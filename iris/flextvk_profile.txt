@@ -1,0 +1,7 @@
+version 1.1.82 vulkan
+extension KHR_surface required
+extension KHR_swapchain required
+
+extension KHR_xlib_surface optional
+extension EXT_debug_report optional
+

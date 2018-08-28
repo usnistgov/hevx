@@ -1,0 +1,10 @@
+include(FetchContent)
+
+include(GoogleTest.cmake)
+include(Abseil.cmake)
+include(GLM.cmake)
+include(TaoJSON.cmake)
+include(Expected.cmake)
+include(Spdlog.cmake)
+include(TBB.cmake)
+include(FlextGL.cmake)
