@@ -181,6 +181,13 @@ static std::error_code ChoosePhysicalDevice() noexcept {
 std::error_code iris::Renderer::Initialize(char const* appName,
                                            std::uint32_t appVersion) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
+
+  ////
+  // In order to reduce the verbosity of the Vulakn API, initialization occurs
+  // over several sub-functions below. Each function is called in-order and
+  // assumes the previous functions have all be called.
+  ////
+
   if (sInitialized) {
     IRIS_LOG_LEAVE(sGetLogger());
     return Error::kAlreadyInitialized;
