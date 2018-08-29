@@ -23,7 +23,9 @@ static spdlog::logger* sGetLogger() noexcept {
 static VkInstance sInstance{VK_NULL_HANDLE};
 static VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
 static VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
-static std::uint32_t sGraphicsQueueFamilyIndex;
+static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
+static VkDevice sDevice{VK_NULL_HANDLE};
+static VkQueue sGraphicsQueue{VK_NULL_HANDLE};
 static bool sInitialized{false};
 
 #ifndef NDEBUG
@@ -64,8 +66,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
  * \see
  * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
  */
-static std::error_code InitInstance(gsl::not_null<gsl::czstring<>> appName,
-                                    std::uint32_t appVersion) noexcept {
+static std::error_code
+InitInstance(gsl::not_null<gsl::czstring<>> appName, std::uint32_t appVersion,
+             gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
 
@@ -111,22 +114,6 @@ static std::error_code InitInstance(gsl::not_null<gsl::czstring<>> appName,
   char const* layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
 #endif
 
-  // These are the extensions that we require from the instance.
-  // We are not going to enumerate the extensions and check for each one,
-  // instead we're going to just specify those we need and let the instance
-  // creation fail if an extension was not found.
-  char const* extensionNames[] = {
-    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
-    VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
-    VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-#ifdef VK_USE_PLATFORM_XLIB_KHR // we also need the platform-specific surface
-    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#endif
-#ifndef NDEBUG
-    VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-#endif
-  };
-
   VkApplicationInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   ai.pApplicationName = appName;
@@ -142,9 +129,8 @@ static std::error_code InitInstance(gsl::not_null<gsl::czstring<>> appName,
   ci.enabledLayerCount = gsl::narrow_cast<uint32_t>(ABSL_ARRAYSIZE(layerNames));
   ci.ppEnabledLayerNames = layerNames;
 #endif
-  ci.enabledExtensionCount =
-    gsl::narrow_cast<uint32_t>(ABSL_ARRAYSIZE(extensionNames));
-  ci.ppEnabledExtensionNames = extensionNames;
+  ci.enabledExtensionCount = gsl::narrow_cast<uint32_t>(extensionNames.size());
+  ci.ppEnabledExtensionNames = extensionNames.data();
 
 #ifndef NDEBUG
   VkDebugReportCallbackCreateInfoEXT drcci = {};
@@ -205,6 +191,7 @@ static std::error_code CreateDebugReportCallback() noexcept {
 
 static void DumpPhysicalDevice(
   VkPhysicalDeviceProperties2 physicalDeviceProperties,
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties,
   absl::FixedArray<VkExtensionProperties> extensionProperties) {
   auto& deviceProps = physicalDeviceProperties.properties;
@@ -213,10 +200,163 @@ static void DumpPhysicalDevice(
       physicalDeviceProperties.pNext);
   auto& multiviewProps =
     *reinterpret_cast<VkPhysicalDeviceMultiviewProperties*>(maint3Props.pNext);
+  auto& features = physicalDeviceFeatures.features;
 
   sGetLogger()->debug("Physical Device {} - Type: {} maxMultiviewViews: {}",
                       deviceProps.deviceName, to_string(deviceProps.deviceType),
                       multiviewProps.maxMultiviewViewCount);
+
+  sGetLogger()->debug("  Features:");
+  sGetLogger()->debug("    robustBufferAccess: {}",
+                      features.robustBufferAccess == VK_TRUE ? "true"
+                                                             : "false");
+  sGetLogger()->debug("    fullDrawIndexUint32: {}",
+                      features.fullDrawIndexUint32 == VK_TRUE ? "true"
+                                                              : "false");
+  sGetLogger()->debug("    imageCubeArray: {}",
+                      features.imageCubeArray == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    independentBlend: {}",
+                      features.independentBlend == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    geometryShader: {}",
+                      features.geometryShader == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    tessellationShader: {}",
+                      features.tessellationShader == VK_TRUE ? "true"
+                                                             : "false");
+  sGetLogger()->debug("    sampleRateShading: {}",
+                      features.sampleRateShading == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    dualSrcBlend: {}",
+                      features.dualSrcBlend == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    logicOp: {}",
+                      features.logicOp == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    multiDrawIndirect: {}",
+                      features.multiDrawIndirect == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    drawIndirectFirstInstance: {}",
+                      features.drawIndirectFirstInstance == VK_TRUE ? "true"
+                                                                    : "false");
+  sGetLogger()->debug("    depthClamp: {}",
+                      features.depthClamp == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    depthBiasClamp: {}",
+                      features.depthBiasClamp == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    fillModeNonSolid: {}",
+                      features.fillModeNonSolid == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    depthBounds: {}",
+                      features.depthBounds == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    wideLines: {}",
+                      features.wideLines == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    largePoints: {}",
+                      features.largePoints == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    alphaToOne: {}",
+                      features.alphaToOne == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    multiViewport: {}",
+                      features.multiViewport == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    samplerAnisotropy: {}",
+                      features.samplerAnisotropy == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    textureCompressionETC2: {}",
+                      features.textureCompressionETC2 == VK_TRUE ? "true"
+                                                                 : "false");
+  sGetLogger()->debug("    textureCompressionASTC_LDR: {}",
+                      features.textureCompressionASTC_LDR == VK_TRUE ? "true"
+                                                                     : "false");
+  sGetLogger()->debug("    textureCompressionBC: {}",
+                      features.textureCompressionBC == VK_TRUE ? "true"
+                                                               : "false");
+  sGetLogger()->debug("    occlusionQueryPrecise: {}",
+                      features.occlusionQueryPrecise == VK_TRUE ? "true"
+                                                                : "false");
+  sGetLogger()->debug("    pipelineStatisticsQuery: {}",
+                      features.pipelineStatisticsQuery == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug(
+    "    vertexPipelineStoresAndAtomics: {}",
+    features.vertexPipelineStoresAndAtomics == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    fragmentStoresAndAtomics: {}",
+                      features.fragmentStoresAndAtomics == VK_TRUE ? "true"
+                                                                   : "false");
+  sGetLogger()->debug("    shaderTessellationAndGeometryPointSize: {}",
+                      features.shaderTessellationAndGeometryPointSize == VK_TRUE
+                        ? "true"
+                        : "false");
+  sGetLogger()->debug("    shaderImageGatherExtended: {}",
+                      features.shaderImageGatherExtended == VK_TRUE ? "true"
+                                                                    : "false");
+  sGetLogger()->debug(
+    "    shaderStorageImageExtendedFormats: {}",
+    features.shaderStorageImageExtendedFormats == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug(
+    "    shaderStorageImageMultisample: {}",
+    features.shaderStorageImageMultisample == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug(
+    "    shaderStorageImageReadWithoutFormat: {}",
+    features.shaderStorageImageReadWithoutFormat == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    shaderStorageImageWriteWithoutFormat: {}",
+                      features.shaderStorageImageWriteWithoutFormat == VK_TRUE
+                        ? "true"
+                        : "false");
+  sGetLogger()->debug(
+    "    shaderUniformBufferArrayDynamicIndexing: {}",
+    features.shaderUniformBufferArrayDynamicIndexing == VK_TRUE ? "true"
+                                                                : "false");
+  sGetLogger()->debug("    shaderSampledImageArrayDynamicIndexing: {}",
+                      features.shaderSampledImageArrayDynamicIndexing == VK_TRUE
+                        ? "true"
+                        : "false");
+  sGetLogger()->debug(
+    "    shaderStorageBufferArrayDynamicIndexing: {}",
+    features.shaderStorageBufferArrayDynamicIndexing == VK_TRUE ? "true"
+                                                                : "false");
+  sGetLogger()->debug("    shaderStorageImageArrayDynamicIndexing: {}",
+                      features.shaderStorageImageArrayDynamicIndexing == VK_TRUE
+                        ? "true"
+                        : "false");
+  sGetLogger()->debug("    shaderClipDistance: {}",
+                      features.shaderClipDistance == VK_TRUE ? "true"
+                                                             : "false");
+  sGetLogger()->debug("    shaderCullDistance: {}",
+                      features.shaderCullDistance == VK_TRUE ? "true"
+                                                             : "false");
+  sGetLogger()->debug("    shaderFloat64: {}",
+                      features.shaderFloat64 == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    shaderInt64: {}",
+                      features.shaderInt64 == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    shaderInt16: {}",
+                      features.shaderInt16 == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    shaderResourceResidency: {}",
+                      features.shaderResourceResidency == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug("    shaderResourceMinLod: {}",
+                      features.shaderResourceMinLod == VK_TRUE ? "true"
+                                                               : "false");
+  sGetLogger()->debug("    sparseBinding: {}",
+                      features.sparseBinding == VK_TRUE ? "true" : "false");
+  sGetLogger()->debug("    sparseResidencyBuffer: {}",
+                      features.sparseResidencyBuffer == VK_TRUE ? "true"
+                                                                : "false");
+  sGetLogger()->debug("    sparseResidencyImage2D: {}",
+                      features.sparseResidencyImage2D == VK_TRUE ? "true"
+                                                                 : "false");
+  sGetLogger()->debug("    sparseResidencyImage3D: {}",
+                      features.sparseResidencyImage3D == VK_TRUE ? "true"
+                                                                 : "false");
+  sGetLogger()->debug("    sparseResidency2Samples: {}",
+                      features.sparseResidency2Samples == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug("    sparseResidency4Samples: {}",
+                      features.sparseResidency4Samples == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug("    sparseResidency8Samples: {}",
+                      features.sparseResidency8Samples == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug("    sparseResidency16Samples: {}",
+                      features.sparseResidency16Samples == VK_TRUE ? "true"
+                                                                   : "false");
+  sGetLogger()->debug("    sparseResidencyAliased: {}",
+                      features.sparseResidencyAliased == VK_TRUE ? "true"
+                                                                 : "false");
+  sGetLogger()->debug("    variableMultisampleRate: {}",
+                      features.variableMultisampleRate == VK_TRUE ? "true"
+                                                                  : "false");
+  sGetLogger()->debug("    inheritedQueries: {}",
+                      features.inheritedQueries == VK_TRUE ? "true" : "false");
 
   sGetLogger()->debug("  Queue Families:");
   for (std::size_t i = 0; i < queueFamilyProperties.size(); ++i) {
@@ -231,6 +371,102 @@ static void DumpPhysicalDevice(
   }
 } // DumpPhysicalDevice
 
+/*! \brief Compare two VkPhysicalDeviceFeatures2 structures.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
+ */
+static bool
+ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
+                              VkPhysicalDeviceFeatures2 b) noexcept {
+  bool result = false;
+  result |= (a.features.robustBufferAccess == b.features.robustBufferAccess);
+  result |= (a.features.fullDrawIndexUint32 == b.features.fullDrawIndexUint32);
+  result |= (a.features.imageCubeArray == b.features.imageCubeArray);
+  result |= (a.features.independentBlend == b.features.independentBlend);
+  result |= (a.features.geometryShader == b.features.geometryShader);
+  result |= (a.features.tessellationShader == b.features.tessellationShader);
+  result |= (a.features.sampleRateShading == b.features.sampleRateShading);
+  result |= (a.features.dualSrcBlend == b.features.dualSrcBlend);
+  result |= (a.features.logicOp == b.features.logicOp);
+  result |= (a.features.multiDrawIndirect == b.features.multiDrawIndirect);
+  result |= (a.features.drawIndirectFirstInstance ==
+             b.features.drawIndirectFirstInstance);
+  result |= (a.features.depthClamp == b.features.depthClamp);
+  result |= (a.features.depthBiasClamp == b.features.depthBiasClamp);
+  result |= (a.features.fillModeNonSolid == b.features.fillModeNonSolid);
+  result |= (a.features.depthBounds == b.features.depthBounds);
+  result |= (a.features.wideLines == b.features.wideLines);
+  result |= (a.features.largePoints == b.features.largePoints);
+  result |= (a.features.alphaToOne == b.features.alphaToOne);
+  result |= (a.features.multiViewport == b.features.multiViewport);
+  result |= (a.features.samplerAnisotropy == b.features.samplerAnisotropy);
+  result |=
+    (a.features.textureCompressionETC2 == b.features.textureCompressionETC2);
+  result |= (a.features.textureCompressionASTC_LDR ==
+             b.features.textureCompressionASTC_LDR);
+  result |=
+    (a.features.textureCompressionBC == b.features.textureCompressionBC);
+  result |=
+    (a.features.occlusionQueryPrecise == b.features.occlusionQueryPrecise);
+  result |=
+    (a.features.pipelineStatisticsQuery == b.features.pipelineStatisticsQuery);
+  result |= (a.features.vertexPipelineStoresAndAtomics ==
+             b.features.vertexPipelineStoresAndAtomics);
+  result |= (a.features.fragmentStoresAndAtomics ==
+             b.features.fragmentStoresAndAtomics);
+  result |= (a.features.shaderTessellationAndGeometryPointSize ==
+             b.features.shaderTessellationAndGeometryPointSize);
+  result |= (a.features.shaderImageGatherExtended ==
+             b.features.shaderImageGatherExtended);
+  result |= (a.features.shaderStorageImageExtendedFormats ==
+             b.features.shaderStorageImageExtendedFormats);
+  result |= (a.features.shaderStorageImageMultisample ==
+             b.features.shaderStorageImageMultisample);
+  result |= (a.features.shaderStorageImageReadWithoutFormat ==
+             b.features.shaderStorageImageReadWithoutFormat);
+  result |= (a.features.shaderStorageImageWriteWithoutFormat ==
+             b.features.shaderStorageImageWriteWithoutFormat);
+  result |= (a.features.shaderUniformBufferArrayDynamicIndexing ==
+             b.features.shaderUniformBufferArrayDynamicIndexing);
+  result |= (a.features.shaderSampledImageArrayDynamicIndexing ==
+             b.features.shaderSampledImageArrayDynamicIndexing);
+  result |= (a.features.shaderStorageBufferArrayDynamicIndexing ==
+             b.features.shaderStorageBufferArrayDynamicIndexing);
+  result |= (a.features.shaderStorageImageArrayDynamicIndexing ==
+             b.features.shaderStorageImageArrayDynamicIndexing);
+  result |= (a.features.shaderClipDistance == b.features.shaderClipDistance);
+  result |= (a.features.shaderCullDistance == b.features.shaderCullDistance);
+  result |= (a.features.shaderFloat64 == b.features.shaderFloat64);
+  result |= (a.features.shaderInt64 == b.features.shaderInt64);
+  result |= (a.features.shaderInt16 == b.features.shaderInt16);
+  result |=
+    (a.features.shaderResourceResidency == b.features.shaderResourceResidency);
+  result |=
+    (a.features.shaderResourceMinLod == b.features.shaderResourceMinLod);
+  result |= (a.features.sparseBinding == b.features.sparseBinding);
+  result |=
+    (a.features.sparseResidencyBuffer == b.features.sparseResidencyBuffer);
+  result |=
+    (a.features.sparseResidencyImage2D == b.features.sparseResidencyImage2D);
+  result |=
+    (a.features.sparseResidencyImage3D == b.features.sparseResidencyImage3D);
+  result |=
+    (a.features.sparseResidency2Samples == b.features.sparseResidency2Samples);
+  result |=
+    (a.features.sparseResidency4Samples == b.features.sparseResidency4Samples);
+  result |=
+    (a.features.sparseResidency8Samples == b.features.sparseResidency8Samples);
+  result |= (a.features.sparseResidency16Samples ==
+             b.features.sparseResidency16Samples);
+  result |=
+    (a.features.sparseResidencyAliased == b.features.sparseResidencyAliased);
+  result |=
+    (a.features.variableMultisampleRate == b.features.variableMultisampleRate);
+  result |= (a.features.inheritedQueries == b.features.inheritedQueries);
+  return result;
+} // ComparePhysicalDeviceFeatures
+
 /*! \brief Check if a specific physical device meets our requirements.
  *
  * \see
@@ -238,6 +474,7 @@ static void DumpPhysicalDevice(
  */
 static tl::expected<std::uint32_t, std::error_code>
 IsPhysicalDeviceGood(VkPhysicalDevice device,
+                     VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
@@ -260,7 +497,6 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   physicalDeviceProperties.pNext = &maint3Props;
 
   vkGetPhysicalDeviceProperties2(device, &physicalDeviceProperties);
-  //auto& deviceProps = physicalDeviceProperties.properties;
 
   //
   // Get the features.
@@ -270,7 +506,6 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 
   vkGetPhysicalDeviceFeatures2(device, &physicalDeviceFeatures);
-  auto& deviceFeatures = physicalDeviceFeatures.features;
 
   //
   // Get the queue family properties.
@@ -316,29 +551,16 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
     return tl::unexpected(make_error_code(result));
   }
 
-  DumpPhysicalDevice(physicalDeviceProperties, queueFamilyProperties,
-                     extensionProperties);
+  DumpPhysicalDevice(physicalDeviceProperties, physicalDeviceFeatures,
+                     queueFamilyProperties, extensionProperties);
 
   //
   // Check all queried data to see if this device is good.
   //
 
   // Check for any required features
-  // NOTE: these should match what's requested below in CreateDevice
-  if (deviceFeatures.fullDrawIndexUint32 == VK_FALSE) {
-    sGetLogger()->debug("No fullDrawIndexUint32 supported by device {}",
-                        static_cast<void*>(device));
-    return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
-  }
-
-  if (deviceFeatures.fillModeNonSolid == VK_FALSE) {
-    sGetLogger()->debug("No fillModeNonSolid supported by device {}",
-                        static_cast<void*>(device));
-    return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
-  }
-
-  if (deviceFeatures.pipelineStatisticsQuery == VK_FALSE) {
-    sGetLogger()->debug("No pipelineStatisticsQuery supported by device {}",
+  if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
+    sGetLogger()->debug("Requested feature not supported by device {}",
                         static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
@@ -390,16 +612,11 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
  */
-static std::error_code ChoosePhysicalDevice() noexcept {
+static std::error_code
+ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
+                     gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
-
-  // These are the extensions that we require from the device.
-  // We are going to enumerate the extensions and check for each one below.
-  char const* extensionNames[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-    VK_KHR_MAINTENANCE2_EXTENSION_NAME, "VK_KHX_multiview"};
 
   // Get the number of physical devices present on the system
   uint32_t numPhysicalDevices;
@@ -423,7 +640,7 @@ static std::error_code ChoosePhysicalDevice() noexcept {
   // Iterate through each physical device to find one that we can use.
   for (auto&& physicalDevice : physicalDevices) {
     if (auto graphicsQFI =
-          IsPhysicalDeviceGood(physicalDevice, extensionNames)) {
+          IsPhysicalDeviceGood(physicalDevice, features, extensionNames)) {
       sPhysicalDevice = physicalDevice;
       sGraphicsQueueFamilyIndex = *graphicsQFI;
       break;
@@ -443,6 +660,52 @@ static std::error_code ChoosePhysicalDevice() noexcept {
   return VulkanResult::kSuccess;
 } // ChoosePhysicalDevice
 
+/*! \brief Create the Vulkan logical device - \b MUST only be called from
+ * \ref Initialize.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
+ */
+static std::error_code
+CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
+                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
+  IRIS_LOG_ENTER(sGetLogger());
+  VkResult result;
+
+  // Queues are created with logical devices.
+
+  float const priority = 1.f;
+  VkDeviceQueueCreateInfo qci = {};
+  qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  qci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+  qci.queueCount = 1;
+  qci.pQueuePriorities = &priority;
+
+  VkDeviceCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  ci.pNext = &physicalDeviceFeatures;
+  ci.queueCreateInfoCount = 1;
+  ci.pQueueCreateInfos = &qci;
+  ci.enabledExtensionCount =
+    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
+  ci.ppEnabledExtensionNames = extensionNames.data();
+
+  result = vkCreateDevice(sPhysicalDevice, &ci, nullptr, &sDevice);
+  if (result != VK_SUCCESS) {
+    sGetLogger()->error("Cannot create device: {}", to_string(result));
+    IRIS_LOG_LEAVE(sGetLogger());
+    return make_error_code(result);
+  }
+
+  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0, &sGraphicsQueue);
+
+  sGetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
+  IRIS_LOG_LEAVE(sGetLogger());
+  return VulkanResult::kSuccess;
+} // CreateDevice
+
 } // namespace iris::Renderer
 
 std::error_code
@@ -461,6 +724,37 @@ iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>> appName,
     return Error::kAlreadyInitialized;
   }
 
+  // These are the extensions that we require from the instance.
+  char const* instanceExtensionNames[] = {
+    VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+    VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
+    VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+#ifdef VK_USE_PLATFORM_XLIB_KHR // we also need the platform-specific surface
+    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#endif
+#ifndef NDEBUG
+    VK_EXT_DEBUG_REPORT_EXTENSION_NAME
+#endif
+  };
+
+  // These are the features that we require from the physical device.
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
+  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  physicalDeviceFeatures.features.fullDrawIndexUint32 = VK_TRUE;
+  physicalDeviceFeatures.features.fillModeNonSolid = VK_TRUE;
+  physicalDeviceFeatures.features.multiViewport = VK_TRUE;
+  physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
+
+  // These are the extensions that we require from the physical device.
+  char const* physicalDeviceExtensionNames[] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+    VK_KHR_MAINTENANCE2_EXTENSION_NAME,
+#if 0 // FIXME: which GPUs support this?
+    VK_KHR_MULTIVIEW_EXTENSION_NAME
+#endif
+  };
+
   ::setenv(
     "VK_LAYER_PATH",
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
@@ -468,7 +762,7 @@ iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>> appName,
 
   flextVkInit();
 
-  if (auto error = InitInstance(appName, appVersion)) {
+  if (auto error = InitInstance(appName, appVersion, instanceExtensionNames)) {
     IRIS_LOG_LEAVE(sGetLogger());
     return Error::kInitializationFailed;
   }
@@ -476,7 +770,14 @@ iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>> appName,
   flextVkInitInstance(sInstance); // initialize instance function pointers
   CreateDebugReportCallback(); // ignore any returned error
 
-  if (auto error = ChoosePhysicalDevice()) {
+  if (auto error = ChoosePhysicalDevice(physicalDeviceFeatures,
+                                        physicalDeviceExtensionNames)) {
+    IRIS_LOG_LEAVE(sGetLogger());
+    return Error::kInitializationFailed;
+  }
+
+  if (auto error = CreateDeviceAndQueues(physicalDeviceFeatures,
+                                         physicalDeviceExtensionNames)) {
     IRIS_LOG_LEAVE(sGetLogger());
     return Error::kInitializationFailed;
   }

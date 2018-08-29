@@ -12,5 +12,5 @@ extension EXT_debug_report optional
 extension KHR_swapchain required
 extension KHR_get_memory_requirements2 required
 extension KHR_maintenance2 required
-extension KHX_multiview required
+extension KHR_multiview required
 
