@@ -6,8 +6,8 @@
  */
 
 tl::expected<iris::wsi::Window, std::error_code>
-iris::wsi::Window::Create(char const* title, glm::uvec2 extent,
-                          Options const& options) noexcept {
+iris::wsi::Window::Create(gsl::not_null<gsl::czstring<>> title,
+                          glm::uvec2 extent, Options const& options) noexcept {
   Window window;
   if (auto pImpl = Impl::Create(title, std::move(extent), options)) {
     window.pImpl_ = std::move(*pImpl);
@@ -38,7 +38,7 @@ glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
 }
 
-void iris::wsi::Window::Retitle(char const* title) noexcept {
+void iris::wsi::Window::Retitle(gsl::not_null<gsl::czstring<>> title) noexcept {
   pImpl_->Retitle(title);
 }
 

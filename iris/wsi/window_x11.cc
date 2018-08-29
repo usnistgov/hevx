@@ -164,7 +164,8 @@ static spdlog::logger* sGetLogger() noexcept {
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
-iris::wsi::Window::Impl::Create(char const*, glm::uvec2 extent,
+iris::wsi::Window::Impl::Create(gsl::not_null<gsl::czstring<>> title,
+                                glm::uvec2 extent,
                                 Options const& options) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
 
@@ -263,6 +264,7 @@ iris::wsi::Window::Impl::Create(char const*, glm::uvec2 extent,
   ::XSetWMNormalHints(pWin->handle_.display, pWin->handle_.window, szHints);
   ::XFree(szHints);
 
+  pWin->Retitle(title);
   IRIS_LOG_LEAVE(sGetLogger());
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
@@ -353,7 +355,7 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
   }
 } // iris::wsi::Window::Impl::Dispatch
 
-char const* iris::wsi::Window::Impl::AtomToString(::Atom atom) noexcept {
+gsl::czstring<> iris::wsi::Window::Impl::AtomToString(::Atom atom) noexcept {
   switch (atom) {
 #define STR(r)                                                                 \
   case r: return #r

@@ -49,10 +49,11 @@ add_library(iris ${SOURCES})
 
 target_link_libraries(iris
   PUBLIC
-    glm expected
+    gsl glm expected
   PRIVATE
     spdlog
     absl::strings
+    absl::container
     Vulkan::Vulkan ${X11_LIBRARIES}
     TBB::tbb Threads::Threads
 )

@@ -33,7 +33,8 @@ public:
    * \return a std::expected of either the Impl pointer or a std::error_code.
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(char const* title, glm::uvec2 extent, Options const& options) noexcept;
+  Create(gsl::not_null<gsl::czstring<>> title, glm::uvec2 extent,
+         Options const& options) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.
@@ -70,16 +71,16 @@ public:
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
    */
-  void Retitle(char const* title) noexcept {
+  void Retitle(gsl::not_null<gsl::czstring<>> title) noexcept {
     auto const len = std::strlen(title);
     ::XmbSetWMProperties(handle_.display, handle_.window, title, title, nullptr,
                          0, nullptr, nullptr, nullptr);
     ::XChangeProperty(handle_.display, handle_.window, atoms_[NET_WM_NAME],
                       XA_STRING, 8, PropModeReplace,
-                      reinterpret_cast<unsigned char const*>(title), len);
+                      reinterpret_cast<unsigned char const*>(title.get()), len);
     ::XChangeProperty(handle_.display, handle_.window, atoms_[NET_WM_ICON_NAME],
                       XA_STRING, 8, PropModeReplace,
-                      reinterpret_cast<unsigned char const*>(title), len);
+                      reinterpret_cast<unsigned char const*>(title.get()), len);
   }
 
   /*! \brief Move this window.
@@ -189,7 +190,7 @@ private:
   ::Atom atoms_[kNumAtoms]{};
 
   void Dispatch(::XEvent const& event) noexcept;
-  static char const* AtomToString(::Atom atom) noexcept;
+  static gsl::czstring<> AtomToString(::Atom atom) noexcept;
 }; // class Window::Impl
 
 } // namespace iris::wsi

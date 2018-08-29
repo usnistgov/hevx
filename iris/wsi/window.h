@@ -5,6 +5,7 @@
  */
 
 #include "glm/vec2.hpp"
+#include "gsl/gsl"
 #include "iris/wsi/input.h"
 #include "tl/expected.hpp"
 #include <cstdint>
@@ -44,7 +45,7 @@ public:
    * \return a std::expected of either the Window or a std::error_code.
    */
   static tl::expected<Window, std::error_code> Create(
-    char const* title, glm::uvec2 extent,
+    gsl::not_null<gsl::czstring<>> title, glm::uvec2 extent,
     Options const& options = Options::kDecorated | Options::kSizeable) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.
@@ -75,7 +76,7 @@ public:
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
    */
-  void Retitle(char const* title) noexcept;
+  void Retitle(gsl::not_null<gsl::czstring<>> title) noexcept;
 
   /*! \brief Move this window.
    * \param[in] offset the new window offset in screen coordinates.

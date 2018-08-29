@@ -22,6 +22,18 @@ inline std::string to_string(VkPhysicalDeviceType type) noexcept {
   return "unknown"s;
 }
 
+//! \brief Convert a VkQueueFlags to a std::string
+inline std::string to_string(VkQueueFlags flags) noexcept {
+  if (!flags) return "{}";
+  std::string result;
+  if (flags & VK_QUEUE_GRAPHICS_BIT) result += "Graphics | ";
+  if (flags & VK_QUEUE_COMPUTE_BIT) result += "Compute | ";
+  if (flags & VK_QUEUE_TRANSFER_BIT) result += "Transfer | ";
+  if (flags & VK_QUEUE_SPARSE_BINDING_BIT) result += "SparseBinding | ";
+  if (flags & VK_QUEUE_PROTECTED_BIT) result += "Protected | ";
+  return "{" + result.substr(0, result.size() - 3) + "}";
+}
+
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_HELPERS_H_

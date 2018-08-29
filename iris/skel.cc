@@ -19,13 +19,15 @@ int main(int arch, char** argv) {
 
   logger->info("initialized");
 
-  if (auto error = iris::Renderer::Initialize("skel")) {
+  if (auto error =
+        iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>>("skel"))) {
     logger->error("unable to initialize renderer: {}", error.message());
     std::exit(EXIT_FAILURE);
   }
 
   iris::wsi::Window window;
-  if (auto win = iris::wsi::Window::Create("skel", {800, 800})) {
+  if (auto win = iris::wsi::Window::Create(
+        gsl::not_null<gsl::czstring<>>("skel"), {800, 800})) {
     window = std::move(*win);
   } else {
     logger->error("unable to create window: {}", win.error().message());

@@ -2,6 +2,7 @@ include(FetchContent)
 
 include(GoogleTest.cmake)
 include(Abseil.cmake)
+include(GSL.cmake)
 include(GLM.cmake)
 include(TaoJSON.cmake)
 include(Expected.cmake)

@@ -21,13 +21,14 @@ Currently this code is under active development and in a pre-release state.
 
 ### Dependencies
 The following packages are fetched and managed with CMake:
-- [Abseil](https://github.com/abseil/abseil-cpp)
-- [GLM](https://github.com/g-truc/glm)
-- [TAoCPP JSON](https://github.com/taocpp/json)
-- [TartanLlama/Expected](https://github.com/TartanLlama/expected)
-- [spdlog](https://github.com/gabime/spdlog)
-- [Threading Building Blocks](https://github.com/01org/tbb)
-- [flextGL](https://github.com/mosra/flextgl)
+- [abseil/apseil-cpp](https://github.com/abseil/abseil-cpp)
+- [Microsoft/GSL](https://github.com/Microsoft/GSL)
+- [g-truc/glm](https://github.com/g-truc/glm)
+- [taocpp/json](https://github.com/taocpp/json)
+- [TartanLlama/expected](https://github.com/TartanLlama/expected)
+- [gabime/spdlog](https://github.com/gabime/spdlog)
+- [01org/tbb](https://github.com/01org/tbb)
+- [mosra/flextgl](https://github.com/mosra/flextgl)
 
 ### Instructions
 On HEV hosts:

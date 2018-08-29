@@ -14,6 +14,7 @@ enum class Error {
   kNone = 0,                 //!< No error
   kInitializationFailed = 1, //!< Initialization failed for some reason.
   kAlreadyInitialized = 2,   //!< The renderer has already been initialized.
+  kNoPhysicalDevice = 3,     //!< No physical device available.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -33,6 +34,7 @@ public:
     case Error::kNone: return "none"s;
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
+    case Error::kNoPhysicalDevice: return "no physical device";
     }
     return "unknown"s;
   }
@@ -60,7 +62,9 @@ inline std::error_code make_error_code(Error e) noexcept {
 namespace std {
 
 template <>
-struct is_error_code_enum<iris::Renderer::Error> : public true_type {};
+struct is_error_code_enum<iris::Renderer::Error> :
+                                     public
+                                       true_type{};
 
 } // namespace std
 
