@@ -1,4 +1,4 @@
-HEVx {#mainpage}
+HEVx
 ====
 
 High End Visualization (HEV) is a software environment for developing
@@ -16,6 +16,7 @@ Currently this code is under active development and in a pre-release state.
 ### Requirements
 - CMake 3.11
 - Python 3
+  - Wheezy Template: '''pip install --user wheeze.template'''
 - GCC >= 7
 
 ### Dependencies
