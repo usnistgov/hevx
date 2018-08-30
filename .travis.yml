@@ -28,6 +28,6 @@ install:
 - cd ${PROJ_DIR}
 
 script:
-- CXX=g++-7 CC=gcc-7 VULKAN_SDK_DIR=${DEPS_DIR}/vulkan/x86_64 cmake .
+- CXX=g++-7 CC=gcc-7 VULKAN_SDK=${DEPS_DIR}/vulkan/x86_64 cmake -DPYTHON_EXECUTABLE=python3 .
 - cmake --build .
 
