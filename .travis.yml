@@ -1,7 +1,11 @@
 language: cpp
 dist: trusty
 sudo: false
-python: "3.6"
+
+addons:
+  apt:
+    packages:
+      - python3
 
 install:
   - pip3 install --user wheezy.template
