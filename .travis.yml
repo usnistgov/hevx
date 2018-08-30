@@ -5,7 +5,7 @@ sudo: false
 addons:
   apt:
     packages:
-      - python3
+      - python3-pip
 
 install:
   - pip3 install --user wheezy.template
