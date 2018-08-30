@@ -16,10 +16,10 @@ Currently this code is under active development and in a pre-release state.
 ### Requirements
 - CMake 3.11
 - Python 3.6
-  - Wheezy Template: 'pip install --user wheezy.template'
+  - Wheezy Template: `pip install --user wheezy.template`
 - GCC >= 7
 - Vulkan SDK >= 1.1.82.1
-  - Specify location use 'VULKAN_SDK' environment variable
+  - Specify location using the `VULKAN_SDK` environment variable
 
 ### Dependencies
 The following packages are fetched and managed with CMake:

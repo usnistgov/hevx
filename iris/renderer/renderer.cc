@@ -204,9 +204,15 @@ static void DumpPhysicalDevice(
     *reinterpret_cast<VkPhysicalDeviceMultiviewProperties*>(maint3Props.pNext);
   auto& features = physicalDeviceFeatures.features;
 
-  sGetLogger()->debug("Physical Device {} - Type: {} maxMultiviewViews: {}",
-                      deviceProps.deviceName, to_string(deviceProps.deviceType),
-                      multiviewProps.maxMultiviewViewCount);
+  sGetLogger()->debug("Physical Device {}", deviceProps.deviceName);
+  sGetLogger()->debug("  {} Driver v{}.{}.{} API v{}.{}.{} ",
+                      to_string(deviceProps.deviceType),
+                      VK_VERSION_MAJOR(deviceProps.driverVersion),
+                      VK_VERSION_MINOR(deviceProps.driverVersion),
+                      VK_VERSION_PATCH(deviceProps.driverVersion),
+                      VK_VERSION_MAJOR(deviceProps.apiVersion),
+                      VK_VERSION_MINOR(deviceProps.apiVersion),
+                      VK_VERSION_PATCH(deviceProps.apiVersion));
 
   sGetLogger()->debug("  Features:");
   sGetLogger()->debug("    robustBufferAccess: {}",
@@ -359,6 +365,10 @@ static void DumpPhysicalDevice(
                                                                   : "false");
   sGetLogger()->debug("    inheritedQueries: {}",
                       features.inheritedQueries == VK_TRUE ? "true" : "false");
+
+  sGetLogger()->debug("  Limits:");
+  sGetLogger()->debug("    maxMultiviewViews: {}",
+                      multiviewProps.maxMultiviewViewCount);
 
   sGetLogger()->debug("  Queue Families:");
   for (std::size_t i = 0; i < queueFamilyProperties.size(); ++i) {
