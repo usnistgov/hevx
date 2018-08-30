@@ -2,10 +2,6 @@ language: cpp
 script: cmake
 dist: trusty
 sudo: false
-python:
-  - "3.6"
-before_install:
-  - sudo apt-get install -y python
 install:
   - pip3 install --user wheezy.template
 compiler:
@@ -14,3 +10,5 @@ compiler:
 addons:
   apt:
     update: true
+    packages:
+      - python3
