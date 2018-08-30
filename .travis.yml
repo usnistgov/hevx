@@ -1,14 +1,16 @@
 language: cpp
-script: cmake
 dist: trusty
 sudo: false
+
 install:
   - pip3 install --user wheezy.template
+
 compiler:
   - gcc
   - clang
-addons:
-  apt:
-    update: true
-    packages:
-      - python3
+
+script: cmake
+
+env:
+  matrix:
+    - python=3.6
