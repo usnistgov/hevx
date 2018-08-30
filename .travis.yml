@@ -11,6 +11,7 @@ addons:
     - g++-7
     - libx11-dev
     - libxrandr-dev
+    - doxygen
 
 install:
 - PROJ_DIR=`pwd`
