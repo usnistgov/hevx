@@ -25,7 +25,7 @@ static VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
 static VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static VkDevice sDevice{VK_NULL_HANDLE};
-static VkQueue sGraphicsQueue{VK_NULL_HANDLE};
+static VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
 static bool sInitialized{false};
 
 #ifndef NDEBUG
@@ -72,7 +72,7 @@ InitInstance(gsl::not_null<gsl::czstring<>> appName, std::uint32_t appVersion,
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
 
-  uint32_t instanceVersion;
+  std::uint32_t instanceVersion;
   vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
 
   sGetLogger()->debug(
@@ -84,7 +84,7 @@ InitInstance(gsl::not_null<gsl::czstring<>> appName, std::uint32_t appVersion,
   //
 
   // Get the number of instance extension properties.
-  uint32_t numExtensionProperties;
+  std::uint32_t numExtensionProperties;
   result = vkEnumerateInstanceExtensionProperties(
     nullptr, &numExtensionProperties, nullptr);
   if (result != VK_SUCCESS) {
@@ -126,10 +126,12 @@ InitInstance(gsl::not_null<gsl::czstring<>> appName, std::uint32_t appVersion,
   ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   ci.pApplicationInfo = &ai;
 #ifndef NDEBUG
-  ci.enabledLayerCount = gsl::narrow_cast<uint32_t>(ABSL_ARRAYSIZE(layerNames));
+  ci.enabledLayerCount =
+    gsl::narrow_cast<std::uint32_t>(ABSL_ARRAYSIZE(layerNames));
   ci.ppEnabledLayerNames = layerNames;
 #endif
-  ci.enabledExtensionCount = gsl::narrow_cast<uint32_t>(extensionNames.size());
+  ci.enabledExtensionCount =
+    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
   ci.ppEnabledExtensionNames = extensionNames.data();
 
 #ifndef NDEBUG
@@ -512,7 +514,7 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   //
 
   // Get the number of physical device queue family properties
-  uint32_t numQueueFamilyProperties;
+  std::uint32_t numQueueFamilyProperties;
   vkGetPhysicalDeviceQueueFamilyProperties2(device, &numQueueFamilyProperties,
                                             nullptr);
 
@@ -531,7 +533,7 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   //
 
   // Get the number of physical device extension properties.
-  uint32_t numExtensionProperties;
+  std::uint32_t numExtensionProperties;
   result = vkEnumerateDeviceExtensionProperties(
     device, nullptr, &numExtensionProperties, nullptr);
   if (result != VK_SUCCESS) {
@@ -619,7 +621,7 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
   VkResult result;
 
   // Get the number of physical devices present on the system
-  uint32_t numPhysicalDevices;
+  std::uint32_t numPhysicalDevices;
   result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices, nullptr);
   if (result != VK_SUCCESS) {
     sGetLogger()->error("Cannot enumerate physical devices: {}",
@@ -674,13 +676,28 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
 
-  // Queues are created with logical devices.
+  // Get all of the queue families again, so that we can get the number of
+  // queues to create.
+
+  std::uint32_t numQueueFamilyProperties;
+  vkGetPhysicalDeviceQueueFamilyProperties2(sPhysicalDevice,
+                                            &numQueueFamilyProperties, nullptr);
+
+  absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties(
+    numQueueFamilyProperties);
+  for (auto& property : queueFamilyProperties) {
+    property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+  }
+
+  vkGetPhysicalDeviceQueueFamilyProperties2(
+    sPhysicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
 
   float const priority = 1.f;
   VkDeviceQueueCreateInfo qci = {};
   qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   qci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
-  qci.queueCount = 1;
+  qci.queueCount = queueFamilyProperties[sGraphicsQueueFamilyIndex]
+                     .queueFamilyProperties.queueCount;
   qci.pQueuePriorities = &priority;
 
   VkDeviceCreateInfo ci = {};
@@ -699,9 +716,12 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
     return make_error_code(result);
   }
 
-  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0, &sGraphicsQueue);
+  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
+                   &sUnorderedCommandQueue);
 
   sGetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
+  sGetLogger()->debug("Unordered Command Queue: {}",
+                      static_cast<void*>(sUnorderedCommandQueue));
   IRIS_LOG_LEAVE(sGetLogger());
   return VulkanResult::kSuccess;
 } // CreateDevice
