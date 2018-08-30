@@ -1,4 +1,4 @@
-HEVx
+HEVx [![Build Status](https://travis-ci.org/usnistgov/hevx.svg?branch=master)](https://travis-ci.org/usnistgov/hevx)
 ====
 
 High End Visualization (HEV) is a software environment for developing

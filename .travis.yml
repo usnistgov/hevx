@@ -11,7 +11,6 @@ addons:
     - g++-7
     - libx11-dev
     - libxrandr-dev
-    - doxygen
 
 install:
 - PROJ_DIR=`pwd`
@@ -26,12 +25,9 @@ install:
 - export PATH=${DEPS_DIR}/vulkan/x86_64/bin:${PATH}
 - glslangValidator --version
 - pip3 install --user wheezy.template
-- type python3
-- python3 --version
-- /opt/pyenv/shims/python3 --version
 - cd ${PROJ_DIR}
 
 script:
-- CXX=g++-7 CC=gcc-7 VULKAN_SDK=${DEPS_DIR}/vulkan/x86_64 cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 .
+- CXX=g++-7 CC=gcc-7 VULKAN_SDK=${DEPS_DIR}/vulkan/x86_64 cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
 - cmake --build .
 
