@@ -4,15 +4,16 @@ sudo: false
 
 addons:
   apt:
+    sources:
+    - ubuntu-toolchain-r-test
     packages:
-      - python3-pip
+    - python3-pip
+    - g++-7
 
 install:
-  - pip3 install --user wheezy.template
+- pip3 install --user wheezy.template
 
-compiler:
-  - gcc
-  - clang
-
-script: cmake
+script:
+- CXX=/usr/bin/g++-7 CC=/usr/bin/gcc-7 cmake .
+- cmake --build .
 
