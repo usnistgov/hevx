@@ -5,7 +5,7 @@ sudo: false
 python:
   - "3.6"
 install:
-  - pip install wheezy.template
+  - pip3 install --user wheezy.template
 compiler:
   - gcc
   - clang
