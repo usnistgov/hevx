@@ -16,8 +16,10 @@ Currently this code is under active development and in a pre-release state.
 ### Requirements
 - CMake 3.11
 - Python 3.6
-  - Wheezy Template: '''pip install --user wheezy.template'''
+  - Wheezy Template: 'pip install --user wheezy.template'
 - GCC >= 7
+- Vulkan SDK >= 1.1.82.1
+  - Specify location use 'VULKAN_SDK' environment variable
 
 ### Dependencies
 The following packages are fetched and managed with CMake:
@@ -34,7 +36,7 @@ The following packages are fetched and managed with CMake:
 On HEV hosts:
 ~~~
 $ mkdir build && cd build
-$ scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ VULKAN_SDK="/opt/VulkanSDK/1.1.82.1/x86_64" scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 $ make -j
 ~~~
 
