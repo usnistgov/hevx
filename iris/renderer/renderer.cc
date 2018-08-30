@@ -523,6 +523,7 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
     numQueueFamilyProperties);
   for (auto& property : queueFamilyProperties) {
     property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    property.pNext = nullptr;
   }
 
   vkGetPhysicalDeviceQueueFamilyProperties2(device, &numQueueFamilyProperties,
@@ -687,6 +688,7 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
     numQueueFamilyProperties);
   for (auto& property : queueFamilyProperties) {
     property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    property.pNext = nullptr;
   }
 
   vkGetPhysicalDeviceQueueFamilyProperties2(

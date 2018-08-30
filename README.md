@@ -15,8 +15,8 @@ Currently this code is under active development and in a pre-release state.
 
 ### Requirements
 - CMake 3.11
-- Python 3
-  - Wheezy Template: '''pip install --user wheeze.template'''
+- Python 3.6
+  - Wheezy Template: '''pip install --user wheezy.template'''
 - GCC >= 7
 
 ### Dependencies
