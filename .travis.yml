@@ -17,11 +17,11 @@ install:
 - DEPS_DIR="${HOME}/deps"
 - mkdir -p ${DEPS_DIR} && cd ${DEPS_DIR}
 - CMAKE_URL="https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz"
-- mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake
+- mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - "${CMAKE_URL}" | tar --strip-components=1 -xz -C cmake
 - export PATH=${DEPS_DIR}/cmake/bin:${PATH}
 - cmake --version
 - VULKAN_URL="https://sdk.lunarg.com/sdk/download/1.1.82.1/linux/vulkansdk-linux-x86_64-1.1.82.1.tar.gz?u="
-- mkdir vulkan && travis_retry wget --no-check-certificate -quiet -O - ${VULKAN_URL} | tar --strip-components=1 -xz -C vulkan
+- mkdir vulkan && travis_retry wget --no-check-certificate -quiet -O - "${VULKAN_URL}" | tar --strip-components=1 -xz -C vulkan
 - export PATH=${DEPS_DIR}/vulkan/x86_64/bin:${PATH}
 - glslangValidator --version
 - pip3 install --user wheezy.template
