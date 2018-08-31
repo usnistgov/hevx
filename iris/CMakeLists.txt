@@ -85,7 +85,8 @@ target_compile_definitions(iris
 )
 
 target_compile_options(iris
-  PRIVATE
+  PUBLIC
+    $<$<CXX_COMPILER_ID:Clang>:-stdlib=libc++>
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wextra -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
@@ -95,4 +96,5 @@ target_compile_options(iris
 )
 
 add_executable(skel skel.cc)
-target_link_libraries(skel iris absl::failure_signal_handler spdlog)
+target_link_libraries(skel iris absl::failure_signal_handler spdlog
+  $<$<CXX_COMPILER_ID:Clang>:-lc++ -lc++abi>)
