@@ -1,4 +1,4 @@
-find_package(Filesystem REQUIRED)
+#find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
 find_package(X11 REQUIRED)
@@ -32,17 +32,12 @@ add_custom_command(
 )
 
 if(WIN32)
-  set(PLATFORM_WINDOWS 1)
-  set(PLATFORM_LINUX 0)
+  set(PLATFORM_WINDOWS TRUE)
 elseif(UNIX)
-  set(PLATFORM_WINDOWS 0)
-  set(PLATFORM_LINUX 1)
-else()
-  set(PLATFORM_WINDOWS 0)
-  set(PLATFORM_LINUX 0)
+  set(PLATFORM_LINUX TRUE)
 endif()
 
-configure_file(config.h.in config.h @ONLY)
+configure_file(config.h.in config.h)
 
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
@@ -60,9 +55,8 @@ add_library(iris ${SOURCES})
 target_link_libraries(iris
   PUBLIC
     gsl glm expected
-  PRIVATE
-    spdlog
     absl::strings
+    spdlog
     absl::container
     Vulkan::Vulkan ${X11_LIBRARIES}
     TBB::tbb Threads::Threads
@@ -86,7 +80,6 @@ target_compile_definitions(iris
 
 target_compile_options(iris
   PUBLIC
-    $<$<CXX_COMPILER_ID:Clang>:-stdlib=libc++>
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wextra -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
@@ -96,5 +89,4 @@ target_compile_options(iris
 )
 
 add_executable(skel skel.cc)
-target_link_libraries(skel iris absl::failure_signal_handler spdlog
-  $<$<CXX_COMPILER_ID:Clang>:-lc++ -lc++abi>)
+target_link_libraries(skel iris absl::failure_signal_handler)

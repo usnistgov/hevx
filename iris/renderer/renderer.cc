@@ -67,7 +67,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
  * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
  */
 static std::error_code
-InitInstance(gsl::not_null<gsl::czstring<>> appName, std::uint32_t appVersion,
+InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
              gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
   VkResult result;
@@ -740,9 +740,8 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
 
 } // namespace iris::Renderer
 
-std::error_code
-iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>> appName,
-                           std::uint32_t appVersion) noexcept {
+std::error_code iris::Renderer::Initialize(gsl::czstring<> appName,
+                                           std::uint32_t appVersion) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
 
   ////
@@ -787,10 +786,12 @@ iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>> appName,
 #endif
   };
 
+#if PLATFORM_LINUX
   ::setenv(
     "VK_LAYER_PATH",
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
     0);
+#endif
 
   flextVkInit();
 

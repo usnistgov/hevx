@@ -22,7 +22,7 @@ namespace iris::Renderer {
  * \param[in] appVersion the version of the application.
  * \return \ref Error
  */
-std::error_code Initialize(gsl::not_null<gsl::czstring<>> appName,
+std::error_code Initialize(gsl::czstring<> appName,
                            std::uint32_t appVersion = 0) noexcept;
 
 } // namespace iris::Renderer

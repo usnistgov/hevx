@@ -13,10 +13,12 @@ inline constexpr char const* kVersionStr = "@PROJECT_VERSION_MAJOR@.@PROJECT_VER
 
 inline constexpr char const* kVulkanSDKDirectory = "@Vulkan_SDK_DIR@"; //!< Location of Vulkan SDK
 
-inline constexpr bool kPlatformWindows = bool(@PLATFORM_WINDOWS@); //!< Indicates if the build platform is Windows
-inline constexpr bool kPlatformLinux = bool(@PLATFORM_LINUX@); //!< Indicates if the build platform is Linux
-
 } // namespace iris
+
+//! Indicates if the build platform is Windows
+#cmakedefine01 PLATFORM_WINDOWS
+//! Indicates if the build platform is Linux
+#cmakedefine01 PLATFORM_LINUX
 
 #ifndef NDEBUG
 

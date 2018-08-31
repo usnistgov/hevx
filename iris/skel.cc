@@ -5,7 +5,7 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 
-int main(int arch, char** argv) {
+int main(int argc[[maybe_unused]], char** argv[[maybe_unused]]) {
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
@@ -19,15 +19,13 @@ int main(int arch, char** argv) {
 
   logger->info("initialized");
 
-  if (auto error =
-        iris::Renderer::Initialize(gsl::not_null<gsl::czstring<>>("skel"))) {
+  if (auto error = iris::Renderer::Initialize("skel")) {
     logger->error("unable to initialize renderer: {}", error.message());
     std::exit(EXIT_FAILURE);
   }
 
   iris::wsi::Window window;
-  if (auto win = iris::wsi::Window::Create(
-        gsl::not_null<gsl::czstring<>>("skel"), {800, 800})) {
+  if (auto win = iris::wsi::Window::Create("skel", {800, 800})) {
     window = std::move(*win);
   } else {
     logger->error("unable to create window: {}", win.error().message());

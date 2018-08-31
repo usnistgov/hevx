@@ -164,8 +164,7 @@ static spdlog::logger* sGetLogger() noexcept {
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
-iris::wsi::Window::Impl::Create(gsl::not_null<gsl::czstring<>> title,
-                                glm::uvec2 extent,
+iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
                                 Options const& options) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
 
