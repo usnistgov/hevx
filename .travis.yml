@@ -6,28 +6,33 @@ addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
+    - llvm-toolchain-trusty-6.0
+    - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main'
+      key_url: 'https://apt.llvm.org/llvm-snapshot.gpg.key'
     packages:
     - python3-pip
     - g++-7
+    - clang-6.0
+    - libstdc++6
     - libx11-dev
     - libxrandr-dev
 
 install:
-- PROJ_DIR=`pwd`
-- DEPS_DIR="${HOME}/deps"
-- mkdir -p ${DEPS_DIR} && cd ${DEPS_DIR}
 - CMAKE_URL="https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz"
-- mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - "${CMAKE_URL}" | tar --strip-components=1 -xz -C cmake
-- export PATH=${DEPS_DIR}/cmake/bin:${PATH}
-- cmake --version
+- mkdir cmake && travis_retry wget --no-check-certificate --quiet -O - "${CMAKE_URL}" | tar --strip-components=1 -xz -C ${HOME}/cmake
 - VULKAN_URL="https://sdk.lunarg.com/sdk/download/1.1.82.1/linux/vulkansdk-linux-x86_64-1.1.82.1.tar.gz?u="
-- mkdir vulkan && travis_retry wget --no-check-certificate --quiet -O - "${VULKAN_URL}" | tar --strip-components=1 -xz -C vulkan
-- export PATH=${DEPS_DIR}/vulkan/x86_64/bin:${PATH}
-- glslangValidator --version
+- mkdir vulkan && travis_retry wget --no-check-certificate --quiet -O - "${VULKAN_URL}" | tar --strip-components=1 -xz -C ${HOME}/vulkan
 - pip3 install --user wheezy.template
-- cd ${PROJ_DIR}
+
+env:
+  global:
+  - PATH=${HOME}/cmake/bin:${HOME}/vulkan/x86_64/bin:${PATH}
+  - VULKAN_SDK=${HOME}/vulkan/x86_64
+  matrix:
+  - CXX=g++-7 CC=gcc-7
+  - CXX=clang++-6.0 CC=clang-6.0
 
 script:
-- CXX=g++-7 CC=gcc-7 VULKAN_SDK=${DEPS_DIR}/vulkan/x86_64 cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
+- cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
 - cmake --build .
 

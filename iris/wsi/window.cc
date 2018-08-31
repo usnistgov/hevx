@@ -1,6 +1,8 @@
 #include "window.h"
 #include "config.h"
+#if defined(VK_USE_PLATFORM_XLIB_KHR)
 #include "window_x11.h"
+#endif
 /*! \file
  * \brief \ref iris::wsi::Window definition.
  */

@@ -9,6 +9,12 @@ get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
+if(WIN32)
+  set(_flextvk_profile flextvk_profile_win32.txt)
+else()
+  set(_flextvk_profile flextvk_profile_xlib.txt)
+endif()
+
 add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
@@ -18,9 +24,9 @@ add_custom_command(
       ${flextgl_SOURCE_DIR}/flextGLgen.py
       -D.
       -t${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template
-      ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_profile.txt
+      ${CMAKE_CURRENT_SOURCE_DIR}/${_flextvk_profile}
   DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_profile.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/${_flextvk_profile}
     ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template/flextVk.h.template
     ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template/flextVk.cpp.template
 )
@@ -41,9 +47,13 @@ configure_file(config.h.in config.h @ONLY)
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   wsi/window.cc
-  wsi/window_x11.cc
   renderer/renderer.cc
 )
+
+if(WIN32)
+elseif(UNIX)
+  list(APPEND sources wsi/window_x11.cc)
+endif()
 
 add_library(iris ${SOURCES})
 
@@ -70,14 +80,18 @@ target_include_directories(iris
 target_compile_definitions(iris
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
-    VK_USE_PLATFORM_XLIB_KHR VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XLIB_KHR VK_USE_PLATFORM_XLIB_XRANDR_EXT>
+    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
 )
 
 target_compile_options(iris
   PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wextra -Werror>
-    $<$<CONFIG:Debug>:-g -Og>
-    $<$<CONFIG:Release>:-O2>
+    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
+    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od /Gm>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
 add_executable(skel skel.cc)
