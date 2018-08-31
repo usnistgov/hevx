@@ -37,6 +37,10 @@ elseif(UNIX)
   set(PLATFORM_LINUX TRUE)
 endif()
 
+if(MSVC)
+  set(PLATFORM_COMPILER_MSVC TRUE)
+endif()
+
 configure_file(config.h.in config.h)
 
 set(SOURCES
@@ -46,6 +50,7 @@ set(SOURCES
 )
 
 if(WIN32)
+  list(APPEND SOURCES wsi/window_win32.cc)
 elseif(UNIX)
   list(APPEND SOURCES wsi/window_x11.cc)
 endif()
@@ -72,6 +77,8 @@ target_include_directories(iris
 )
 
 target_compile_definitions(iris
+  PUBLIC
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX>
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
     $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XLIB_KHR VK_USE_PLATFORM_XLIB_XRANDR_EXT>
@@ -83,7 +90,7 @@ target_compile_options(iris
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wextra -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4201>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od /Gm>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )

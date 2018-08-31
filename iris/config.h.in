@@ -20,6 +20,9 @@ inline constexpr char const* kVulkanSDKDirectory = "@Vulkan_SDK_DIR@"; //!< Loca
 //! Indicates if the build platform is Linux
 #cmakedefine01 PLATFORM_LINUX
 
+//! Indicates if the compiler is MSVC
+#cmakedefine01 PLATFORM_COMPILER_MSVC
+
 #ifndef NDEBUG
 
 //! \brief Logs entry into a function.

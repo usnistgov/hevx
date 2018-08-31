@@ -1,9 +1,18 @@
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
+#include "iris/config.h"
 #include "iris/renderer/renderer.h"
 #include "iris/wsi/window.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable: 4127)
+#endif
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
+#include "spdlog/spdlog.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 int main(int argc[[maybe_unused]], char** argv[[maybe_unused]]) {
   absl::InitializeSymbolizer(argv[0]);

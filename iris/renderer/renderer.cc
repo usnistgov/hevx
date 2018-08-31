@@ -8,7 +8,14 @@
 #include "config.h"
 #include "error.h"
 #include "helpers.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4127)
+#endif
 #include "spdlog/spdlog.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 #include "tl/expected.hpp"
 #include "vulkan_result.h"
 #include <cstdlib>
