@@ -52,7 +52,7 @@ set(SOURCES
 
 if(WIN32)
 elseif(UNIX)
-  list(APPEND sources wsi/window_x11.cc)
+  list(APPEND SOURCES wsi/window_x11.cc)
 endif()
 
 add_library(iris ${SOURCES})
