@@ -14,6 +14,7 @@ enum class Error {
   kNone = 0,
   kNoDisplay,
   kXError,
+  kWin32Error,
 }; // enum class Error
 
 //! \brief Implements std::error_category for \ref Error
@@ -33,6 +34,7 @@ public:
     case Error::kNone: return "none"s;
     case Error::kNoDisplay: return "no display"s;
     case Error::kXError: return "X error"s;
+    case Error::kWin32Error: return "Win32 error"s;
     }
     return "unknown"s;
   }

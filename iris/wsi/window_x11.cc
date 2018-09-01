@@ -2,6 +2,7 @@
  * \brief \ref iris::wsi::Window::Impl definition for X11.
  */
 #include "wsi/window_x11.h"
+#include "absl/base/macros.h"
 #include "config.h"
 #include "spdlog/spdlog.h"
 #include "wsi/error.h"
@@ -213,7 +214,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
 
   if (sErrorCode != Success) {
     char str[1024];
-    ::XGetErrorText(pWin->handle_.display, sErrorCode, str, 1024);
+    ::XGetErrorText(pWin->handle_.display, sErrorCode, str,
+                    ABSL_ARRAY_SIZE(str));
     sGetLogger()->error("Cannot create window: {}", str);
     IRIS_LOG_LEAVE(sGetLogger());
     return tl::unexpected(Error::kXError);

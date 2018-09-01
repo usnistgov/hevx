@@ -60,7 +60,7 @@ add_library(iris ${SOURCES})
 target_link_libraries(iris
   PUBLIC
     gsl glm expected
-    absl::strings
+    absl::base absl::strings
     spdlog
     absl::container
     Vulkan::Vulkan ${X11_LIBRARIES}
@@ -70,6 +70,7 @@ target_link_libraries(iris
 target_include_directories(iris
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/..>
     $<INSTALL_INTERFACE:${INCLUDE_DIR}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -90,7 +91,7 @@ target_compile_options(iris
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wextra -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4201>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4127 /wd4201 /wd4996>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od /Gm>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
