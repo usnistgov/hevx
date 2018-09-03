@@ -215,7 +215,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   if (sErrorCode != Success) {
     char str[1024];
     ::XGetErrorText(pWin->handle_.display, sErrorCode, str,
-                    ABSL_ARRAY_SIZE(str));
+                    ABSL_ARRAYSIZE(str));
     sGetLogger()->error("Cannot create window: {}", str);
     IRIS_LOG_LEAVE(sGetLogger());
     return tl::unexpected(Error::kXError);
