@@ -31,7 +31,7 @@ CreateSurface(wsi::Window& window) noexcept {
 
   VkXlibSurfaceCreateInfoKHR sci = {};
   sci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-  sci.display = native.display;
+  sci.dpy = native.display;
   sci.window = native.window;
 
   VkResult result = vkCreateXlibSurfaceKHR(sInstance, &sci, nullptr, &surface);
