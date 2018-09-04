@@ -45,6 +45,5 @@ int main(int argc, char** argv) {
 
   for (auto&& file : files) iris::Renderer::LoadFile(file);
 
-  ::Sleep(3000);
   logger.info("exiting");
 }
