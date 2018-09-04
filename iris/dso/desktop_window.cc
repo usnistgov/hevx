@@ -12,12 +12,26 @@
 #pragma warning(pop)
 #endif
 
-iris::DesktopWindow::DesktopWindow() {}
+namespace iris {
 
-iris::DesktopWindow::~DesktopWindow() {}
+static spdlog::logger* sGetLogger() noexcept {
+  static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
+  return sLogger.get();
+}
+
+} // namespace iris::Renderer
+
+iris::DesktopWindow::DesktopWindow() {
+  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_LEAVE(sGetLogger());
+}
+
+iris::DesktopWindow::~DesktopWindow() = default;
 
 std::error_code
 iris::DesktopWindow::Control(std::string_view,
                              std::vector<std::string_view> const&) noexcept {
+  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_LEAVE(sGetLogger());
   return {};
 }
