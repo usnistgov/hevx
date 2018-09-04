@@ -1,6 +1,7 @@
 #ifndef HEV_IRIS_DSO_DSO_H_
 #define HEV_IRIS_DSO_DSO_H_
 
+#include <memory>
 #include <string_view>
 #include <system_error>
 #include <vector>
