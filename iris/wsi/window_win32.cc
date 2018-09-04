@@ -146,7 +146,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
 
   auto pWin = std::make_unique<Impl>();
   if (!pWin) {
-    sGetLogger()->error("Unable to allocate memory");
+    sGetLogger()->critical("Unable to allocate memory");
     std::terminate();
   }
 

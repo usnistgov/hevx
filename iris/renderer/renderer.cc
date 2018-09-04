@@ -4,8 +4,11 @@
 #include "renderer.h"
 #include "absl/base/macros.h"
 #include "absl/container/fixed_array.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "config.h"
+#include "dso/dso.h"
 #include "error.h"
 #include "helpers.h"
 #if PLATFORM_COMPILER_MSVC
@@ -19,21 +22,31 @@
 #include "tl/expected.hpp"
 #include "vulkan_result.h"
 #include <cstdlib>
+#include <string>
+#include <unordered_map>
 
 namespace iris::Renderer {
 
-static spdlog::logger* sGetLogger() noexcept {
-  static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
+static spdlog::logger*
+sGetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
+  static std::shared_ptr<spdlog::logger> sLogger;
+  if (!sLogger) {
+    sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
+    sLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(sLogger);
+  }
+
   return sLogger.get();
 }
 
+static bool sInitialized{false};
 static VkInstance sInstance{VK_NULL_HANDLE};
 static VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
 static VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static VkDevice sDevice{VK_NULL_HANDLE};
 static VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
-static bool sInitialized{false};
+static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sDSOs;
 
 #ifndef NDEBUG
 /*! \brief Callback for Vulkan Debug Reporting.
@@ -747,9 +760,10 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
 
 } // namespace iris::Renderer
 
-std::error_code iris::Renderer::Initialize(gsl::czstring<> appName,
-                                           std::uint32_t appVersion) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+std::error_code
+iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
+                           spdlog::sinks_init_list logSinks) noexcept {
+  IRIS_LOG_ENTER(sGetLogger(logSinks)); // pass logSinks here to initialize logs
 
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
@@ -825,5 +839,67 @@ std::error_code iris::Renderer::Initialize(gsl::czstring<> appName,
   sInitialized = true;
   IRIS_LOG_LEAVE(sGetLogger());
   return Error::kNone;
-} // InitializeRenderer
+} // iris::Renderer::Initialize
 
+namespace iris::Renderer {
+
+} // namespace iris::Renderer
+
+std::error_code iris::Renderer::Control(std::string_view command) noexcept {
+  IRIS_LOG_ENTER(sGetLogger());
+  if (command.empty()) {
+    sGetLogger()->trace("empty control command");
+    IRIS_LOG_LEAVE(sGetLogger());
+    return Error::kNone;
+  }
+
+  sGetLogger()->debug("Control \"{}\"", command);
+  std::vector<std::string_view> components = absl::StrSplit(command, " ");
+  auto&& controlCommand = components[0];
+
+  if (absl::StartsWithIgnoreCase(controlCommand, "dso")) {
+    std::string dsoName(components[1]);
+
+    if (auto&& iter = sDSOs.find(dsoName); iter != sDSOs.end()) {
+      // Pass command to DSO
+      if (auto error = iter->second->Control(command, components)) {
+        sGetLogger()->error("Error: {}", error.message());
+        IRIS_LOG_LEAVE(sGetLogger());
+        return Error::kControlCommandFailed;
+      } else {
+        IRIS_LOG_LEAVE(sGetLogger());
+        return Error::kNone;
+      }
+    } else {
+      // Load DSO and then pass command
+      if (auto dso = DSO::Instantiate(dsoName)) {
+        sDSOs.emplace(dsoName, std::move(dso));
+        if (auto error = sDSOs[dsoName]->Control(command, components)) {
+          sGetLogger()->error("Error: {}", error.message());
+          IRIS_LOG_LEAVE(sGetLogger());
+          return Error::kControlCommandFailed;
+        } else {
+          IRIS_LOG_LEAVE(sGetLogger());
+          return Error::kNone;
+        }
+      } else {
+        sGetLogger()->error("Unknown DSO \"{}\"", dsoName);
+        return Error::kUnknownDSO;
+      }
+    }
+
+  } else {
+    sGetLogger()->error("Unknown control command: \"{}\"", command);
+    IRIS_LOG_LEAVE(sGetLogger());
+    return Error::kUnknownControlCommand;
+  }
+} // iris::Renderer::Control
+
+std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
+  IRIS_LOG_ENTER(sGetLogger());
+
+  sGetLogger()->debug("Loading {}", fileName);
+
+  IRIS_LOG_LEAVE(sGetLogger());
+  return Error::kNone;
+} // iris::Renderer::LoadFile

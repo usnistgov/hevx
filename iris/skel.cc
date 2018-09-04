@@ -8,44 +8,41 @@
 #pragma warning(disable: 4127)
 #endif
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
+#include "flags.h"
 
-int main(int argc[[maybe_unused]], char** argv[[maybe_unused]]) {
+int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
+  flags::args const args(argc, argv);
+  auto const& files = args.positional();
+
+  auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("skel.log");
+  file_sink->set_level(spdlog::level::trace);
+
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
-  auto iris_logger = std::make_shared<spdlog::logger>("iris", console_sink);
-  iris_logger->set_level(spdlog::level::trace);
-  spdlog::register_logger(iris_logger);
-  auto logger = std::make_shared<spdlog::logger>("skel", console_sink);
-  logger->set_level(spdlog::level::trace);
 
-  logger->info("initialized");
+  spdlog::logger logger("skel", {console_sink, file_sink});
+  logger.set_level(spdlog::level::trace);
 
-  if (auto error = iris::Renderer::Initialize("skel")) {
-    logger->error("unable to initialize renderer: {}", error.message());
+  logger.info("initialized");
+
+  if (auto error =
+        iris::Renderer::Initialize("skel", 0, {console_sink, file_sink})) {
+    logger.critical("unable to initialize renderer: {}", error.message());
     std::exit(EXIT_FAILURE);
   }
 
-  iris::wsi::Window window;
-  if (auto win = iris::wsi::Window::Create("skel", {800, 800})) {
-    window = std::move(*win);
-  } else {
-    logger->error("unable to create window: {}", win.error().message());
-    std::exit(EXIT_FAILURE);
-  }
+  // Simulate "DSO desktopWindow" command from desktopWindow.iris file
+  iris::Renderer::Control("DSO desktopWindow");
 
-  window.OnClose([&logger]() { logger->debug("window closing"); });
+  for (auto&& file : files) iris::Renderer::LoadFile(file);
 
-  window.Show();
-  while (!window.IsClosed()) { window.PollEvents(); }
-
-  logger->info("exiting");
+  logger.info("exiting");
 }
-

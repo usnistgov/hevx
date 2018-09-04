@@ -44,6 +44,8 @@ set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   wsi/window.cc
   renderer/renderer.cc
+  dso/dso.cc
+  dso/desktop_window.cc
 )
 
 if(WIN32)
@@ -56,7 +58,7 @@ add_library(iris ${SOURCES})
 
 target_link_libraries(iris
   PUBLIC
-    imgui vma
+    flags imgui vma
     gsl glm expected
     absl::base absl::strings
     spdlog

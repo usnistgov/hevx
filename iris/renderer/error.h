@@ -11,10 +11,14 @@ namespace iris::Renderer {
 
 //! \brief Renderer errors.
 enum class Error {
-  kNone = 0,                 //!< No error
-  kInitializationFailed = 1, //!< Initialization failed for some reason.
-  kAlreadyInitialized = 2,   //!< The renderer has already been initialized.
-  kNoPhysicalDevice = 3,     //!< No physical device available.
+  kNone = 0,                  //!< No error
+  kInitializationFailed = 1,  //!< Initialization failed for some reason.
+  kAlreadyInitialized = 2,    //!< The renderer has already been initialized.
+  kNoPhysicalDevice = 3,      //!< No physical device available.
+  kInvalidControlCommand = 4, //!< Invalid control command.
+  kControlCommandFailed = 5,  //!< The control command failed while executing.
+  kUnknownControlCommand = 6, //!< Unknown control command.
+  kUnknownDSO = 7,            //!< Unknown DSO.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -35,6 +39,10 @@ public:
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device";
+    case Error::kInvalidControlCommand: return "invalid control command";
+    case Error::kControlCommandFailed: return "control command failed";
+    case Error::kUnknownControlCommand: return "unknown control command";
+    case Error::kUnknownDSO: return "unknown DSO";
     }
     return "unknown"s;
   }

@@ -5,7 +5,9 @@
  */
 
 #include "gsl/gsl"
+#include "spdlog/sinks/sink.h"
 #include <cstdint>
+#include <string_view>
 #include <system_error>
 
 /*! \brief IRIS renderer
@@ -23,9 +25,13 @@ namespace iris::Renderer {
  * \return \ref Error
  */
 std::error_code Initialize(gsl::czstring<> appName,
-                           std::uint32_t appVersion = 0) noexcept;
+                           std::uint32_t appVersion = 0,
+                           spdlog::sinks_init_list logSinks = {}) noexcept;
+
+std::error_code Control(std::string_view command) noexcept;
+
+std::error_code LoadFile(std::string_view fileName) noexcept;
 
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_H_
-
