@@ -1,16 +1,14 @@
 /*! \file
  * \brief \ref iris::Renderer definition.
  */
-#include "renderer.h"
+#include "renderer/renderer.h"
 #include "absl/base/macros.h"
 #include "absl/container/fixed_array.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
-#include "config.h"
 #include "dso/dso.h"
-#include "error.h"
-#include "helpers.h"
+#include "renderer/impl.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -20,7 +18,6 @@
 #pragma warning(pop)
 #endif
 #include "tl/expected.hpp"
-#include "vulkan_result.h"
 #include <cstdlib>
 #include <string>
 #include <unordered_map>
@@ -39,13 +36,14 @@ sGetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
   return sLogger.get();
 }
 
+VkInstance sInstance{VK_NULL_HANDLE};
+VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
+VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
+std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
+VkDevice sDevice{VK_NULL_HANDLE};
+VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
+
 static bool sInitialized{false};
-static VkInstance sInstance{VK_NULL_HANDLE};
-static VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
-static VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
-static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-static VkDevice sDevice{VK_NULL_HANDLE};
-static VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
 static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sDSOs;
 
 #ifndef NDEBUG
@@ -781,8 +779,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
     VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-#ifdef VK_USE_PLATFORM_XLIB_KHR // we also need the platform-specific surface
+#if defined(VK_USE_PLATFORM_XLIB_KHR) // we also need the platform-specific surface
     VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#elif defined(VK_USE_PLATFORM_WIN32_KHR) // we also need the platform-specific surface
+    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif
 #ifndef NDEBUG
     VK_EXT_DEBUG_REPORT_EXTENSION_NAME
@@ -841,10 +841,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   return Error::kNone;
 } // iris::Renderer::Initialize
 
-namespace iris::Renderer {
-
-} // namespace iris::Renderer
-
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   IRIS_LOG_ENTER(sGetLogger());
   if (command.empty()) {
@@ -860,32 +856,27 @@ std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   if (absl::StartsWithIgnoreCase(controlCommand, "dso")) {
     std::string dsoName(components[1]);
 
-    if (auto&& iter = sDSOs.find(dsoName); iter != sDSOs.end()) {
-      // Pass command to DSO
-      if (auto error = iter->second->Control(command, components)) {
-        sGetLogger()->error("Error: {}", error.message());
-        IRIS_LOG_LEAVE(sGetLogger());
-        return Error::kControlCommandFailed;
-      } else {
-        IRIS_LOG_LEAVE(sGetLogger());
-        return Error::kNone;
-      }
-    } else {
-      // Load DSO and then pass command
+    // if the DSO hasn't been loaded before, then load and initialie it
+    if (sDSOs.find(dsoName) == sDSOs.end()) {
       if (auto dso = DSO::Instantiate(dsoName)) {
-        sDSOs.emplace(dsoName, std::move(dso));
-        if (auto error = sDSOs[dsoName]->Control(command, components)) {
-          sGetLogger()->error("Error: {}", error.message());
+        if (auto error = dso->Initialize()) {
+          sGetLogger()->error("DSO Initialize Error: {}", error.message());
           IRIS_LOG_LEAVE(sGetLogger());
           return Error::kControlCommandFailed;
         } else {
-          IRIS_LOG_LEAVE(sGetLogger());
-          return Error::kNone;
+          sDSOs.emplace(dsoName, std::move(dso));
         }
-      } else {
-        sGetLogger()->error("Unknown DSO \"{}\"", dsoName);
-        return Error::kUnknownDSO;
       }
+    }
+
+    // Send control command to the DSO
+    if (auto error = sDSOs[dsoName]->Control(command, components)) {
+      sGetLogger()->error("DSO Error: {}", error.message());
+      IRIS_LOG_LEAVE(sGetLogger());
+      return Error::kControlCommandFailed;
+    } else {
+      IRIS_LOG_LEAVE(sGetLogger());
+      return Error::kNone;
     }
 
   } else {

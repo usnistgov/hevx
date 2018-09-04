@@ -44,6 +44,7 @@ set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   wsi/window.cc
   renderer/renderer.cc
+  renderer/surface.cc
   dso/dso.cc
   dso/desktop_window.cc
 )

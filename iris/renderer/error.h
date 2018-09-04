@@ -11,14 +11,16 @@ namespace iris::Renderer {
 
 //! \brief Renderer errors.
 enum class Error {
-  kNone = 0,                  //!< No error
-  kInitializationFailed = 1,  //!< Initialization failed for some reason.
-  kAlreadyInitialized = 2,    //!< The renderer has already been initialized.
-  kNoPhysicalDevice = 3,      //!< No physical device available.
-  kInvalidControlCommand = 4, //!< Invalid control command.
-  kControlCommandFailed = 5,  //!< The control command failed while executing.
-  kUnknownControlCommand = 6, //!< Unknown control command.
-  kUnknownDSO = 7,            //!< Unknown DSO.
+  kNone = 0,              //!< No error
+  kInitializationFailed,  //!< Initialization failed for some reason.
+  kAlreadyInitialized,    //!< The renderer has already been initialized.
+  kNoPhysicalDevice,      //!< No physical device available.
+  kSurfaceCreationFailed, //!< Surface creation failed for some reason.
+  kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
+  kInvalidControlCommand, //!< Invalid control command.
+  kControlCommandFailed,  //!< The control command failed while executing.
+  kUnknownControlCommand, //!< Unknown control command.
+  kUnknownDSO,            //!< Unknown DSO.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -38,11 +40,13 @@ public:
     case Error::kNone: return "none"s;
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
-    case Error::kNoPhysicalDevice: return "no physical device";
-    case Error::kInvalidControlCommand: return "invalid control command";
-    case Error::kControlCommandFailed: return "control command failed";
-    case Error::kUnknownControlCommand: return "unknown control command";
-    case Error::kUnknownDSO: return "unknown DSO";
+    case Error::kNoPhysicalDevice: return "no physical device"s;
+    case Error::kSurfaceCreationFailed: return "surface creation failed"s;
+    case Error::kSurfaceNotSupported: return "surface not supported"s;
+    case Error::kInvalidControlCommand: return "invalid control command"s;
+    case Error::kControlCommandFailed: return "control command failed"s;
+    case Error::kUnknownControlCommand: return "unknown control command"s;
+    case Error::kUnknownDSO: return "unknown DSO"s;
     }
     return "unknown"s;
   }

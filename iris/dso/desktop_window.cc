@@ -6,7 +6,6 @@
 #pragma warning(push)
 #pragma warning(disable : 4127)
 #endif
-#include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -21,12 +20,31 @@ static spdlog::logger* sGetLogger() noexcept {
 
 } // namespace iris::Renderer
 
-iris::DesktopWindow::DesktopWindow() {
+std::error_code iris::DesktopWindow::DesktopWindow::Initialize() noexcept {
   IRIS_LOG_ENTER(sGetLogger());
-  IRIS_LOG_LEAVE(sGetLogger());
-}
 
-iris::DesktopWindow::~DesktopWindow() = default;
+  if (auto win = wsi::Window::Create("DesktopWindow", {720, 720}); !win) {
+    sGetLogger()->error("Unable to create DesktopWindow window: {}",
+                        win.error().message());
+    return win.error();
+  } else {
+    window_ = std::move(*win);
+  }
+
+  if (auto sfc = Renderer::Surface::Create(window_); !sfc) {
+    sGetLogger()->error("Unable to create DesktopWindow surface: {}",
+                        sfc.error().message());
+    return sfc.error();
+  } else {
+    surface_ = std::move(*sfc);
+  }
+
+  window_.Move({320, 320});
+  window_.Show();
+
+  IRIS_LOG_LEAVE(sGetLogger());
+  return {};
+}
 
 std::error_code
 iris::DesktopWindow::Control(std::string_view,

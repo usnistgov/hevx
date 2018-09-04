@@ -6,6 +6,7 @@
 
 #include "gsl/gsl"
 #include "spdlog/sinks/sink.h"
+#include "tl/expected.hpp"
 #include <cstdint>
 #include <string_view>
 #include <system_error>
