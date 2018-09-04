@@ -31,6 +31,8 @@ The following packages are fetched and managed with CMake:
 - [gabime/spdlog](https://github.com/gabime/spdlog)
 - [01org/tbb](https://github.com/01org/tbb)
 - [mosra/flextgl](https://github.com/mosra/flextgl)
+- [GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
+- [ocornut/imgui](https://github.com/ocornut/imgui)
 
 ### Instructions
 On HEV hosts:

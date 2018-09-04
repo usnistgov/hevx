@@ -2,9 +2,6 @@
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
 find_package(X11 REQUIRED)
-find_package(Vulkan REQUIRED)
-get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
-get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
 
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
@@ -59,6 +56,7 @@ add_library(iris ${SOURCES})
 
 target_link_libraries(iris
   PUBLIC
+    imgui vma
     gsl glm expected
     absl::base absl::strings
     spdlog
