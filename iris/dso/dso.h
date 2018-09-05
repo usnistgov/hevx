@@ -15,6 +15,8 @@ public:
 
   virtual std::error_code Initialize() noexcept = 0;
 
+  virtual std::error_code Frame() noexcept = 0;
+
   virtual std::error_code
   Control(std::string_view command,
           std::vector<std::string_view> const& components) noexcept = 0;

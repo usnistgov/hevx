@@ -45,5 +45,7 @@ int main(int argc, char** argv) {
 
   for (auto&& file : files) iris::Renderer::LoadFile(file);
 
+  while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
+
   logger.info("exiting");
 }

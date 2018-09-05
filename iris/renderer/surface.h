@@ -12,7 +12,15 @@ struct Surface {
   static tl::expected<Surface, std::error_code>
   Create(wsi::Window& window) noexcept;
 
-  VkSurfaceKHR handle;
+  std::error_code Resize(glm::uvec2 const& newExtent) noexcept;
+
+  VkSurfaceKHR handle{VK_NULL_HANDLE};
+
+  VkExtent2D extent{};
+  VkViewport viewport;
+  VkRect2D scissor{};
+
+  VkSwapchainKHR swapchain{VK_NULL_HANDLE};
 }; // struct Surface
 
 } // namespace iris::Renderer

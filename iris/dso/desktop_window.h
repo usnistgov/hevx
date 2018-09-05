@@ -13,6 +13,8 @@ public:
 
   virtual std::error_code Initialize() noexcept override;
 
+  virtual std::error_code Frame() noexcept override;
+
   virtual std::error_code
   Control(std::string_view,
           std::vector<std::string_view> const&) noexcept override;
@@ -20,6 +22,8 @@ public:
   virtual ~DesktopWindow() noexcept = default;
 
 private:
+  bool sResized_{false};
+
   wsi::Window window_;
   Renderer::Surface surface_;
 }; // class DesktopWindow

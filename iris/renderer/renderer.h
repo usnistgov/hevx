@@ -29,6 +29,11 @@ std::error_code Initialize(gsl::czstring<> appName,
                            std::uint32_t appVersion = 0,
                            spdlog::sinks_init_list logSinks = {}) noexcept;
 
+void Terminate() noexcept;
+bool IsRunning() noexcept;
+
+void Frame() noexcept;
+
 std::error_code Control(std::string_view command) noexcept;
 
 std::error_code LoadFile(std::string_view fileName) noexcept;

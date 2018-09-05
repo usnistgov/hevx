@@ -18,6 +18,7 @@
 #endif
 #include "renderer/impl.h"
 #include "tl/expected.hpp"
+#include <array>
 #include <cstdlib>
 #include <string>
 #include <unordered_map>
@@ -43,7 +44,17 @@ std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
 VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
 
+// These are the desired properties of all surfaces for the renderer.
+VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
+                                       VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+VkFormat sSurfaceDepthFormat{VK_FORMAT_D32_SFLOAT};
+VkSampleCountFlagBits sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
+VkPresentModeKHR sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
+
+VkRenderPass sRenderPass{VK_NULL_HANDLE};
+
 static bool sInitialized{false};
+static bool sRunning{false};
 static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sDSOs;
 
 #ifndef NDEBUG
@@ -129,7 +140,8 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
 
   // validation layers do add overhead, so only use them in Debug configs.
 #ifndef NDEBUG
-  char const* layerNames[] = {"VK_LAYER_LUNARG_standard_validation"};
+  std::array<char const*, 1> layerNames = {
+    {"VK_LAYER_LUNARG_standard_validation"}};
 #endif
 
   VkApplicationInfo ai = {};
@@ -145,8 +157,8 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   ci.pApplicationInfo = &ai;
 #ifndef NDEBUG
   ci.enabledLayerCount =
-    gsl::narrow_cast<std::uint32_t>(ABSL_ARRAYSIZE(layerNames));
-  ci.ppEnabledLayerNames = layerNames;
+    gsl::narrow_cast<std::uint32_t>(layerNames.size());
+  ci.ppEnabledLayerNames = layerNames.data();
 #endif
   ci.enabledExtensionCount =
     gsl::narrow_cast<std::uint32_t>(extensionNames.size());
@@ -756,6 +768,149 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   return VulkanResult::kSuccess;
 } // CreateDevice
 
+static std::error_code
+CreateRenderPass() noexcept {
+  IRIS_LOG_ENTER(sGetLogger());
+  VkResult result;
+
+  // Our render pass has four attachments:
+  // 0: color
+  // 1: resolve color
+  // 2: depth stencil
+  // 3: resolve depth stencil
+  //
+  // The four are needed to support multi-sampling.
+  //
+  // The color (0) and depth stencil (2) attachments are the multi-sampled
+  // attachments that will match up with framebuffers that are rendered into.
+  //
+  // The resolve (1, 3) attachments are then used for presenting the final
+  // image (1) and sampling for any depth-subpasses (3).
+  std::array<VkAttachmentDescription, 4> attachments;
+
+  // The multi-sampled color attachment needs to be cleared on load (loadOp).
+  // We don't care what the input layout is (initialLayout) but the final
+  // layout must be COLOR_ATTCHMENT_OPTIMAL to allow for resolving.
+  attachments[0] = VkAttachmentDescription{
+    0,                                       // flags
+    sSurfaceColorFormat.format,              // format
+    sSurfaceSampleCount,                     // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,             // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  // The resolve color attachment has a single sample and stores the resolved
+  // color and depth. It will be transitioned to PRESENT_SRC_KHR for
+  // presentation.
+  attachments[1] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceColorFormat.format,       // format
+    VK_SAMPLE_COUNT_1_BIT,            // samples
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,     // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR   // finalLayout
+  };
+
+  // The multi-sampled depth attachment needs to be cleared on load (loadOp).
+  // We don't care what the input layout is (initialLayout) but the final
+  // layout must be DEPTH_STENCIL_ATTCHMENT_OPTIMAL to allow for resolving.
+  attachments[2] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceDepthFormat,              // format
+    sSurfaceSampleCount,              // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  // The resolve depth stencil attachment has a single sample and stores the
+  // resolved depth. It will be transitioned to COLOR_ATTACHMENT_OPTIMAL for
+  // attachment as an input image to other subpasses.
+  attachments[3] = VkAttachmentDescription{
+    0,                                       // flags
+    sSurfaceDepthFormat,                     // format
+    VK_SAMPLE_COUNT_1_BIT,                   // samples
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,            // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  VkAttachmentReference color{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference resolve{1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthStencil{
+    2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+  VkSubpassDescription subpass = {
+    0,                               // flags
+    VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+    0,                               // inputAttachmentCount
+    nullptr,                         // pInputAttachments
+    1,                               // colorAttachmentCount
+    &color,                          // pColorAttachments (array)
+    &resolve,                        // pResolveAttachments (array)
+    &depthStencil,                   // pDepthStencilAttachment (single)
+    0,                               // preserveAttachmentCount
+    nullptr                          // pPreserveAttachments
+  };
+
+  std::array<VkSubpassDependency, 2> dependencies;
+
+  dependencies[0] = VkSubpassDependency{
+    VK_SUBPASS_EXTERNAL,                           // srcSubpass
+    0,                                             // dstSubpass
+    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // srcStageMask
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
+    VK_ACCESS_MEMORY_READ_BIT,                     // srcAccessMask
+    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
+    VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+  };
+
+  dependencies[1] = VkSubpassDependency{
+    0,                                             // srcSubpass
+    VK_SUBPASS_EXTERNAL,                           // dstSubpass
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
+    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // dstStageMask
+    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // srcAccessMask
+    VK_ACCESS_MEMORY_READ_BIT,              // dstAccessMask
+    VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+  };
+
+  VkRenderPassCreateInfo rpci = {};
+  rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  rpci.attachmentCount = gsl::narrow_cast<std::uint32_t>(attachments.size());
+  rpci.pAttachments = attachments.data();
+  rpci.subpassCount = 1;
+  rpci.pSubpasses = &subpass;
+  rpci.dependencyCount = gsl::narrow_cast<std::uint32_t>(dependencies.size());
+  rpci.pDependencies = dependencies.data();
+
+  result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
+  if (result != VK_SUCCESS) {
+    sGetLogger()->error("Cannot create device: {}", to_string(result));
+    IRIS_LOG_LEAVE(sGetLogger());
+    return make_error_code(result);
+  }
+
+  sGetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
+  IRIS_LOG_LEAVE(sGetLogger());
+  return VulkanResult::kSuccess;
+} // CreateRenderPass
+
 } // namespace iris::Renderer
 
 std::error_code
@@ -836,10 +991,28 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     return Error::kInitializationFailed;
   }
 
+  if (auto error = CreateRenderPass()) {
+    IRIS_LOG_LEAVE(sGetLogger());
+    return Error::kInitializationFailed;
+  }
+
   sInitialized = true;
+  sRunning = true;
   IRIS_LOG_LEAVE(sGetLogger());
   return Error::kNone;
 } // iris::Renderer::Initialize
+
+void iris::Renderer::Terminate() noexcept {
+  sRunning = false;
+} // iris::Renderer::Terminate
+
+bool iris::Renderer::IsRunning() noexcept {
+  return sRunning;
+} // iris::Renderer::IsRunning
+
+void iris::Renderer::Frame() noexcept {
+  for (auto [name, dso] : sDSOs) { dso->Frame(); }
+} // iris::Renderer::Frame
 
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   IRIS_LOG_ENTER(sGetLogger());

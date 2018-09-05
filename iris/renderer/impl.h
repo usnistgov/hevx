@@ -16,6 +16,12 @@ extern std::uint32_t sGraphicsQueueFamilyIndex;
 extern VkDevice sDevice;
 extern VkQueue sUnorderedCommandQueue;
 
+extern VkSurfaceFormatKHR sSurfaceColorFormat;
+extern VkFormat sSurfaceDepthFormat;
+extern VkSampleCountFlagBits sSurfaceSampleCount;
+extern VkPresentModeKHR sSurfacePresentMode;
+extern VkRenderPass sRenderPass;
+
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_IMPL_H_
