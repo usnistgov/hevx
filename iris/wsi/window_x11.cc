@@ -4,7 +4,7 @@
 #include "wsi/window_x11.h"
 #include "absl/base/macros.h"
 #include "config.h"
-#include "spdlog/spdlog.h"
+#include "logging.h"
 #include "wsi/error.h"
 #include <cstdint>
 #include <exception>
@@ -156,11 +156,6 @@ static Keys TranslateKeySym(::KeySym keysym) {
 
   return Keys::kUnknown;
 } // TranslateKeySym
-
-static spdlog::logger* sGetLogger() noexcept {
-  static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
-  return sLogger.get();
-}
 
 } // namespace iris::wsi
 

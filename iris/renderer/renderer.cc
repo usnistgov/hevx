@@ -8,7 +8,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "dso/dso.h"
-#include "renderer/impl.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -17,6 +16,7 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
+#include "renderer/impl.h"
 #include "tl/expected.hpp"
 #include <cstdlib>
 #include <string>

@@ -4,10 +4,7 @@
 #include "wsi/window_win32.h"
 #include "absl/base/macros.h"
 #include "config.h"
-#pragma warning(push)
-#pragma warning(disable: 4127)
-#include "spdlog/spdlog.h"
-#pragma warning(pop)
+#include "logging.h"
 #include "wsi/error.h"
 
 namespace iris::wsi {
@@ -131,11 +128,6 @@ Keys TranslateKeycode(WPARAM keyCode) {
 
   return Keys::kUnknown;
 } // TranslateKeycode
-
-static spdlog::logger* sGetLogger() noexcept {
-  static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
-  return sLogger.get();
-}
 
 } // namespace iris::wsi
 

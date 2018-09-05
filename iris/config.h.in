@@ -23,6 +23,9 @@ inline constexpr char const* kVulkanSDKDirectory = "@Vulkan_SDK_DIR@"; //!< Loca
 //! Indicates if the compiler is MSVC
 #cmakedefine01 PLATFORM_COMPILER_MSVC
 
+//! Indicates if the compiler is GCC or Clang
+#cmakedefine01 PLATFORM_COMPILER_GCC
+
 #ifndef NDEBUG
 
 //! \brief Logs entry into a function.

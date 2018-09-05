@@ -34,8 +34,10 @@ elseif(UNIX)
   set(PLATFORM_LINUX TRUE)
 endif()
 
-if(MSVC)
+if(CXX_COMPILER_ID STREQUAL MSVC)
   set(PLATFORM_COMPILER_MSVC TRUE)
+elseif(CXX_COMPILER_ID STREQUAL GCC OR CXX_COMPILER_ID STREQUAL Clang)
+  set(PLATFORM_COMPILER_GCC TRUE)
 endif()
 
 configure_file(config.h.in config.h)

@@ -1,25 +1,13 @@
 #include "renderer/surface.h"
+#include "logging.h"
 #include "renderer/impl.h"
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 #include "wsi/window_x11.h"
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
 #include "wsi/window_win32.h"
 #endif
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4127)
-#endif
-#include "spdlog/spdlog.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
 
 namespace iris::Renderer {
-
-static spdlog::logger* sGetLogger() noexcept {
-  static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
-  return sLogger.get();
-}
 
 tl::expected<VkSurfaceKHR, std::error_code>
 CreateSurface(wsi::Window& window) noexcept {
@@ -105,3 +93,4 @@ iris::Renderer::Surface::Create(wsi::Window& window) noexcept {
   IRIS_LOG_LEAVE(sGetLogger());
   return surface;
 } // iris::Renderer::Surface::Create
+
