@@ -1,7 +1,6 @@
 #ifndef HEV_IRIS_RENDERER_WINDOW_H_
 #define HEV_IRIS_RENDERER_WINDOW_H_
 
-#include "iris/wsi/window.h"
 #include "iris/renderer/surface.h"
 #include "iris/logging.h"
 #include <system_error>
@@ -29,13 +28,12 @@ struct Window {
     IRIS_LOG_ENTER();
 
     window.OnResize([&](glm::uvec2 const& newExtent) {
-      GetLogger()->info("DesktopWindow window resized: ({}x{})", newExtent[0],
-                        newExtent[1]);
+      GetLogger()->info("Window resized: ({}x{})", newExtent[0], newExtent[1]);
       resized = true;
     });
 
     window.OnClose([]() {
-      GetLogger()->info("DesktopWindow window closing");
+      GetLogger()->info("Window closing");
       Renderer::Terminate();
     });
 

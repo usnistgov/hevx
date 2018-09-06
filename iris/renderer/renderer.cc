@@ -1105,16 +1105,26 @@ void iris::Renderer::Frame() noexcept {
   // 4. Present the swapchains to a queue
 
   for (auto&& iter : Windows()) iter.second.Frame();
+
+  for (auto&& iter : Windows()) {
+    auto&& window = iter.second;
+    if (window.resized) {
+      window.surface.Resize(window.window.Extent());
+      window.resized = false;
+    }
+  }
 } // iris::Renderer::Frame
 
 namespace iris::Renderer {
 
-static std::error_code CreateDesktopWindow() noexcept {
+static std::error_code CreateWindow(std::string const& name) noexcept {
   IRIS_LOG_ENTER();
 
-  auto win = wsi::Window::Create("desktop", {720, 720});
+  std::string baseName = std::string(absl::StripSuffix(name, "Window"));
+
+  auto win = wsi::Window::Create(baseName.c_str(), {720, 720});
   if (!win) {
-    GetLogger()->error("Unable to create DesktopWindow window: {}",
+    GetLogger()->error("Unable to create Window window: {}",
                        win.error().message());
     IRIS_LOG_LEAVE();
     return win.error();
@@ -1122,17 +1132,17 @@ static std::error_code CreateDesktopWindow() noexcept {
 
   auto sfc = Surface::Create(*win);
   if (!sfc) {
-    GetLogger()->error("Unable to create DesktopWindow surface: {}",
+    GetLogger()->error("Unable to create Window surface: {}",
                        sfc.error().message());
     IRIS_LOG_LEAVE();
     return sfc.error();
   }
 
-  Windows().emplace("desktopWindow", Window(std::move(*win), std::move(*sfc)));
+  Windows().emplace(name, Window(std::move(*win), std::move(*sfc)));
 
   IRIS_LOG_LEAVE();
   return Error::kNone;
-} // CreateDesktopWindow
+} // CreateWindow
 
 } // namespace iris::Renderer
 
@@ -1154,20 +1164,16 @@ std::error_code iris::Renderer::Control(std::string_view command) noexcept {
     if (absl::EndsWith(dsoName, "Window")) {
       auto&& windows = Windows();
 
-      if (dsoName == "desktopWindow") {
-        if (windows.find(dsoName) == windows.end()) {
-          if (auto error = CreateDesktopWindow()) {
-            IRIS_LOG_LEAVE();
-            return error;
-          }
+      if (windows.find(dsoName) == windows.end()) {
+        if (auto error = CreateWindow(dsoName)) {
+          IRIS_LOG_LEAVE();
+          return error;
         }
-
-        IRIS_LOG_LEAVE();
-        return Error::kNone;
-      } else {
-        IRIS_LOG_LEAVE();
-        return Error::kUnknownControlCommand;
       }
+
+      // Need to handle rest of control command for windows
+      IRIS_LOG_LEAVE();
+      return Error::kUnknownControlCommand;
 
     } else {
 
