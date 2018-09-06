@@ -1096,7 +1096,7 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  for (auto [name, dso] : GetDSOMap()) { dso->Frame(); }
+  for (auto iter : GetDSOMap()) iter.second->Frame();
 } // iris::Renderer::Frame
 
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
