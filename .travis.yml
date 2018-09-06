@@ -26,8 +26,10 @@ matrix:
         - python3-pip
         - g++-7
         - clang-7
-        - libc++-7
+        - libc++1-7
+        - libc++abi1-7
         - libc++-7-dev
+        - libc++abi-7-dev
         - libx11-dev
         - libxrandr-dev
 
