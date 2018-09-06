@@ -14,7 +14,7 @@ matrix:
         - g++-7
         - libx11-dev
         - libxrandr-dev
-  - env: COMPILER_NAME=clang CXX=clang++-7 CC=clang-7
+  - env: COMPILER_NAME=clang CXX=clang++-7 CC=clang
     addons:
       apt:
         sources:
@@ -46,5 +46,6 @@ env:
   - VULKAN_SDK=${HOME}/vulkan/x86_64
 
 script:
+- alias clang=clang-7
 - cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
 - cmake --build .
