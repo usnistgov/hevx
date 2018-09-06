@@ -5,11 +5,12 @@
  */
 
 #include <bitset>
+#include <cstdint>
 
 namespace iris::wsi {
 
 //! \brief Keyboard keys.
-enum class Keys {
+enum class Keys : std::uint8_t {
   kUnknown = 0,
 
   kSpace = 32,
@@ -136,7 +137,7 @@ enum class Keys {
   kRightSuper = 247,
   kMenu = 248,
 
-  kMaxKeys = 256
+  kMaxKeys = 255
 }; // knum class keys
 
 //! \brief Tracks the current state of a keyboard.
@@ -179,7 +180,7 @@ private:
 }; // class Keyset
 
 //! \brief Mouse buttons.
-enum class Buttons {
+enum class Buttons : std::uint8_t {
   k1 = 1,
   k2,
   k3,

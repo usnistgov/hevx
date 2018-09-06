@@ -2,6 +2,27 @@
 #define HEV_IRIS_RENDERER_VULKAN_H_
 
 #include "flextVk.h"
+
+// FIXME: flextGL should probably generate these PFN definitions...
+using PFN_vkGetPhysicalDeviceProperties = decltype(vkGetPhysicalDeviceProperties);
+using PFN_vkGetPhysicalDeviceMemoryProperties = decltype(vkGetPhysicalDeviceMemoryProperties);
+using PFN_vkAllocateMemory = decltype(vkAllocateMemory);
+using PFN_vkFreeMemory = decltype(vkFreeMemory);
+using PFN_vkMapMemory = decltype(vkMapMemory);
+using PFN_vkUnmapMemory = decltype(vkUnmapMemory);
+using PFN_vkFlushMappedMemoryRanges = decltype(vkFlushMappedMemoryRanges);
+using PFN_vkInvalidateMappedMemoryRanges = decltype(vkInvalidateMappedMemoryRanges);
+using PFN_vkBindBufferMemory = decltype(vkBindBufferMemory);
+using PFN_vkBindImageMemory = decltype(vkBindImageMemory);
+using PFN_vkGetBufferMemoryRequirements = decltype(vkGetBufferMemoryRequirements);
+using PFN_vkGetImageMemoryRequirements = decltype(vkGetImageMemoryRequirements);
+using PFN_vkCreateBuffer = decltype(vkCreateBuffer);
+using PFN_vkDestroyBuffer = decltype(vkDestroyBuffer);
+using PFN_vkCreateImage = decltype(vkCreateImage);
+using PFN_vkDestroyImage = decltype(vkDestroyImage);
+
+#include "vk_mem_alloc.h"
+
 #include <string>
 #include <system_error>
 
@@ -163,3 +184,4 @@ inline std::string to_string(VkQueueFlags flags) noexcept {
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_VULKAN_H_
+

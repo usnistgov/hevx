@@ -162,11 +162,11 @@ static Keys TranslateKeySym(::KeySym keysym) {
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
                                 Options const& options) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
 
   auto pWin = std::make_unique<Impl>();
   if (!pWin) {
-    sGetLogger()->critical("Unable to allocate memory");
+    GetLogger()->critical("Unable to allocate memory");
     std::terminate();
   }
 
@@ -174,8 +174,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
 
   pWin->handle_.display = ::XOpenDisplay("");
   if (!pWin->handle_.display) {
-    sGetLogger()->error("Cannot open default display");
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot open default display");
+    IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kNoDisplay);
   }
 
@@ -184,8 +184,9 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   ::KeySym* keySyms = ::XGetKeyboardMapping(
     pWin->handle_.display, minKeycode, maxKeycode - minKeycode, &numKeycodes);
 
-  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
-    pWin->keyLUT_[i] = TranslateKeySym(keySyms[(i - minKeycode) * numKeycodes]);
+  for (int i = minKeycode; i < maxKeycode; ++i) {
+    pWin->keyLUT_[i - minKeycode] =
+      TranslateKeySym(keySyms[(i - minKeycode) * numKeycodes]);
   }
   ::XFree(keySyms);
 
@@ -211,8 +212,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     char str[1024];
     ::XGetErrorText(pWin->handle_.display, sErrorCode, str,
                     ABSL_ARRAYSIZE(str));
-    sGetLogger()->error("Cannot create window: {}", str);
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot create window: {}", str);
+    IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kXError);
   }
 
@@ -261,7 +262,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   ::XFree(szHints);
 
   pWin->Retitle(title);
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
 

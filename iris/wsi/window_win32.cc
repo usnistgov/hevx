@@ -134,11 +134,11 @@ Keys TranslateKeycode(WPARAM keyCode) {
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
                                 Options const& options) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
 
   auto pWin = std::make_unique<Impl>();
   if (!pWin) {
-    sGetLogger()->critical("Unable to allocate memory");
+    GetLogger()->critical("Unable to allocate memory");
     std::terminate();
   }
 
@@ -150,8 +150,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str,
                      ABSL_ARRAYSIZE(str), NULL);
-    sGetLogger()->error("Cannot get module handle: {}", str);
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot get module handle: {}", str);
+    IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kWin32Error);
   }
 
@@ -164,8 +164,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
       ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
                        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str,
                        ABSL_ARRAYSIZE(str), NULL);
-      sGetLogger()->error("Cannot register window class: {}", str);
-      IRIS_LOG_LEAVE(sGetLogger());
+      GetLogger()->error("Cannot register window class: {}", str);
+      IRIS_LOG_LEAVE();
       return tl::unexpected(Error::kWin32Error);
     }
   }
@@ -193,8 +193,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str,
                      ABSL_ARRAYSIZE(str), NULL);
-    sGetLogger()->error("Cannot create window: {}", str);
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot create window: {}", str);
+    IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kWin32Error);
   }
 
@@ -202,7 +202,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     ::SetWindowLongA(pWin->handle_.hWnd, GWL_STYLE, 0);
   }
 
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
 
@@ -300,3 +300,4 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
 
   return res;
 } // iris::wsi::Window::Impl::WndProc
+

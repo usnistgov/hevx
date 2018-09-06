@@ -26,21 +26,5 @@ inline constexpr char const* kVulkanSDKDirectory = "@Vulkan_SDK_DIR@"; //!< Loca
 //! Indicates if the compiler is GCC or Clang
 #cmakedefine01 PLATFORM_COMPILER_GCC
 
-#ifndef NDEBUG
-
-//! \brief Logs entry into a function.
-#define IRIS_LOG_ENTER(log) \
-  log->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
-//! \brief Logs leave from a function.
-#define IRIS_LOG_LEAVE(log) \
-  log->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
-
-#else
-
-#define IRIS_LOG_ENTER(log)
-#define IRIS_LOG_LEAVE(log)
-
-#endif
-
 #endif // HEV_IRIS_CONFIG_H_
 

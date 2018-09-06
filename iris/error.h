@@ -1,15 +1,15 @@
 #ifndef HEV_IRIS_ERROR_H_
 #define HEV_IRIS_ERROR_H_
 /*! \file
- * \brief \ref iris::Renderer::Error definition.
+ * \brief \ref iris::Error definition.
  */
 
 #include <string>
 #include <system_error>
 
-namespace iris::Renderer {
+namespace iris {
 
-//! \brief Renderer errors.
+//! \brief IRIS errors.
 enum class Error {
   kNone = 0,              //!< No error
   kInitializationFailed,  //!< Initialization failed for some reason.
@@ -30,7 +30,7 @@ public:
 
   //! \brief Get the name of this category.
   virtual const char* name() const noexcept override {
-    return "iris::Renderer::Error";
+    return "iris::Error";
   }
 
   //! \brief Convert an int representing an Error into a std::string.
@@ -69,14 +69,12 @@ inline std::error_code make_error_code(Error e) noexcept {
   return std::error_code(static_cast<int>(e), GetErrorCategory());
 }
 
-} // namespace iris::Renderer
+} // namespace iris
 
 namespace std {
 
 template <>
-struct is_error_code_enum<iris::Renderer::Error> :
-                                     public
-                                       true_type{};
+struct is_error_code_enum<iris::Error> : public true_type {};
 
 } // namespace std
 

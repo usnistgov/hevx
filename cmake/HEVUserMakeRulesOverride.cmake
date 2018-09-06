@@ -1,6 +1,10 @@
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  list(APPEND CMAKE_CXX_FLAGS_INIT "-stdlib=libc++")
-  list(APPEND CMAKE_EXE_LINKER_FLAGS_INIT "-lc++")
+  set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -lc++")
+
+  if(USE_ASAN)
+    set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -fno-omit-frame-pointer -fsanitize=address")
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -fno-omit-frame-pointer -fsanitize=address")
+  endif()
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")

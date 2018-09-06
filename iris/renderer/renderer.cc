@@ -7,6 +7,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "config.h"
 #include "dso/dso.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -23,10 +24,26 @@
 #include <string>
 #include <unordered_map>
 
+#ifndef NDEBUG
+
+//! \brief Logs entry into a function.
+#define IRIS_LOG_ENTER()                                                       \
+  GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
+//! \brief Logs leave from a function.
+#define IRIS_LOG_LEAVE()                                                       \
+  GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
+
+#else
+
+#define IRIS_LOG_ENTER()
+#define IRIS_LOG_LEAVE()
+
+#endif
+
 namespace iris::Renderer {
 
 static spdlog::logger*
-sGetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
+GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
   static std::shared_ptr<spdlog::logger> sLogger;
   if (!sLogger) {
     sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
@@ -43,6 +60,9 @@ VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
 VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
+VkCommandPool sUnorderedCommandPool{VK_NULL_HANDLE};
+VkFence sUnorderedCommandFence{VK_NULL_HANDLE};
+VmaAllocator sAllocator;
 
 // These are the desired properties of all surfaces for the renderer.
 VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
@@ -51,11 +71,17 @@ VkFormat sSurfaceDepthFormat{VK_FORMAT_D32_SFLOAT};
 VkSampleCountFlagBits sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 VkPresentModeKHR sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
+std::uint32_t sNumRenderPassAttachments{4};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
 static bool sInitialized{false};
 static bool sRunning{false};
-static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sDSOs;
+
+static std::unordered_map<std::string, std::shared_ptr<iris::DSO>>&
+GetDSOMap() {
+  static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sMap;
+  return sMap;
+} // GetDSOMap
 
 #ifndef NDEBUG
 /*! \brief Callback for Vulkan Debug Reporting.
@@ -69,15 +95,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
   std::int32_t /*messageCode*/, char const* pLayerPrefix, char const* pMessage,
   void* /*pUserData*/) {
   if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-    sGetLogger()->info("{}: {}", pLayerPrefix, pMessage);
+    GetLogger()->info("{}: {}", pLayerPrefix, pMessage);
   } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-    sGetLogger()->warn("{}: {}", pLayerPrefix, pMessage);
+    GetLogger()->warn("{}: {}", pLayerPrefix, pMessage);
   } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-    sGetLogger()->error("{}: {}", pLayerPrefix, pMessage);
+    GetLogger()->error("{}: {}", pLayerPrefix, pMessage);
   } else if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-    sGetLogger()->error("{}: {}", pLayerPrefix, pMessage);
+    GetLogger()->error("{}: {}", pLayerPrefix, pMessage);
   } else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-    sGetLogger()->debug("{}: {}", pLayerPrefix, pMessage);
+    GetLogger()->debug("{}: {}", pLayerPrefix, pMessage);
   }
   return VK_FALSE;
 } // DebugReportCallback
@@ -98,13 +124,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
 static std::error_code
 InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
              gsl::span<gsl::czstring<>> extensionNames) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   VkResult result;
 
   std::uint32_t instanceVersion;
   vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
 
-  sGetLogger()->debug(
+  GetLogger()->debug(
     "Vulkan Instance Version: {}.{}.{}", VK_VERSION_MAJOR(instanceVersion),
     VK_VERSION_MINOR(instanceVersion), VK_VERSION_PATCH(instanceVersion));
 
@@ -117,8 +143,8 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   result = vkEnumerateInstanceExtensionProperties(
     nullptr, &numExtensionProperties, nullptr);
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot enumerate instance extension properties: {}",
-                        to_string(result));
+    GetLogger()->error("Cannot enumerate instance extension properties: {}",
+                       to_string(result));
     return make_error_code(result);
   }
 
@@ -128,14 +154,14 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   result = vkEnumerateInstanceExtensionProperties(
     nullptr, &numExtensionProperties, extensionProperties.data());
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot enumerate instance extension properties: {}",
-                        to_string(result));
+    GetLogger()->error("Cannot enumerate instance extension properties: {}",
+                       to_string(result));
     return make_error_code(result);
   }
 
-  sGetLogger()->debug("Instance Extensions:");
+  GetLogger()->debug("Instance Extensions:");
   for (auto&& property : extensionProperties) {
-    sGetLogger()->debug("  {}:", property.extensionName);
+    GetLogger()->debug("  {}:", property.extensionName);
   }
 
   // validation layers do add overhead, so only use them in Debug configs.
@@ -156,8 +182,7 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   ci.pApplicationInfo = &ai;
 #ifndef NDEBUG
-  ci.enabledLayerCount =
-    gsl::narrow_cast<std::uint32_t>(layerNames.size());
+  ci.enabledLayerCount = gsl::narrow_cast<std::uint32_t>(layerNames.size());
   ci.ppEnabledLayerNames = layerNames.data();
 #endif
   ci.enabledExtensionCount =
@@ -177,13 +202,13 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
 
   result = vkCreateInstance(&ci, nullptr, &sInstance);
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot create instance: {}", to_string(result));
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot create instance: {}", to_string(result));
+    IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
 
-  sGetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
-  IRIS_LOG_LEAVE(sGetLogger());
+  GetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
+  IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // InitInstance
 
@@ -195,7 +220,7 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
  */
 static std::error_code CreateDebugReportCallback() noexcept {
 #ifndef NDEBUG
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   VkResult result;
 
   VkDebugReportCallbackCreateInfoEXT drcci = {};
@@ -209,13 +234,13 @@ static std::error_code CreateDebugReportCallback() noexcept {
   result = vkCreateDebugReportCallbackEXT(sInstance, &drcci, nullptr,
                                           &sDebugReportCallback);
   if (result != VK_SUCCESS) {
-    sGetLogger()->warn("Cannot create debug report callback: {}",
-                       to_string(result));
+    GetLogger()->warn("Cannot create debug report callback: {}",
+                      to_string(result));
   }
 
-  sGetLogger()->debug("Debug Report Callback: {}",
-                      static_cast<void*>(sDebugReportCallback));
-  IRIS_LOG_LEAVE(sGetLogger());
+  GetLogger()->debug("Debug Report Callback: {}",
+                     static_cast<void*>(sDebugReportCallback));
+  IRIS_LOG_LEAVE();
 #endif
 
   return VulkanResult::kSuccess;
@@ -234,182 +259,178 @@ static void DumpPhysicalDevice(
     *reinterpret_cast<VkPhysicalDeviceMultiviewProperties*>(maint3Props.pNext);
   auto& features = physicalDeviceFeatures.features;
 
-  sGetLogger()->debug("Physical Device {}", deviceProps.deviceName);
-  sGetLogger()->debug("  {} Driver v{}.{}.{} API v{}.{}.{} ",
-                      to_string(deviceProps.deviceType),
-                      VK_VERSION_MAJOR(deviceProps.driverVersion),
-                      VK_VERSION_MINOR(deviceProps.driverVersion),
-                      VK_VERSION_PATCH(deviceProps.driverVersion),
-                      VK_VERSION_MAJOR(deviceProps.apiVersion),
-                      VK_VERSION_MINOR(deviceProps.apiVersion),
-                      VK_VERSION_PATCH(deviceProps.apiVersion));
+  GetLogger()->debug("Physical Device {}", deviceProps.deviceName);
+  GetLogger()->debug("  {} Driver v{}.{}.{} API v{}.{}.{} ",
+                     to_string(deviceProps.deviceType),
+                     VK_VERSION_MAJOR(deviceProps.driverVersion),
+                     VK_VERSION_MINOR(deviceProps.driverVersion),
+                     VK_VERSION_PATCH(deviceProps.driverVersion),
+                     VK_VERSION_MAJOR(deviceProps.apiVersion),
+                     VK_VERSION_MINOR(deviceProps.apiVersion),
+                     VK_VERSION_PATCH(deviceProps.apiVersion));
 
-  sGetLogger()->debug("  Features:");
-  sGetLogger()->debug("    robustBufferAccess: {}",
-                      features.robustBufferAccess == VK_TRUE ? "true"
+  GetLogger()->debug("  Features:");
+  GetLogger()->debug("    robustBufferAccess: {}",
+                     features.robustBufferAccess == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    fullDrawIndexUint32: {}",
+                     features.fullDrawIndexUint32 == VK_TRUE ? "true"
                                                              : "false");
-  sGetLogger()->debug("    fullDrawIndexUint32: {}",
-                      features.fullDrawIndexUint32 == VK_TRUE ? "true"
-                                                              : "false");
-  sGetLogger()->debug("    imageCubeArray: {}",
-                      features.imageCubeArray == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    independentBlend: {}",
-                      features.independentBlend == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    geometryShader: {}",
-                      features.geometryShader == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    tessellationShader: {}",
-                      features.tessellationShader == VK_TRUE ? "true"
-                                                             : "false");
-  sGetLogger()->debug("    sampleRateShading: {}",
-                      features.sampleRateShading == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    dualSrcBlend: {}",
-                      features.dualSrcBlend == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    logicOp: {}",
-                      features.logicOp == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    multiDrawIndirect: {}",
-                      features.multiDrawIndirect == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    drawIndirectFirstInstance: {}",
-                      features.drawIndirectFirstInstance == VK_TRUE ? "true"
-                                                                    : "false");
-  sGetLogger()->debug("    depthClamp: {}",
-                      features.depthClamp == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    depthBiasClamp: {}",
-                      features.depthBiasClamp == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    fillModeNonSolid: {}",
-                      features.fillModeNonSolid == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    depthBounds: {}",
-                      features.depthBounds == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    wideLines: {}",
-                      features.wideLines == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    largePoints: {}",
-                      features.largePoints == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    alphaToOne: {}",
-                      features.alphaToOne == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    multiViewport: {}",
-                      features.multiViewport == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    samplerAnisotropy: {}",
-                      features.samplerAnisotropy == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    textureCompressionETC2: {}",
-                      features.textureCompressionETC2 == VK_TRUE ? "true"
-                                                                 : "false");
-  sGetLogger()->debug("    textureCompressionASTC_LDR: {}",
-                      features.textureCompressionASTC_LDR == VK_TRUE ? "true"
-                                                                     : "false");
-  sGetLogger()->debug("    textureCompressionBC: {}",
-                      features.textureCompressionBC == VK_TRUE ? "true"
-                                                               : "false");
-  sGetLogger()->debug("    occlusionQueryPrecise: {}",
-                      features.occlusionQueryPrecise == VK_TRUE ? "true"
+  GetLogger()->debug("    imageCubeArray: {}",
+                     features.imageCubeArray == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    independentBlend: {}",
+                     features.independentBlend == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    geometryShader: {}",
+                     features.geometryShader == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    tessellationShader: {}",
+                     features.tessellationShader == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    sampleRateShading: {}",
+                     features.sampleRateShading == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    dualSrcBlend: {}",
+                     features.dualSrcBlend == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    logicOp: {}",
+                     features.logicOp == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    multiDrawIndirect: {}",
+                     features.multiDrawIndirect == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    drawIndirectFirstInstance: {}",
+                     features.drawIndirectFirstInstance == VK_TRUE ? "true"
+                                                                   : "false");
+  GetLogger()->debug("    depthClamp: {}",
+                     features.depthClamp == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    depthBiasClamp: {}",
+                     features.depthBiasClamp == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    fillModeNonSolid: {}",
+                     features.fillModeNonSolid == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    depthBounds: {}",
+                     features.depthBounds == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    wideLines: {}",
+                     features.wideLines == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    largePoints: {}",
+                     features.largePoints == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    alphaToOne: {}",
+                     features.alphaToOne == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    multiViewport: {}",
+                     features.multiViewport == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    samplerAnisotropy: {}",
+                     features.samplerAnisotropy == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    textureCompressionETC2: {}",
+                     features.textureCompressionETC2 == VK_TRUE ? "true"
                                                                 : "false");
-  sGetLogger()->debug("    pipelineStatisticsQuery: {}",
-                      features.pipelineStatisticsQuery == VK_TRUE ? "true"
-                                                                  : "false");
-  sGetLogger()->debug(
+  GetLogger()->debug("    textureCompressionASTC_LDR: {}",
+                     features.textureCompressionASTC_LDR == VK_TRUE ? "true"
+                                                                    : "false");
+  GetLogger()->debug("    textureCompressionBC: {}",
+                     features.textureCompressionBC == VK_TRUE ? "true"
+                                                              : "false");
+  GetLogger()->debug("    occlusionQueryPrecise: {}",
+                     features.occlusionQueryPrecise == VK_TRUE ? "true"
+                                                               : "false");
+  GetLogger()->debug("    pipelineStatisticsQuery: {}",
+                     features.pipelineStatisticsQuery == VK_TRUE ? "true"
+                                                                 : "false");
+  GetLogger()->debug(
     "    vertexPipelineStoresAndAtomics: {}",
     features.vertexPipelineStoresAndAtomics == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    fragmentStoresAndAtomics: {}",
-                      features.fragmentStoresAndAtomics == VK_TRUE ? "true"
+  GetLogger()->debug("    fragmentStoresAndAtomics: {}",
+                     features.fragmentStoresAndAtomics == VK_TRUE ? "true"
+                                                                  : "false");
+  GetLogger()->debug("    shaderTessellationAndGeometryPointSize: {}",
+                     features.shaderTessellationAndGeometryPointSize == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderImageGatherExtended: {}",
+                     features.shaderImageGatherExtended == VK_TRUE ? "true"
                                                                    : "false");
-  sGetLogger()->debug("    shaderTessellationAndGeometryPointSize: {}",
-                      features.shaderTessellationAndGeometryPointSize == VK_TRUE
-                        ? "true"
-                        : "false");
-  sGetLogger()->debug("    shaderImageGatherExtended: {}",
-                      features.shaderImageGatherExtended == VK_TRUE ? "true"
-                                                                    : "false");
-  sGetLogger()->debug(
+  GetLogger()->debug(
     "    shaderStorageImageExtendedFormats: {}",
     features.shaderStorageImageExtendedFormats == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug(
+  GetLogger()->debug(
     "    shaderStorageImageMultisample: {}",
     features.shaderStorageImageMultisample == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug(
+  GetLogger()->debug(
     "    shaderStorageImageReadWithoutFormat: {}",
     features.shaderStorageImageReadWithoutFormat == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    shaderStorageImageWriteWithoutFormat: {}",
-                      features.shaderStorageImageWriteWithoutFormat == VK_TRUE
-                        ? "true"
-                        : "false");
-  sGetLogger()->debug(
-    "    shaderUniformBufferArrayDynamicIndexing: {}",
-    features.shaderUniformBufferArrayDynamicIndexing == VK_TRUE ? "true"
-                                                                : "false");
-  sGetLogger()->debug("    shaderSampledImageArrayDynamicIndexing: {}",
-                      features.shaderSampledImageArrayDynamicIndexing == VK_TRUE
-                        ? "true"
-                        : "false");
-  sGetLogger()->debug(
-    "    shaderStorageBufferArrayDynamicIndexing: {}",
-    features.shaderStorageBufferArrayDynamicIndexing == VK_TRUE ? "true"
-                                                                : "false");
-  sGetLogger()->debug("    shaderStorageImageArrayDynamicIndexing: {}",
-                      features.shaderStorageImageArrayDynamicIndexing == VK_TRUE
-                        ? "true"
-                        : "false");
-  sGetLogger()->debug("    shaderClipDistance: {}",
-                      features.shaderClipDistance == VK_TRUE ? "true"
-                                                             : "false");
-  sGetLogger()->debug("    shaderCullDistance: {}",
-                      features.shaderCullDistance == VK_TRUE ? "true"
-                                                             : "false");
-  sGetLogger()->debug("    shaderFloat64: {}",
-                      features.shaderFloat64 == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    shaderInt64: {}",
-                      features.shaderInt64 == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    shaderInt16: {}",
-                      features.shaderInt16 == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    shaderResourceResidency: {}",
-                      features.shaderResourceResidency == VK_TRUE ? "true"
-                                                                  : "false");
-  sGetLogger()->debug("    shaderResourceMinLod: {}",
-                      features.shaderResourceMinLod == VK_TRUE ? "true"
+  GetLogger()->debug("    shaderStorageImageWriteWithoutFormat: {}",
+                     features.shaderStorageImageWriteWithoutFormat == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderUniformBufferArrayDynamicIndexing: {}",
+                     features.shaderUniformBufferArrayDynamicIndexing == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderSampledImageArrayDynamicIndexing: {}",
+                     features.shaderSampledImageArrayDynamicIndexing == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderStorageBufferArrayDynamicIndexing: {}",
+                     features.shaderStorageBufferArrayDynamicIndexing == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderStorageImageArrayDynamicIndexing: {}",
+                     features.shaderStorageImageArrayDynamicIndexing == VK_TRUE
+                       ? "true"
+                       : "false");
+  GetLogger()->debug("    shaderClipDistance: {}",
+                     features.shaderClipDistance == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    shaderCullDistance: {}",
+                     features.shaderCullDistance == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    shaderFloat64: {}",
+                     features.shaderFloat64 == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    shaderInt64: {}",
+                     features.shaderInt64 == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    shaderInt16: {}",
+                     features.shaderInt16 == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    shaderResourceResidency: {}",
+                     features.shaderResourceResidency == VK_TRUE ? "true"
+                                                                 : "false");
+  GetLogger()->debug("    shaderResourceMinLod: {}",
+                     features.shaderResourceMinLod == VK_TRUE ? "true"
+                                                              : "false");
+  GetLogger()->debug("    sparseBinding: {}",
+                     features.sparseBinding == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    sparseResidencyBuffer: {}",
+                     features.sparseResidencyBuffer == VK_TRUE ? "true"
                                                                : "false");
-  sGetLogger()->debug("    sparseBinding: {}",
-                      features.sparseBinding == VK_TRUE ? "true" : "false");
-  sGetLogger()->debug("    sparseResidencyBuffer: {}",
-                      features.sparseResidencyBuffer == VK_TRUE ? "true"
+  GetLogger()->debug("    sparseResidencyImage2D: {}",
+                     features.sparseResidencyImage2D == VK_TRUE ? "true"
                                                                 : "false");
-  sGetLogger()->debug("    sparseResidencyImage2D: {}",
-                      features.sparseResidencyImage2D == VK_TRUE ? "true"
+  GetLogger()->debug("    sparseResidencyImage3D: {}",
+                     features.sparseResidencyImage3D == VK_TRUE ? "true"
+                                                                : "false");
+  GetLogger()->debug("    sparseResidency2Samples: {}",
+                     features.sparseResidency2Samples == VK_TRUE ? "true"
                                                                  : "false");
-  sGetLogger()->debug("    sparseResidencyImage3D: {}",
-                      features.sparseResidencyImage3D == VK_TRUE ? "true"
+  GetLogger()->debug("    sparseResidency4Samples: {}",
+                     features.sparseResidency4Samples == VK_TRUE ? "true"
                                                                  : "false");
-  sGetLogger()->debug("    sparseResidency2Samples: {}",
-                      features.sparseResidency2Samples == VK_TRUE ? "true"
-                                                                  : "false");
-  sGetLogger()->debug("    sparseResidency4Samples: {}",
-                      features.sparseResidency4Samples == VK_TRUE ? "true"
-                                                                  : "false");
-  sGetLogger()->debug("    sparseResidency8Samples: {}",
-                      features.sparseResidency8Samples == VK_TRUE ? "true"
-                                                                  : "false");
-  sGetLogger()->debug("    sparseResidency16Samples: {}",
-                      features.sparseResidency16Samples == VK_TRUE ? "true"
-                                                                   : "false");
-  sGetLogger()->debug("    sparseResidencyAliased: {}",
-                      features.sparseResidencyAliased == VK_TRUE ? "true"
+  GetLogger()->debug("    sparseResidency8Samples: {}",
+                     features.sparseResidency8Samples == VK_TRUE ? "true"
                                                                  : "false");
-  sGetLogger()->debug("    variableMultisampleRate: {}",
-                      features.variableMultisampleRate == VK_TRUE ? "true"
+  GetLogger()->debug("    sparseResidency16Samples: {}",
+                     features.sparseResidency16Samples == VK_TRUE ? "true"
                                                                   : "false");
-  sGetLogger()->debug("    inheritedQueries: {}",
-                      features.inheritedQueries == VK_TRUE ? "true" : "false");
+  GetLogger()->debug("    sparseResidencyAliased: {}",
+                     features.sparseResidencyAliased == VK_TRUE ? "true"
+                                                                : "false");
+  GetLogger()->debug("    variableMultisampleRate: {}",
+                     features.variableMultisampleRate == VK_TRUE ? "true"
+                                                                 : "false");
+  GetLogger()->debug("    inheritedQueries: {}",
+                     features.inheritedQueries == VK_TRUE ? "true" : "false");
 
-  sGetLogger()->debug("  Limits:");
-  sGetLogger()->debug("    maxMultiviewViews: {}",
-                      multiviewProps.maxMultiviewViewCount);
+  GetLogger()->debug("  Limits:");
+  GetLogger()->debug("    maxMultiviewViews: {}",
+                     multiviewProps.maxMultiviewViewCount);
 
-  sGetLogger()->debug("  Queue Families:");
+  GetLogger()->debug("  Queue Families:");
   for (std::size_t i = 0; i < queueFamilyProperties.size(); ++i) {
     auto& qfProps = queueFamilyProperties[i].queueFamilyProperties;
-    sGetLogger()->debug("    index: {} count: {} flags: {}", i,
-                        qfProps.queueCount, to_string(qfProps.queueFlags));
+    GetLogger()->debug("    index: {} count: {} flags: {}", i,
+                       qfProps.queueCount, to_string(qfProps.queueFlags));
   }
 
-  sGetLogger()->debug("  Extensions:");
+  GetLogger()->debug("  Extensions:");
   for (auto&& property : extensionProperties) {
-    sGetLogger()->debug("    {}:", property.extensionName);
+    GetLogger()->debug("    {}:", property.extensionName);
   }
 } // DumpPhysicalDevice
 
@@ -518,7 +539,7 @@ static tl::expected<std::uint32_t, std::error_code>
 IsPhysicalDeviceGood(VkPhysicalDevice device,
                      VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   VkResult result;
 
   //
@@ -578,8 +599,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   result = vkEnumerateDeviceExtensionProperties(
     device, nullptr, &numExtensionProperties, nullptr);
   if (result != VK_SUCCESS) {
-    sGetLogger()->warn("Cannot enumerate device extension properties: {}",
-                       to_string(result));
+    GetLogger()->warn("Cannot enumerate device extension properties: {}",
+                      to_string(result));
     return tl::unexpected(make_error_code(result));
   }
 
@@ -589,8 +610,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   result = vkEnumerateDeviceExtensionProperties(
     device, nullptr, &numExtensionProperties, extensionProperties.data());
   if (result != VK_SUCCESS) {
-    sGetLogger()->warn("Cannot enumerate device extension properties: {}",
-                       to_string(result));
+    GetLogger()->warn("Cannot enumerate device extension properties: {}",
+                      to_string(result));
     return tl::unexpected(make_error_code(result));
   }
 
@@ -603,8 +624,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 
   // Check for any required features
   if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
-    sGetLogger()->debug("Requested feature not supported by device {}",
-                        static_cast<void*>(device));
+    GetLogger()->debug("Requested feature not supported by device {}",
+                       static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -621,8 +642,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   }
 
   if (graphicsQueueFamilyIndex == UINT32_MAX) {
-    sGetLogger()->debug("No graphics queue supported by device {}",
-                        static_cast<void*>(device));
+    GetLogger()->debug("No graphics queue supported by device {}",
+                       static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -638,14 +659,14 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
     }
 
     if (!found) {
-      sGetLogger()->debug("Extension {} not supported by device {}", required,
-                          static_cast<void*>(device));
+      GetLogger()->debug("Extension {} not supported by device {}", required,
+                         static_cast<void*>(device));
       return tl::unexpected(VulkanResult::kErrorExtensionNotPresent);
     }
   }
 
   // At this point we know all required extensions are present.
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return graphicsQueueFamilyIndex;
 } // IsPhysicalDeviceGood
 
@@ -658,15 +679,15 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 static std::error_code
 ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   VkResult result;
 
   // Get the number of physical devices present on the system
   std::uint32_t numPhysicalDevices;
   result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices, nullptr);
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot enumerate physical devices: {}",
-                        to_string(result));
+    GetLogger()->error("Cannot enumerate physical devices: {}",
+                       to_string(result));
     return make_error_code(result);
   }
 
@@ -675,8 +696,8 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
   result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices,
                                       physicalDevices.data());
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot enumerate physical devices: {}",
-                        to_string(result));
+    GetLogger()->error("Cannot enumerate physical devices: {}",
+                       to_string(result));
     return make_error_code(result);
   }
 
@@ -691,15 +712,15 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
   }
 
   if (sPhysicalDevice == VK_NULL_HANDLE) {
-    sGetLogger()->error("No suitable physical device found");
-    return Renderer::Error::kNoPhysicalDevice;
+    GetLogger()->error("No suitable physical device found");
+    return Error::kNoPhysicalDevice;
   }
 
-  sGetLogger()->debug("Physical Device: {} Graphics QueueFamilyIndex: {}",
-                      static_cast<void*>(sPhysicalDevice),
-                      sGraphicsQueueFamilyIndex);
+  GetLogger()->debug("Physical Device: {} Graphics QueueFamilyIndex: {}",
+                     static_cast<void*>(sPhysicalDevice),
+                     sGraphicsQueueFamilyIndex);
 
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // ChoosePhysicalDevice
 
@@ -714,7 +735,7 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
 static std::error_code
 CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                       gsl::span<gsl::czstring<>> extensionNames) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   VkResult result;
 
   // Get all of the queue families again, so that we can get the number of
@@ -753,24 +774,64 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
 
   result = vkCreateDevice(sPhysicalDevice, &ci, nullptr, &sDevice);
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot create device: {}", to_string(result));
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot create device: {}", to_string(result));
+    IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
 
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
                    &sUnorderedCommandQueue);
 
-  sGetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
-  sGetLogger()->debug("Unordered Command Queue: {}",
-                      static_cast<void*>(sUnorderedCommandQueue));
-  IRIS_LOG_LEAVE(sGetLogger());
+  GetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
+  GetLogger()->debug("Unordered Command Queue: {}",
+                     static_cast<void*>(sUnorderedCommandQueue));
+  IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateDevice
 
-static std::error_code
-CreateRenderPass() noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+static std::error_code CreateCommandPool() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkCommandPoolCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  ci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+
+  result = vkCreateCommandPool(sDevice, &ci, nullptr, &sUnorderedCommandPool);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create command pool: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  GetLogger()->debug("Unordered Command Pool: {}",
+                     static_cast<void*>(sUnorderedCommandPool));
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // CreateCommandPool
+
+static std::error_code CreateAllocator() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.physicalDevice = sPhysicalDevice;
+  allocatorInfo.device = sDevice;
+
+  result = vmaCreateAllocator(&allocatorInfo, &sAllocator);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create allocator: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // CreateAllocator
+
+static std::error_code CreateRenderPass() noexcept {
+  IRIS_LOG_ENTER();
   VkResult result;
 
   // Our render pass has four attachments:
@@ -901,13 +962,13 @@ CreateRenderPass() noexcept {
 
   result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
   if (result != VK_SUCCESS) {
-    sGetLogger()->error("Cannot create device: {}", to_string(result));
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Cannot create device: {}", to_string(result));
+    IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
 
-  sGetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
-  IRIS_LOG_LEAVE(sGetLogger());
+  GetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
+  IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateRenderPass
 
@@ -916,7 +977,8 @@ CreateRenderPass() noexcept {
 std::error_code
 iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
                            spdlog::sinks_init_list logSinks) noexcept {
-  IRIS_LOG_ENTER(sGetLogger(logSinks)); // pass logSinks here to initialize logs
+  GetLogger(logSinks);
+  IRIS_LOG_ENTER();
 
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
@@ -925,7 +987,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   ////
 
   if (sInitialized) {
-    IRIS_LOG_LEAVE(sGetLogger());
+    IRIS_LOG_LEAVE();
     return Error::kAlreadyInitialized;
   }
 
@@ -934,9 +996,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
     VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-#if defined(VK_USE_PLATFORM_XLIB_KHR) // we also need the platform-specific surface
+#if defined(                                                                   \
+  VK_USE_PLATFORM_XLIB_KHR) // we also need the platform-specific surface
     VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#elif defined(VK_USE_PLATFORM_WIN32_KHR) // we also need the platform-specific surface
+#elif defined(                                                                 \
+  VK_USE_PLATFORM_WIN32_KHR) // we also need the platform-specific surface
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif
 #ifndef NDEBUG
@@ -972,33 +1036,54 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   flextVkInit();
 
   if (auto error = InitInstance(appName, appVersion, instanceExtensionNames)) {
-    IRIS_LOG_LEAVE(sGetLogger());
+    IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
-  CreateDebugReportCallback(); // ignore any returned error
+  CreateDebugReportCallback();    // ignore any returned error
 
   if (auto error = ChoosePhysicalDevice(physicalDeviceFeatures,
                                         physicalDeviceExtensionNames)) {
-    IRIS_LOG_LEAVE(sGetLogger());
+    IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
 
   if (auto error = CreateDeviceAndQueues(physicalDeviceFeatures,
                                          physicalDeviceExtensionNames)) {
-    IRIS_LOG_LEAVE(sGetLogger());
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  if (auto error = CreateCommandPool()) {
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  VkFenceCreateInfo fci = {};
+  fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+  if (auto result =
+        vkCreateFence(sDevice, &fci, nullptr, &sUnorderedCommandFence);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create fence: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  if (auto error = CreateAllocator()) {
+    IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
 
   if (auto error = CreateRenderPass()) {
-    IRIS_LOG_LEAVE(sGetLogger());
+    IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
 
   sInitialized = true;
   sRunning = true;
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return Error::kNone;
 } // iris::Renderer::Initialize
 
@@ -1011,18 +1096,18 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  for (auto [name, dso] : sDSOs) { dso->Frame(); }
+  for (auto [name, dso] : GetDSOMap()) { dso->Frame(); }
 } // iris::Renderer::Frame
 
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
   if (command.empty()) {
-    sGetLogger()->trace("empty control command");
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->trace("empty control command");
+    IRIS_LOG_LEAVE();
     return Error::kNone;
   }
 
-  sGetLogger()->debug("Control \"{}\"", command);
+  GetLogger()->debug("Control \"{}\"", command);
   std::vector<std::string_view> components = absl::StrSplit(command, " ");
   auto&& controlCommand = components[0];
 
@@ -1030,40 +1115,41 @@ std::error_code iris::Renderer::Control(std::string_view command) noexcept {
     std::string dsoName(components[1]);
 
     // if the DSO hasn't been loaded before, then load and initialie it
-    if (sDSOs.find(dsoName) == sDSOs.end()) {
+    if (GetDSOMap().find(dsoName) == GetDSOMap().end()) {
       if (auto dso = DSO::Instantiate(dsoName)) {
         if (auto error = dso->Initialize()) {
-          sGetLogger()->error("DSO Initialize Error: {}", error.message());
-          IRIS_LOG_LEAVE(sGetLogger());
+          GetLogger()->error("DSO Initialize Error: {}", error.message());
+          IRIS_LOG_LEAVE();
           return Error::kControlCommandFailed;
         } else {
-          sDSOs.emplace(dsoName, std::move(dso));
+          GetDSOMap().emplace(dsoName, std::move(dso));
         }
       }
     }
 
     // Send control command to the DSO
-    if (auto error = sDSOs[dsoName]->Control(command, components)) {
-      sGetLogger()->error("DSO Error: {}", error.message());
-      IRIS_LOG_LEAVE(sGetLogger());
+    if (auto error = GetDSOMap()[dsoName]->Control(command, components)) {
+      GetLogger()->error("DSO Error: {}", error.message());
+      IRIS_LOG_LEAVE();
       return Error::kControlCommandFailed;
     } else {
-      IRIS_LOG_LEAVE(sGetLogger());
+      IRIS_LOG_LEAVE();
       return Error::kNone;
     }
 
   } else {
-    sGetLogger()->error("Unknown control command: \"{}\"", command);
-    IRIS_LOG_LEAVE(sGetLogger());
+    GetLogger()->error("Unknown control command: \"{}\"", command);
+    IRIS_LOG_LEAVE();
     return Error::kUnknownControlCommand;
   }
 } // iris::Renderer::Control
 
 std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
-  IRIS_LOG_ENTER(sGetLogger());
+  IRIS_LOG_ENTER();
 
-  sGetLogger()->debug("Loading {}", fileName);
+  GetLogger()->debug("Loading {}", fileName);
 
-  IRIS_LOG_LEAVE(sGetLogger());
+  IRIS_LOG_LEAVE();
   return Error::kNone;
 } // iris::Renderer::LoadFile
+

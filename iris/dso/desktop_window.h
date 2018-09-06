@@ -19,7 +19,7 @@ public:
   Control(std::string_view,
           std::vector<std::string_view> const&) noexcept override;
 
-  virtual ~DesktopWindow() noexcept = default;
+  virtual ~DesktopWindow() noexcept;
 
 private:
   bool sResized_{false};
@@ -31,3 +31,4 @@ private:
 } // namespace iris
 
 #endif // HEV_IRIS_DSO_DESKTOP_WINDOW_H_
+
