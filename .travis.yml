@@ -14,7 +14,7 @@ matrix:
         - g++-7
         - libx11-dev
         - libxrandr-dev
-  - env: COMPILER_NAME=clang CXX=clang++-6.0 CC=clang-6.0
+  - env: COMPILER_NAME=clang CXX=clang++-7 CC=clang-7
     addons:
       apt:
         sources:
