@@ -8,7 +8,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "config.h"
-#include "dso/dso.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -18,11 +17,14 @@
 #pragma warning(pop)
 #endif
 #include "renderer/impl.h"
+#include "renderer/window.h"
 #include "tl/expected.hpp"
 #include <array>
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #ifndef NDEBUG
 
@@ -77,11 +79,11 @@ VkRenderPass sRenderPass{VK_NULL_HANDLE};
 static bool sInitialized{false};
 static bool sRunning{false};
 
-static std::unordered_map<std::string, std::shared_ptr<iris::DSO>>&
-GetDSOMap() {
-  static std::unordered_map<std::string, std::shared_ptr<iris::DSO>> sMap;
-  return sMap;
-} // GetDSOMap
+static std::unordered_map<std::string, iris::Renderer::Window>&
+Windows() noexcept {
+  static std::unordered_map<std::string, iris::Renderer::Window> sWindows;
+  return sWindows;
+}
 
 #ifndef NDEBUG
 /*! \brief Callback for Vulkan Debug Reporting.
@@ -1096,8 +1098,43 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  for (auto iter : GetDSOMap()) iter.second->Frame();
+  // 1. Acquire images/semaphores from all registered iris::Window objects
+  // 2. Build command buffers (or use pre-recorded ones)
+  // 3. Submit command buffers to a queue, waiting on all acquired image
+  // semaphores and signaling a single frameFinished semaphore
+  // 4. Present the swapchains to a queue
+
+  for (auto&& iter : Windows()) iter.second.Frame();
 } // iris::Renderer::Frame
+
+namespace iris::Renderer {
+
+static std::error_code CreateDesktopWindow() noexcept {
+  IRIS_LOG_ENTER();
+
+  auto win = wsi::Window::Create("desktop", {720, 720});
+  if (!win) {
+    GetLogger()->error("Unable to create DesktopWindow window: {}",
+                       win.error().message());
+    IRIS_LOG_LEAVE();
+    return win.error();
+  }
+
+  auto sfc = Surface::Create(*win);
+  if (!sfc) {
+    GetLogger()->error("Unable to create DesktopWindow surface: {}",
+                       sfc.error().message());
+    IRIS_LOG_LEAVE();
+    return sfc.error();
+  }
+
+  Windows().emplace("desktopWindow", Window(std::move(*win), std::move(*sfc)));
+
+  IRIS_LOG_LEAVE();
+  return Error::kNone;
+} // CreateDesktopWindow
+
+} // namespace iris::Renderer
 
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   IRIS_LOG_ENTER();
@@ -1114,27 +1151,30 @@ std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   if (absl::StartsWithIgnoreCase(controlCommand, "dso")) {
     std::string dsoName(components[1]);
 
-    // if the DSO hasn't been loaded before, then load and initialie it
-    if (GetDSOMap().find(dsoName) == GetDSOMap().end()) {
-      if (auto dso = DSO::Instantiate(dsoName)) {
-        if (auto error = dso->Initialize()) {
-          GetLogger()->error("DSO Initialize Error: {}", error.message());
-          IRIS_LOG_LEAVE();
-          return Error::kControlCommandFailed;
-        } else {
-          GetDSOMap().emplace(dsoName, std::move(dso));
-        }
-      }
-    }
+    if (absl::EndsWith(dsoName, "Window")) {
+      auto&& windows = Windows();
 
-    // Send control command to the DSO
-    if (auto error = GetDSOMap()[dsoName]->Control(command, components)) {
-      GetLogger()->error("DSO Error: {}", error.message());
-      IRIS_LOG_LEAVE();
-      return Error::kControlCommandFailed;
+      if (dsoName == "desktopWindow") {
+        if (windows.find(dsoName) == windows.end()) {
+          if (auto error = CreateDesktopWindow()) {
+            IRIS_LOG_LEAVE();
+            return error;
+          }
+        }
+
+        IRIS_LOG_LEAVE();
+        return Error::kNone;
+      } else {
+        IRIS_LOG_LEAVE();
+        return Error::kUnknownControlCommand;
+      }
+
     } else {
+
+      // This is a normal DSO
       IRIS_LOG_LEAVE();
-      return Error::kNone;
+      return Error::kUnknownControlCommand;
+
     }
 
   } else {

@@ -46,6 +46,5 @@ env:
   - VULKAN_SDK=${HOME}/vulkan/x86_64
 
 script:
-- alias clang=clang-7
 - cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
 - cmake --build .

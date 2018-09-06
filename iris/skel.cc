@@ -41,7 +41,6 @@ int main(int argc, char** argv) {
 
   // Simulate "DSO desktopWindow" command from desktopWindow.iris file
   iris::Renderer::Control("DSO desktopWindow");
-  iris::Renderer::Control("DSO desktopWindow WIDTH 512 HEIGHT 512");
 
   for (auto&& file : files) iris::Renderer::LoadFile(file);
 
@@ -49,3 +48,4 @@ int main(int argc, char** argv) {
 
   logger.info("exiting");
 }
+
