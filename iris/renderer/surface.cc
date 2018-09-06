@@ -149,6 +149,16 @@ iris::Renderer::Surface::Create(wsi::Window& window) noexcept {
     return tl::unexpected(chk.error());
   }
 
+  VkSemaphoreCreateInfo sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  if (auto result =
+        vkCreateSemaphore(sDevice, &sci, nullptr, &surface.imageAvailable);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create semaphore: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(make_error_code(result));
+  }
+
   if (auto error = surface.Resize(window.Extent())) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
@@ -587,6 +597,7 @@ fail:
 
 iris::Renderer::Surface::Surface(Surface&& other) noexcept
   : handle{other.handle}
+  , imageAvailable{other.imageAvailable}
   , extent{other.extent}
   , viewport{other.viewport}
   , scissor{other.scissor}
@@ -613,6 +624,7 @@ iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noe
   IRIS_LOG_ENTER();
 
   handle = other.handle;
+  imageAvailable = other.imageAvailable;
   extent = other.extent;
   viewport = other.viewport;
   scissor = other.scissor;
@@ -640,6 +652,7 @@ iris::Renderer::Surface::~Surface() noexcept {
 
   IRIS_LOG_ENTER();
   Release();
+  vkDestroySemaphore(sDevice, imageAvailable, nullptr);
   vkDestroySurfaceKHR(sInstance, handle, nullptr);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface::~Surface

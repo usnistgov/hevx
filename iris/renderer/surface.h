@@ -15,6 +15,7 @@ struct Surface {
   std::error_code Resize(glm::uvec2 const& newExtent) noexcept;
 
   VkSurfaceKHR handle{VK_NULL_HANDLE};
+  VkSemaphore imageAvailable{VK_NULL_HANDLE};
 
   VkExtent2D extent{};
   VkViewport viewport{};

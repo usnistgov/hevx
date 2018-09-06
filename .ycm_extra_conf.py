@@ -4,6 +4,8 @@ import os.path
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 database = ycm_core.CompilationDatabase(os.path.join(SCRIPT_DIR, 'build'))
 
+SOURCE_EXTENSIONS = ['.cpp', '.cc', '.c']
+
 def IsHeaderFile(filename):
   extension = os.path.splitext(filename)[1]
   return extension in ['.h', '.hxx', '.hpp', '.hh']
