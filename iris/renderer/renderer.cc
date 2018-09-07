@@ -1116,7 +1116,25 @@ void iris::Renderer::Frame() noexcept {
 
   auto&& windows = Windows();
 
-  //for (auto&& iter : windows) iter.second->Frame();
+  absl::FixedArray<std::uint32_t> imageIndices(windows.size());
+  std::size_t i = 0;
+  for (auto&& iter : windows) {
+    auto&& window = iter.second;
+    if (auto result = vkAcquireNextImageKHR(
+          sDevice, window.surface.swapchain, UINT64_MAX,
+          window.surface.imageAvailable, VK_NULL_HANDLE, &imageIndices[i]);
+        result != VK_SUCCESS) {
+      if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
+        window.resized = true;
+      } else {
+        GetLogger()->error(
+          "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
+          to_string(result));
+      }
+    }
+    ++i;
+  }
+
   for (auto&& iter : windows) iter.second.Frame();
 
   for (auto&& iter : windows) {
