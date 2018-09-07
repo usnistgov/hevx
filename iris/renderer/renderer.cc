@@ -26,6 +26,22 @@
 #include <unordered_map>
 #include <vector>
 
+namespace iris::Renderer {
+
+static spdlog::logger*
+GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
+  static std::shared_ptr<spdlog::logger> sLogger;
+  if (!sLogger) {
+    sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
+    sLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(sLogger);
+  }
+
+  return sLogger.get();
+}
+
+} // namespace iris::Renderer
+
 #ifndef NDEBUG
 
 //! \brief Logs entry into a function.
@@ -43,18 +59,6 @@
 #endif
 
 namespace iris::Renderer {
-
-static spdlog::logger*
-GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
-  static std::shared_ptr<spdlog::logger> sLogger;
-  if (!sLogger) {
-    sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
-    sLogger->set_level(spdlog::level::trace);
-    spdlog::register_logger(sLogger);
-  }
-
-  return sLogger.get();
-}
 
 VkInstance sInstance{VK_NULL_HANDLE};
 VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
@@ -83,7 +87,7 @@ static std::unordered_map<std::string, iris::Renderer::Window>&
 Windows() noexcept {
   static std::unordered_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
-}
+} // Windows
 
 #ifndef NDEBUG
 /*! \brief Callback for Vulkan Debug Reporting.
@@ -757,13 +761,17 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   vkGetPhysicalDeviceQueueFamilyProperties2(
     sPhysicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
 
-  float const priority = 1.f;
+  absl::FixedArray<float> priorities(
+    queueFamilyProperties[sGraphicsQueueFamilyIndex]
+      .queueFamilyProperties.queueCount);
+  std::fill_n(std::begin(priorities), priorities.size(), 1.f);
+
   VkDeviceQueueCreateInfo qci = {};
   qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   qci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
   qci.queueCount = queueFamilyProperties[sGraphicsQueueFamilyIndex]
                      .queueFamilyProperties.queueCount;
-  qci.pQueuePriorities = &priority;
+  qci.pQueuePriorities = priorities.data();
 
   VkDeviceCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1090,7 +1098,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 } // iris::Renderer::Initialize
 
 void iris::Renderer::Terminate() noexcept {
+  IRIS_LOG_ENTER();
   sRunning = false;
+  IRIS_LOG_LEAVE();
 } // iris::Renderer::Terminate
 
 bool iris::Renderer::IsRunning() noexcept {
@@ -1104,9 +1114,12 @@ void iris::Renderer::Frame() noexcept {
   // semaphores and signaling a single frameFinished semaphore
   // 4. Present the swapchains to a queue
 
-  for (auto&& iter : Windows()) iter.second.Frame();
+  auto&& windows = Windows();
 
-  for (auto&& iter : Windows()) {
+  //for (auto&& iter : windows) iter.second->Frame();
+  for (auto&& iter : windows) iter.second.Frame();
+
+  for (auto&& iter : windows) {
     auto&& window = iter.second;
     if (window.resized) {
       window.surface.Resize(window.window.Extent());
@@ -1114,37 +1127,6 @@ void iris::Renderer::Frame() noexcept {
     }
   }
 } // iris::Renderer::Frame
-
-namespace iris::Renderer {
-
-static std::error_code CreateWindow(std::string const& name) noexcept {
-  IRIS_LOG_ENTER();
-
-  std::string baseName = std::string(absl::StripSuffix(name, "Window"));
-
-  auto win = wsi::Window::Create(baseName.c_str(), {720, 720});
-  if (!win) {
-    GetLogger()->error("Unable to create Window window: {}",
-                       win.error().message());
-    IRIS_LOG_LEAVE();
-    return win.error();
-  }
-
-  auto sfc = Surface::Create(*win);
-  if (!sfc) {
-    GetLogger()->error("Unable to create Window surface: {}",
-                       sfc.error().message());
-    IRIS_LOG_LEAVE();
-    return sfc.error();
-  }
-
-  Windows().emplace(name, Window(std::move(*win), std::move(*sfc)));
-
-  IRIS_LOG_LEAVE();
-  return Error::kNone;
-} // CreateWindow
-
-} // namespace iris::Renderer
 
 std::error_code iris::Renderer::Control(std::string_view command) noexcept {
   IRIS_LOG_ENTER();
@@ -1165,9 +1147,11 @@ std::error_code iris::Renderer::Control(std::string_view command) noexcept {
       auto&& windows = Windows();
 
       if (windows.find(dsoName) == windows.end()) {
-        if (auto error = CreateWindow(dsoName)) {
+        if (auto win = Window::Create(dsoName)) {
+          Windows().emplace(dsoName, std::move(*win));
+        } else {
           IRIS_LOG_LEAVE();
-          return error;
+          return win.error();
         }
       }
 

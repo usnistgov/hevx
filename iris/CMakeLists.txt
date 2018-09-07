@@ -47,6 +47,7 @@ set(SOURCES
   wsi/window.cc
   renderer/renderer.cc
   renderer/surface.cc
+  renderer/window.cc
 )
 
 if(WIN32)

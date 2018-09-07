@@ -22,7 +22,8 @@ int main(int argc, char** argv) {
   flags::args const args(argc, argv);
   auto const& files = args.positional();
 
-  auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("skel.log");
+  auto file_sink =
+    std::make_shared<spdlog::sinks::basic_file_sink_mt>("skel.log", true);
   file_sink->set_level(spdlog::level::trace);
 
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();

@@ -409,10 +409,10 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
       ? glm::clamp(newSize[0], caps.minImageExtent.width,
                    caps.maxImageExtent.width)
       : caps.currentExtent.width,
-    caps.currentExtent.width == UINT32_MAX
-      ? glm::clamp(newSize[1], caps.minImageExtent.width,
-                   caps.maxImageExtent.width)
-      : caps.currentExtent.width,
+    caps.currentExtent.height == UINT32_MAX
+      ? glm::clamp(newSize[1], caps.minImageExtent.height,
+                   caps.maxImageExtent.height)
+      : caps.currentExtent.height,
   };
 
   VkExtent3D imageExtent{newExtent.width, newExtent.height, 1};
