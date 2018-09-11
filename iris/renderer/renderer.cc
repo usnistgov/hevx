@@ -83,6 +83,8 @@ VkRenderPass sRenderPass{VK_NULL_HANDLE};
 static bool sInitialized{false};
 static bool sRunning{false};
 
+VkSemaphore sFrameComplete{VK_NULL_HANDLE};
+
 static std::unordered_map<std::string, iris::Renderer::Window>&
 Windows() noexcept {
   static std::unordered_map<std::string, iris::Renderer::Window> sWindows;
@@ -1081,6 +1083,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     return Error::kInitializationFailed;
   }
 
+  VkSemaphoreCreateInfo sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  if (auto result = vkCreateSemaphore(sDevice, &sci, nullptr, &sFrameComplete);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create semaphore: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
   if (auto error = CreateAllocator()) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
@@ -1108,32 +1120,190 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  // 1. Acquire images/semaphores from all registered iris::Window objects
-  // 2. Build command buffers (or use pre-recorded ones)
-  // 3. Submit command buffers to a queue, waiting on all acquired image
-  // semaphores and signaling a single frameFinished semaphore
-  // 4. Present the swapchains to a queue
-
+  VkResult result;
   auto&& windows = Windows();
 
   absl::FixedArray<std::uint32_t> imageIndices(windows.size());
+  absl::FixedArray<VkExtent2D> extents(windows.size());
+  absl::FixedArray<VkViewport> viewports(windows.size());
+  absl::FixedArray<VkRect2D> scissors(windows.size());
+  absl::FixedArray<VkFramebuffer> framebuffers(windows.size());
+  absl::FixedArray<VkImage> images(windows.size());
+  absl::FixedArray<VkSemaphore> waitSemaphores(windows.size());
+  absl::FixedArray<VkSwapchainKHR> swapchains(windows.size());
+
+  //
+  // Acquire images/semaphores from all iris::Window objects
+  //
+
   std::size_t i = 0;
   for (auto&& iter : windows) {
     auto&& window = iter.second;
-    if (auto result = vkAcquireNextImageKHR(
-          sDevice, window.surface.swapchain, UINT64_MAX,
-          window.surface.imageAvailable, VK_NULL_HANDLE, &imageIndices[i]);
-        result != VK_SUCCESS) {
+    result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
+                                   UINT64_MAX, window.surface.imageAvailable,
+                                   VK_NULL_HANDLE, &imageIndices[i]);
+    if (result != VK_SUCCESS) {
       if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
         window.resized = true;
       } else {
         GetLogger()->error(
           "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
           to_string(result));
+        IRIS_LOG_LEAVE();
+        return;
       }
     }
-    ++i;
+
+    extents[i] = window.surface.extent;
+    viewports[i] = window.surface.viewport;
+    scissors[i] = window.surface.scissor;
+    framebuffers[i] = window.surface.framebuffers[imageIndices[i]];
+    images[i] = window.surface.colorImages[imageIndices[i]];
+    waitSemaphores[i] = window.surface.imageAvailable;
+    swapchains[i] = window.surface.swapchain;
+
+    i += 1;
   }
+
+  //
+  // Build command buffers (or use pre-recorded ones)
+  //
+
+  VkCommandBufferAllocateInfo ai = {};
+  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  ai.commandPool = sUnorderedCommandPool;
+  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  ai.commandBufferCount = 1;
+
+  VkCommandBuffer cb;
+  result = vkAllocateCommandBuffers(sDevice, &ai, &cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error allocating command buffer: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  VkCommandBufferBeginInfo cbi = {};
+  cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  cbi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+  result = vkBeginCommandBuffer(cb, &cbi);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error beginning command buffer: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  absl::FixedArray<VkClearValue> clearValues(3);
+  clearValues[0].color.float32[0] = 0;
+  clearValues[0].color.float32[1] = 0;
+  clearValues[0].color.float32[2] = 0;
+  clearValues[0].color.float32[3] = 255;
+  clearValues[0].depthStencil.depth = 1.f;
+  clearValues[0].depthStencil.stencil = 0;
+
+  VkRenderPassBeginInfo rbi = {};
+  rbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  rbi.renderPass = sRenderPass;
+  rbi.clearValueCount = gsl::narrow_cast<std::uint32_t>(clearValues.size());
+  rbi.pClearValues = clearValues.data();
+
+  VkImageMemoryBarrier ib = {};
+  ib.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  ib.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+  ib.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  ib.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  ib.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+  for (std::size_t j = 0; i < windows.size(); ++i) {
+    vkCmdSetViewport(cb, 0, 1, &viewports[j]);
+    vkCmdSetScissor(cb, 0, 1, &scissors[j]);
+
+    rbi.renderArea.extent = extents[j];
+    rbi.framebuffer = framebuffers[j];
+    vkCmdBeginRenderPass(cb, &rbi, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdEndRenderPass(cb);
+
+    ib.image = images[j];
+    vkCmdPipelineBarrier(cb,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, // srcStageMask
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, // dstStageMask
+                         0,                                  // dependencyFlags
+                         0,       // memoryBarrierCount
+                         nullptr, // pMemoryBarriers
+                         0,       // bufferMemoryBarrierCount
+                         nullptr, // pBufferMemoryBarriers
+                         1,       // imageMemoryBarrierCount,
+                         &ib);    // pImageMemoryBarriers
+  }
+
+  result = vkEndCommandBuffer(cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error ending command buffer: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  //
+  // Submit command buffers to a queue, waiting on all acquired image
+  // semaphores and signaling a single frameFinished semaphore
+  //
+
+  VkPipelineStageFlags waitDstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+  VkSubmitInfo si = {};
+  si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  si.waitSemaphoreCount =
+    gsl::narrow_cast<std::uint32_t>(waitSemaphores.size());
+  si.pWaitSemaphores = waitSemaphores.data();
+  si.pWaitDstStageMask = &waitDstStage;
+  si.commandBufferCount = 1;
+  si.pCommandBuffers = &cb;
+  si.signalSemaphoreCount = 1;
+  si.pSignalSemaphores = &sFrameComplete;
+
+  result =
+    vkQueueSubmit(sUnorderedCommandQueue, 1, &si, sUnorderedCommandFence);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error submitting command buffer: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  //
+  // Present the swapchains to a queue
+  //
+
+  VkPresentInfoKHR pi = {};
+  pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  pi.waitSemaphoreCount = 1;
+  pi.pWaitSemaphores = &sFrameComplete;
+  pi.swapchainCount = gsl::narrow_cast<std::uint32_t>(swapchains.size());
+  pi.pSwapchains = swapchains.data();
+  pi.pImageIndices = imageIndices.data();
+
+  result = vkQueuePresentKHR(sUnorderedCommandQueue, &pi);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error presenting swapchains: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  result =
+    vkWaitForFences(sDevice, 1, &sUnorderedCommandFence, VK_TRUE, UINT64_MAX);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error waiting on fence: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  vkResetFences(sDevice, 1, &sUnorderedCommandFence);
+  vkFreeCommandBuffers(sDevice, sUnorderedCommandPool, 1, &cb);
 
   for (auto&& iter : windows) iter.second.Frame();
 

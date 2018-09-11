@@ -315,11 +315,25 @@ static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
   barrier.image = depthImage;
   barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
 
-  vkBeginCommandBuffer(cb, &bi);
+  result = vkBeginCommandBuffer(cb, &bi);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error beginning command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
   vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0,
                        nullptr, 0, nullptr, 1, &barrier);
-  vkEndCommandBuffer(cb);
+
+  result = vkEndCommandBuffer(cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error ending command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
 
   VkSubmitInfo si = {};
   si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
