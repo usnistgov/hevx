@@ -8,6 +8,9 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "config.h"
+#include "protos.h"
+#include "renderer/impl.h"
+#include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -16,8 +19,6 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
-#include "renderer/impl.h"
-#include "renderer/window.h"
 #include "tl/expected.hpp"
 #include <array>
 #include <cstdlib>
@@ -1315,52 +1316,6 @@ void iris::Renderer::Frame() noexcept {
     }
   }
 } // iris::Renderer::Frame
-
-std::error_code iris::Renderer::Control(std::string_view command) noexcept {
-  IRIS_LOG_ENTER();
-  if (command.empty()) {
-    GetLogger()->trace("empty control command");
-    IRIS_LOG_LEAVE();
-    return Error::kNone;
-  }
-
-  GetLogger()->debug("Control \"{}\"", command);
-  std::vector<std::string_view> components = absl::StrSplit(command, " ");
-  auto&& controlCommand = components[0];
-
-  if (absl::StartsWithIgnoreCase(controlCommand, "dso")) {
-    std::string dsoName(components[1]);
-
-    if (absl::EndsWith(dsoName, "Window")) {
-      auto&& windows = Windows();
-
-      if (windows.find(dsoName) == windows.end()) {
-        if (auto win = Window::Create(dsoName)) {
-          Windows().emplace(dsoName, std::move(*win));
-        } else {
-          IRIS_LOG_LEAVE();
-          return win.error();
-        }
-      }
-
-      // Need to handle rest of control command for windows
-      IRIS_LOG_LEAVE();
-      return Error::kUnknownControlCommand;
-
-    } else {
-
-      // This is a normal DSO
-      IRIS_LOG_LEAVE();
-      return Error::kUnknownControlCommand;
-
-    }
-
-  } else {
-    GetLogger()->error("Unknown control command: \"{}\"", command);
-    IRIS_LOG_LEAVE();
-    return Error::kUnknownControlCommand;
-  }
-} // iris::Renderer::Control
 
 std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
   IRIS_LOG_ENTER();

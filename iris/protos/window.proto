@@ -1,0 +1,11 @@
+syntax = "proto3";
+package iris;
+
+message Window {
+  bool Stereo = 1;
+  uint32 X = 2;
+  uint32 Y = 3;
+  uint32 Width = 4;
+  uint32 Height = 5;
+  bool Decoration = 10;
+}

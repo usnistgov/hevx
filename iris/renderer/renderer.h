@@ -34,8 +34,6 @@ bool IsRunning() noexcept;
 
 void Frame() noexcept;
 
-std::error_code Control(std::string_view command) noexcept;
-
 std::error_code LoadFile(std::string_view fileName) noexcept;
 
 } // namespace iris::Renderer

@@ -40,9 +40,6 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  // Simulate "DSO desktopWindow" command from desktopWindow.iris file
-  iris::Renderer::Control("DSO desktopWindow");
-
   for (auto&& file : files) iris::Renderer::LoadFile(file);
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }

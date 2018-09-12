@@ -6,6 +6,21 @@ find_package(X11 REQUIRED)
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
+  COMMAND protobuf::protoc
+  ARGS
+    --proto_path=${CMAKE_CURRENT_SOURCE_DIR}/protos
+    --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/protos
+    ${CMAKE_CURRENT_SOURCE_DIR}/protos/window.proto
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/protos/window.proto protobuf::protoc
+  COMMENT "Running cpp protocol buffer compiler on protos/window.proto"
+  VERBATIM
+)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
+  PROPERTIES COMPILE_OPTIONS $<$<CXX_COMPILER_ID:MSVC>:/wd4100>
+)
+
 if(WIN32)
   set(_flextvk_profile flextvk_profile_win32.txt)
 else()
@@ -16,9 +31,8 @@ add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  COMMAND
-    ${PYTHON_EXECUTABLE}
-      ${flextgl_SOURCE_DIR}/flextGLgen.py
+  COMMAND ${PYTHON_EXECUTABLE} ${flextgl_SOURCE_DIR}/flextGLgen.py
+  ARGS
       -D.
       -t${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template
       ${CMAKE_CURRENT_SOURCE_DIR}/${_flextvk_profile}
@@ -44,6 +58,7 @@ configure_file(config.h.in config.h)
 
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
   wsi/window.cc
   renderer/renderer.cc
   renderer/surface.cc
@@ -78,6 +93,7 @@ target_include_directories(iris
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}/protos
 )
 
 target_compile_definitions(iris

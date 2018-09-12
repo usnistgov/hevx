@@ -17,10 +17,6 @@ enum class Error {
   kNoPhysicalDevice,      //!< No physical device available.
   kSurfaceCreationFailed, //!< Surface creation failed for some reason.
   kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
-  kInvalidControlCommand, //!< Invalid control command.
-  kControlCommandFailed,  //!< The control command failed while executing.
-  kUnknownControlCommand, //!< Unknown control command.
-  kUnknownDSO,            //!< Unknown DSO.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -43,10 +39,6 @@ public:
     case Error::kNoPhysicalDevice: return "no physical device"s;
     case Error::kSurfaceCreationFailed: return "surface creation failed"s;
     case Error::kSurfaceNotSupported: return "surface not supported"s;
-    case Error::kInvalidControlCommand: return "invalid control command"s;
-    case Error::kControlCommandFailed: return "control command failed"s;
-    case Error::kUnknownControlCommand: return "unknown control command"s;
-    case Error::kUnknownDSO: return "unknown DSO"s;
     }
     return "unknown"s;
   }
