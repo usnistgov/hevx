@@ -8,7 +8,7 @@
 #pragma warning(disable : 4100)
 #endif // PLATFORM_COMPILER_MSVC
 
-#include "protos/window.pb.h"
+#include "iris/protos/window.pb.h"
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)

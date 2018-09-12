@@ -993,6 +993,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   GetLogger(logSinks);
   IRIS_LOG_ENTER();
 
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
   // over several sub-functions below. Each function is called in-order and
@@ -1106,6 +1108,22 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 
   sInitialized = true;
   sRunning = true;
+
+  //
+  // FIXME: place holder to create a window
+  //
+  iris::Control::Window params;
+  params.set_name("desktopWindow");
+  params.set_stereo(false);
+  params.set_x(320);
+  params.set_y(320);
+  params.set_width(720);
+  params.set_height(720);
+  params.set_decoration(true);
+  if (auto win = Window::Create(params)) {
+    Windows().emplace("desktopWindow", std::move(*win));
+  }
+
   IRIS_LOG_LEAVE();
   return Error::kNone;
 } // iris::Renderer::Initialize

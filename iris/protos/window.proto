@@ -1,11 +1,12 @@
 syntax = "proto3";
-package iris;
+package iris.Control;
 
 message Window {
-  bool Stereo = 1;
-  uint32 X = 2;
-  uint32 Y = 3;
-  uint32 Width = 4;
-  uint32 Height = 5;
+  string Name = 1;
+  bool Stereo = 2;
+  uint32 X = 3;
+  uint32 Y = 4;
+  uint32 Width = 5;
+  uint32 Height = 6;
   bool Decoration = 10;
 }

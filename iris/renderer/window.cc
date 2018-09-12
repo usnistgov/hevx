@@ -5,13 +5,15 @@
 #include "renderer/renderer.h"
 
 tl::expected<iris::Renderer::Window, std::error_code>
-iris::Renderer::Window::Create(std::string const& name) noexcept {
+iris::Renderer::Window::Create(iris::Control::Window const& params) noexcept {
   IRIS_LOG_ENTER();
 
   Window window;
-  std::string baseName = std::string(absl::StripSuffix(name, "Window"));
+  std::string baseName =
+    std::string(absl::StripSuffix(params.name(), "Window"));
 
-  if (auto win = wsi::Window::Create(baseName.c_str(), {720, 720})) {
+  if (auto win = wsi::Window::Create(baseName.c_str(),
+                                     {params.width(), params.height()})) {
     window.window = std::move(*win);
   } else {
     GetLogger()->error("Unable to create Window window: {}",
@@ -33,7 +35,7 @@ iris::Renderer::Window::Create(std::string const& name) noexcept {
     std::bind(&Window::Resize, &window, std::placeholders::_1));
   window.window.OnClose(std::bind(&Window::Close, &window));
 
-  window.window.Move({320, 320});
+  window.window.Move({params.x(), params.y()});
   window.window.Show();
 
   IRIS_LOG_LEAVE();

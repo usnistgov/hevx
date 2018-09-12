@@ -2,6 +2,7 @@
 #define HEV_IRIS_RENDERER_WINDOW_H_
 
 #include "iris/renderer/surface.h"
+#include "iris/protos.h"
 #include "tl/expected.hpp"
 #include <memory>
 #include <system_error>
@@ -10,7 +11,7 @@ namespace iris::Renderer {
 
 struct Window {
   static tl::expected<Window, std::error_code>
-  Create(std::string const& name) noexcept;
+  Create(iris::Control::Window const& params) noexcept;
 
   bool resized{false};
   wsi::Window window{};
