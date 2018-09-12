@@ -18,7 +18,10 @@ add_custom_command(
   VERBATIM
 )
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
-  PROPERTIES COMPILE_OPTIONS $<$<CXX_COMPILER_ID:MSVC>:/wd4100>
+  PROPERTIES
+    COMPILE_OPTIONS
+      $<$<CXX_COMPILER_ID:MSVC>:/wd4100>
+      $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-shadow -Wno-unused-parameter>
 )
 
 if(WIN32)
