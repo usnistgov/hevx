@@ -1121,7 +1121,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   params.set_height(720);
   params.set_decoration(true);
   if (auto win = Window::Create(params)) {
-    Windows().emplace("desktopWindow", std::move(*win));
+    Windows().emplace(params.name(), std::move(*win));
   }
 
   IRIS_LOG_LEAVE();

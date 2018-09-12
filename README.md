@@ -23,16 +23,20 @@ Currently this code is under active development and in a pre-release state.
 
 ### Dependencies
 The following packages are fetched and managed with CMake:
+- [01org/tbb](https://github.com/01org/tbb)
 - [abseil/apseil-cpp](https://github.com/abseil/abseil-cpp)
-- [Microsoft/GSL](https://github.com/Microsoft/GSL)
 - [g-truc/glm](https://github.com/g-truc/glm)
+- [gabime/spdlog](https://github.com/gabime/spdlog)
+- [google/googletest](https://github.com/google/googletest)
+- [GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
+- [Microsoft/GSL](https://github.com/Microsoft/GSL)
+- [mosra/flextgl](https://github.com/mosra/flextgl)
+- [nanomsg/nng](https://github.com/nanomsg/nng)
+- [ocornut/imgui](https://github.com/ocornut/imgui)
+- [protocolbuffers/protobuf](https://github.com/protocolbuffers/protobuf)
 - [taocpp/json](https://github.com/taocpp/json)
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
-- [gabime/spdlog](https://github.com/gabime/spdlog)
-- [01org/tbb](https://github.com/01org/tbb)
-- [mosra/flextgl](https://github.com/mosra/flextgl)
-- [GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
-- [ocornut/imgui](https://github.com/ocornut/imgui)
+- [sailormoon/flags](https://github.com/sailormoon/flags)
 
 ### Instructions
 On HEV hosts:
