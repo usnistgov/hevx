@@ -66,6 +66,7 @@ target_link_libraries(iris
     spdlog
     absl::container
     Vulkan::Vulkan ${X11_LIBRARIES}
+    protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
 )
 
