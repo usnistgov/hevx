@@ -13,6 +13,8 @@ if(NOT glm_POPULATED)
   FetchContent_Populate(glm)
   add_library(glm INTERFACE)
   target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
+  target_compile_definitions(glm
+    INTERFACE GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 endif()
 
 unset(_glm_git_tag)

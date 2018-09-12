@@ -1,7 +1,8 @@
 #ifndef HEV_IRIS_RENDERER_VULKAN_H_
 #define HEV_IRIS_RENDERER_VULKAN_H_
 
-#include "flextVk.h"
+#include "iris/flextVk.h"
+#include "iris/config.h"
 
 // FIXME: flextGL should probably generate these PFN definitions...
 using PFN_vkGetPhysicalDeviceProperties = decltype(vkGetPhysicalDeviceProperties);
@@ -21,7 +22,17 @@ using PFN_vkDestroyBuffer = decltype(vkDestroyBuffer);
 using PFN_vkCreateImage = decltype(vkCreateImage);
 using PFN_vkDestroyImage = decltype(vkDestroyImage);
 
+#if PLATFORM_COMPILER_MSVC
+#if defined(NOMINMAX)
+#undef NOMINMAX  // vk_mem_alloc.h unconditionally defines this
+#endif
+#endif // PLATFORM_COMPILER_MSVC
 #include "vk_mem_alloc.h"
+#if PLATFORM_COMPILER_MSVC
+#if !defined(NOMINMAX)
+#define NOMINMAX  // vk_mem_alloc.h unconditionally defines this
+#endif
+#endif // PLATFORM_COMPILER_MSVC
 
 #include <string>
 #include <system_error>
