@@ -159,12 +159,12 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
 
   if (::RegisterClass(&sWindowClass) == 0) {
     int err = ::GetLastError();
-    if (err != ERROR_ALREADY_EXISTS) {
+    if (err != ERROR_CLASS_ALREADY_EXISTS) {
       char str[1024];
       ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
                        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str,
                        ABSL_ARRAYSIZE(str), NULL);
-      GetLogger()->error("Cannot register window class: {}", str);
+      GetLogger()->error("Cannot register window class: {} ({}) ({})", str);
       IRIS_LOG_LEAVE();
       return tl::unexpected(Error::kWin32Error);
     }

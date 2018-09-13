@@ -1373,11 +1373,11 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
   
   if (parts.back() == "json") {
     std::string fn(fileName);
-    std::FILE* fh = std::fopen(fn.c_str(), "r");
+    std::FILE* fh = std::fopen(fn.c_str(), "rb");
     if (!fh) {
       fn = absl::StrCat(kIRISContentDirectory, "/", fileName);
       GetLogger()->debug("Loading {} failed, trying {}", fileName, fn);
-      fh = std::fopen(fn.c_str(), "r");
+      fh = std::fopen(fn.c_str(), "rb");
     }
 
     if (!fh) {
@@ -1387,9 +1387,9 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
     }
 
     std::fseek(fh, 0L, SEEK_END);
-    std::string json(std::ftell(fh) + 1, '\0');
+    std::vector<char> bytes(std::ftell(fh));
     std::fseek(fh, 0L, SEEK_SET);
-    std::fread(json.data(), sizeof(char), json.size(), fh);
+    std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
 
     if (std::ferror(fh) && !std::feof(fh)) {
       std::fclose(fh);
@@ -1398,7 +1398,7 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
     }
 
     std::fclose(fh);
-    GetLogger()->debug("JSON: {}", json);
+    std::string json(bytes.data(), bytes.size());
 
     iris::Control::Control control;
     if (auto status =
