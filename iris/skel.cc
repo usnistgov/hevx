@@ -15,6 +15,104 @@
 #endif
 #include "flags.h"
 
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#endif
+#include "google/protobuf/util/json_util.h"
+#include "google/protobuf/text_format.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
+#include "iris/protos.h"
+
+iris::Control::Displays CreateDesktopWindow(spdlog::logger& logger) {
+  std::string const json = R"({
+  "Windows":
+  [
+    {
+      "Name": "desktopWindow",
+      "Stereo": false,
+      "X": 320,
+      "Y": 320,
+      "Width": 720,
+      "Height": 720,
+      "Decoration": true
+    }
+  ]
+})";
+  logger.debug("json: {}", json);
+
+  iris::Control::Displays displays;
+  if (auto status = google::protobuf::util::JsonStringToMessage(json, &displays);
+    status != google::protobuf::util::Status::OK) {
+    logger.error("Failed to parse json: {}", status.ToString());
+  } else {
+    std::string str;
+    google::protobuf::TextFormat::PrintToString(displays, &str);
+    logger.info("Parsed json into Displays message: {}", str);
+  }
+
+  return displays;
+}
+
+iris::Control::Displays CreateSimulatorWindows(spdlog::logger& logger) {
+  std::string const json = R"({
+  "Windows":
+  [
+    {
+      "Name": "frontSimulatorWindow",
+      "Stereo": false,
+      "X": 320,
+      "Y": 320,
+      "Width": 720,
+      "Height": 720,
+      "Decoration": true
+    },
+    {
+      "Name": "leftSimulatorWindow",
+      "Stereo": false,
+      "X": 320,
+      "Y": 320,
+      "Width": 720,
+      "Height": 720,
+      "Decoration": true
+    },
+    {
+      "Name": "floorSimulatorWindow",
+      "Stereo": false,
+      "X": 320,
+      "Y": 320,
+      "Width": 720,
+      "Height": 720,
+      "Decoration": true
+    },
+    {
+      "Name": "consoleWindow",
+      "Stereo": false,
+      "X": 320,
+      "Y": 320,
+      "Width": 720,
+      "Height": 720,
+      "Decoration": true
+    }
+  ]
+})";
+  logger.debug("json: {}", json);
+
+  iris::Control::Displays displays;
+  if (auto status = google::protobuf::util::JsonStringToMessage(json, &displays);
+    status != google::protobuf::util::Status::OK) {
+    logger.error("Failed to parse json: {}", status.ToString());
+  } else {
+    std::string str;
+    google::protobuf::TextFormat::PrintToString(displays, &str);
+    logger.info("Parsed json into Displays message: {}", str);
+  }
+
+  return displays;
+}
+
 int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
@@ -33,6 +131,8 @@ int main(int argc, char** argv) {
   logger.set_level(spdlog::level::trace);
 
   logger.info("initialized");
+  CreateDesktopWindow(logger);
+  CreateSimulatorWindows(logger);
 
   if (auto error =
         iris::Renderer::Initialize("skel", 0, {console_sink, file_sink})) {

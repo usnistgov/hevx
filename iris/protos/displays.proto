@@ -1,0 +1,8 @@
+syntax = "proto3";
+package iris.Control;
+
+import "window.proto";
+
+message Displays {
+  repeated Window Windows = 1;
+}

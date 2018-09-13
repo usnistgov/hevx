@@ -6,22 +6,42 @@ find_package(X11 REQUIRED)
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
-  COMMAND protobuf::protoc
-  ARGS
-    --proto_path=${CMAKE_CURRENT_SOURCE_DIR}/protos
-    --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/protos
-    ${CMAKE_CURRENT_SOURCE_DIR}/protos/window.proto
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/protos/window.proto protobuf::protoc
-  COMMENT "Running cpp protocol buffer compiler on protos/window.proto"
-  VERBATIM
+set(protos_PROTOS
+  protos/displays.proto
+  protos/window.proto
 )
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
-  PROPERTIES
-    COMPILE_OPTIONS
-      $<$<CXX_COMPILER_ID:MSVC>:/wd4100>
-      $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-shadow -Wno-unused-parameter>
+
+foreach(filename ${protos_PROTOS})
+  get_filename_component(dirname ${filename} DIRECTORY)
+  get_filename_component(basename ${filename} NAME_WE)
+  list(APPEND protos_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/${dirname}/${basename}.pb.cc)
+
+  add_custom_command(
+    OUTPUT
+      ${CMAKE_CURRENT_BINARY_DIR}/${dirname}/${basename}.pb.h
+      ${CMAKE_CURRENT_BINARY_DIR}/${dirname}/${basename}.pb.cc
+    COMMAND protobuf::protoc
+    ARGS
+      --proto_path=${CMAKE_CURRENT_SOURCE_DIR}/protos
+      --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/protos
+      ${CMAKE_CURRENT_SOURCE_DIR}/${filename}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${filename} protobuf::protoc
+    COMMENT "Running cpp protocol buffer compiler on ${filename}"
+    VERBATIM
+  )
+endforeach()
+
+add_library(protos OBJECT ${protos_SOURCES})
+target_include_directories(protos PRIVATE ${PROTOBUF_INCLUDE_DIRS})
+
+target_compile_options(protos
+  PRIVATE
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wnon-virtual-dtor>
+    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
+    $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4125 /wd4127 /wd4201 /wd4996>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od /Gm>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
 if(WIN32)
@@ -61,7 +81,6 @@ configure_file(config.h.in config.h)
 
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  ${CMAKE_CURRENT_BINARY_DIR}/protos/window.pb.cc
   wsi/window.cc
   renderer/renderer.cc
   renderer/surface.cc
@@ -74,7 +93,7 @@ elseif(UNIX)
   list(APPEND SOURCES wsi/window_x11.cc)
 endif()
 
-add_library(iris ${SOURCES})
+add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC
