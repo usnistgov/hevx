@@ -1373,7 +1373,7 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
   
   if (parts.back() == "json") {
     std::string fn(fileName);
-    FILE* fh = std::fopen(fn.c_str(), "r");
+    std::FILE* fh = std::fopen(fn.c_str(), "r");
     if (!fh) {
       fn = absl::StrCat(kIRISContentDirectory, "/", fileName);
       GetLogger()->debug("Loading {} failed, trying {}", fileName, fn);

@@ -69,8 +69,13 @@ int main(int argc, char** argv) {
   google::protobuf::util::MessageToJsonString(control, &json, options);
   logger.debug("{}", json);
 
+  std::FILE *fh = std::fopen("foo.json", "w");
+  std::fwrite(json.data(), sizeof(char), json.size(), fh);
+  std::fclose(fh);
+
   //iris::Renderer::Control(control);
   iris::Renderer::LoadFile("configs/desktop.json");
+  iris::Renderer::LoadFile("foo.json");
   for (auto&& file : files) iris::Renderer::LoadFile(file);
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
