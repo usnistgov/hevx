@@ -6,8 +6,9 @@ import "window.proto";
 
 message Control {
   enum Type {
-    DISPLAYS = 0;
-    WINDOW = 1;
+    NOOP = 0;
+    DISPLAYS = 1;
+    WINDOW = 2;
   }
 
   Type type = 1;

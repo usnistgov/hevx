@@ -19,7 +19,7 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #elif PLATFORM_COMPILER_GCC
-#pragma GCC diangostic push
+#pragma GCC diagnostic pop
 #endif
 
 #endif
