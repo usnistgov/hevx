@@ -1,0 +1,16 @@
+{
+  "type": "DISPLAYS",
+  "displays": {
+    "windows": [
+      {
+        "name": "desktopWindow",
+        "stereo": false,
+        "x": 320,
+        "y": 320,
+        "width": 720,
+        "height": 720,
+        "decoration": true
+      }
+    ]
+  }
+}

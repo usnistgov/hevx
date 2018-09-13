@@ -17,6 +17,8 @@ enum class Error {
   kNoPhysicalDevice,      //!< No physical device available.
   kSurfaceCreationFailed, //!< Surface creation failed for some reason.
   kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
+  kFileNotSupported,      //!< File is not supported.
+  kControlMessageInvalid, //!< Control message invalid.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -39,6 +41,8 @@ public:
     case Error::kNoPhysicalDevice: return "no physical device"s;
     case Error::kSurfaceCreationFailed: return "surface creation failed"s;
     case Error::kSurfaceNotSupported: return "surface not supported"s;
+    case Error::kFileNotSupported: return "file not supported"s;
+    case Error::kControlMessageInvalid: return "control message invalid";
     }
     return "unknown"s;
   }

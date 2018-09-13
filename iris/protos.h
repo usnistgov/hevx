@@ -12,8 +12,9 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #endif
 
-#include "iris/protos/window.pb.h"
+#include "iris/protos/control.pb.h"
 #include "iris/protos/displays.pb.h"
+#include "iris/protos/window.pb.h"
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)

@@ -5,6 +5,7 @@
  */
 
 #include "gsl/gsl"
+#include "iris/protos.h"
 #include "spdlog/sinks/sink.h"
 #include "tl/expected.hpp"
 #include <cstdint>
@@ -33,6 +34,8 @@ void Terminate() noexcept;
 bool IsRunning() noexcept;
 
 void Frame() noexcept;
+
+std::error_code Control(iris::Control::Control const& control) noexcept;
 
 std::error_code LoadFile(std::string_view fileName) noexcept;
 

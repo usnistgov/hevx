@@ -7,6 +7,7 @@ find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
 set(protos_PROTOS
+  protos/control.proto
   protos/displays.proto
   protos/window.proto
 )
@@ -73,7 +74,7 @@ endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(PLATFORM_COMPILER_MSVC TRUE)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GCC" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   set(PLATFORM_COMPILER_GCC TRUE)
 endif()
 

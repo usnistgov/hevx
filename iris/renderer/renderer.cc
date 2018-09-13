@@ -8,6 +8,14 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "config.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#endif
+#include "google/protobuf/util/json_util.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/window.h"
@@ -22,6 +30,7 @@
 #include "tl/expected.hpp"
 #include <array>
 #include <cstdlib>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -1109,21 +1118,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   sInitialized = true;
   sRunning = true;
 
-  //
-  // FIXME: place holder to create a window
-  //
-  iris::Control::Window params;
-  params.set_name("desktopWindow");
-  params.set_stereo(false);
-  params.set_x(320);
-  params.set_y(320);
-  params.set_width(720);
-  params.set_height(720);
-  params.set_decoration(true);
-  if (auto win = Window::Create(params)) {
-    Windows().emplace(params.name(), std::move(*win));
-  }
-
   IRIS_LOG_LEAVE();
   return Error::kNone;
 } // iris::Renderer::Initialize
@@ -1141,6 +1135,7 @@ bool iris::Renderer::IsRunning() noexcept {
 void iris::Renderer::Frame() noexcept {
   VkResult result;
   auto&& windows = Windows();
+  if (windows.empty()) return;
 
   absl::FixedArray<std::uint32_t> imageIndices(windows.size());
   absl::FixedArray<VkExtent2D> extents(windows.size());
@@ -1335,12 +1330,92 @@ void iris::Renderer::Frame() noexcept {
   }
 } // iris::Renderer::Frame
 
+std::error_code
+iris::Renderer::Control(iris::Control::Control const& control) noexcept {
+  IRIS_LOG_ENTER();
+
+  if (!iris::Control::Control::Type_IsValid(control.type())) {
+    GetLogger()->error("Invalid control message type {}", control.type());
+    IRIS_LOG_LEAVE();
+    return Error::kControlMessageInvalid;
+  }
+
+  switch(control.type()) {
+  case iris::Control::Control_Type_DISPLAYS:
+    for (int i = 0; i < control.displays().windows_size(); ++i) {
+      auto&& window = control.displays().windows(i);
+      if (auto win = Window::Create(window)) {
+        Windows().emplace(window.name(), std::move(*win));
+      }
+    }
+    break;
+  case iris::Control::Control_Type_WINDOW:
+    if (auto win = Window::Create(control.window())) {
+      Windows().emplace(control.window().name(), std::move(*win));
+    }
+    break;
+  default:
+    GetLogger()->error("Unsupported control message type {}", control.type());
+    IRIS_LOG_LEAVE();
+    return Error::kControlMessageInvalid;
+    break;
+  }
+
+  IRIS_LOG_LEAVE();
+  return Error::kNone;
+} // iris::Renderer::Control
+
 std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
   IRIS_LOG_ENTER();
 
   GetLogger()->debug("Loading {}", fileName);
+  std::vector<std::string_view> parts = absl::StrSplit(fileName, ".");
+  
+  if (parts.back() == "json") {
+    std::string fn(fileName);
+    FILE* fh = std::fopen(fn.c_str(), "r");
+    if (!fh) {
+      fn = absl::StrCat(kIRISContentDirectory, "/", fileName);
+      GetLogger()->debug("Loading {} failed, trying {}", fileName, fn);
+      fh = std::fopen(fn.c_str(), "r");
+    }
 
-  IRIS_LOG_LEAVE();
-  return Error::kNone;
+    if (!fh) {
+      GetLogger()->error("Unable to open or find {}: {}", fileName,
+                         strerror(errno));
+      return Error::kFileNotSupported;
+    }
+
+    std::fseek(fh, 0L, SEEK_END);
+    std::string json(std::ftell(fh) + 1, '\0');
+    std::fseek(fh, 0L, SEEK_SET);
+    std::fread(json.data(), sizeof(char), json.size(), fh);
+
+    if (std::ferror(fh) && !std::feof(fh)) {
+      std::fclose(fh);
+      GetLogger()->error("Unable to read {}: {}", fileName, strerror(errno));
+      return Error::kFileNotSupported;
+    }
+
+    std::fclose(fh);
+    GetLogger()->debug("JSON: {}", json);
+
+    iris::Control::Control control;
+    if (auto status =
+          google::protobuf::util::JsonStringToMessage(json, &control);
+        status != google::protobuf::util::Status::OK) {
+      GetLogger()->error("Unable to parse {}: {}", fileName, status.ToString());
+      IRIS_LOG_LEAVE();
+      return Error::kFileNotSupported;
+    } else {
+      IRIS_LOG_LEAVE();
+      return Control(control);
+    }
+  } else {
+    GetLogger()->error("Unhandled file extension: {} for {}", parts.back(),
+                       fileName);
+    IRIS_LOG_LEAVE();
+    return Error::kFileNotSupported;
+  }
 } // iris::Renderer::LoadFile
 

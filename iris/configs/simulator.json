@@ -1,0 +1,43 @@
+{
+  "type": "DISPLAYS",
+  "displays": {
+    "windows": [
+      {
+        "name": "frontSimulatorWindow",
+        "stereo": false,
+        "x": 20,
+        "y": 20,
+        "width": 720,
+        "height": 720,
+        "decoration": true
+      },
+      {
+        "name": "leftSimulatorWindow",
+        "stereo": false,
+        "x": 760,
+        "y": 20,
+        "width": 720,
+        "height": 720,
+        "decoration": true
+      },
+      {
+        "name": "floorSimulatorWindow",
+        "stereo": false,
+        "x": 20,
+        "y": 760,
+        "width": 720,
+        "height": 720,
+        "decoration": true
+      },
+      {
+        "name": "consoleWindow",
+        "stereo": false,
+        "x": 760,
+        "y": 760,
+        "width": 720,
+        "height": 720,
+        "decoration": true
+      }
+    ]
+  }
+}

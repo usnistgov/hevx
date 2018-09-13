@@ -4,5 +4,5 @@ package iris.Control;
 import "window.proto";
 
 message Displays {
-  repeated Window Windows = 1;
+  repeated Window windows = 1;
 }

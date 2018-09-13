@@ -1,0 +1,18 @@
+syntax = "proto3";
+package iris.Control;
+
+import "displays.proto";
+import "window.proto";
+
+message Control {
+  enum Type {
+    DISPLAYS = 0;
+    WINDOW = 1;
+  }
+
+  Type type = 1;
+  oneof control_union {
+    Displays displays = 2;
+    Window window = 3;
+  }
+}

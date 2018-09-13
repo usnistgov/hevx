@@ -2,11 +2,11 @@ syntax = "proto3";
 package iris.Control;
 
 message Window {
-  string Name = 1;
-  bool Stereo = 2;
-  uint32 X = 3;
-  uint32 Y = 4;
-  uint32 Width = 5;
-  uint32 Height = 6;
-  bool Decoration = 10;
+  string name = 1;
+  bool stereo = 2;
+  uint32 x = 3;
+  uint32 y = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  bool decoration = 10;
 }
