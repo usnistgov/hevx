@@ -1331,31 +1331,39 @@ void iris::Renderer::Frame() noexcept {
 } // iris::Renderer::Frame
 
 std::error_code
-iris::Renderer::Control(iris::Control::Control const& control) noexcept {
+iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_ENTER();
 
-  if (!iris::Control::Control::Type_IsValid(control.type())) {
-    GetLogger()->error("Invalid control message type {}", control.type());
+  if (!iris::Control::Control::Type_IsValid(controlMessage.type())) {
+    GetLogger()->error("Invalid controlMessage message type {}",
+                       controlMessage.type());
     IRIS_LOG_LEAVE();
     return Error::kControlMessageInvalid;
   }
 
-  switch(control.type()) {
+  switch (controlMessage.type()) {
   case iris::Control::Control_Type_DISPLAYS:
-    for (int i = 0; i < control.displays().windows_size(); ++i) {
-      auto&& window = control.displays().windows(i);
-      if (auto win = Window::Create(window)) {
-        Windows().emplace(window.name(), std::move(*win));
+    for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
+      auto&& windowMessage = controlMessage.displays().windows(i);
+      if (auto win =
+            Window::Create(windowMessage.name().c_str(),
+                           {windowMessage.width(), windowMessage.height()})) {
+        win->window.Move({windowMessage.x(), windowMessage.y()});
+        win->window.Show();
+        Windows().emplace(windowMessage.name(), std::move(*win));
       }
     }
     break;
   case iris::Control::Control_Type_WINDOW:
-    if (auto win = Window::Create(control.window())) {
-      Windows().emplace(control.window().name(), std::move(*win));
+    if (auto win = Window::Create(controlMessage.window().name().c_str(),
+                                  {controlMessage.window().width(),
+                                   controlMessage.window().height()})) {
+      Windows().emplace(controlMessage.window().name(), std::move(*win));
     }
     break;
   default:
-    GetLogger()->error("Unsupported control message type {}", control.type());
+    GetLogger()->error("Unsupported controlMessage message type {}",
+                       controlMessage.type());
     IRIS_LOG_LEAVE();
     return Error::kControlMessageInvalid;
     break;
@@ -1400,16 +1408,16 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
     std::fclose(fh);
     std::string json(bytes.data(), bytes.size());
 
-    iris::Control::Control control;
+    iris::Control::Control controlMessage;
     if (auto status =
-          google::protobuf::util::JsonStringToMessage(json, &control);
+          google::protobuf::util::JsonStringToMessage(json, &controlMessage);
         status != google::protobuf::util::Status::OK) {
       GetLogger()->error("Unable to parse {}: {}", fileName, status.ToString());
       IRIS_LOG_LEAVE();
       return Error::kFileNotSupported;
     } else {
       IRIS_LOG_LEAVE();
-      return Control(control);
+      return Control(controlMessage);
     }
   } else {
     GetLogger()->error("Unhandled file extension: {} for {}", parts.back(),
