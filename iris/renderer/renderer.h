@@ -5,12 +5,15 @@
  */
 
 #include "gsl/gsl"
-#include "iris/protos.h"
 #include "spdlog/sinks/sink.h"
 #include "tl/expected.hpp"
 #include <cstdint>
 #include <string_view>
 #include <system_error>
+
+namespace iris::Control {
+class Control;
+} // namespace iris::Control
 
 /*! \brief IRIS renderer
  *
@@ -29,6 +32,7 @@ namespace iris::Renderer {
 std::error_code Initialize(gsl::czstring<> appName,
                            std::uint32_t appVersion = 0,
                            spdlog::sinks_init_list logSinks = {}) noexcept;
+void Shutdown() noexcept;
 
 void Terminate() noexcept;
 bool IsRunning() noexcept;

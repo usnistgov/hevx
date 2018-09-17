@@ -11,10 +11,16 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4100)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 #endif
 #include "google/protobuf/util/json_util.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
 #endif
 #include "protos.h"
 #include "renderer/impl.h"
@@ -1122,6 +1128,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   return Error::kNone;
 } // iris::Renderer::Initialize
 
+void iris::Renderer::Shutdown() noexcept {
+  IRIS_LOG_ENTER();
+  Windows().clear();
+  IRIS_LOG_LEAVE();
+}
+
 void iris::Renderer::Terminate() noexcept {
   IRIS_LOG_ENTER();
   sRunning = false;
@@ -1411,7 +1423,7 @@ std::error_code iris::Renderer::LoadFile(std::string_view fileName) noexcept {
     iris::Control::Control controlMessage;
     if (auto status =
           google::protobuf::util::JsonStringToMessage(json, &controlMessage);
-        status != google::protobuf::util::Status::OK) {
+        !status.ok()) {
       GetLogger()->error("Unable to parse {}: {}", fileName, status.ToString());
       IRIS_LOG_LEAVE();
       return Error::kFileNotSupported;

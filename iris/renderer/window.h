@@ -2,7 +2,6 @@
 #define HEV_IRIS_RENDERER_WINDOW_H_
 
 #include "iris/renderer/surface.h"
-#include "iris/protos.h"
 #include "tl/expected.hpp"
 #include <memory>
 #include <system_error>

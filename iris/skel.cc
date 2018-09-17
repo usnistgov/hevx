@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
 
+  iris::Renderer::Shutdown();
   logger.info("exiting");
 }
 
