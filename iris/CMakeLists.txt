@@ -33,11 +33,11 @@ foreach(filename ${protos_PROTOS})
 endforeach()
 
 add_library(protos OBJECT ${protos_SOURCES})
-target_include_directories(protos PRIVATE ${PROTOBUF_INCLUDE_DIRS})
+target_include_directories(protos PRIVATE ${PROTOBUF_INCLUDE_DIR})
 
 target_compile_options(protos
   PRIVATE
-    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wnon-virtual-dtor>
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-mavx -Wall -Wnon-virtual-dtor -Wno-unused-parameter -Wno-maybe-uninitialized>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4125 /wd4127 /wd4201 /wd4996>
@@ -113,6 +113,7 @@ target_include_directories(iris
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/..>
+    $<BUILD_INTERFACE:${NNG_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:${INCLUDE_DIR}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

@@ -8,6 +8,7 @@
 #include "absl/strings/str_cat.h"
 #include "config.h"
 #include "error.h"
+#include "nng.h"
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/window.h"

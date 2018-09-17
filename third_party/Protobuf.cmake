@@ -15,7 +15,7 @@ if(NOT protobuf_POPULATED)
   message(STATUS "Populating build dependency: protobuf")
   FetchContent_Populate(protobuf)
   add_subdirectory(${protobuf_SOURCE_DIR}/cmake ${protobuf_BINARY_DIR})
-  set(PROTOBUF_INCLUDE_DIRS ${protobuf_SOURCE_DIR}/src CACHE STRING "")
+  set(PROTOBUF_INCLUDE_DIR ${protobuf_SOURCE_DIR}/src CACHE PATH "")
 endif()
 
 unset(_protobuf_git_tag)
