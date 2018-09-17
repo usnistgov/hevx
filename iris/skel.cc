@@ -2,6 +2,7 @@
 #include "absl/debugging/symbolize.h"
 #include "iris/config.h"
 #include "iris/renderer/renderer.h"
+#include "iris/renderer/io.h"
 #include "iris/wsi/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -40,8 +41,8 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  iris::Renderer::LoadFile("configs/simulator.json");
-  for (auto&& file : files) iris::Renderer::LoadFile(file);
+  iris::Renderer::io::LoadFile("configs/simulator.json");
+  for (auto&& file : files) iris::Renderer::io::LoadFile(file);
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
 

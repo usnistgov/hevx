@@ -629,7 +629,21 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   , depthTargetView{other.depthTargetView}
   , framebuffers{std::move(other.framebuffers)} {
   IRIS_LOG_ENTER();
+
   other.handle = VK_NULL_HANDLE;
+  other.handle = VK_NULL_HANDLE;
+  other.imageAvailable = VK_NULL_HANDLE;
+  other.swapchain = VK_NULL_HANDLE;
+  other.depthImage = VK_NULL_HANDLE;
+  other.depthImageAllocation = VK_NULL_HANDLE;
+  other.depthImageView = VK_NULL_HANDLE;
+  other.colorTarget = VK_NULL_HANDLE;
+  other.colorTargetAllocation = VK_NULL_HANDLE;
+  other.colorTargetView = VK_NULL_HANDLE;
+  other.depthTarget = VK_NULL_HANDLE;
+  other.depthTargetAllocation = VK_NULL_HANDLE;
+  other.depthTargetView = VK_NULL_HANDLE;
+
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface
 
@@ -657,6 +671,18 @@ iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noe
   framebuffers = std::move(other.framebuffers);
 
   other.handle = VK_NULL_HANDLE;
+  other.imageAvailable = VK_NULL_HANDLE;
+  other.swapchain = VK_NULL_HANDLE;
+  other.depthImage = VK_NULL_HANDLE;
+  other.depthImageAllocation = VK_NULL_HANDLE;
+  other.depthImageView = VK_NULL_HANDLE;
+  other.colorTarget = VK_NULL_HANDLE;
+  other.colorTargetAllocation = VK_NULL_HANDLE;
+  other.colorTargetView = VK_NULL_HANDLE;
+  other.depthTarget = VK_NULL_HANDLE;
+  other.depthTargetAllocation = VK_NULL_HANDLE;
+  other.depthTargetView = VK_NULL_HANDLE;
+
   IRIS_LOG_LEAVE();
   return *this;
 } // iris::Renderer::Surface::operator=
@@ -690,6 +716,7 @@ void iris::Renderer::Surface::Release() noexcept {
     vkDestroyImageView(sDevice, imageView, nullptr);
   }
 
+  GetLogger()->debug("swapchain: {}", static_cast<void*>(swapchain));
   vkDestroySwapchainKHR(sDevice, swapchain, nullptr);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface::Release

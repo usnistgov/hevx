@@ -1,5 +1,5 @@
-#ifndef HEV_IRIS_RENDERER_H_
-#define HEV_IRIS_RENDERER_H_
+#ifndef HEV_IRIS_RENDERER_RENDERER_H_
+#define HEV_IRIS_RENDERER_RENDERER_H_
 /*! \file
  * \brief \ref iris::Renderer declaration.
  */
@@ -41,9 +41,7 @@ void Frame() noexcept;
 
 std::error_code Control(iris::Control::Control const& control) noexcept;
 
-std::error_code LoadFile(std::string_view fileName) noexcept;
-
 } // namespace iris::Renderer
 
-#endif // HEV_IRIS_RENDERER_H_
+#endif // HEV_IRIS_RENDERER_RENDERER_H_
 
