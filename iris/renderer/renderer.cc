@@ -8,7 +8,6 @@
 #include "absl/strings/str_cat.h"
 #include "config.h"
 #include "error.h"
-#include "nng.h"
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/window.h"
@@ -20,6 +19,7 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
+#include "tasks.h"
 #include "tl/expected.hpp"
 #include <array>
 #include <cstdlib>
@@ -72,6 +72,7 @@ VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
 VkCommandPool sUnorderedCommandPool{VK_NULL_HANDLE};
 VkFence sUnorderedCommandFence{VK_NULL_HANDLE};
 VmaAllocator sAllocator;
+tbb::concurrent_queue<TaskResult> sTasksResultsQueue;
 
 // These are the desired properties of all surfaces for the renderer.
 VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
@@ -1134,9 +1135,23 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  VkResult result;
+  TaskResult taskResult;
+  while (sTasksResultsQueue.try_pop(taskResult)) {
+    std::visit([](auto&& arg) {
+      using T = std::decay_t<decltype(arg)>;
+      if constexpr (std::is_same_v<T, std::error_code>) {
+        GetLogger()->error("Task result has error: {}", arg.message());
+      } else if constexpr (std::is_same_v<T, Control::Control>) {
+        Control(arg);
+      }
+    }, taskResult);
+  }
+
   auto&& windows = Windows();
-  if (windows.empty()) return;
+  if (windows.empty()) {
+    GetLogger()->debug("no windows");
+    return;
+  }
 
   absl::FixedArray<std::uint32_t> imageIndices(windows.size());
   absl::FixedArray<VkExtent2D> extents(windows.size());
@@ -1150,6 +1165,8 @@ void iris::Renderer::Frame() noexcept {
   //
   // Acquire images/semaphores from all iris::Window objects
   //
+
+  VkResult result;
 
   std::size_t i = 0;
   for (auto&& iter : windows) {
