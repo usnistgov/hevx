@@ -80,7 +80,7 @@ TaskResult LoadFileTask::load() noexcept {
       return std::make_error_code(std::errc::io_error);
     } else {
       IRIS_LOG_LEAVE();
-      return Control(controlMessage);
+      return controlMessage;
     }
   } else {
     GetLogger()->error("Unhandled file extension: {} for {}", parts.back(),
@@ -93,8 +93,8 @@ TaskResult LoadFileTask::load() noexcept {
 tbb::task* LoadFileTask::execute() {
   IRIS_LOG_ENTER();
   sTasksResultsQueue.push(load());
-  return nullptr;
   IRIS_LOG_LEAVE();
+  return nullptr;
 } // LoadFileTask::execute
 
 } // namespace iris::Renderer::io

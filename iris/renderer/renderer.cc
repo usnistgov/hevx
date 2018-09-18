@@ -38,6 +38,7 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
     sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
     sLogger->set_level(spdlog::level::trace);
     spdlog::register_logger(sLogger);
+    spdlog::set_pattern("[%Y-%m-%d %T.%e] %^[%t] [%n] [%l] %v%$");
   }
 
   return sLogger.get();
@@ -1148,10 +1149,7 @@ void iris::Renderer::Frame() noexcept {
   }
 
   auto&& windows = Windows();
-  if (windows.empty()) {
-    GetLogger()->debug("no windows");
-    return;
-  }
+  if (windows.empty()) return;
 
   absl::FixedArray<std::uint32_t> imageIndices(windows.size());
   absl::FixedArray<VkExtent2D> extents(windows.size());
