@@ -28,6 +28,7 @@ The following packages are fetched and managed with CMake:
 - [g-truc/glm](https://github.com/g-truc/glm)
 - [gabime/spdlog](https://github.com/gabime/spdlog)
 - [google/googletest](https://github.com/google/googletest)
+- [google/shaderc](https://github.com/google/shaderc)
 - [GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
 - [Microsoft/GSL](https://github.com/Microsoft/GSL)
 - [mosra/flextgl](https://github.com/mosra/flextgl)

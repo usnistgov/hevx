@@ -13,6 +13,18 @@
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "shaderc/shaderc.hpp"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
 #pragma warning(disable : 4127)
 #endif
 #include "spdlog/spdlog.h"
@@ -24,6 +36,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstdio>
+#include <experimental/filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -69,9 +82,9 @@ VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
 VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
-VkQueue sUnorderedCommandQueue{VK_NULL_HANDLE};
-VkCommandPool sUnorderedCommandPool{VK_NULL_HANDLE};
-VkFence sUnorderedCommandFence{VK_NULL_HANDLE};
+VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
+VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
+VkFence sGraphicsCommandFence{VK_NULL_HANDLE};
 VmaAllocator sAllocator;
 tbb::concurrent_queue<TaskResult> sTasksResultsQueue;
 
@@ -84,6 +97,8 @@ VkPresentModeKHR sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 std::uint32_t sNumRenderPassAttachments{4};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
+VkPipelineLayout sBlankFSQPipelineLayout{VK_NULL_HANDLE};
+VkPipeline sBlankFSQPipeline{VK_NULL_HANDLE};
 
 static bool sInitialized{false};
 static bool sRunning{false};
@@ -797,11 +812,11 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   }
 
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
-                   &sUnorderedCommandQueue);
+                   &sGraphicsCommandQueue);
 
   GetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
-  GetLogger()->debug("Unordered Command Queue: {}",
-                     static_cast<void*>(sUnorderedCommandQueue));
+  GetLogger()->debug("Graphics Command Queue: {}",
+                     static_cast<void*>(sGraphicsCommandQueue));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateDevice
@@ -815,15 +830,15 @@ static std::error_code CreateCommandPool() noexcept {
   ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   ci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
 
-  result = vkCreateCommandPool(sDevice, &ci, nullptr, &sUnorderedCommandPool);
+  result = vkCreateCommandPool(sDevice, &ci, nullptr, &sGraphicsCommandPool);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot create command pool: {}", to_string(result));
     IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
 
-  GetLogger()->debug("Unordered Command Pool: {}",
-                     static_cast<void*>(sUnorderedCommandPool));
+  GetLogger()->debug("Graphics Command Pool: {}",
+                     static_cast<void*>(sGraphicsCommandPool));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateCommandPool
@@ -979,7 +994,7 @@ static std::error_code CreateRenderPass() noexcept {
 
   result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create device: {}", to_string(result));
+    GetLogger()->error("Cannot create render pass: {}", to_string(result));
     IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
@@ -988,6 +1003,287 @@ static std::error_code CreateRenderPass() noexcept {
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateRenderPass
+
+class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
+public:
+  shaderc_include_result* GetInclude(char const* requested_source,
+      shaderc_include_type type,
+      char const* requesting_source,
+      size_t include_depth[[maybe_unused]]) override {
+    IRIS_LOG_ENTER();
+
+    if (type == shaderc_include_type_relative) {
+      std::experimental::filesystem::path parent(requesting_source);
+      parent = parent.parent_path();
+      includePaths_.push_back(parent / requested_source);
+    } else {
+      includePaths_.push_back(requested_source);
+    }
+
+    auto&& path = includePaths_.back();
+    try {
+      if (!std::experimental::filesystem::exists(path)) path.clear();
+    } catch (...) { path.clear(); }
+
+    if (!path.empty()) {
+      std::FILE* fh = std::fopen(path.string().c_str(), "rb");
+      if (fh) {
+        std::fseek(fh, 0L, SEEK_END);
+        std::vector<char> bytes(std::ftell(fh));
+        std::fseek(fh, 0L, SEEK_SET);
+        std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
+
+        if (std::ferror(fh) && !std::feof(fh)) {
+          std::fclose(fh);
+          includeSources_.push_back("error reading file");
+        } else {
+          std::fclose(fh);
+          includeSources_.push_back({bytes.data(), bytes.size()});
+        }
+      } else {
+        includeSources_.push_back("file not found");
+      }
+    }
+
+    includeResults_.push_back(new shaderc_include_result);
+    auto&& result = includeResults_.back();
+
+    result->source_name_length = includePaths_.back().string().size();
+    result->source_name = includePaths_.back().string().c_str();
+    result->content_length = includeSources_.back().size();
+    result->content = includeSources_.back().data();
+    result->user_data = nullptr;
+
+    IRIS_LOG_LEAVE();
+    return result;
+  } // GetInclude
+
+  void ReleaseInclude(shaderc_include_result* data) override {
+    IRIS_LOG_ENTER();
+    for (std::size_t i = 0; i< includeResults_.size(); ++i) {
+      if (includeResults_[i] == data) {
+        includeResults_.erase(includeResults_.begin() + i);
+        break;
+      }
+    }
+    IRIS_LOG_LEAVE();
+  } // ReleaesInclude
+
+private:
+  std::vector<std::experimental::filesystem::path> includePaths_{};
+  std::vector<std::string> includeSources_{};
+  std::vector<shaderc_include_result*> includeResults_{};
+}; // class ShaderIncluder
+
+tl::expected<std::vector<std::uint32_t>, std::string>
+CompileShader(char const* fileName, shaderc_shader_kind kind) {
+  IRIS_LOG_ENTER();
+  shaderc::Compiler compiler;
+  shaderc::CompileOptions options;
+  options.SetOptimizationLevel(shaderc_optimization_level_size);
+  options.SetIncluder(std::make_unique<ShaderIncluder>());
+
+  std::FILE* fh = std::fopen(fileName, "rb");
+  if (!fh) {
+    return tl::unexpected(
+      std::make_error_code(std::errc::no_such_file_or_directory).message());
+  }
+
+  std::fseek(fh, 0L, SEEK_END);
+  std::vector<char> bytes(std::ftell(fh));
+  std::fseek(fh, 0L, SEEK_SET);
+  std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
+
+  if (std::ferror(fh) && !std::feof(fh)) {
+    std::fclose(fh);
+    return tl::unexpected(std::make_error_code(std::errc::io_error).message());
+  }
+
+  std::fclose(fh);
+
+  auto spv = compiler.CompileGlslToSpv(bytes.data(), bytes.size(), kind,
+      fileName, "main", options);
+  if (spv.GetCompilationStatus() != shaderc_compilation_status_success) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(spv.GetErrorMessage());
+  }
+
+  std::vector<std::uint32_t> code;
+  std::copy(std::begin(spv), std::end(spv), std::back_inserter(code));
+
+  IRIS_LOG_LEAVE();
+  return code;
+} // CompileShader
+
+tl::expected<VkShaderModule, std::error_code>
+CreateShader(gsl::czstring<> fileName,
+             VkShaderStageFlagBits shaderStage) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  auto const kind = [&shaderStage]() {
+    if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
+      return shaderc_vertex_shader;
+    } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
+      return shaderc_fragment_shader;
+    } else {
+      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
+      std::terminate();
+    }
+  }();
+
+  if (auto code = CompileShader(fileName, kind)) {
+    VkShaderModuleCreateInfo smci = {};
+    smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    // codeSize is bytes, not count of words
+    smci.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
+    smci.pCode = code->data();
+
+    VkShaderModule module;
+    result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
+    if (result != VK_SUCCESS) {
+      GetLogger()->error("Unable to create shader module: {}",
+                         to_string(result));
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(make_error_code(result));
+    }
+
+    IRIS_LOG_LEAVE();
+    return module;
+  } else {
+    GetLogger()->error("Unable to compile shader: {}", code.error());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(Error::kShaderCompileFailed);
+  }
+} // CreateShader
+
+std::error_code CreateBlankFSQPipeline() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkPipelineLayoutCreateInfo plci = {};
+  plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+  result =
+    vkCreatePipelineLayout(sDevice, &plci, nullptr, &sBlankFSQPipelineLayout);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create pipeline layout: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> stages{{
+    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+     VK_SHADER_STAGE_VERTEX_BIT, VK_NULL_HANDLE, "main", nullptr},
+    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+     VK_SHADER_STAGE_FRAGMENT_BIT, VK_NULL_HANDLE, "main", nullptr},
+  }};
+
+  std::string vsFN =
+    absl::StrCat(kIRISContentDirectory, "/assets/shaders/fsqEmpty.vert");
+  std::string fsFN =
+    absl::StrCat(kIRISContentDirectory, "/assets/shaders/fsqEmpty.frag");
+
+  if (auto module = CreateShader(vsFN.c_str(), VK_SHADER_STAGE_VERTEX_BIT)) {
+    stages[0].module = *module;
+  } else {
+    IRIS_LOG_LEAVE();
+    return module.error();
+  }
+
+  if (auto module = CreateShader(fsFN.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    stages[1].module = *module;
+  } else {
+    IRIS_LOG_LEAVE();
+    return module.error();
+  }
+
+  VkPipelineVertexInputStateCreateInfo vertexInputState = {};
+  vertexInputState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
+  inputAssemblyState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+  VkPipelineViewportStateCreateInfo viewportState = {};
+  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportState.viewportCount = 1;
+  viewportState.pViewports = nullptr;
+  viewportState.scissorCount = 1;
+  viewportState.pScissors = nullptr;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationState = {};
+  rasterizationState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationState.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleState = {};
+  multisampleState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleState.rasterizationSamples = sSurfaceSampleCount;
+  multisampleState.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
+  depthStencilState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilState.depthWriteEnable = VK_TRUE;
+
+  VkPipelineColorBlendAttachmentState colorBlendStateAttachment = {};
+  colorBlendStateAttachment.colorWriteMask =
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+  VkPipelineColorBlendStateCreateInfo colorBlendState = {};
+  colorBlendState.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlendState.attachmentCount = 1;
+  colorBlendState.pAttachments = &colorBlendStateAttachment;
+
+  std::array<VkDynamicState, 2> dynamicStates{
+    {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR}};
+
+  VkPipelineDynamicStateCreateInfo dynamicState = {};
+  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamicState.dynamicStateCount =
+    gsl::narrow_cast<std::uint32_t>(dynamicStates.size());
+  dynamicState.pDynamicStates = dynamicStates.data();
+
+  VkGraphicsPipelineCreateInfo gpci = {};
+  gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  gpci.stageCount = gsl::narrow_cast<std::uint32_t>(stages.size());
+  gpci.pStages = stages.data();
+  gpci.pVertexInputState = &vertexInputState;
+  gpci.pInputAssemblyState = &inputAssemblyState;
+  gpci.pViewportState = &viewportState;
+  gpci.pRasterizationState = &rasterizationState;
+  gpci.pMultisampleState = &multisampleState;
+  gpci.pDepthStencilState = &depthStencilState;
+  gpci.pColorBlendState = &colorBlendState;
+  gpci.pDynamicState = &dynamicState;
+  gpci.layout = sBlankFSQPipelineLayout;
+  gpci.renderPass = sRenderPass;
+  gpci.subpass = 0;
+
+  result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1, &gpci, nullptr,
+                                     &sBlankFSQPipeline);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create graphics pipeline: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  GetLogger()->debug("Pipeline Layout: {}",
+                     static_cast<void*>(sBlankFSQPipelineLayout));
+  GetLogger()->debug("Pipeline: {}", static_cast<void*>(sBlankFSQPipeline));
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // CreateBlankFSQPipeline
 
 } // namespace iris::Renderer
 
@@ -1083,7 +1379,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
   fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
   if (auto result =
-        vkCreateFence(sDevice, &fci, nullptr, &sUnorderedCommandFence);
+        vkCreateFence(sDevice, &fci, nullptr, &sGraphicsCommandFence);
       result != VK_SUCCESS) {
     GetLogger()->error("Cannot create fence: {}", to_string(result));
     IRIS_LOG_LEAVE();
@@ -1110,6 +1406,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     return Error::kInitializationFailed;
   }
 
+  if (auto error = CreateBlankFSQPipeline()) {
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
   sInitialized = true;
   sRunning = true;
 
@@ -1119,7 +1420,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 
 void iris::Renderer::Shutdown() noexcept {
   IRIS_LOG_ENTER();
-  vkQueueWaitIdle(sUnorderedCommandQueue);
+  vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
   Windows().clear();
   IRIS_LOG_LEAVE();
@@ -1201,7 +1502,7 @@ void iris::Renderer::Frame() noexcept {
 
   VkCommandBufferAllocateInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sUnorderedCommandPool;
+  ai.commandPool = sGraphicsCommandPool;
   ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   ai.commandBufferCount = 1;
 
@@ -1256,19 +1557,10 @@ void iris::Renderer::Frame() noexcept {
     rbi.framebuffer = framebuffers[j];
     vkCmdBeginRenderPass(cb, &rbi, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdEndRenderPass(cb);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sBlankFSQPipeline);
+    vkCmdDraw(cb, 3, 1, 0, 0);
 
-    ib.image = images[j];
-    vkCmdPipelineBarrier(cb,
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, // srcStageMask
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, // dstStageMask
-                         0,                                  // dependencyFlags
-                         0,       // memoryBarrierCount
-                         nullptr, // pMemoryBarriers
-                         0,       // bufferMemoryBarrierCount
-                         nullptr, // pBufferMemoryBarriers
-                         1,       // imageMemoryBarrierCount,
-                         &ib);    // pImageMemoryBarriers
+    vkCmdEndRenderPass(cb);
   }
 
   result = vkEndCommandBuffer(cb);
@@ -1297,7 +1589,7 @@ void iris::Renderer::Frame() noexcept {
   si.pSignalSemaphores = &sFrameComplete;
 
   result =
-    vkQueueSubmit(sUnorderedCommandQueue, 1, &si, sUnorderedCommandFence);
+    vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
@@ -1317,7 +1609,7 @@ void iris::Renderer::Frame() noexcept {
   pi.pSwapchains = swapchains.data();
   pi.pImageIndices = imageIndices.data();
 
-  result = vkQueuePresentKHR(sUnorderedCommandQueue, &pi);
+  result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
     IRIS_LOG_LEAVE();
@@ -1325,15 +1617,15 @@ void iris::Renderer::Frame() noexcept {
   }
 
   result =
-    vkWaitForFences(sDevice, 1, &sUnorderedCommandFence, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error waiting on fence: {}", to_string(result));
     IRIS_LOG_LEAVE();
     return;
   }
 
-  vkResetFences(sDevice, 1, &sUnorderedCommandFence);
-  vkFreeCommandBuffers(sDevice, sUnorderedCommandPool, 1, &cb);
+  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
 
   for (auto&& iter : windows) iter.second.Frame();
 

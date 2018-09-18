@@ -1,3 +1,4 @@
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "")
 include(FetchContent)
 
 include(GoogleTest.cmake)
@@ -12,5 +13,6 @@ include(NNG.cmake)
 include(Protobuf.cmake)
 include(FlextGL.cmake)
 include(VulkanMemoryAllocator.cmake)
+include(ShaderC.cmake)
 include(DearImGui.cmake)
 include(Flags.cmake)

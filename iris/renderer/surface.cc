@@ -287,7 +287,7 @@ static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
 
   VkCommandBufferAllocateInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sUnorderedCommandPool;
+  ai.commandPool = sGraphicsCommandPool;
   ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   ai.commandBufferCount = 1;
 
@@ -341,7 +341,7 @@ static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
   si.pCommandBuffers = &cb;
 
   result =
-    vkQueueSubmit(sUnorderedCommandQueue, 1, &si, sUnorderedCommandFence);
+    vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer for transition: {}",
                        to_string(result));
@@ -350,7 +350,7 @@ static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
   }
 
   result =
-    vkWaitForFences(sDevice, 1, &sUnorderedCommandFence, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error waiting on fence for transition: {}",
                        to_string(result));
@@ -358,8 +358,8 @@ static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
     return make_error_code(result);
   }
 
-  vkResetFences(sDevice, 1, &sUnorderedCommandFence);
-  vkFreeCommandBuffers(sDevice, sUnorderedCommandPool, 1, &cb);
+  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
 
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;

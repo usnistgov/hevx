@@ -1,4 +1,4 @@
-#find_package(Filesystem REQUIRED)
+find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
 find_package(X11 REQUIRED)
@@ -100,11 +100,9 @@ add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
 target_link_libraries(iris
   PUBLIC
     flags imgui vma
-    gsl glm expected
-    absl::base absl::strings
-    spdlog
-    absl::container
-    Vulkan::Vulkan ${X11_LIBRARIES}
+    gsl glm expected CXX::Filesystem spdlog
+    absl::base absl::strings absl::container
+    shaderc Vulkan::Vulkan ${X11_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
 )

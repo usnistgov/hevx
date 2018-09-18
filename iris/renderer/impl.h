@@ -14,9 +14,9 @@ extern VkDebugReportCallbackEXT sDebugReportCallback;
 extern VkPhysicalDevice sPhysicalDevice;
 extern std::uint32_t sGraphicsQueueFamilyIndex;
 extern VkDevice sDevice;
-extern VkQueue sUnorderedCommandQueue;
-extern VkCommandPool sUnorderedCommandPool;
-extern VkFence sUnorderedCommandFence;
+extern VkQueue sGraphicsCommandQueue;
+extern VkCommandPool sGraphicsCommandPool;
+extern VkFence sGraphicsCommandFence;
 extern VmaAllocator sAllocator;
 
 extern VkSurfaceFormatKHR sSurfaceColorFormat;

@@ -19,6 +19,7 @@ enum class Error {
   kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
   kFileNotSupported,      //!< File is not supported.
   kControlMessageInvalid, //!< Control message invalid.
+  kShaderCompileFailed,   //!< Shader compile failed.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -42,7 +43,8 @@ public:
     case Error::kSurfaceCreationFailed: return "surface creation failed"s;
     case Error::kSurfaceNotSupported: return "surface not supported"s;
     case Error::kFileNotSupported: return "file not supported"s;
-    case Error::kControlMessageInvalid: return "control message invalid";
+    case Error::kControlMessageInvalid: return "control message invalid"s;
+    case Error::kShaderCompileFailed: return "shader compile failed"s;
     }
     return "unknown"s;
   }
