@@ -780,6 +780,12 @@ static void FindDeviceGroup() {
 
   absl::FixedArray<VkPhysicalDeviceGroupProperties>
     physicalDeviceGroupProperties(numPhysicalDeviceGroups);
+  for (std::uint32_t i = 0; i < numPhysicalDeviceGroups; ++i) {
+    physicalDeviceGroupProperties[i].sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+    physicalDeviceGroupProperties[i].pNext = nullptr;
+  }
+
   result = vkEnumeratePhysicalDeviceGroups(
     sInstance, &numPhysicalDeviceGroups, physicalDeviceGroupProperties.data());
   if (result != VK_SUCCESS) {
