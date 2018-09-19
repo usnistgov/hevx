@@ -4,11 +4,17 @@
  * \brief \ref iris::Renderer declaration.
  */
 
-#include <string_view>
+#include "tl/expected.hpp"
+#include <experimental/filesystem>
+#include <system_error>
+#include <vector>
 
 namespace iris::Renderer::io {
 
-void LoadFile(std::string_view fileName) noexcept;
+tl::expected<std::vector<char>, std::error_code>
+ReadFile(std::experimental::filesystem::path path) noexcept;
+
+void LoadFile(std::experimental::filesystem::path path) noexcept;
 
 } // namespace iris::Renderer::io
 

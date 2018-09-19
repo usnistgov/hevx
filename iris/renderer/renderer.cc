@@ -10,6 +10,7 @@
 #include "error.h"
 #include "protos.h"
 #include "renderer/impl.h"
+#include "renderer/io.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -35,8 +36,6 @@
 #include "tl/expected.hpp"
 #include <array>
 #include <cstdlib>
-#include <cstdio>
-#include <experimental/filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -1002,22 +1001,10 @@ public:
     } catch (...) { path.clear(); }
 
     if (!path.empty()) {
-      std::FILE* fh = std::fopen(path.string().c_str(), "rb");
-      if (fh) {
-        std::fseek(fh, 0L, SEEK_END);
-        std::vector<char> bytes(std::ftell(fh));
-        std::fseek(fh, 0L, SEEK_SET);
-        std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
-
-        if (std::ferror(fh) && !std::feof(fh)) {
-          std::fclose(fh);
-          includeSources_.push_back("error reading file");
-        } else {
-          std::fclose(fh);
-          includeSources_.push_back({bytes.data(), bytes.size()});
-        }
+      if (auto const& bytes = io::ReadFile(path)) {
+        includeSources_.push_back({bytes->data(), bytes->size()});
       } else {
-        includeSources_.push_back("file not found");
+        includeSources_.push_back("error reading file");
       }
     }
 
