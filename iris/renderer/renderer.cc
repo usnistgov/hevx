@@ -51,7 +51,7 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
     sLogger = std::make_shared<spdlog::logger>("iris", logSinks);
     sLogger->set_level(spdlog::level::trace);
     spdlog::register_logger(sLogger);
-    spdlog::set_pattern("[%Y-%m-%d %T.%e] %^[%t] [%n] [%l] %v%$");
+    spdlog::set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] %^[%l] %v%$");
   }
 
   return sLogger.get();
@@ -95,7 +95,10 @@ VkFormat sSurfaceDepthFormat{VK_FORMAT_D32_SFLOAT};
 VkSampleCountFlagBits sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 VkPresentModeKHR sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
-std::uint32_t sNumRenderPassAttachments{4};
+std::uint32_t sNumRenderPassAttachments{3};
+std::uint32_t sColorTargetAttachmentIndex{0};
+std::uint32_t sDepthTargetAttachmentIndex{1};
+std::uint32_t sResolveTargetAttachmentIndex{2};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 VkPipelineLayout sBlankFSQPipelineLayout{VK_NULL_HANDLE};
 VkPipeline sBlankFSQPipeline{VK_NULL_HANDLE};
@@ -874,32 +877,45 @@ static std::error_code CreateRenderPass() noexcept {
   //
   // The four are needed to support multi-sampling.
   //
-  // The color (0) and depth stencil (2) attachments are the multi-sampled
+  // The color (0) and depth stencil (1) attachments are the multi-sampled
   // attachments that will match up with framebuffers that are rendered into.
   //
-  // The resolve (1, 3) attachments are then used for presenting the final
-  // image (1) and sampling for any depth-subpasses (3).
-  std::array<VkAttachmentDescription, 4> attachments;
+  // The resolve (2) attachment is then used for presenting the final image (1).
+  std::array<VkAttachmentDescription, 3> attachments;
 
   // The multi-sampled color attachment needs to be cleared on load (loadOp).
   // We don't care what the input layout is (initialLayout) but the final
   // layout must be COLOR_ATTCHMENT_OPTIMAL to allow for resolving.
-  attachments[0] = VkAttachmentDescription{
+  attachments[sColorTargetAttachmentIndex] = VkAttachmentDescription{
     0,                                       // flags
     sSurfaceColorFormat.format,              // format
     sSurfaceSampleCount,                     // samples
     VK_ATTACHMENT_LOAD_OP_CLEAR,             // loadOp (color and depth)
-    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // storeOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,            // storeOp (color and depth)
     VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
     VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
     VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
   };
 
+  // The multi-sampled depth attachment needs to be cleared on load (loadOp).
+  // We don't care what the input layout is (initialLayout) but the final
+  // layout must be DEPTH_STENCIL_ATTACHMENT_OPTIMAL to allow for resolving.
+  attachments[sDepthTargetAttachmentIndex] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceDepthFormat,              // format
+    sSurfaceSampleCount,              // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,     // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
   // The resolve color attachment has a single sample and stores the resolved
-  // color and depth. It will be transitioned to PRESENT_SRC_KHR for
-  // presentation.
-  attachments[1] = VkAttachmentDescription{
+  // color. It will be transitioned to PRESENT_SRC_KHR for presentation.
+  attachments[sResolveTargetAttachmentIndex] = VkAttachmentDescription{
     0,                                // flags
     sSurfaceColorFormat.format,       // format
     VK_SAMPLE_COUNT_1_BIT,            // samples
@@ -911,40 +927,13 @@ static std::error_code CreateRenderPass() noexcept {
     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR   // finalLayout
   };
 
-  // The multi-sampled depth attachment needs to be cleared on load (loadOp).
-  // We don't care what the input layout is (initialLayout) but the final
-  // layout must be DEPTH_STENCIL_ATTCHMENT_OPTIMAL to allow for resolving.
-  attachments[2] = VkAttachmentDescription{
-    0,                                // flags
-    sSurfaceDepthFormat,              // format
-    sSurfaceSampleCount,              // samples
-    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
-    VK_ATTACHMENT_STORE_OP_DONT_CARE, // storeOp (color and depth)
-    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
-    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
-    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
-    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
-  };
-
-  // The resolve depth stencil attachment has a single sample and stores the
-  // resolved depth. It will be transitioned to COLOR_ATTACHMENT_OPTIMAL for
-  // attachment as an input image to other subpasses.
-  attachments[3] = VkAttachmentDescription{
-    0,                                       // flags
-    sSurfaceDepthFormat,                     // format
-    VK_SAMPLE_COUNT_1_BIT,                   // samples
-    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // loadOp (color and depth)
-    VK_ATTACHMENT_STORE_OP_STORE,            // storeOp (color and depth)
-    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
-    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
-    VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
-    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
-  };
-
-  VkAttachmentReference color{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-  VkAttachmentReference resolve{1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference color{sColorTargetAttachmentIndex,
+                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
   VkAttachmentReference depthStencil{
-    2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    sDepthTargetAttachmentIndex,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference resolve{sResolveTargetAttachmentIndex,
+                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
   VkSubpassDescription subpass = {
     0,                               // flags
@@ -959,27 +948,14 @@ static std::error_code CreateRenderPass() noexcept {
     nullptr                          // pPreserveAttachments
   };
 
-  std::array<VkSubpassDependency, 2> dependencies;
-
-  dependencies[0] = VkSubpassDependency{
-    VK_SUBPASS_EXTERNAL,                           // srcSubpass
-    0,                                             // dstSubpass
-    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // srcStageMask
-    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
-    VK_ACCESS_MEMORY_READ_BIT,                     // srcAccessMask
-    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
-    VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
-  };
-
-  dependencies[1] = VkSubpassDependency{
+  VkSubpassDependency dependency{
     0,                                             // srcSubpass
     VK_SUBPASS_EXTERNAL,                           // dstSubpass
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
-    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // dstStageMask
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
+    0,                                             // srcAccessMask
     VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // srcAccessMask
-    VK_ACCESS_MEMORY_READ_BIT,              // dstAccessMask
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
     VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
   };
 
@@ -989,8 +965,8 @@ static std::error_code CreateRenderPass() noexcept {
   rpci.pAttachments = attachments.data();
   rpci.subpassCount = 1;
   rpci.pSubpasses = &subpass;
-  rpci.dependencyCount = gsl::narrow_cast<std::uint32_t>(dependencies.size());
-  rpci.pDependencies = dependencies.data();
+  rpci.dependencyCount = 1;
+  rpci.pDependencies = &dependency;
 
   result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
   if (result != VK_SUCCESS) {
@@ -1217,30 +1193,41 @@ std::error_code CreateBlankFSQPipeline() noexcept {
   VkPipelineRasterizationStateCreateInfo rasterizationState = {};
   rasterizationState.sType =
     VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationState.depthClampEnable = VK_FALSE;
+  rasterizationState.rasterizerDiscardEnable = VK_FALSE;
   rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
   rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationState.depthBiasEnable = VK_FALSE;
   rasterizationState.lineWidth = 1.f;
 
   VkPipelineMultisampleStateCreateInfo multisampleState = {};
   multisampleState.sType =
     VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   multisampleState.rasterizationSamples = sSurfaceSampleCount;
+  multisampleState.sampleShadingEnable = VK_FALSE;
   multisampleState.minSampleShading = 1.f;
 
   VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
   depthStencilState.sType =
     VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilState.depthTestEnable = VK_TRUE;
   depthStencilState.depthWriteEnable = VK_TRUE;
+  depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+  depthStencilState.depthBoundsTestEnable = VK_FALSE;
+  depthStencilState.stencilTestEnable = VK_FALSE;
 
   VkPipelineColorBlendAttachmentState colorBlendStateAttachment = {};
   colorBlendStateAttachment.colorWriteMask =
     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
     VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  colorBlendStateAttachment.blendEnable = VK_FALSE;
 
   VkPipelineColorBlendStateCreateInfo colorBlendState = {};
   colorBlendState.sType =
     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlendState.logicOpEnable = VK_FALSE;
+  colorBlendState.logicOp = VK_LOGIC_OP_COPY;
   colorBlendState.attachmentCount = 1;
   colorBlendState.pAttachments = &colorBlendStateAttachment;
 
@@ -1281,6 +1268,10 @@ std::error_code CreateBlankFSQPipeline() noexcept {
   GetLogger()->debug("Pipeline Layout: {}",
                      static_cast<void*>(sBlankFSQPipelineLayout));
   GetLogger()->debug("Pipeline: {}", static_cast<void*>(sBlankFSQPipeline));
+
+  vkDestroyShaderModule(sDevice, stages[0].module, nullptr);
+  vkDestroyShaderModule(sDevice, stages[1].module, nullptr);
+
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateBlankFSQPipeline
@@ -1451,15 +1442,16 @@ void iris::Renderer::Frame() noexcept {
 
   auto&& windows = Windows();
   if (windows.empty()) return;
+  const std::size_t numWindows = windows.size();
 
-  absl::FixedArray<std::uint32_t> imageIndices(windows.size());
-  absl::FixedArray<VkExtent2D> extents(windows.size());
-  absl::FixedArray<VkViewport> viewports(windows.size());
-  absl::FixedArray<VkRect2D> scissors(windows.size());
-  absl::FixedArray<VkFramebuffer> framebuffers(windows.size());
-  absl::FixedArray<VkImage> images(windows.size());
-  absl::FixedArray<VkSemaphore> waitSemaphores(windows.size());
-  absl::FixedArray<VkSwapchainKHR> swapchains(windows.size());
+  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
+  absl::FixedArray<VkExtent2D> extents(numWindows);
+  absl::FixedArray<VkViewport> viewports(numWindows);
+  absl::FixedArray<VkRect2D> scissors(numWindows);
+  absl::FixedArray<VkFramebuffer> framebuffers(numWindows);
+  absl::FixedArray<VkImage> images(numWindows);
+  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
+  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
 
   //
   // Acquire images/semaphores from all iris::Window objects
@@ -1526,36 +1518,24 @@ void iris::Renderer::Frame() noexcept {
     return;
   }
 
-  absl::FixedArray<VkClearValue> clearValues(3);
-  clearValues[0].color.float32[0] = 0;
-  clearValues[0].color.float32[1] = 0;
-  clearValues[0].color.float32[2] = 0;
-  clearValues[0].color.float32[3] = 255;
-  clearValues[0].depthStencil.depth = 1.f;
-  clearValues[0].depthStencil.stencil = 0;
+  absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
+  clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
+  clearValues[1].depthStencil = {1.f, 0};
 
   VkRenderPassBeginInfo rbi = {};
   rbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   rbi.renderPass = sRenderPass;
-  rbi.clearValueCount = gsl::narrow_cast<std::uint32_t>(clearValues.size());
+  rbi.clearValueCount =
+    gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
   rbi.pClearValues = clearValues.data();
 
-  VkImageMemoryBarrier ib = {};
-  ib.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  ib.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-  ib.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  ib.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  ib.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  ib.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-
-  for (std::size_t j = 0; i < windows.size(); ++i) {
-    vkCmdSetViewport(cb, 0, 1, &viewports[j]);
-    vkCmdSetScissor(cb, 0, 1, &scissors[j]);
-
+  for (std::size_t j = 0; j < numWindows; ++j) {
     rbi.renderArea.extent = extents[j];
     rbi.framebuffer = framebuffers[j];
     vkCmdBeginRenderPass(cb, &rbi, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdSetViewport(cb, 0, 1, &viewports[j]);
+    vkCmdSetScissor(cb, 0, 1, &scissors[j]);
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sBlankFSQPipeline);
     vkCmdDraw(cb, 3, 1, 0, 0);
@@ -1575,14 +1555,15 @@ void iris::Renderer::Frame() noexcept {
   // semaphores and signaling a single frameFinished semaphore
   //
 
-  VkPipelineStageFlags waitDstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  absl::FixedArray<VkPipelineStageFlags> waitDstStages(numWindows);
+  std::fill_n(waitDstStages.begin(), numWindows,
+              VK_PIPELINE_STAGE_TRANSFER_BIT);
 
   VkSubmitInfo si = {};
   si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  si.waitSemaphoreCount =
-    gsl::narrow_cast<std::uint32_t>(waitSemaphores.size());
+  si.waitSemaphoreCount = gsl::narrow_cast<std::uint32_t>(numWindows);
   si.pWaitSemaphores = waitSemaphores.data();
-  si.pWaitDstStageMask = &waitDstStage;
+  si.pWaitDstStageMask = waitDstStages.data();
   si.commandBufferCount = 1;
   si.pCommandBuffers = &cb;
   si.signalSemaphoreCount = 1;
@@ -1601,13 +1582,16 @@ void iris::Renderer::Frame() noexcept {
   // Present the swapchains to a queue
   //
 
+  absl::FixedArray<VkResult> presentResults(numWindows);
+
   VkPresentInfoKHR pi = {};
   pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   pi.waitSemaphoreCount = 1;
   pi.pWaitSemaphores = &sFrameComplete;
-  pi.swapchainCount = gsl::narrow_cast<std::uint32_t>(swapchains.size());
+  pi.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
   pi.pSwapchains = swapchains.data();
   pi.pImageIndices = imageIndices.data();
+  pi.pResults = presentResults.data();
 
   result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
   if (result != VK_SUCCESS) {
@@ -1680,4 +1664,131 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_LEAVE();
   return Error::kNone;
 } // iris::Renderer::Control
+
+std::error_code
+iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
+                                VkImageLayout newLayout,
+                                std::uint32_t mipLevels) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkCommandBufferAllocateInfo ai = {};
+  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  ai.commandPool = sGraphicsCommandPool;
+  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  ai.commandBufferCount = 1;
+
+  VkCommandBuffer cb;
+  result = vkAllocateCommandBuffers(sDevice, &ai, &cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error allocating command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  VkCommandBufferBeginInfo bi = {};
+  bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  bi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = oldLayout;
+  barrier.newLayout = newLayout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = mipLevels;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = 1;
+
+  if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    // FIXME: handle stencil
+  } else {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  VkPipelineStageFlagBits srcStage;
+  VkPipelineStageFlagBits dstStage;
+
+  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  } else {
+    GetLogger()->critical("Logic error: unsupported layout transition");
+    std::terminate();
+  }
+
+  result = vkBeginCommandBuffer(cb, &bi);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error beginning command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1,
+                       &barrier);
+
+  result = vkEndCommandBuffer(cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error ending command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  VkSubmitInfo si = {};
+  si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  si.commandBufferCount = 1;
+  si.pCommandBuffers = &cb;
+
+  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error submitting command buffer for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  result =
+    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error waiting on fence for transition: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
+
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // iris::Renderer::TransitionImage
 

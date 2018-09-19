@@ -281,90 +281,6 @@ CreateImageAndView(VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
   return std::make_tuple(image, allocation, view);
 } // CreateImageAndView
 
-static std::error_code TransitionDepthImage(VkImage depthImage) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkCommandBufferAllocateInfo ai = {};
-  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sGraphicsCommandPool;
-  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  ai.commandBufferCount = 1;
-
-  VkCommandBuffer cb;
-  result = vkAllocateCommandBuffers(sDevice, &ai, &cb);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error allocating command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  VkCommandBufferBeginInfo bi = {};
-  bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  bi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-
-  VkImageMemoryBarrier barrier = {};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = depthImage;
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-
-  result = vkBeginCommandBuffer(cb, &bi);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error beginning command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0,
-                       nullptr, 0, nullptr, 1, &barrier);
-
-  result = vkEndCommandBuffer(cb);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error ending command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  VkSubmitInfo si = {};
-  si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  si.commandBufferCount = 1;
-  si.pCommandBuffers = &cb;
-
-  result =
-    vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error submitting command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  result =
-    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error waiting on fence for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
-
-  IRIS_LOG_LEAVE();
-  return VulkanResult::kSuccess;
-} // TransitionDepthImage
-
 static tl::expected<VkFramebuffer, std::error_code>
 CreateFramebuffer(gsl::span<VkImageView> attachments,
                   VkExtent2D extent) noexcept {
@@ -481,10 +397,6 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
     }
   }
 
-  VkImage newDepthImage{VK_NULL_HANDLE};
-  VmaAllocation newDepthImageAllocation{VK_NULL_HANDLE};
-  VkImageView newDepthImageView{VK_NULL_HANDLE};
-
   VkImage newColorTarget{VK_NULL_HANDLE};
   VmaAllocation newColorTargetAllocation{VK_NULL_HANDLE};
   VkImageView newColorTargetView{VK_NULL_HANDLE};
@@ -498,21 +410,6 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
 
   std::error_code error;
 
-  if (auto div = CreateImageAndView(sSurfaceDepthFormat, imageExtent,
-                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                    VK_SAMPLE_COUNT_1_BIT,
-                                    {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
-    std::tie(newDepthImage, newDepthImageAllocation, newDepthImageView) = *div;
-  } else {
-    error = div.error();
-    goto fail;
-  }
-
-  if (auto err = TransitionDepthImage(newDepthImage)) {
-    error = err;
-    goto fail;
-  }
-
   if (auto ctv = CreateImageAndView(sSurfaceColorFormat.format, imageExtent,
                                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                       VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
@@ -525,11 +422,17 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
     goto fail;
   }
 
-  if (auto dtv = CreateImageAndView(
-        sSurfaceDepthFormat, imageExtent,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-          VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-        sSurfaceSampleCount, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+  GetLogger()->debug("Transitioning new color target");
+  if (auto err = TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)) {
+    error = err;
+    goto fail;
+  }
+
+  if (auto dtv = CreateImageAndView(sSurfaceDepthFormat, imageExtent,
+                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                    sSurfaceSampleCount,
+                                    {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     std::tie(newDepthTarget, newDepthTargetAllocation, newDepthTargetView) =
       *dtv;
   } else {
@@ -537,12 +440,19 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
     goto fail;
   }
 
-  attachments[0] = newColorTargetView;
-  attachments[2] = newDepthTargetView;
-  attachments[3] = newDepthImageView;
+  GetLogger()->debug("Transitioning new depth target");
+  if (auto err =
+        TransitionImage(newDepthTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)) {
+    error = err;
+    goto fail;
+  }
+
+  attachments[sColorTargetAttachmentIndex] = newColorTargetView;
+  attachments[sDepthTargetAttachmentIndex] = newDepthTargetView;
 
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
-    attachments[1] = newColorImageViews[i];
+    attachments[sResolveTargetAttachmentIndex] = newColorImageViews[i];
     if (auto fb = CreateFramebuffer(attachments, newExtent)) {
       newFramebuffers[i] = *fb;
     } else {
@@ -561,17 +471,13 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
   colorImages = std::move(newColorImages);
   colorImageViews = std::move(newColorImageViews);
 
-  depthImage = newDepthImage;
-  depthImageAllocation = newDepthImageAllocation;
-  depthImageView = newDepthImageView;
+  depthTarget = newDepthTarget;
+  depthTargetAllocation = newDepthTargetAllocation;
+  depthTargetView = newDepthTargetView;
 
   colorTarget = newColorTarget;
   colorTargetAllocation = newColorTargetAllocation;
   colorTargetView = newColorTargetView;
-
-  depthTarget = newDepthTarget;
-  depthTargetAllocation = newDepthTargetAllocation;
-  depthTargetView = newDepthTargetView;
 
   framebuffers = std::move(newFramebuffers);
 
@@ -584,19 +490,14 @@ fail:
     vkDestroyFramebuffer(sDevice, framebuffer, nullptr);
   }
 
-  if (newDepthTargetView != VK_NULL_HANDLE) {
-   vkDestroyImageView(sDevice, newDepthTargetView, nullptr);
-   vmaDestroyImage(sAllocator, newDepthTarget, newDepthTargetAllocation);
-  }
-
   if (newColorTargetView != VK_NULL_HANDLE) {
    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
   }
 
-  if (newDepthImage != VK_NULL_HANDLE) {
-   vkDestroyImageView(sDevice, newDepthImageView, nullptr);
-   vmaDestroyImage(sAllocator, newDepthImage, newDepthImageAllocation);
+  if (newDepthTarget != VK_NULL_HANDLE) {
+   vkDestroyImageView(sDevice, newDepthTargetView, nullptr);
+   vmaDestroyImage(sAllocator, newDepthTarget, newDepthTargetAllocation);
   }
 
   for (auto&& imageView : newColorImageViews) {
@@ -618,9 +519,6 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   , swapchain{other.swapchain}
   , colorImages{std::move(other.colorImages)}
   , colorImageViews{std::move(other.colorImageViews)}
-  , depthImage{other.depthImage}
-  , depthImageAllocation{other.depthImageAllocation}
-  , depthImageView{other.depthImageView}
   , colorTarget{other.colorTarget}
   , colorTargetAllocation{other.colorTargetAllocation}
   , colorTargetView{other.colorTargetView}
@@ -634,9 +532,6 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   other.handle = VK_NULL_HANDLE;
   other.imageAvailable = VK_NULL_HANDLE;
   other.swapchain = VK_NULL_HANDLE;
-  other.depthImage = VK_NULL_HANDLE;
-  other.depthImageAllocation = VK_NULL_HANDLE;
-  other.depthImageView = VK_NULL_HANDLE;
   other.colorTarget = VK_NULL_HANDLE;
   other.colorTargetAllocation = VK_NULL_HANDLE;
   other.colorTargetView = VK_NULL_HANDLE;
@@ -659,9 +554,6 @@ iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noe
   swapchain = other.swapchain;
   colorImages = std::move(other.colorImages);
   colorImageViews = std::move(other.colorImageViews);
-  depthImage = other.depthImage;
-  depthImageAllocation = other.depthImageAllocation;
-  depthImageView = other.depthImageView;
   colorTarget = other.colorTarget;
   colorTargetAllocation = other.colorTargetAllocation;
   colorTargetView = other.colorTargetView;
@@ -673,9 +565,6 @@ iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noe
   other.handle = VK_NULL_HANDLE;
   other.imageAvailable = VK_NULL_HANDLE;
   other.swapchain = VK_NULL_HANDLE;
-  other.depthImage = VK_NULL_HANDLE;
-  other.depthImageAllocation = VK_NULL_HANDLE;
-  other.depthImageView = VK_NULL_HANDLE;
   other.colorTarget = VK_NULL_HANDLE;
   other.colorTargetAllocation = VK_NULL_HANDLE;
   other.colorTargetView = VK_NULL_HANDLE;
@@ -708,9 +597,6 @@ void iris::Renderer::Surface::Release() noexcept {
 
   vkDestroyImageView(sDevice, colorTargetView, nullptr);
   vmaDestroyImage(sAllocator, colorTarget, colorTargetAllocation);
-
-  vkDestroyImageView(sDevice, depthImageView, nullptr);
-  vmaDestroyImage(sAllocator, depthImage, depthImageAllocation);
 
   for (auto&& imageView : colorImageViews) {
     vkDestroyImageView(sDevice, imageView, nullptr);

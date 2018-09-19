@@ -26,10 +26,6 @@ struct Surface {
   std::vector<VkImage> colorImages{};
   std::vector<VkImageView> colorImageViews{};
 
-  VkImage depthImage{VK_NULL_HANDLE};
-  VmaAllocation depthImageAllocation{VK_NULL_HANDLE};
-  VkImageView depthImageView{VK_NULL_HANDLE};
-
   VkImage colorTarget{VK_NULL_HANDLE};
   VmaAllocation colorTargetAllocation{VK_NULL_HANDLE};
   VkImageView colorTargetView{VK_NULL_HANDLE};

@@ -25,7 +25,14 @@ extern VkSampleCountFlagBits sSurfaceSampleCount;
 extern VkPresentModeKHR sSurfacePresentMode;
 
 extern std::uint32_t sNumRenderPassAttachments;
+extern std::uint32_t sColorTargetAttachmentIndex;
+extern std::uint32_t sDepthTargetAttachmentIndex;
+extern std::uint32_t sResolveTargetAttachmentIndex;
 extern VkRenderPass sRenderPass;
+
+std::error_code TransitionImage(VkImage image, VkImageLayout oldLayout,
+                                VkImageLayout newLayout,
+                                std::uint32_t mipLevels = 1) noexcept;
 
 } // namespace iris::Renderer
 
