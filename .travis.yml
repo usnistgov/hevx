@@ -47,4 +47,5 @@ env:
 
 script:
 - cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF .
-- cmake --build .
+- cat CMakeFiles/CMakeError.log
+- make VERBOSE=1
