@@ -31,8 +31,6 @@ endif()
 find_package(Vulkan REQUIRED)
 get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
 get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
-get_filename_component(Vulkan_SHADERC_SOURCE_DIR
-  ${Vulkan_SDK_DIR}/../source/shaderc ABSOLUTE CACHE)
 
 add_subdirectory(third_party)
 

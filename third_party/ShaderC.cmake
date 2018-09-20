@@ -1,6 +1,12 @@
 find_package(Git REQUIRED)
 include(JSONParser)
 
+if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/shaderc_known_good.json)
+  file(DOWNLOAD
+    "https://raw.githubusercontent.com/google/shaderc/known-good/known_good.json"
+    ${CMAKE_CURRENT_BINARY_DIR}/shaderc_known_good.json)
+endif()
+
 FetchContent_Declare(shaderc
   GIT_REPOSITORY https://github.com/google/shaderc
   GIT_SHALLOW TRUE
@@ -38,7 +44,7 @@ if(NOT shaderc_POPULATED)
   message(STATUS "Populating build dependency: shaderc")
   FetchContent_Populate(shaderc)
 
-  file(STRINGS ${Vulkan_SHADERC_SOURCE_DIR}/known_good.json known_good NEWLINE_CONSUME)
+  file(STRINGS ${CMAKE_CURRENT_BINARY_DIR}/shaderc_known_good.json known_good NEWLINE_CONSUME)
   sbeParseJson(kg known_good)
 
   foreach(commit ${kg.commits})

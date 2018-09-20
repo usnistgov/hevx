@@ -42,7 +42,7 @@ private:
 TaskResult LoadFileTask::load() noexcept {
   IRIS_LOG_ENTER();
 
-  GetLogger()->debug("Loading {}", path_.c_str());
+  GetLogger()->debug("Loading {}", path_.string());
   auto const& ext = path_.extension();
 
   if (ext.compare(".json") == 0) {
@@ -57,7 +57,7 @@ TaskResult LoadFileTask::load() noexcept {
     if (auto status =
           google::protobuf::util::JsonStringToMessage(json, &controlMessage);
         !status.ok()) {
-      GetLogger()->error("Unable to parse {}: {}", path_.c_str(),
+      GetLogger()->error("Unable to parse {}: {}", path_.string(),
                          status.ToString());
       IRIS_LOG_LEAVE();
       return std::make_error_code(std::errc::io_error);
@@ -66,8 +66,8 @@ TaskResult LoadFileTask::load() noexcept {
       return controlMessage;
     }
   } else {
-    GetLogger()->error("Unhandled file extension '{}' for {}", ext.c_str(),
-                       path_.c_str());
+    GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
+                       path_.string());
     IRIS_LOG_LEAVE();
     return make_error_code(Error::kFileNotSupported);
   }
@@ -86,14 +86,14 @@ tl::expected<std::vector<char>, std::error_code> iris::Renderer::io::ReadFile(
   std::experimental::filesystem::path path) noexcept {
   IRIS_LOG_ENTER();
 
-  GetLogger()->debug("Reading {}", path.c_str());
+  GetLogger()->debug("Reading {}", path.string());
 
-  std::FILE* fh = std::fopen(path.c_str(), "rb");
+  std::FILE* fh = std::fopen(path.string().c_str(), "rb");
 
   if (!fh) {
     path = std::experimental::filesystem::path(kIRISContentDirectory) / path;
-    GetLogger()->debug("Reading failed trying {}", path.c_str());
-    fh = std::fopen(path.c_str(), "rb");
+    GetLogger()->debug("Reading failed trying {}", path.string());
+    fh = std::fopen(path.string().c_str(), "rb");
   }
 
   if (!fh) {

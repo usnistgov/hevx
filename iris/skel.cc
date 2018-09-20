@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
   }
 
   iris::Renderer::io::LoadFile("configs/simulator.json");
-  for (auto&& file : files) iris::Renderer::io::LoadFile(file);
+  for (auto&& file : files) iris::Renderer::io::LoadFile(std::string(file));
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
 
