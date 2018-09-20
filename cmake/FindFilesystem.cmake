@@ -34,7 +34,7 @@ string(CONFIGURE [[
 check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITHOUT_LINK)
 
 if(NOT CAN_COMPILE_FS_WITHOUT_LINK)
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT CAN
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_REQUIRED_LIBRARIES -lstdc++fs)
     check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_STDCPPFS)
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

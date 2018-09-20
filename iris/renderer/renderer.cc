@@ -1550,15 +1550,24 @@ bool iris::Renderer::IsRunning() noexcept {
 
 void iris::Renderer::Frame() noexcept {
   TaskResult taskResult;
-  while (sTasksResultsQueue.try_pop(taskResult)) {
-    std::visit([](auto&& arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, std::error_code>) {
-        GetLogger()->error("Task result has error: {}", arg.message());
-      } else if constexpr (std::is_same_v<T, Control::Control>) {
-        Control(arg);
-      }
-    }, taskResult);
+
+  try {
+    while (sTasksResultsQueue.try_pop(taskResult)) {
+      std::visit(
+        [](auto&& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, std::error_code>) {
+            GetLogger()->error("Task result has error: {}", arg.message());
+          } else if constexpr (std::is_same_v<T, Control::Control>) {
+            Control(arg);
+          }
+        },
+        taskResult);
+    }
+  } catch (std::exception const& e) {
+    GetLogger()->critical(
+      "Exception encountered while processing task results: {}", e.what());
+    std::terminate();
   }
 
   auto&& windows = Windows();
