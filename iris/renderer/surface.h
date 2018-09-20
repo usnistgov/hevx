@@ -5,6 +5,7 @@
 #include "iris/wsi/window.h"
 #include "tl/expected.hpp"
 #include <system_error>
+#include <vector>
 
 namespace iris::Renderer {
 

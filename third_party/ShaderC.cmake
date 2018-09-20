@@ -9,34 +9,34 @@ endif()
 
 FetchContent_Declare(shaderc
   GIT_REPOSITORY https://github.com/google/shaderc
-  GIT_SHALLOW TRUE
 )
 
 set(SHADERC_SKIP_TESTS ON CACHE BOOL "" FORCE)
 
 function(fetch_source NAME COMMIT BASEDIR SUBDIR REPO)
-  message(STATUS "Fetching ${NAME} source: ${COMMIT}")
   if(EXISTS ${BASEDIR}/${SUBDIR}/CMakeLists.txt)
     return()
   endif()
+  message(STATUS "Fetching ${NAME} source: ${COMMIT}")
 
   execute_process(
     COMMAND ${GIT_EXECUTABLE} clone https://github.com/${REPO} ${SUBDIR}
     WORKING_DIRECTORY ${BASEDIR}
-    RESULT_VARIABLE git_result)
+    RESULT_VARIABLE git_result OUTPUT_VARIABLE git_output ERROR_VARIABLE git_output)
   if(git_result)
     message(FATAL_ERROR "Unable to clone ${NAME} source: ${git_result}")
   endif()
 
   execute_process(
-    COMMAND ${GIT_EXECUTABLE} checkout ${COMMIT}
+    COMMAND ${GIT_EXECUTABLE} reset --hard ${COMMIT}
     WORKING_DIRECTORY ${BASEDIR}/${SUBDIR}
-    RESULT_VARIABLE git_result)
+    RESULT_VARIABLE git_result OUTPUT_VARIABLE git_output ERROR_VARIABLE git_output)
   if(git_result)
     message(FATAL_ERROR "Unable to checkout ${NAME} source: ${git_result}")
   endif()
 
   unset(git_result)
+  unset(git_output)
 endfunction()
 
 FetchContent_GetProperties(shaderc)
@@ -66,14 +66,12 @@ if(NOT shaderc_POPULATED)
   endforeach()
 
   message(STATUS "Fetching shaderc source: ${shaderc_commit}")
-  if(NOT EXISTS ${shaderc_SOURCE_DIR}/CMakeLists.txt)
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} checkout ${shaderc_commit}
-      WORKING_DIRECTORY ${shaderc_SOURCE_DIR}
-      RESULT_VARIABLE git_result)
-    if(git_result)
-      message(FATAL_ERROR "Unable to checkout shaderc source: ${git_result}")
-    endif()
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} reset --hard ${shaderc_commit}
+    WORKING_DIRECTORY ${shaderc_SOURCE_DIR}
+    RESULT_VARIABLE git_result OUTPUT_VARIABLE git_output ERROR_VARIABLE git_output)
+  if(git_result)
+    message(FATAL_ERROR "Unable to checkout shaderc source: ${git_result}\n${git_output}")
   endif()
 
   fetch_source("glslang" ${glslang_commit} ${shaderc_SOURCE_DIR}
@@ -86,6 +84,7 @@ if(NOT shaderc_POPULATED)
   add_subdirectory(${shaderc_SOURCE_DIR} ${shaderc_BINARY_DIR})
 
   unset(git_result)
+  unset(git_output)
   unset(shaderc_commit)
   unset(glslang_commit)
   unset(glslang_subrepo)

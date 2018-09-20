@@ -1,5 +1,12 @@
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -lc++")
+  get_filename_component(_clang_bin ${CMAKE_CXX_COMPILER} DIRECTORY)
+  get_filename_component(_clang_lib ${_clang_bin}/../lib REALPATH)
+
+  set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -stdlib=libc++")
+  set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS_INIT} -Wl,-rpath,${_clang_lib} -lc++")
+
+  unset(_clang_bin)
+  unset(_clang_lib)
 
   if(USE_ASAN)
     set(CMAKE_CXX_FLAGS_INIT "${CMAKE_CXX_FLAGS_INIT} -fno-omit-frame-pointer -fsanitize=address")

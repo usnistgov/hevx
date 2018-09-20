@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
+
 set(CMAKE_USER_MAKE_RULES_OVERRIDE
     "${CMAKE_CURRENT_LIST_DIR}/cmake/HEVUserMakeRulesOverride.cmake")
 project(hevx VERSION 3.0.0 LANGUAGES C CXX)
