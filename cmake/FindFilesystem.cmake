@@ -6,6 +6,11 @@ cmake_push_check_state(RESET)
 set(CMAKE_CXX_STANDARD 17)
 set(have_fs FALSE)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  set(CMAKE_REQUIRED_FLAGS "-stdlib=libc++")
+  set(CMAKE_REQUIRED_LIBRARIES "-lc++")
+endif()
+
 check_include_file_cxx("filesystem" HAVE_STD_FILESYSTEM)
 check_include_file_cxx("experimental/filesystem" HAVE_STD_EXPERIMENTAL_FILESYSTEM)
 
