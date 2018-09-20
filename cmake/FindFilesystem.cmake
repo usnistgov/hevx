@@ -38,6 +38,7 @@ if(NOT CAN_COMPILE_FS_WITHOUT_LINK)
     set(CMAKE_REQUIRED_LIBRARIES -lstdc++fs)
     check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_STDCPPFS)
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_REQUIRED_FLAGS "-std=c++17")
     set(CMAKE_REQUIRED_LIBRARIES -lc++fs)
     check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_CPPFS)
 

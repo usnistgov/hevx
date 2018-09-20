@@ -984,6 +984,7 @@ static std::error_code CreateAllocator() noexcept {
   VkResult result;
 
   VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
   allocatorInfo.physicalDevice = sPhysicalDevice;
   allocatorInfo.device = sDevice;
 
@@ -1443,9 +1444,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 
   // These are the extensions that we require from the physical device.
   char const* physicalDeviceExtensionNames[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+    VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
     VK_KHR_MAINTENANCE2_EXTENSION_NAME,
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if 0 // FIXME: which GPUs support this?
     VK_KHR_MULTIVIEW_EXTENSION_NAME
 #endif
