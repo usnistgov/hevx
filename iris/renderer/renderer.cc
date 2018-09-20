@@ -41,6 +41,13 @@
 #include <unordered_map>
 #include <vector>
 
+/////
+//
+// The logging must be directly defined here instead of including "logging.h".
+// This is because we need to define the static logger instance here.
+//
+/////
+
 namespace iris::Renderer {
 
 static spdlog::logger*
@@ -74,6 +81,12 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 #endif
 
+/////
+//
+// Here are the definitions from impl.h
+// 
+/////
+
 namespace iris::Renderer {
 
 VkInstance sInstance{VK_NULL_HANDLE};
@@ -101,6 +114,12 @@ std::uint32_t sResolveTargetAttachmentIndex{2};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 VkPipelineLayout sBlankFSQPipelineLayout{VK_NULL_HANDLE};
 VkPipeline sBlankFSQPipeline{VK_NULL_HANDLE};
+
+/////
+//
+// Additional static private variables
+// 
+/////
 
 static bool sInitialized{false};
 static bool sRunning{false};
