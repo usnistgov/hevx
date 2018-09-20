@@ -34,12 +34,17 @@ string(CONFIGURE [[
 check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITHOUT_LINK)
 
 if(NOT CAN_COMPILE_FS_WITHOUT_LINK)
-  set(CMAKE_REQUIRED_LIBRARIES -lstdc++fs)
-  check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_STDCPPFS)
-
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT CAN_COMPILE_FS_WITH_STDCPPFS)
-    set(CMAKE_REQUIRED_LIBRARIES -lc++experimental)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT CAN
+    set(CMAKE_REQUIRED_LIBRARIES -lstdc++fs)
+    check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_STDCPPFS)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_REQUIRED_LIBRARIES -lc++fs)
     check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_CPPFS)
+
+    if (NOT CAN_COMPILE_FS_WITH_CPPFS)
+      set(CMAKE_REQUIRED_LIBRARIES -lc++experimental)
+      check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITH_EXPERIMENTALFS)
+    endif()
   endif()
 endif()
 
@@ -53,6 +58,9 @@ if(have_fs)
   elseif(CAN_COMPILE_FS_WITH_STDCPPFS)
     target_link_libraries(CXX::Filesystem INTERFACE -lstdc++fs)
   elseif(CAN_COMPILE_FS_WITH_CPPFS)
+    target_compile_options(CXX::Filesystem INTERFACE -stdlib=libc++)
+    target_link_libraries(CXX::Filesystem INTERFACE -lc++fs)
+  elseif(CAN_COMPILE_FS_WITH_EXPERIMENTALFS)
     target_compile_options(CXX::Filesystem INTERFACE -stdlib=libc++)
     target_link_libraries(CXX::Filesystem INTERFACE -lc++experimental)
   else()
