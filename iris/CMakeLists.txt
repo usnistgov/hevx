@@ -138,5 +138,13 @@ target_compile_options(iris
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
-add_executable(skel skel.cc)
+add_executable(skel WIN32 skel.cc)
 target_link_libraries(skel iris absl::failure_signal_handler)
+if(WIN32)
+  file(GLOB tbb_dlls ${TBB_BINARY_DIR}/*.dll)
+  foreach(dll ${tbb_dlls})
+    add_custom_command(TARGET skel POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:skel>)
+  endforeach()
+  unset(tbb_dlls)
+endif()

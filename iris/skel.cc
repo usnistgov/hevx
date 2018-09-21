@@ -16,7 +16,30 @@
 #endif
 #include "flags.h"
 
+#if PLATFORM_WINDOWS
+#include <Windows.h>
+#include <shellapi.h>
+
+int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+  // Oh my goodness
+  char* cmdLine = ::GetCommandLineA();
+  int argc = 1;
+  char* argv[128]; // 128 command line argument max
+  argv[0] = cmdLine;
+
+  for (char* p = cmdLine; *p; ++p) {
+    if (*p == ' ') {
+      *p++ = '\0';
+      argv[argc++] = p;
+    }
+  }
+
+#else
+
 int main(int argc, char** argv) {
+
+#endif
+
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
@@ -41,7 +64,6 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  iris::Renderer::io::LoadFile("configs/simulator.json");
   for (auto&& file : files) iris::Renderer::io::LoadFile(std::string(file));
 
   while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
