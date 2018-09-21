@@ -115,10 +115,15 @@ tl::expected<bool, std::error_code> static CheckSurfaceFormat(
 } // namespace iris::Renderer
 
 tl::expected<iris::Renderer::Surface, std::error_code>
-iris::Renderer::Surface::Create(wsi::Window& window) noexcept {
+iris::Renderer::Surface::Create(wsi::Window& window,
+                                glm::vec4 const& clearColor) noexcept {
   IRIS_LOG_ENTER();
 
   Surface surface;
+  surface.clearColor.float32[0] = clearColor[0];
+  surface.clearColor.float32[1] = clearColor[1];
+  surface.clearColor.float32[2] = clearColor[2];
+  surface.clearColor.float32[3] = clearColor[3];
 
   if (auto sfc = CreateSurface(window)) {
     surface.handle = *sfc;
@@ -516,6 +521,7 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   , extent{other.extent}
   , viewport{other.viewport}
   , scissor{other.scissor}
+  , clearColor{other.clearColor}
   , swapchain{other.swapchain}
   , colorImages{std::move(other.colorImages)}
   , colorImageViews{std::move(other.colorImageViews)}
@@ -551,6 +557,7 @@ iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noe
   extent = other.extent;
   viewport = other.viewport;
   scissor = other.scissor;
+  clearColor = other.clearColor;
   swapchain = other.swapchain;
   colorImages = std::move(other.colorImages);
   colorImageViews = std::move(other.colorImageViews);

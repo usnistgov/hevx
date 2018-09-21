@@ -1,0 +1,9 @@
+syntax = "proto3";
+package iris.Control;
+
+message Color {
+  float r = 1;
+  float g = 2;
+  float b = 3;
+  float a = 4;
+}

@@ -4,6 +4,7 @@
 #include "iris/renderer/vulkan.h"
 #include "iris/wsi/window.h"
 #include "tl/expected.hpp"
+#include "glm/vec4.hpp"
 #include <system_error>
 #include <vector>
 
@@ -11,7 +12,7 @@ namespace iris::Renderer {
 
 struct Surface {
   static tl::expected<Surface, std::error_code>
-  Create(wsi::Window& window) noexcept;
+  Create(wsi::Window& window, glm::vec4 const& clearColor) noexcept;
 
   std::error_code Resize(glm::uvec2 const& newExtent) noexcept;
 
@@ -21,6 +22,7 @@ struct Surface {
   VkExtent2D extent{};
   VkViewport viewport{};
   VkRect2D scissor{};
+  VkClearColorValue clearColor{};
 
   VkSwapchainKHR swapchain{VK_NULL_HANDLE};
 

@@ -7,6 +7,7 @@ find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
 set(protos_PROTOS
+  protos/color.proto
   protos/control.proto
   protos/displays.proto
   protos/window.proto

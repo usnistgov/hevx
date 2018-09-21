@@ -1,6 +1,8 @@
 syntax = "proto3";
 package iris.Control;
 
+import "color.proto";
+
 message Window {
   string name = 1;
   bool stereo = 2;
@@ -9,4 +11,5 @@ message Window {
   uint32 width = 5;
   uint32 height = 6;
   bool decoration = 10;
+  Color background = 11;
 }

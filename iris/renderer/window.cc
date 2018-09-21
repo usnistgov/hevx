@@ -5,8 +5,8 @@
 #include "renderer/renderer.h"
 
 tl::expected<iris::Renderer::Window, std::error_code>
-iris::Renderer::Window::Create(gsl::czstring<> title,
-                               glm::uvec2 extent) noexcept {
+iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 extent,
+                               glm::vec4 const& clearColor) noexcept {
   IRIS_LOG_ENTER();
 
   Window window;
@@ -19,7 +19,7 @@ iris::Renderer::Window::Create(gsl::czstring<> title,
     return tl::unexpected(win.error());
   }
 
-  if (auto sfc = Surface::Create(window.window)) {
+  if (auto sfc = Surface::Create(window.window, clearColor)) {
     window.surface = std::move(*sfc);
   } else {
     GetLogger()->error("Unable to create Window surface: {}",

@@ -1580,6 +1580,7 @@ void iris::Renderer::Frame() noexcept {
   absl::FixedArray<VkExtent2D> extents(numWindows);
   absl::FixedArray<VkViewport> viewports(numWindows);
   absl::FixedArray<VkRect2D> scissors(numWindows);
+  absl::FixedArray<VkClearColorValue> clearColors(numWindows);
   absl::FixedArray<VkFramebuffer> framebuffers(numWindows);
   absl::FixedArray<VkImage> images(numWindows);
   absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
@@ -1612,6 +1613,7 @@ void iris::Renderer::Frame() noexcept {
     extents[i] = window.surface.extent;
     viewports[i] = window.surface.viewport;
     scissors[i] = window.surface.scissor;
+    clearColors[i] = window.surface.clearColor;
     framebuffers[i] = window.surface.framebuffers[imageIndices[i]];
     images[i] = window.surface.colorImages[imageIndices[i]];
     waitSemaphores[i] = window.surface.imageAvailable;
@@ -1651,7 +1653,6 @@ void iris::Renderer::Frame() noexcept {
   }
 
   absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
-  clearValues[0].color = {{0.f, 0.f, 0.f, 1.f}};
   clearValues[1].depthStencil = {1.f, 0};
 
   VkRenderPassBeginInfo rbi = {};
@@ -1659,11 +1660,13 @@ void iris::Renderer::Frame() noexcept {
   rbi.renderPass = sRenderPass;
   rbi.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
-  rbi.pClearValues = clearValues.data();
 
   for (std::size_t j = 0; j < numWindows; ++j) {
+    clearValues[0].color = clearColors[j];
     rbi.renderArea.extent = extents[j];
     rbi.framebuffer = framebuffers[j];
+    rbi.pClearValues = clearValues.data();
+
     vkCmdBeginRenderPass(cb, &rbi, VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdSetViewport(cb, 0, 1, &viewports[j]);
@@ -1769,9 +1772,11 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   case iris::Control::Control_Type_DISPLAYS:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
+      auto const& bg = windowMessage.background();
       if (auto win =
             Window::Create(windowMessage.name().c_str(),
-                           {windowMessage.width(), windowMessage.height()})) {
+                           {windowMessage.width(), windowMessage.height()},
+                           {bg.r(), bg.g(), bg.b(), bg.a()})) {
         win->window.Move({windowMessage.x(), windowMessage.y()});
         win->window.Show();
         Windows().emplace(windowMessage.name(), std::move(*win));
@@ -1779,9 +1784,13 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     }
     break;
   case iris::Control::Control_Type_WINDOW:
-    if (auto win = Window::Create(controlMessage.window().name().c_str(),
-                                  {controlMessage.window().width(),
-                                   controlMessage.window().height()})) {
+    if (auto win = Window::Create(
+          controlMessage.window().name().c_str(),
+          {controlMessage.window().width(), controlMessage.window().height()},
+          {controlMessage.window().background().r(),
+           controlMessage.window().background().g(),
+           controlMessage.window().background().b(),
+           controlMessage.window().background().a()})) {
       Windows().emplace(controlMessage.window().name(), std::move(*win));
     }
     break;

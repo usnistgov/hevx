@@ -3,6 +3,7 @@
 
 #include "iris/renderer/surface.h"
 #include "tl/expected.hpp"
+#include "glm/vec4.hpp"
 #include <memory>
 #include <system_error>
 
@@ -10,7 +11,8 @@ namespace iris::Renderer {
 
 struct Window {
   static tl::expected<Window, std::error_code>
-  Create(gsl::czstring<> title, glm::uvec2 extent) noexcept;
+  Create(gsl::czstring<> title, glm::uvec2 extent,
+         glm::vec4 const& clearColor) noexcept;
 
   bool resized{false};
   wsi::Window window{};
