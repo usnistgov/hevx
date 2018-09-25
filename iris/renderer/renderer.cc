@@ -132,7 +132,6 @@ Windows() noexcept {
   return sWindows;
 } // Windows
 
-#ifndef NDEBUG
 /*! \brief Callback for Vulkan Debug Reporting.
  *
  * \see
@@ -156,7 +155,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
   }
   return VK_FALSE;
 } // DebugReportCallback
-#endif
 
 /*! \brief Create a Vulkan Instance - \b MUST only be called from
  * \ref Initialize.
@@ -170,9 +168,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
  * \see
  * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
  */
-static std::error_code
-InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
-             gsl::span<gsl::czstring<>> extensionNames) noexcept {
+static std::error_code InitInstance(gsl::czstring<> appName,
+                                    std::uint32_t appVersion,
+                                    gsl::span<gsl::czstring<>> extensionNames,
+                                    gsl::span<gsl::czstring<>> layerNames,
+                                    bool reportDebug) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
@@ -213,12 +213,6 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
     GetLogger()->debug("  {}:", property.extensionName);
   }
 
-  // validation layers do add overhead, so only use them in Debug configs.
-#ifndef NDEBUG
-  std::array<char const*, 1> layerNames = {
-    {"VK_LAYER_LUNARG_standard_validation"}};
-#endif
-
   VkApplicationInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   ai.pApplicationName = appName;
@@ -230,24 +224,23 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   VkInstanceCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   ci.pApplicationInfo = &ai;
-#ifndef NDEBUG
   ci.enabledLayerCount = gsl::narrow_cast<std::uint32_t>(layerNames.size());
   ci.ppEnabledLayerNames = layerNames.data();
-#endif
   ci.enabledExtensionCount =
     gsl::narrow_cast<std::uint32_t>(extensionNames.size());
   ci.ppEnabledExtensionNames = extensionNames.data();
 
-#ifndef NDEBUG
   VkDebugReportCallbackCreateInfoEXT drcci = {};
-  drcci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-  drcci.flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-                VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-  drcci.pfnCallback = &DebugReportCallback;
-  ci.pNext = &drcci;
-#endif
+
+  if (reportDebug) {
+    drcci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+    drcci.flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                  VK_DEBUG_REPORT_WARNING_BIT_EXT |
+                  VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+                  VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+    drcci.pfnCallback = &DebugReportCallback;
+    ci.pNext = &drcci;
+  }
 
   result = vkCreateInstance(&ci, nullptr, &sInstance);
   if (result != VK_SUCCESS) {
@@ -268,7 +261,6 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
  * https://www.khronos.org/registry/vulkan/specs/1.0-extensions/html/vkspec.html#debugging-debug-report-callbacks
  */
 static std::error_code CreateDebugReportCallback() noexcept {
-#ifndef NDEBUG
   IRIS_LOG_ENTER();
   VkResult result;
 
@@ -290,7 +282,6 @@ static std::error_code CreateDebugReportCallback() noexcept {
   //GetLogger()->debug("Debug Report Callback: {}",
   //                   static_cast<void*>(sDebugReportCallback));
   IRIS_LOG_LEAVE();
-#endif
 
   return VulkanResult::kSuccess;
 } // CreateDebugReportCallback
@@ -1401,7 +1392,8 @@ std::error_code CreateBlankFSQPipeline() noexcept {
 } // namespace iris::Renderer
 
 std::error_code
-iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
+iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
+                           std::uint32_t appVersion,
                            spdlog::sinks_init_list logSinks) noexcept {
   GetLogger(logSinks);
   IRIS_LOG_ENTER();
@@ -1419,8 +1411,14 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
     return Error::kAlreadyInitialized;
   }
 
+  std::vector<gsl::czstring<>> layerNames;
+  if ((options & Options::kUseValidationLayers) ==
+      Options::kUseValidationLayers) {
+    layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
+  }
+
   // These are the extensions that we require from the instance.
-  char const* instanceExtensionNames[] = {
+  std::vector<gsl::czstring<>> instanceExtensionNames = {
     VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
     VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
@@ -1429,10 +1427,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 #elif defined(VK_USE_PLATFORM_WIN32_KHR) // plus the platform-specific surface
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif
-#ifndef NDEBUG
-    VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-#endif
   };
+
+  if ((options & Options::kReportDebugMessages) ==
+      Options::kReportDebugMessages) {
+    instanceExtensionNames.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+  }
 
   // These are the features that we require from the physical device.
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
@@ -1462,13 +1462,20 @@ iris::Renderer::Initialize(gsl::czstring<> appName, std::uint32_t appVersion,
 
   flextVkInit();
 
-  if (auto error = InitInstance(appName, appVersion, instanceExtensionNames)) {
+  if (auto error =
+        InitInstance(appName, appVersion, instanceExtensionNames, layerNames,
+                     (options & Options::kReportDebugMessages) ==
+                       Options::kReportDebugMessages)) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
-  CreateDebugReportCallback();    // ignore any returned error
+
+  if ((options & Options::kReportDebugMessages) ==
+      Options::kReportDebugMessages) {
+    CreateDebugReportCallback(); // ignore any returned error
+  }
 
   FindDeviceGroup();
 
@@ -1551,7 +1558,6 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  IRIS_LOG_ENTER();
   TaskResult taskResult;
 
   try {
@@ -1622,7 +1628,6 @@ void iris::Renderer::Frame() noexcept {
       GetLogger()->error(
         "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
         to_string(result));
-      IRIS_LOG_LEAVE();
       return;
     }
 
@@ -1653,7 +1658,6 @@ void iris::Renderer::Frame() noexcept {
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error allocating command buffer: {}",
                        to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1664,7 +1668,6 @@ void iris::Renderer::Frame() noexcept {
   result = vkBeginCommandBuffer(cb, &cbi);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error beginning command buffer: {}", to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1697,7 +1700,6 @@ void iris::Renderer::Frame() noexcept {
   result = vkEndCommandBuffer(cb);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error ending command buffer: {}", to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1725,7 +1727,6 @@ void iris::Renderer::Frame() noexcept {
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1747,7 +1748,6 @@ void iris::Renderer::Frame() noexcept {
   result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1755,7 +1755,6 @@ void iris::Renderer::Frame() noexcept {
     vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error waiting on fence: {}", to_string(result));
-    IRIS_LOG_LEAVE();
     return;
   }
 
@@ -1781,12 +1780,12 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
       auto const& bg = windowMessage.background();
-      if (auto win =
-            Window::Create(windowMessage.name().c_str(),
-                           {windowMessage.x(), windowMessage.y()},
-                           {windowMessage.width(), windowMessage.height()},
-                           {bg.r(), bg.g(), bg.b(), bg.a()})) {
-        win->window.Show();
+      if (auto win = Window::Create(
+            windowMessage.name().c_str(),
+            {windowMessage.x(), windowMessage.y()},
+            {windowMessage.width(), windowMessage.height()},
+            {bg.r(), bg.g(), bg.b(), bg.a()}, windowMessage.decoration(),
+            windowMessage.display())) {
         Windows().emplace(windowMessage.name(), std::move(*win));
       }
     }
@@ -1799,7 +1798,9 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
           {controlMessage.window().background().r(),
            controlMessage.window().background().g(),
            controlMessage.window().background().b(),
-           controlMessage.window().background().a()})) {
+           controlMessage.window().background().a()},
+          controlMessage.window().decoration(),
+          controlMessage.window().display())) {
       Windows().emplace(controlMessage.window().name(), std::move(*win));
     }
     break;

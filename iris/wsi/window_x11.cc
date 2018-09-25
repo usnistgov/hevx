@@ -4,6 +4,7 @@
 #include "wsi/window_x11.h"
 #include "absl/base/macros.h"
 #include "config.h"
+#include "fmt/format.h"
 #include "logging.h"
 #include "wsi/error.h"
 #include <cstdint>
@@ -161,7 +162,7 @@ static Keys TranslateKeySym(::KeySym keysym) {
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
-                                Options const& options) noexcept {
+                                Options const& options, int display) noexcept {
   IRIS_LOG_ENTER();
 
   auto pWin = std::make_unique<Impl>();
@@ -172,7 +173,10 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
 
   pWin->rect_ = std::move(rect);
 
-  pWin->handle_.display = ::XOpenDisplay("");
+  std::string const displayName = fmt::format(":0.{}", display);
+  GetLogger()->debug("Opening display {}", displayName);
+
+  pWin->handle_.display = ::XOpenDisplay(displayName.c_str());
   if (!pWin->handle_.display) {
     GetLogger()->error("Cannot open default display");
     IRIS_LOG_LEAVE();
@@ -199,6 +203,10 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   attrs.event_mask = StructureNotifyMask | KeyPressMask | KeyReleaseMask |
                      ButtonPressMask | ButtonReleaseMask | ExposureMask |
                      VisibilityChangeMask | PropertyChangeMask;
+
+  GetLogger()->debug("Window rect {{({}, {}), ({}, {})}}",
+                     pWin->rect_.offset[0], pWin->rect_.offset[1],
+                     pWin->rect_.extent[0], pWin->rect_.extent[1]);
 
   GrabErrorHandler(pWin->handle_.display);
   pWin->handle_.window = ::XCreateWindow(
@@ -263,6 +271,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   ::XFree(szHints);
 
   pWin->Retitle(title);
+  pWin->Show();
+
   IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create

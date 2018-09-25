@@ -12,7 +12,7 @@ namespace iris::Renderer {
 struct Window {
   static tl::expected<Window, std::error_code>
   Create(gsl::czstring<> title, glm::uvec2 offset, glm::uvec2 extent,
-         glm::vec4 const& clearColor) noexcept;
+         glm::vec4 const& clearColor, bool decorated, int display) noexcept;
 
   bool resized{false};
   wsi::Window window{};

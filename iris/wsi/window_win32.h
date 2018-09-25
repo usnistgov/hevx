@@ -29,7 +29,8 @@ public:
    * \return a std::expected of either the Impl pointer or a std::error_code.
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, Rect rect, Options const& options) noexcept;
+  Create(gsl::czstring<> title, Rect rect, Options const& options,
+         int) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.

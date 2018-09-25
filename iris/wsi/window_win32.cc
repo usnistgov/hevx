@@ -133,7 +133,7 @@ Keys TranslateKeycode(WPARAM keyCode) {
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
-                                Options const& options) noexcept {
+                                Options const& options, int) noexcept {
   IRIS_LOG_ENTER();
 
   auto pWin = std::make_unique<Impl>();
@@ -202,6 +202,9 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   if ((options & Options::kDecorated) != Options::kDecorated) {
     ::SetWindowLongA(pWin->handle_.hWnd, GWL_STYLE, 0);
   }
+
+  pWin->Retitle(title);
+  pWin->Show();
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);

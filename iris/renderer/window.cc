@@ -6,13 +6,18 @@
 
 tl::expected<iris::Renderer::Window, std::error_code>
 iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
-                               glm::uvec2 extent,
-                               glm::vec4 const& clearColor) noexcept {
+                               glm::uvec2 extent, glm::vec4 const& clearColor,
+                               bool decorated, int display) noexcept {
   IRIS_LOG_ENTER();
 
+  wsi::Window::Options const options =
+    wsi::Window::Options::kSizeable |
+    (decorated ? wsi::Window::Options::kDecorated
+               : wsi::Window::Options::kNone);
+
   Window window;
-  if (auto win =
-        wsi::Window::Create(title, {std::move(offset), std::move(extent)})) {
+  if (auto win = wsi::Window::Create(
+        title, {std::move(offset), std::move(extent)}, options, display)) {
     window.window = std::move(*win);
   } else {
     GetLogger()->error("Unable to create Window window: {}",

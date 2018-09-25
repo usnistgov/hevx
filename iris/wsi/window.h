@@ -37,6 +37,7 @@ class Window {
 public:
   //! \brief Options for window creation.
   enum class Options {
+    kNone = (0),           //!< The window has no options.
     kDecorated = (1 << 0), //!< The window has decorations (title bar, borders).
     kSizeable = (1 << 1),  //!< The window is sizeable.
   };
@@ -50,9 +51,10 @@ public:
    * \param[in] options the Options describing how to create the window.
    * \return a std::expected of either the Window or a std::error_code.
    */
-  static tl::expected<Window, std::error_code> Create(
-    gsl::czstring<> title, Rect rect,
-    Options const& options = Options::kDecorated | Options::kSizeable) noexcept;
+  static tl::expected<Window, std::error_code> Create(gsl::czstring<> title,
+                                                      Rect rect,
+                                                      Options const& options,
+                                                      int display) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.

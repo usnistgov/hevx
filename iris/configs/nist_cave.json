@@ -3,55 +3,58 @@
   "displays": {
     "windows": [
       {
-        "name": "frontSimulatorWindow",
-        "stereo": false,
-        "x": 20,
-        "y": 20,
-        "width": 720,
-        "height": 720,
-        "decoration": true,
+        "name": "frontWindow",
+        "stereo": true,
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1200,
+        "decoration": false,
         "background": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
-        }
+        },
+        "display": 1
       },
       {
-        "name": "leftSimulatorWindow",
-        "stereo": false,
-        "x": 760,
-        "y": 20,
-        "width": 720,
-        "height": 720,
-        "decoration": true,
+        "name": "leftWindow",
+        "stereo": true,
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1200,
+        "decoration": false,
         "background": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
-        }
+        },
+        "display": 2
       },
       {
-        "name": "floorSimulatorWindow",
-        "stereo": false,
-        "x": 20,
-        "y": 760,
-        "width": 720,
-        "height": 720,
-        "decoration": true,
+        "name": "floorWindow",
+        "stereo": true,
+        "x": 0,
+        "y": 0,
+        "width": 1600,
+        "height": 1200,
+        "decoration": false,
         "background": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
-        }
+        },
+        "display": 3
       },
       {
         "name": "consoleWindow",
         "stereo": false,
-        "x": 760,
-        "y": 760,
+        "x": 320,
+        "y": 320,
         "width": 720,
         "height": 720,
         "decoration": true,

@@ -61,8 +61,11 @@ int main(int argc, char** argv) {
 
   logger.info("initialized");
 
-  if (auto error =
-        iris::Renderer::Initialize("skel", 0, {console_sink, file_sink})) {
+  if (auto error = iris::Renderer::Initialize(
+        "skel",
+        iris::Renderer::Options::kReportDebugMessages |
+          iris::Renderer::Options::kUseValidationLayers,
+        0, {console_sink, file_sink})) {
     logger.critical("unable to initialize renderer: {}", error.message());
     std::exit(EXIT_FAILURE);
   }
