@@ -256,7 +256,7 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
     return make_error_code(result);
   }
 
-  GetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
+  //GetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // InitInstance
@@ -287,8 +287,8 @@ static std::error_code CreateDebugReportCallback() noexcept {
                       to_string(result));
   }
 
-  GetLogger()->debug("Debug Report Callback: {}",
-                     static_cast<void*>(sDebugReportCallback));
+  //GetLogger()->debug("Debug Report Callback: {}",
+  //                   static_cast<void*>(sDebugReportCallback));
   IRIS_LOG_LEAVE();
 #endif
 
@@ -738,8 +738,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 
   // Check for any required features
   if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
-    GetLogger()->debug("Requested feature not supported by device {}",
-                       static_cast<void*>(device));
+    GetLogger()->debug("Requested feature not supported by device");// {}",
+                       //static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -756,8 +756,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   }
 
   if (graphicsQueueFamilyIndex == UINT32_MAX) {
-    GetLogger()->debug("No graphics queue supported by device {}",
-                       static_cast<void*>(device));
+    GetLogger()->debug("No graphics queue supported by device");// {}",
+                       //static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -773,8 +773,8 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
     }
 
     if (!found) {
-      GetLogger()->debug("Extension {} not supported by device {}", required,
-                         static_cast<void*>(device));
+      GetLogger()->debug("Extension {} not supported by device", required);// {}", required,
+                         //static_cast<void*>(device));
       return tl::unexpected(VulkanResult::kErrorExtensionNotPresent);
     }
   }
@@ -880,9 +880,9 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
     return Error::kNoPhysicalDevice;
   }
 
-  GetLogger()->debug("Physical Device: {} Graphics QueueFamilyIndex: {}",
-                     static_cast<void*>(sPhysicalDevice),
-                     sGraphicsQueueFamilyIndex);
+  //GetLogger()->debug("Physical Device: {} Graphics QueueFamilyIndex: {}",
+  //                   static_cast<void*>(sPhysicalDevice),
+  //                   sGraphicsQueueFamilyIndex);
 
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
@@ -950,9 +950,9 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
                    &sGraphicsCommandQueue);
 
-  GetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
-  GetLogger()->debug("Graphics Command Queue: {}",
-                     static_cast<void*>(sGraphicsCommandQueue));
+  //GetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
+  //GetLogger()->debug("Graphics Command Queue: {}",
+  //                   static_cast<void*>(sGraphicsCommandQueue));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateDevice
@@ -973,8 +973,8 @@ static std::error_code CreateCommandPool() noexcept {
     return make_error_code(result);
   }
 
-  GetLogger()->debug("Graphics Command Pool: {}",
-                     static_cast<void*>(sGraphicsCommandPool));
+  //GetLogger()->debug("Graphics Command Pool: {}",
+  //                   static_cast<void*>(sGraphicsCommandPool));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateCommandPool
@@ -1109,7 +1109,7 @@ static std::error_code CreateRenderPass() noexcept {
     return make_error_code(result);
   }
 
-  GetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
+  //GetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateRenderPass
@@ -1387,9 +1387,9 @@ std::error_code CreateBlankFSQPipeline() noexcept {
     return make_error_code(result);
   }
 
-  GetLogger()->debug("Pipeline Layout: {}",
-                     static_cast<void*>(sBlankFSQPipelineLayout));
-  GetLogger()->debug("Pipeline: {}", static_cast<void*>(sBlankFSQPipeline));
+  //GetLogger()->debug("Pipeline Layout: {}",
+  //                   static_cast<void*>(sBlankFSQPipelineLayout));
+  //GetLogger()->debug("Pipeline: {}", static_cast<void*>(sBlankFSQPipeline));
 
   vkDestroyShaderModule(sDevice, stages[0].module, nullptr);
   vkDestroyShaderModule(sDevice, stages[1].module, nullptr);
@@ -1551,6 +1551,7 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
+  IRIS_LOG_ENTER();
   TaskResult taskResult;
 
   try {
@@ -1574,8 +1575,16 @@ void iris::Renderer::Frame() noexcept {
 
   auto&& windows = Windows();
   if (windows.empty()) return;
-  const std::size_t numWindows = windows.size();
 
+  for (auto&& iter : windows) {
+    auto&& window = iter.second;
+    if (window.resized) {
+      window.surface.Resize(window.window.Extent());
+      window.resized = false;
+    }
+  }
+
+  const std::size_t numWindows = windows.size();
   absl::FixedArray<std::uint32_t> imageIndices(numWindows);
   absl::FixedArray<VkExtent2D> extents(numWindows);
   absl::FixedArray<VkViewport> viewports(numWindows);
@@ -1598,16 +1607,23 @@ void iris::Renderer::Frame() noexcept {
     result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
                                    UINT64_MAX, window.surface.imageAvailable,
                                    VK_NULL_HANDLE, &imageIndices[i]);
+
+    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
+      GetLogger()->warn("Swapchains out of date; resizing and re-acquiring");
+      window.surface.Resize(window.window.Extent());
+      window.resized = false;
+
+      result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
+                                     UINT64_MAX, window.surface.imageAvailable,
+                                     VK_NULL_HANDLE, &imageIndices[i]);
+    }
+
     if (result != VK_SUCCESS) {
-      if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
-        window.resized = true;
-      } else {
-        GetLogger()->error(
-          "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
-          to_string(result));
-        IRIS_LOG_LEAVE();
-        return;
-      }
+      GetLogger()->error(
+        "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
+        to_string(result));
+      IRIS_LOG_LEAVE();
+      return;
     }
 
     extents[i] = window.surface.extent;
@@ -1747,14 +1763,6 @@ void iris::Renderer::Frame() noexcept {
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
 
   for (auto&& iter : windows) iter.second.Frame();
-
-  for (auto&& iter : windows) {
-    auto&& window = iter.second;
-    if (window.resized) {
-      window.surface.Resize(window.window.Extent());
-      window.resized = false;
-    }
-  }
 } // iris::Renderer::Frame
 
 std::error_code
@@ -1775,9 +1783,9 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
       auto const& bg = windowMessage.background();
       if (auto win =
             Window::Create(windowMessage.name().c_str(),
+                           {windowMessage.x(), windowMessage.y()},
                            {windowMessage.width(), windowMessage.height()},
                            {bg.r(), bg.g(), bg.b(), bg.a()})) {
-        win->window.Move({windowMessage.x(), windowMessage.y()});
         win->window.Show();
         Windows().emplace(windowMessage.name(), std::move(*win));
       }
@@ -1786,6 +1794,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   case iris::Control::Control_Type_WINDOW:
     if (auto win = Window::Create(
           controlMessage.window().name().c_str(),
+          {controlMessage.window().x(), controlMessage.window().y()},
           {controlMessage.window().width(), controlMessage.window().height()},
           {controlMessage.window().background().r(),
            controlMessage.window().background().g(),

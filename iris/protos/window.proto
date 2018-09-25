@@ -10,6 +10,7 @@ message Window {
   uint32 y = 4;
   uint32 width = 5;
   uint32 height = 6;
+  uint32 display = 7;
   bool decoration = 10;
   Color background = 11;
 }

@@ -22,6 +22,11 @@
  */
 namespace iris::wsi {
 
+struct Rect {
+  glm::uvec2 offset;
+  glm::uvec2 extent;
+}; // struct Rect
+
 /*! \brief Manages a platform-specific Window.
  *
  * Windows are created with the \ref Create method. The \ref PollEvents method
@@ -46,7 +51,7 @@ public:
    * \return a std::expected of either the Window or a std::error_code.
    */
   static tl::expected<Window, std::error_code> Create(
-    gsl::czstring<> title, glm::uvec2 extent,
+    gsl::czstring<> title, Rect rect,
     Options const& options = Options::kDecorated | Options::kSizeable) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.

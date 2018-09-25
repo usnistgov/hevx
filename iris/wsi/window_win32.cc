@@ -132,7 +132,7 @@ Keys TranslateKeycode(WPARAM keyCode) {
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
-iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
+iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
                                 Options const& options) noexcept {
   IRIS_LOG_ENTER();
 
@@ -142,7 +142,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     std::terminate();
   }
 
-  pWin->extent_ = std::move(extent);
+  pWin->rect_ = std::move(rect);
 
   pWin->handle_.hInstance = ::GetModuleHandleA(nullptr);
   if (pWin->handle_.hInstance == 0) {
@@ -181,7 +181,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   }
 
   RECT rect;
-  ::SetRect(&rect, 0, 0, pWin->extent_[0], pWin->extent_[1]);
+  ::SetRect(&rect, pWin->rect_.offset[0], pWin->rect_.offset[1],
+            pWin->rect_.extent[0], pWin->rect_.extent[1]);
   ::AdjustWindowRect(&rect, pWin->dwStyle_, FALSE);
 
   HWND hWnd = ::CreateWindowExA(
@@ -236,16 +237,16 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     break;
 
   case WM_MOVE:
-    if (offset_[0] != LOWORD(lParam) || offset_[1] != HIWORD(lParam)) {
-      offset_ = {LOWORD(lParam), HIWORD(lParam)};
-      moveDelegate_(offset_);
+    if (rect_.offset[0] != LOWORD(lParam) || rect_.offset[1] != HIWORD(lParam)) {
+      rect_.offset = {LOWORD(lParam), HIWORD(lParam)};
+      moveDelegate_(rect_.offset);
     }
     break;
 
   case WM_SIZE:
-    if (extent_[0] != LOWORD(lParam) || extent_[1] != HIWORD(lParam)) {
-      extent_ = {LOWORD(lParam), HIWORD(lParam)};
-      resizeDelegate_(extent_);
+    if (rect_.extent[0] != LOWORD(lParam) || rect_.extent[1] != HIWORD(lParam)) {
+      rect_.extent = {LOWORD(lParam), HIWORD(lParam)};
+      resizeDelegate_(rect_.extent);
     }
     break;
 

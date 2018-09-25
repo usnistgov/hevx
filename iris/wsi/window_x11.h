@@ -33,18 +33,17 @@ public:
    * \return a std::expected of either the Impl pointer or a std::error_code.
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, glm::uvec2 extent,
-         Options const& options) noexcept;
+  Create(gsl::czstring<> title, Rect rect, Options const& options) noexcept;
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.
    */
-  glm::uvec2 Offset() const noexcept { return offset_; }
+  glm::uvec2 Offset() const noexcept { return rect_.offset; }
 
   /*! \brief Get the current window extent in screen coordinates.
    *  \return the current window extent in screen coordinates.
    */
-  glm::uvec2 Extent() const noexcept { return extent_; }
+  glm::uvec2 Extent() const noexcept { return rect_.extent; }
 
   /*! \brief Get the current state of the keyboard.
    *  \return the current state of the keyboard.
@@ -176,8 +175,7 @@ private:
     kNumAtoms
   }; // enum Atoms
 
-  glm::uvec2 offset_{};
-  glm::uvec2 extent_{};
+  Rect rect_{};
   NativeHandle_t handle_{};
   ::Visual* visual_{nullptr};
   bool closed_{false};

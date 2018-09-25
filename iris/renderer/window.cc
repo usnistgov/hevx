@@ -5,12 +5,14 @@
 #include "renderer/renderer.h"
 
 tl::expected<iris::Renderer::Window, std::error_code>
-iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 extent,
+iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
+                               glm::uvec2 extent,
                                glm::vec4 const& clearColor) noexcept {
   IRIS_LOG_ENTER();
 
   Window window;
-  if (auto win = wsi::Window::Create(title, std::move(extent))) {
+  if (auto win =
+        wsi::Window::Create(title, {std::move(offset), std::move(extent)})) {
     window.window = std::move(*win);
   } else {
     GetLogger()->error("Unable to create Window window: {}",

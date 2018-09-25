@@ -160,7 +160,7 @@ static Keys TranslateKeySym(::KeySym keysym) {
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
-iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
+iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
                                 Options const& options) noexcept {
   IRIS_LOG_ENTER();
 
@@ -170,7 +170,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
     std::terminate();
   }
 
-  pWin->extent_ = std::move(extent);
+  pWin->rect_ = std::move(rect);
 
   pWin->handle_.display = ::XOpenDisplay("");
   if (!pWin->handle_.display) {
@@ -203,9 +203,10 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   GrabErrorHandler(pWin->handle_.display);
   pWin->handle_.window = ::XCreateWindow(
     pWin->handle_.display, DefaultRootWindow(pWin->handle_.display),
-    pWin->offset_[0], pWin->offset_[1], pWin->extent_[0], pWin->extent_[1], 0,
-    DefaultDepth(pWin->handle_.display, screen), InputOutput, pWin->visual_,
-    CWBorderPixel | CWColormap | CWEventMask, &attrs);
+    pWin->rect_.offset[0], pWin->rect_.offset[1], pWin->rect_.extent[0],
+    pWin->rect_.extent[1], 0, DefaultDepth(pWin->handle_.display, screen),
+    InputOutput, pWin->visual_, CWBorderPixel | CWColormap | CWEventMask,
+    &attrs);
   ReleaseErrorHandler(pWin->handle_.display);
 
   if (sErrorCode != Success) {
@@ -252,8 +253,8 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, glm::uvec2 extent,
   if ((options & Options::kSizeable) != Options::kSizeable) {
     // remove sizeability
     szHints->flags |= (PMinSize | PMaxSize);
-    szHints->min_width = szHints->max_width = pWin->extent_[0];
-    szHints->min_height = szHints->max_height = pWin->extent_[1];
+    szHints->min_width = szHints->max_width = pWin->rect_.extent[0];
+    szHints->min_height = szHints->max_height = pWin->rect_.extent[1];
   }
 
   szHints->flags |= PWinGravity;
@@ -334,17 +335,17 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
 
   case ConfigureNotify:
     if (event.xconfigure.window != handle_.window) break;
-    if (extent_[0] == static_cast<unsigned int>(event.xconfigure.width) &&
-        extent_[1] == static_cast<unsigned int>(event.xconfigure.height)) {
-      if (offset_[0] == static_cast<unsigned int>(event.xconfigure.x) &&
-          offset_[1] == static_cast<unsigned int>(event.xconfigure.y)) {
+    if (rect_.extent[0] == static_cast<unsigned int>(event.xconfigure.width) &&
+        rect_.extent[1] == static_cast<unsigned int>(event.xconfigure.height)) {
+      if (rect_.offset[0] == static_cast<unsigned int>(event.xconfigure.x) &&
+          rect_.offset[1] == static_cast<unsigned int>(event.xconfigure.y)) {
         break;
       }
-      offset_ = {event.xconfigure.x, event.xconfigure.y};
-      moveDelegate_(offset_);
+      rect_.offset = {event.xconfigure.x, event.xconfigure.y};
+      moveDelegate_(rect_.offset);
     } else {
-      extent_ = {event.xconfigure.width, event.xconfigure.height};
-      resizeDelegate_(extent_);
+      rect_.extent = {event.xconfigure.width, event.xconfigure.height};
+      resizeDelegate_(rect_.extent);
     }
     break;
 

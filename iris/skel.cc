@@ -4,6 +4,7 @@
 #include "iris/renderer/renderer.h"
 #include "iris/renderer/io.h"
 #include "iris/wsi/window.h"
+#include "fmt/format.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable: 4127)
@@ -39,6 +40,8 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 int main(int argc, char** argv) {
 
 #endif
+
+  fmt::print("argc: {} &argc: {}", argc, static_cast<void*>(&argc));
 
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});

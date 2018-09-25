@@ -609,7 +609,7 @@ void iris::Renderer::Surface::Release() noexcept {
     vkDestroyImageView(sDevice, imageView, nullptr);
   }
 
-  GetLogger()->debug("swapchain: {}", static_cast<void*>(swapchain));
+  //GetLogger()->debug("Swapchain: {}", static_cast<void*>(swapchain));
   vkDestroySwapchainKHR(sDevice, swapchain, nullptr);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface::Release

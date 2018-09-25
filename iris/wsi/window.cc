@@ -10,10 +10,10 @@
  */
 
 tl::expected<iris::wsi::Window, std::error_code>
-iris::wsi::Window::Create(gsl::czstring<> title, glm::uvec2 extent,
+iris::wsi::Window::Create(gsl::czstring<> title, Rect rect,
                           Options const& options) noexcept {
   Window window;
-  if (auto pImpl = Impl::Create(title, std::move(extent), options)) {
+  if (auto pImpl = Impl::Create(title, std::move(rect), options)) {
     window.pImpl_ = std::move(*pImpl);
   } else {
     return tl::make_unexpected(pImpl.error());
