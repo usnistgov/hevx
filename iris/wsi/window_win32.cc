@@ -180,15 +180,15 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
     pWin->dwStyle_ = WS_OVERLAPPEDWINDOW;
   }
 
-  RECT rect;
-  ::SetRect(&rect, pWin->rect_.offset[0], pWin->rect_.offset[1],
+  RECT r;
+  ::SetRect(&r, pWin->rect_.offset[0], pWin->rect_.offset[1],
             pWin->rect_.extent[0], pWin->rect_.extent[1]);
-  ::AdjustWindowRect(&rect, pWin->dwStyle_, FALSE);
+  ::AdjustWindowRect(&r, pWin->dwStyle_, FALSE);
 
-  HWND hWnd = ::CreateWindowExA(
-    0, sWindowClass.lpszClassName, title, pWin->dwStyle_, CW_USEDEFAULT,
-    CW_USEDEFAULT, (rect.right - rect.left), (rect.bottom - rect.top), 0, 0,
-    sWindowClass.hInstance, pWin.get());
+  HWND hWnd = ::CreateWindowExA(0, sWindowClass.lpszClassName, title,
+                                pWin->dwStyle_, CW_USEDEFAULT, CW_USEDEFAULT,
+                                (r.right - r.left), (r.bottom - r.top), 0, 0,
+                                sWindowClass.hInstance, pWin.get());
   if (hWnd == 0 || pWin->handle_.hWnd == 0) {
     char str[1024];
     ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
