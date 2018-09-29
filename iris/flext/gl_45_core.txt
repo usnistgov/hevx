@@ -1,0 +1,5 @@
+version 4.5 core
+
+extension NV_draw_vulkan_image required
+
+extension ARB_debug_output optional

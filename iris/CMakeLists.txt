@@ -47,9 +47,9 @@ target_compile_options(protos
 )
 
 if(WIN32)
-  set(_flextvk_profile flextvk_profile_win32.txt)
+  set(_flextvk_profile vk_win32_khr.txt)
 else()
-  set(_flextvk_profile flextvk_profile_xlib.txt)
+  set(_flextvk_profile vk_xlib_khr.txt)
 endif()
 
 add_custom_command(
@@ -59,12 +59,27 @@ add_custom_command(
   COMMAND ${PYTHON_EXECUTABLE} ${flextgl_SOURCE_DIR}/flextGLgen.py
   ARGS
       -D.
-      -t${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template
-      ${CMAKE_CURRENT_SOURCE_DIR}/${_flextvk_profile}
+      -t${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan
+      ${CMAKE_CURRENT_SOURCE_DIR}/flext/${_flextvk_profile}
   DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/${_flextvk_profile}
-    ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template/flextVk.h.template
-    ${CMAKE_CURRENT_SOURCE_DIR}/flextvk_template/flextVk.cpp.template
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/${_flextvk_profile}
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan/flextVk.h.template
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan/flextVk.cpp.template
+)
+
+add_custom_command(
+  OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/flextGL.h
+    ${CMAKE_CURRENT_BINARY_DIR}/flextGL.c
+  COMMAND ${PYTHON_EXECUTABLE} ${flextgl_SOURCE_DIR}/flextGLgen.py
+  ARGS
+      -D.
+      -t${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible
+      ${CMAKE_CURRENT_SOURCE_DIR}/flext/gl_45_core.txt
+  DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/gl_45_core.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible/flextGL.h.template
+    ${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible/flextGL.c.template
 )
 
 if(WIN32)
@@ -82,6 +97,7 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
+  ${CMAKE_CURRENT_BINARY_DIR}/flextGL.c
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   wsi/window.cc
   renderer/io.cc
@@ -103,7 +119,7 @@ target_link_libraries(iris
     flags imgui vma
     gsl glm expected CXX::Filesystem fmt spdlog
     absl::base absl::strings absl::container
-    shaderc Vulkan::Vulkan ${X11_LIBRARIES}
+    shaderc OpenGL::GL Vulkan::Vulkan ${X11_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
 )
