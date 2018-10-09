@@ -4,6 +4,7 @@
 #include "renderer/renderer.h"
 #include "absl/base/macros.h"
 #include "absl/container/fixed_array.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "config.h"
@@ -126,9 +127,9 @@ static bool sRunning{false};
 
 VkSemaphore sFrameComplete{VK_NULL_HANDLE};
 
-static std::unordered_map<std::string, iris::Renderer::Window>&
+static absl::flat_hash_map<std::string, iris::Renderer::Window>&
 Windows() noexcept {
-  static std::unordered_map<std::string, iris::Renderer::Window> sWindows;
+  static absl::flat_hash_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
 } // Windows
 

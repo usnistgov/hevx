@@ -118,7 +118,7 @@ target_link_libraries(iris
   PUBLIC
     flags imgui vma
     gsl glm expected CXX::Filesystem fmt spdlog
-    absl::base absl::strings absl::container
+    absl::base absl::strings absl::container absl::hash
     shaderc OpenGL::GL Vulkan::Vulkan ${X11_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
