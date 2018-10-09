@@ -97,11 +97,14 @@ tl::expected<std::vector<char>, std::error_code> iris::Renderer::io::ReadFile(
   }
 
   if (!fh) {
-    tl::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+    GetLogger()->debug("Reading {} failed", path.string());
+    return tl::unexpected(
+      std::make_error_code(std::errc::no_such_file_or_directory));
   }
 
   std::fseek(fh, 0L, SEEK_END);
   std::vector<char> bytes(std::ftell(fh));
+  GetLogger()->debug("Reading {} bytes from {}", bytes.size(), path.string());
   std::fseek(fh, 0L, SEEK_SET);
   std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
 

@@ -41,8 +41,6 @@ int main(int argc, char** argv) {
 
 #endif
 
-  fmt::print("argc: {} &argc: {}", argc, static_cast<void*>(&argc));
-
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
