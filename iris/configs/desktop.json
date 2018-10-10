@@ -9,7 +9,13 @@
         "y": 320,
         "width": 720,
         "height": 720,
-        "decoration": true
+        "decoration": true,
+        "background": {
+          "r": 0.25,
+          "g": 0.5,
+          "b": 0.75,
+          "a": 1.0
+        }
       }
     ]
   }

@@ -2,6 +2,7 @@
 #define HEV_IRIS_RENDERER_VULKAN_H_
 
 #include "iris/flextVk.h"
+#include "iris/flextGL.h"
 #include "iris/config.h"
 
 // FIXME: flextGL should probably generate these PFN definitions...

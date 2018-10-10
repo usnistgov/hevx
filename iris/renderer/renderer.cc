@@ -1462,6 +1462,25 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   flextVkInit();
 
+  if (auto error = flextInit() != GL_NO_ERROR) {
+    GetLogger()->error("Cannot initialize GL extensions: {}", error);
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  GetLogger()->debug("OpenGL Vendor: {}", glGetString(GL_VENDOR));
+  GetLogger()->debug("OpenGL Renderer: {}", glGetString(GL_RENDERER));
+  GetLogger()->debug("OpenGL Version: {}", glGetString(GL_VERSION));
+  GetLogger()->debug("OpenGL Shading Language Version: {}",
+                     glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+  int numGLExtensions;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
+  GetLogger()->debug("{} Extensions:", numGLExtensions);
+  for (int i = 0; i < numGLExtensions; ++i) {
+    GetLogger()->debug("  {}", glGetStringi(GL_EXTENSIONS, i));
+  }
+
   if (auto error =
         InitInstance(appName, appVersion, instanceExtensionNames, layerNames,
                      (options & Options::kReportDebugMessages) ==

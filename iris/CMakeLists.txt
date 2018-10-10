@@ -122,6 +122,7 @@ target_link_libraries(iris
     shaderc OpenGL::GL Vulkan::Vulkan ${X11_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
+    $<$<PLATFORM_ID:Linux>:-ldl>
 )
 
 target_include_directories(iris
