@@ -14,24 +14,6 @@ matrix:
         - g++-7
         - libx11-dev
         - libxrandr-dev
-  - env: COMPILER_NAME=clang CXX=clang++-7 CC=clang
-    addons:
-      apt:
-        sources:
-        - ubuntu-toolchain-r-test
-        - llvm-toolchain-trusty-7
-        - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-7 main'
-          key_url: 'https://apt.llvm.org/llvm-snapshot.gpg.key'
-        packages:
-        - python3-pip
-        - g++-7
-        - clang-7
-        - libc++1-7
-        - libc++abi1-7
-        - libc++-7-dev
-        - libc++abi-7-dev
-        - libx11-dev
-        - libxrandr-dev
 
 install:
 - CMAKE_URL="https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz"
