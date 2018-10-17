@@ -13,6 +13,7 @@ namespace iris::wsi {
 struct Window::NativeHandle_t {
   ::HINSTANCE hInstance{0}; //<! The Win32 instance handle
   ::HWND hWnd{0};           //<! The Win32 window handle
+  ::HGLRC hGLContext{0};    //<! The OpenGL context handle
 };
 
 /*! \brief Platform-specific window for Win32.

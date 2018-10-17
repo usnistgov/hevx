@@ -35,6 +35,12 @@
 #endif
 #include "tasks.h"
 #include "tl/expected.hpp"
+#include "wsi/window.h"
+#if PLATFORM_WINDOWS
+#include "wsi/window_win32.h"
+#elif PLATFORM_LINUX
+#include "wsi/window_x11.h"
+#endif
 #include <array>
 #include <cstdlib>
 #include <memory>
@@ -1461,6 +1467,26 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #endif
 
   flextVkInit();
+
+#if PLATFORM_WINDOWS
+
+  wsi::Window offscreen;
+  if (auto win = wsi::Window::Create("offscreen", {{0, 0}, {32, 32}},
+                                     wsi::Window::Options::kNone, 0)) {
+    offscreen = std::move(*win);
+  } else {
+    GetLogger()->error(
+      "Unable to create offscreen window for GL initialization");
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  ::wglMakeCurrent(GetDC(offscreen.NativeHandle().hWnd),
+                   offscreen.NativeHandle().hGLContext);
+
+#elif PLATFORM_LINUX
+
+#endif // PLATFORM_...
 
   if (auto error = flextInit() != GL_NO_ERROR) {
     GetLogger()->error("Cannot initialize GL extensions: {}", error);

@@ -26,6 +26,8 @@ iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
     return tl::unexpected(win.error());
   }
 
+  window.window.Show();
+
   if (auto sfc = Surface::Create(window.window, clearColor)) {
     window.surface = std::move(*sfc);
   } else {

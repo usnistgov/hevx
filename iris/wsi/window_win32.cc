@@ -203,8 +203,49 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
     ::SetWindowLongA(pWin->handle_.hWnd, GWL_STYLE, 0);
   }
 
+  PIXELFORMATDESCRIPTOR pfd = {sizeof(PIXELFORMATDESCRIPTOR),
+                               1,
+                               PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+                               PFD_TYPE_RGBA,
+                               32, // colorbuffer bits
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               0,
+                               24, // depthbuffer bits
+                               8,  // stencil bits
+                               0,  // aux buffers in framebuffer
+                               PFD_MAIN_PLANE,
+                               0,
+                               0,
+                               0,
+                               0};
+
+  ::SetPixelFormat(GetDC(pWin->handle_.hWnd), 1, &pfd);
+  pWin->handle_.hGLContext = ::wglCreateContext(GetDC(pWin->handle_.hWnd));
+
+  if (!pWin->handle_.hGLContext) {
+    char str[1024];
+    ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, ::GetLastError(),
+                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), str,
+                     ABSL_ARRAYSIZE(str), NULL);
+    GetLogger()->error("Cannot create OpenGL context: {}", str);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(Error::kWin32Error);
+  }
+
+  GetLogger()->debug("hGLContext: {}", (void*)pWin->handle_.hGLContext);
+
   pWin->Retitle(title);
-  pWin->Show();
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);
@@ -256,6 +297,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   case WM_CLOSE:
     closed_ = true;
     closeDelegate_();
+    ::wglDeleteContext(handle_.hGLContext);
     ::DestroyWindow(handle_.hWnd);
     break;
 
