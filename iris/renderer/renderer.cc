@@ -1474,7 +1474,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   GetLogger()->debug("OpenGL Shading Language Version: {}",
                      glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-  int numGLExtensions;
+  int numGLExtensions = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
   GetLogger()->debug("{} Extensions:", numGLExtensions);
   for (int i = 0; i < numGLExtensions; ++i) {
