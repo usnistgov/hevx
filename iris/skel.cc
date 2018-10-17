@@ -18,6 +18,10 @@
 #include "flags.h"
 
 #if PLATFORM_WINDOWS
+extern "C" {
+_declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+}
+
 #include <Windows.h>
 #include <shellapi.h>
 

@@ -1488,17 +1488,17 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
 #endif // PLATFORM_...
 
-  if (auto error = flextInit() != GL_NO_ERROR) {
-    GetLogger()->error("Cannot initialize GL extensions: {}", error);
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
-
   GetLogger()->debug("OpenGL Vendor: {}", glGetString(GL_VENDOR));
   GetLogger()->debug("OpenGL Renderer: {}", glGetString(GL_RENDERER));
   GetLogger()->debug("OpenGL Version: {}", glGetString(GL_VERSION));
   GetLogger()->debug("OpenGL Shading Language Version: {}",
                      glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+  if (flextInit() != GL_TRUE) {
+    GetLogger()->error("Cannot initialize GL extensions");
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
 
   int numGLExtensions = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
