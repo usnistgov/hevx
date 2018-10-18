@@ -15,6 +15,7 @@ enum class Error {
   kNoDisplay,
   kXError,
   kWin32Error,
+  kCreateFailed,
 }; // enum class Error
 
 //! \brief Implements std::error_category for \ref Error

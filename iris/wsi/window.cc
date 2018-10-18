@@ -1,9 +1,11 @@
-#include "window.h"
+#include "wsi/window.h"
 #include "config.h"
+#include "logging.h"
+#include "wsi/error.h"
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-#include "window_x11.h"
+#include "wsi/window_x11.h"
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
-#include "window_win32.h"
+#include "wsi/window_win32.h"
 #endif
 /*! \file
  * \brief \ref iris::wsi::Window definition.
@@ -12,14 +14,19 @@
 tl::expected<iris::wsi::Window, std::error_code>
 iris::wsi::Window::Create(gsl::czstring<> title, Rect rect,
                           Options const& options, int display) noexcept {
-  Window window;
-  if (auto pImpl = Impl::Create(title, std::move(rect), options, display)) {
-    window.pImpl_ = std::move(*pImpl);
-  } else {
-    return tl::make_unexpected(pImpl.error());
-  }
+  try {
+    Window window;
+    if (auto pImpl = Impl::Create(title, std::move(rect), options, display)) {
+      window.pImpl_ = std::move(*pImpl);
+    } else {
+      return tl::unexpected(pImpl.error());
+    }
 
-  return std::move(window);
+    return std::move(window);
+  } catch (std::exception const& e) {
+    GetLogger()->error("Exception while creating window: {}", e.what());
+    return tl::unexpected(Error::kCreateFailed);
+  }
 }
 
 glm::uvec2 iris::wsi::Window::Offset() const noexcept {
@@ -94,5 +101,8 @@ iris::wsi::Window::NativeHandle_t iris::wsi::Window::NativeHandle() const
 iris::wsi::Window::Window() noexcept = default;
 iris::wsi::Window::Window(Window&&) noexcept = default;
 iris::wsi::Window& iris::wsi::Window::operator=(Window&&) noexcept = default;
-iris::wsi::Window::~Window() noexcept = default;
 
+iris::wsi::Window::~Window() noexcept {
+  IRIS_LOG_ENTER();
+  IRIS_LOG_LEAVE();
+}

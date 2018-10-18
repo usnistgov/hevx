@@ -174,12 +174,26 @@ inline Window::Options operator|(Window::Options const& lhs,
                                       static_cast<U>(rhs));
 }
 
+//! \brief bit-wise or of \ref Window::Options.
+inline Window::Options operator|=(Window::Options& lhs,
+                                  Window::Options const& rhs) noexcept {
+  lhs = lhs | rhs;
+  return lhs;
+}
+
 //! \brief bit-wise and of \ref Window::Options.
 inline Window::Options operator&(Window::Options const& lhs,
                                  Window::Options const& rhs) noexcept {
   using U = std::underlying_type_t<Window::Options>;
   return static_cast<Window::Options>(static_cast<U>(lhs) &
                                       static_cast<U>(rhs));
+}
+
+//! \brief bit-wise and of \ref Window::Options.
+inline Window::Options operator&=(Window::Options& lhs,
+                                  Window::Options const& rhs) noexcept {
+  lhs = lhs & rhs;
+  return lhs;
 }
 
 } // namespace iris::wsi

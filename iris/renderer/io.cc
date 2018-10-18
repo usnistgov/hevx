@@ -57,7 +57,7 @@ TaskResult LoadFileTask::load() noexcept {
     if (auto status =
           google::protobuf::util::JsonStringToMessage(json, &controlMessage);
         !status.ok()) {
-      GetLogger()->error("Unable to parse {}: {}", path_.string(),
+      GetLogger()->error("Cannot parse {}: {}", path_.string(),
                          status.ToString());
       IRIS_LOG_LEAVE();
       return std::make_error_code(std::errc::io_error);

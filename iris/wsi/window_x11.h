@@ -5,6 +5,7 @@
  */
 
 #include "wsi/window.h"
+#include "logging.h"
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -33,8 +34,7 @@ public:
    * \return a std::expected of either the Impl pointer or a std::error_code.
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, Rect rect, Options const& options,
-         int display) noexcept;
+  Create(gsl::czstring<> title, Rect rect, Options const& options, int display);
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.
@@ -164,7 +164,11 @@ public:
   Impl() = default;
 
   //! \brief Destructor.
-  ~Impl() noexcept { ::XCloseDisplay(handle_.display); }
+  ~Impl() noexcept {
+    IRIS_LOG_ENTER();
+    ::XCloseDisplay(handle_.display);
+    IRIS_LOG_LEAVE();
+  }
 
 private:
   enum Atoms {

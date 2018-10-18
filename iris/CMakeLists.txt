@@ -99,11 +99,12 @@ configure_file(config.h.in config.h)
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextGL.c
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  wsi/window.cc
+  renderer/glcontext.cc
   renderer/io.cc
   renderer/renderer.cc
   renderer/surface.cc
   renderer/window.cc
+  wsi/window.cc
 )
 
 if(WIN32)

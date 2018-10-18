@@ -10,6 +10,7 @@
 #include "config.h"
 #include "error.h"
 #include "protos.h"
+#include "renderer/glcontext.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
 #include "renderer/window.h"
@@ -35,6 +36,7 @@
 #endif
 #include "tasks.h"
 #include "tl/expected.hpp"
+#include "wsi/error.h"
 #include "wsi/window.h"
 #if PLATFORM_WINDOWS
 #include "wsi/window_win32.h"
@@ -94,6 +96,8 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 /////
 
 namespace iris::Renderer {
+
+bool sHasHardwareStereo{false};
 
 VkInstance sInstance{VK_NULL_HANDLE};
 VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
@@ -162,6 +166,58 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
   return VK_FALSE;
 } // DebugReportCallback
 
+/*! \brief Initialize OpenGL - \b MUST only be called from \ref Initialize.
+ */
+static std::error_code InitGL() {
+  IRIS_LOG_ENTER();
+
+  wsi::Window offscreen;
+  if (auto win = wsi::Window::Create("offscreen", {{0, 0}, {0, 0}},
+                                     wsi::Window::Options::kNone, 0)) {
+    offscreen = std::move(*win);
+  } else {
+    GetLogger()->error("Cannot create offscreen window");
+    return win.error();
+  }
+
+  GLContext context;
+  if (auto ctx = GLContext::Create(offscreen)) {
+    context = std::move(*ctx);
+  } else {
+    GetLogger()->error("Cannot create OpenGL Context");
+    return ctx.error();
+  }
+
+  context.MakeCurrent();
+
+  if (flextInit() != GL_TRUE) {
+    GetLogger()->error("Cannot initialize OpenGL extensions");
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  GLboolean stereo;
+  glGetBooleanv(GL_STEREO, &stereo);
+  sHasHardwareStereo = (stereo == GL_TRUE) && FLEXT_NV_draw_vulkan_image;
+
+  GetLogger()->debug("OpenGL Vendor: {}", glGetString(GL_VENDOR));
+  GetLogger()->debug("OpenGL Renderer: {}", glGetString(GL_RENDERER));
+  GetLogger()->debug("OpenGL Version: {}", glGetString(GL_VERSION));
+  GetLogger()->debug("OpenGL Shading Language Version: {}",
+                     glGetString(GL_SHADING_LANGUAGE_VERSION));
+  GetLogger()->debug("OpenGL Hardware Stereo: {}", sHasHardwareStereo);
+
+  int numGLExtensions = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
+  GetLogger()->debug("{} Extensions:", numGLExtensions);
+  for (int i = 0; i < numGLExtensions; ++i) {
+    GetLogger()->debug("  {}", glGetStringi(GL_EXTENSIONS, i));
+  }
+
+  IRIS_LOG_LEAVE();
+  return Error::kNone;
+} // InitGL
+
 /*! \brief Create a Vulkan Instance - \b MUST only be called from
  * \ref Initialize.
  *
@@ -181,6 +237,8 @@ static std::error_code InitInstance(gsl::czstring<> appName,
                                     bool reportDebug) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
+
+  flextVkInit();
 
   std::uint32_t instanceVersion;
   vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
@@ -254,6 +312,8 @@ static std::error_code InitInstance(gsl::czstring<> appName,
     IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
+
+  flextVkInitInstance(sInstance); // initialize instance function pointers
 
   //GetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
   IRIS_LOG_LEAVE();
@@ -1237,8 +1297,7 @@ CreateShader(gsl::czstring<> fileName,
     VkShaderModule module;
     result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
     if (result != VK_SUCCESS) {
-      GetLogger()->error("Unable to create shader module: {}",
-                         to_string(result));
+      GetLogger()->error("Cannot create shader module: {}", to_string(result));
       IRIS_LOG_LEAVE();
       return tl::unexpected(make_error_code(result));
     }
@@ -1246,7 +1305,7 @@ CreateShader(gsl::czstring<> fileName,
     IRIS_LOG_LEAVE();
     return module;
   } else {
-    GetLogger()->error("Unable to compile shader: {}", code.error());
+    GetLogger()->error("Cannot compile shader: {}", code.error());
     IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kShaderCompileFailed);
   }
@@ -1466,45 +1525,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     0);
 #endif
 
-  flextVkInit();
-
-#if PLATFORM_WINDOWS
-
-  wsi::Window offscreen;
-  if (auto win = wsi::Window::Create("offscreen", {{0, 0}, {32, 32}},
-                                     wsi::Window::Options::kNone, 0)) {
-    offscreen = std::move(*win);
-  } else {
-    GetLogger()->error(
-      "Unable to create offscreen window for GL initialization");
+  if (auto error = InitGL()) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
-  }
-
-  ::wglMakeCurrent(GetDC(offscreen.NativeHandle().hWnd),
-                   offscreen.NativeHandle().hGLContext);
-
-#elif PLATFORM_LINUX
-
-#endif // PLATFORM_...
-
-  GetLogger()->debug("OpenGL Vendor: {}", glGetString(GL_VENDOR));
-  GetLogger()->debug("OpenGL Renderer: {}", glGetString(GL_RENDERER));
-  GetLogger()->debug("OpenGL Version: {}", glGetString(GL_VERSION));
-  GetLogger()->debug("OpenGL Shading Language Version: {}",
-                     glGetString(GL_SHADING_LANGUAGE_VERSION));
-
-  if (flextInit() != GL_TRUE) {
-    GetLogger()->error("Cannot initialize GL extensions");
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
-
-  int numGLExtensions = 0;
-  glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
-  GetLogger()->debug("{} Extensions:", numGLExtensions);
-  for (int i = 0; i < numGLExtensions; ++i) {
-    GetLogger()->debug("  {}", glGetStringi(GL_EXTENSIONS, i));
   }
 
   if (auto error =
@@ -1514,8 +1537,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
-
-  flextVkInitInstance(sInstance); // initialize instance function pointers
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
@@ -1825,30 +1846,36 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
       auto const& bg = windowMessage.background();
-      if (auto win = Window::Create(
-            windowMessage.name().c_str(),
-            {windowMessage.x(), windowMessage.y()},
-            {windowMessage.width(), windowMessage.height()},
-            {bg.r(), bg.g(), bg.b(), bg.a()}, windowMessage.decoration(),
-            windowMessage.display())) {
+
+      Window::Options options = Window::Options::kNone;
+      if (windowMessage.decoration()) options |= Window::Options::kDecorated;
+      if (windowMessage.stereo()) options |= Window::Options::kStereo;
+
+      if (auto win =
+            Window::Create(windowMessage.name().c_str(),
+                           {windowMessage.x(), windowMessage.y()},
+                           {windowMessage.width(), windowMessage.height()},
+                           {bg.r(), bg.g(), bg.b(), bg.a()}, options,
+                           windowMessage.display())) {
         Windows().emplace(windowMessage.name(), std::move(*win));
       }
     }
     break;
-  case iris::Control::Control_Type_WINDOW:
+  case iris::Control::Control_Type_WINDOW: {
+    auto&& windowMessage = controlMessage.window();
+    auto const& bg = windowMessage.background();
+
+    Window::Options options = Window::Options::kNone;
+    if (windowMessage.decoration()) options |= Window::Options::kDecorated;
+    if (windowMessage.stereo()) options |= Window::Options::kStereo;
+
     if (auto win = Window::Create(
-          controlMessage.window().name().c_str(),
-          {controlMessage.window().x(), controlMessage.window().y()},
-          {controlMessage.window().width(), controlMessage.window().height()},
-          {controlMessage.window().background().r(),
-           controlMessage.window().background().g(),
-           controlMessage.window().background().b(),
-           controlMessage.window().background().a()},
-          controlMessage.window().decoration(),
-          controlMessage.window().display())) {
-      Windows().emplace(controlMessage.window().name(), std::move(*win));
+          windowMessage.name().c_str(), {windowMessage.x(), windowMessage.y()},
+          {windowMessage.width(), windowMessage.height()},
+          {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display())) {
+      Windows().emplace(windowMessage.name(), std::move(*win));
     }
-    break;
+  } break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",
                        controlMessage.type());

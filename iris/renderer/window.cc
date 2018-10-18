@@ -7,35 +7,57 @@
 tl::expected<iris::Renderer::Window, std::error_code>
 iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
                                glm::uvec2 extent, glm::vec4 const& clearColor,
-                               bool decorated, int display) noexcept {
+                               Options const& options, int display) noexcept {
   IRIS_LOG_ENTER();
 
-  wsi::Window::Options const options =
-    wsi::Window::Options::kSizeable |
-    (decorated ? wsi::Window::Options::kDecorated
-               : wsi::Window::Options::kNone);
+  wsi::Window::Options windowOptions = wsi::Window::Options::kSizeable;
+  if ((options & Window::Options::kDecorated) == Window::Options::kDecorated) {
+    windowOptions |= wsi::Window::Options::kDecorated;
+  }
 
   Window window;
-  if (auto win = wsi::Window::Create(
-        title, {std::move(offset), std::move(extent)}, options, display)) {
+  if (auto win =
+        wsi::Window::Create(title, {std::move(offset), std::move(extent)},
+                            windowOptions, display)) {
     window.window = std::move(*win);
   } else {
-    GetLogger()->error("Unable to create Window window: {}",
+    GetLogger()->error("Cannot create Window window: {}",
                        win.error().message());
     IRIS_LOG_LEAVE();
     return tl::unexpected(win.error());
   }
 
-  window.window.Show();
+  if ((options & Window::Options::kStereo) == Window::Options::kStereo) {
+    if (auto ctx = GLContext::Create(window.window)) {
+      window.context = std::move(*ctx);
+    } else {
+      GetLogger()->error("Cannot create OpenGL Context");
+      return tl::unexpected(ctx.error());
+    }
 
-  if (auto sfc = Surface::Create(window.window, clearColor)) {
-    window.surface = std::move(*sfc);
+    window.context.MakeCurrent();
+
+    if (flextInit() != GL_TRUE) {
+      GetLogger()->error("Cannot initialize OpenGL extensions");
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(Error::kInitializationFailed);
+    }
+
+    GLboolean stereo;
+    glGetBooleanv(GL_STEREO, &stereo);
+    bool const hasStereo = (stereo == GL_TRUE) && FLEXT_NV_draw_vulkan_image;
   } else {
-    GetLogger()->error("Unable to create Window surface: {}",
-                       sfc.error().message());
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(sfc.error());
+    if (auto sfc = Surface::Create(window.window, clearColor)) {
+      window.surface = std::move(*sfc);
+    } else {
+      GetLogger()->error("Cannot create Window surface: {}",
+                         sfc.error().message());
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(sfc.error());
+    }
   }
+
+  window.window.Show();
 
   window.window.OnResize(
     std::bind(&Window::Resize, &window, std::placeholders::_1));
@@ -67,6 +89,7 @@ std::error_code iris::Renderer::Window::Frame() noexcept {
 iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)
   , window(std::move(other.window))
+  , context(std::move(other.context))
   , surface(std::move(other.surface)) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
@@ -79,6 +102,7 @@ operator=(Window&& other) noexcept {
 
   resized = other.resized;
   window = std::move(other.window);
+  context = std::move(other.context);
   surface = std::move(other.surface);
 
   // Re-bind delegates

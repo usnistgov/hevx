@@ -162,12 +162,12 @@ static Keys TranslateKeySym(::KeySym keysym) {
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
-                                Options const& options, int display) noexcept {
+                                Options const& options, int display) {
   IRIS_LOG_ENTER();
 
   auto pWin = std::make_unique<Impl>();
   if (!pWin) {
-    GetLogger()->critical("Unable to allocate memory");
+    GetLogger()->critical("Cannot allocate memory");
     std::terminate();
   }
 

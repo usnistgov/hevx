@@ -9,6 +9,8 @@
 
 namespace iris::Renderer {
 
+extern bool sHasHardwareStereo;
+
 extern VkInstance sInstance;
 extern VkDebugReportCallbackEXT sDebugReportCallback;
 extern VkPhysicalDevice sPhysicalDevice;

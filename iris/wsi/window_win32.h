@@ -5,6 +5,7 @@
  */
 
 #include "wsi/window.h"
+#include "logging.h"
 #include <Windows.h>
 
 namespace iris::wsi {
@@ -13,7 +14,6 @@ namespace iris::wsi {
 struct Window::NativeHandle_t {
   ::HINSTANCE hInstance{0}; //<! The Win32 instance handle
   ::HWND hWnd{0};           //<! The Win32 window handle
-  ::HGLRC hGLContext{0};    //<! The OpenGL context handle
 };
 
 /*! \brief Platform-specific window for Win32.
@@ -30,8 +30,7 @@ public:
    * \return a std::expected of either the Impl pointer or a std::error_code.
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, Rect rect, Options const& options,
-         int) noexcept;
+  Create(gsl::czstring<> title, Rect rect, Options const& options, int);
 
   /*! \brief Get the current window offset in screen coordinates.
    * \return the current window offset in screen coordinates.
@@ -138,7 +137,10 @@ public:
   Impl() = default;
 
   //! \brief Destructor.
-  ~Impl() noexcept {}
+  ~Impl() noexcept {
+    IRIS_LOG_ENTER();
+    IRIS_LOG_LEAVE();
+  }
 
 private:
   Rect rect_{};

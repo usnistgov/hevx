@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers,
         0, {console_sink, file_sink})) {
-    logger.critical("unable to initialize renderer: {}", error.message());
+    logger.critical("cannot initialize renderer: {}", error.message());
     std::exit(EXIT_FAILURE);
   }
 
