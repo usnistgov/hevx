@@ -15,7 +15,6 @@ enum class Error {
   kInitializationFailed,    //!< Initialization failed for some reason.
   kAlreadyInitialized,      //!< The renderer has already been initialized.
   kNoPhysicalDevice,        //!< No physical device available.
-  kGLContextCreationFailed, //!< OpenGL context creation failed for some reason.
   kSurfaceCreationFailed,   //!< Surface creation failed for some reason.
   kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
   kFileNotSupported,      //!< File is not supported.
@@ -41,7 +40,6 @@ public:
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device"s;
-    case Error::kGLContextCreationFailed: return "gl context creation failed"s;
     case Error::kSurfaceCreationFailed: return "surface creation failed"s;
     case Error::kSurfaceNotSupported: return "surface not supported"s;
     case Error::kFileNotSupported: return "file not supported"s;

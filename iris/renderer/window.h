@@ -2,7 +2,6 @@
 #define HEV_IRIS_RENDERER_WINDOW_H_
 
 #include "iris/renderer/surface.h"
-#include "iris/renderer/glcontext.h"
 #include "tl/expected.hpp"
 #include "glm/vec4.hpp"
 #include <memory>
@@ -29,7 +28,6 @@ struct Window {
 
   bool resized{false};
   wsi::Window window{};
-  GLContext context{};
   Surface surface{};
 
   void Resize(glm::uvec2 const& newExtent) noexcept;

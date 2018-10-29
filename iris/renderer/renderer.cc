@@ -10,7 +10,6 @@
 #include "config.h"
 #include "error.h"
 #include "protos.h"
-#include "renderer/glcontext.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
 #include "renderer/window.h"
@@ -165,58 +164,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
   }
   return VK_FALSE;
 } // DebugReportCallback
-
-/*! \brief Initialize OpenGL - \b MUST only be called from \ref Initialize.
- */
-static std::error_code InitGL() {
-  IRIS_LOG_ENTER();
-
-  wsi::Window offscreen;
-  if (auto win = wsi::Window::Create("offscreen", {{0, 0}, {0, 0}},
-                                     wsi::Window::Options::kNone, 0)) {
-    offscreen = std::move(*win);
-  } else {
-    GetLogger()->error("Cannot create offscreen window");
-    return win.error();
-  }
-
-  GLContext context;
-  if (auto ctx = GLContext::Create(offscreen)) {
-    context = std::move(*ctx);
-  } else {
-    GetLogger()->error("Cannot create OpenGL Context");
-    return ctx.error();
-  }
-
-  context.MakeCurrent();
-
-  if (flextInit() != GL_TRUE) {
-    GetLogger()->error("Cannot initialize OpenGL extensions");
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
-
-  GLboolean stereo;
-  glGetBooleanv(GL_STEREO, &stereo);
-  sHasHardwareStereo = (stereo == GL_TRUE) && FLEXT_NV_draw_vulkan_image;
-
-  GetLogger()->debug("OpenGL Vendor: {}", glGetString(GL_VENDOR));
-  GetLogger()->debug("OpenGL Renderer: {}", glGetString(GL_RENDERER));
-  GetLogger()->debug("OpenGL Version: {}", glGetString(GL_VERSION));
-  GetLogger()->debug("OpenGL Shading Language Version: {}",
-                     glGetString(GL_SHADING_LANGUAGE_VERSION));
-  GetLogger()->debug("OpenGL Hardware Stereo: {}", sHasHardwareStereo);
-
-  int numGLExtensions = 0;
-  glGetIntegerv(GL_NUM_EXTENSIONS, &numGLExtensions);
-  GetLogger()->debug("{} Extensions:", numGLExtensions);
-  for (int i = 0; i < numGLExtensions; ++i) {
-    GetLogger()->debug("  {}", glGetStringi(GL_EXTENSIONS, i));
-  }
-
-  IRIS_LOG_LEAVE();
-  return Error::kNone;
-} // InitGL
 
 /*! \brief Create a Vulkan Instance - \b MUST only be called from
  * \ref Initialize.
@@ -1524,11 +1471,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
     0);
 #endif
-
-  if (auto error = InitGL()) {
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
 
   if (auto error =
         InitInstance(appName, appVersion, instanceExtensionNames, layerNames,

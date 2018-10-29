@@ -67,21 +67,6 @@ add_custom_command(
     ${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan/flextVk.cpp.template
 )
 
-add_custom_command(
-  OUTPUT
-    ${CMAKE_CURRENT_BINARY_DIR}/flextGL.h
-    ${CMAKE_CURRENT_BINARY_DIR}/flextGL.c
-  COMMAND ${PYTHON_EXECUTABLE} ${flextgl_SOURCE_DIR}/flextGLgen.py
-  ARGS
-      -D.
-      -t${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible
-      ${CMAKE_CURRENT_SOURCE_DIR}/flext/gl_45_core.txt
-  DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/flext/gl_45_core.txt
-    ${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible/flextGL.h.template
-    ${CMAKE_CURRENT_SOURCE_DIR}/flext/compatible/flextGL.c.template
-)
-
 if(WIN32)
   set(PLATFORM_WINDOWS TRUE)
 elseif(UNIX)
@@ -97,9 +82,7 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
-  ${CMAKE_CURRENT_BINARY_DIR}/flextGL.c
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  renderer/glcontext.cc
   renderer/io.cc
   renderer/renderer.cc
   renderer/surface.cc
@@ -120,7 +103,7 @@ target_link_libraries(iris
     flags imgui vma
     gsl glm expected CXX::Filesystem fmt spdlog
     absl::base absl::strings absl::container absl::hash
-    shaderc OpenGL::GL Vulkan::Vulkan ${X11_LIBRARIES}
+    shaderc Vulkan::Vulkan ${X11_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
     $<$<PLATFORM_ID:Linux>:-ldl>
