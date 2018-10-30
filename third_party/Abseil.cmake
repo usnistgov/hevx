@@ -8,8 +8,5 @@ FetchContent_GetProperties(abseil)
 if(NOT abseil_POPULATED)
   message(STATUS "Populating build dependency: abseil")
   FetchContent_Populate(abseil)
-  file(REMOVE ${abseil_SOURCE_DIR}/CMake/AbseilHelpers.cmake)
-  file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/AbseilHelpers.cmake
-       DESTINATION ${abseil_SOURCE_DIR}/CMake)
   add_subdirectory(${abseil_SOURCE_DIR} ${abseil_BINARY_DIR})
 endif()

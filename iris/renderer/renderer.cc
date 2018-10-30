@@ -551,7 +551,7 @@ static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
 
   GetLogger()->debug("{}  Extensions:", indent);
   for (auto&& property : extensionProperties) {
-    GetLogger()->debug("{}    {}:", indent, property.extensionName);
+    GetLogger()->debug("{}    {}", indent, property.extensionName);
   }
 } // DumpPhysicalDevice
 

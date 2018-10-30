@@ -36,6 +36,7 @@ public:
     case Error::kNoDisplay: return "no display"s;
     case Error::kXError: return "X error"s;
     case Error::kWin32Error: return "Win32 error"s;
+    case Error::kCreateFailed: return "Create failed"s;
     }
     return "unknown"s;
   }
