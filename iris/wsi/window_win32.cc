@@ -3,7 +3,6 @@
  */
 #include "wsi/window_win32.h"
 #include "absl/base/macros.h"
-#include "config.h"
 #include "logging.h"
 #include "wsi/error.h"
 
@@ -208,6 +207,11 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
+
+iris::wsi::Window::Impl::~Impl() noexcept {
+  IRIS_LOG_ENTER();
+  IRIS_LOG_LEAVE();
+} // iris::wsi::Window::Impl::~Impl
 
 ::LRESULT CALLBACK iris::wsi::Window::Impl::Dispatch(::UINT uMsg,
                                                      ::WPARAM wParam,

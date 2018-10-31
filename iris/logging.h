@@ -1,7 +1,7 @@
 #ifndef HEV_IRIS_LOGGING_H_
 #define HEV_IRIS_LOGGING_H_
 
-#include "iris/config.h"
+#include "config.h"
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)

@@ -29,11 +29,11 @@ namespace iris::Renderer::io {
 
 class LoadFileTask : public tbb::task {
 public:
-  LoadFileTask(std::experimental::filesystem::path path)
+  LoadFileTask(filesystem::path path)
     : path_(std::move(path)) {}
 
 private:
-  std::experimental::filesystem::path path_;
+  filesystem::path path_;
 
   TaskResult load() noexcept;
   tbb::task* execute() override;
@@ -82,8 +82,8 @@ tbb::task* LoadFileTask::execute() {
 
 } // namespace iris::Renderer::io
 
-tl::expected<std::vector<char>, std::error_code> iris::Renderer::io::ReadFile(
-  std::experimental::filesystem::path path) noexcept {
+tl::expected<std::vector<char>, std::error_code>
+iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
   IRIS_LOG_ENTER();
 
   GetLogger()->debug("Reading {}", path.string());
@@ -91,7 +91,7 @@ tl::expected<std::vector<char>, std::error_code> iris::Renderer::io::ReadFile(
   std::FILE* fh = std::fopen(path.string().c_str(), "rb");
 
   if (!fh) {
-    path = std::experimental::filesystem::path(kIRISContentDirectory) / path;
+    path = filesystem::path(kIRISContentDirectory) / path;
     GetLogger()->debug("Reading failed trying {}", path.string());
     fh = std::fopen(path.string().c_str(), "rb");
   }
@@ -119,12 +119,10 @@ tl::expected<std::vector<char>, std::error_code> iris::Renderer::io::ReadFile(
   return bytes;
 }
 
-void iris::Renderer::io::LoadFile(
-  std::experimental::filesystem::path path) noexcept {
+void iris::Renderer::io::LoadFile(filesystem::path path) noexcept {
   IRIS_LOG_ENTER();
   LoadFileTask* task =
     new (tbb::task::allocate_root()) LoadFileTask(std::move(path));
   tbb::task::enqueue(*task);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::LoadFile::io
-

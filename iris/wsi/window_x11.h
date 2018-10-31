@@ -5,7 +5,6 @@
  */
 
 #include "wsi/window.h"
-#include "logging.h"
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -164,11 +163,7 @@ public:
   Impl() = default;
 
   //! \brief Destructor.
-  ~Impl() noexcept {
-    IRIS_LOG_ENTER();
-    ::XCloseDisplay(handle_.display);
-    IRIS_LOG_LEAVE();
-  }
+  ~Impl() noexcept;
 
 private:
   enum Atoms {

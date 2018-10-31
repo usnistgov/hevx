@@ -5,7 +5,6 @@
  */
 
 #include "wsi/window.h"
-#include "logging.h"
 #include <Windows.h>
 
 namespace iris::wsi {
@@ -137,10 +136,7 @@ public:
   Impl() = default;
 
   //! \brief Destructor.
-  ~Impl() noexcept {
-    IRIS_LOG_ENTER();
-    IRIS_LOG_LEAVE();
-  }
+  ~Impl() noexcept;
 
 private:
   Rect rect_{};

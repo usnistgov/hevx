@@ -5,16 +5,22 @@
  */
 
 #include "tl/expected.hpp"
+#if STD_FS_IS_EXPERIMENTAL
 #include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 #include <system_error>
 #include <vector>
 
 namespace iris::Renderer::io {
 
-tl::expected<std::vector<char>, std::error_code>
-ReadFile(std::experimental::filesystem::path path) noexcept;
+tl::expected<std::vector<char>, std::error_code> ReadFile(
+    filesystem::path path) noexcept;
 
-void LoadFile(std::experimental::filesystem::path path) noexcept;
+  void LoadFile(filesystem::path path) noexcept;
 
 } // namespace iris::Renderer::io
 

@@ -12,6 +12,7 @@
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
+#include "renderer/tasks.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -33,7 +34,6 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
-#include "tasks.h"
 #include "tl/expected.hpp"
 #include "wsi/error.h"
 #include "wsi/window.h"
@@ -44,6 +44,13 @@
 #endif
 #include <array>
 #include <cstdlib>
+#if STD_FS_IS_EXPERIMENTAL
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,7 +62,7 @@
 //
 /////
 
-namespace iris::Renderer {
+namespace iris {
 
 static spdlog::logger*
 GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
@@ -70,7 +77,7 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
   return sLogger.get();
 }
 
-} // namespace iris::Renderer
+} // namespace iris
 
 #ifndef NDEBUG
 
@@ -1127,7 +1134,7 @@ public:
     IRIS_LOG_ENTER();
 
     if (type == shaderc_include_type_relative) {
-      std::experimental::filesystem::path parent(requesting_source);
+      filesystem::path parent(requesting_source);
       parent = parent.parent_path();
       includePaths_.push_back(parent / requested_source);
     } else {
@@ -1136,7 +1143,7 @@ public:
 
     auto&& path = includePaths_.back();
     try {
-      if (!std::experimental::filesystem::exists(path)) path.clear();
+      if (!filesystem::exists(path)) path.clear();
     } catch (...) { path.clear(); }
 
     if (!path.empty()) {
@@ -1172,7 +1179,7 @@ public:
   } // ReleaesInclude
 
 private:
-  std::vector<std::experimental::filesystem::path> includePaths_{};
+  std::vector<filesystem::path> includePaths_{};
   std::vector<std::string> includeSources_{};
   std::vector<shaderc_include_result*> includeResults_{};
 }; // class ShaderIncluder
