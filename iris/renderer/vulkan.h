@@ -181,14 +181,32 @@ inline std::string to_string(VkPhysicalDeviceType type) noexcept {
 }
 
 //! \brief Convert a VkQueueFlags to a std::string
-inline std::string to_string(VkQueueFlags flags) noexcept {
-  if (!flags) return "{}";
+inline std::string to_string(VkQueueFlagBits flags) noexcept {
+  using namespace std::string_literals;
+  if (!flags) return "{}"s;
   std::string result;
   if (flags & VK_QUEUE_GRAPHICS_BIT) result += "Graphics | ";
   if (flags & VK_QUEUE_COMPUTE_BIT) result += "Compute | ";
   if (flags & VK_QUEUE_TRANSFER_BIT) result += "Transfer | ";
   if (flags & VK_QUEUE_SPARSE_BINDING_BIT) result += "SparseBinding | ";
   if (flags & VK_QUEUE_PROTECTED_BIT) result += "Protected | ";
+  return "{" + result.substr(0, result.size() - 3) + "}";
+}
+
+//! \brief Convert a VkDebugUtilsMessageTypeFlagsEXT to a std::string
+inline std::string to_string(VkDebugUtilsMessageTypeFlagBitsEXT types) noexcept {
+  using namespace std::string_literals;
+  if (!types) return "{}"s;
+  std::string result;
+  if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) {
+    result += "General | ";
+  }
+  if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
+    result += "Validation | ";
+  }
+  if (types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
+    result += "Performance | ";
+  }
   return "{" + result.substr(0, result.size() - 3) + "}";
 }
 

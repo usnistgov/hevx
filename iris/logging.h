@@ -25,10 +25,10 @@ static spdlog::logger* GetLogger() noexcept {
 
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER() \
-  GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
+  ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
 //! \brief Logs leave from a function.
 #define IRIS_LOG_LEAVE() \
-  GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
+  ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
 
 #else
 

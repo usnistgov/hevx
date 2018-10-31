@@ -13,6 +13,7 @@ set(protos_PROTOS
   protos/window.proto
 )
 
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/protos)
 foreach(filename ${protos_PROTOS})
   get_filename_component(dirname ${filename} DIRECTORY)
   get_filename_component(basename ${filename} NAME_WE)
@@ -82,6 +83,7 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
+  ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   renderer/io.cc
   renderer/renderer.cc
@@ -141,13 +143,13 @@ target_compile_options(iris
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
-add_executable(skel WIN32 skel.cc)
-target_link_libraries(skel iris absl::failure_signal_handler)
+add_executable(iris-viewer WIN32 iris-viewer.cc)
+target_link_libraries(iris-viewer iris absl::failure_signal_handler)
 if(WIN32)
   file(GLOB tbb_dlls ${TBB_BINARY_DIR}/*.dll)
   foreach(dll ${tbb_dlls})
-    add_custom_command(TARGET skel POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:skel>)
+    add_custom_command(TARGET iris-viewer POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:iris-viewer>)
   endforeach()
   unset(tbb_dlls)
 endif()

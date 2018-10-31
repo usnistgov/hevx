@@ -83,10 +83,10 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
-  GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
+  ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
 //! \brief Logs leave from a function.
 #define IRIS_LOG_LEAVE()                                                       \
-  GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
+  ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
 
 #else
 
@@ -103,10 +103,8 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 namespace iris::Renderer {
 
-bool sHasHardwareStereo{false};
-
 VkInstance sInstance{VK_NULL_HANDLE};
-VkDebugReportCallbackEXT sDebugReportCallback{VK_NULL_HANDLE};
+VkDebugUtilsMessengerEXT sDebugUtilsMessenger{VK_NULL_HANDLE};
 VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
@@ -148,29 +146,70 @@ Windows() noexcept {
   return sWindows;
 } // Windows
 
-/*! \brief Callback for Vulkan Debug Reporting.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.0-extensions/html/vkspec.html#debugging-debug-report-callbacks
- */
-static VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
-  VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT /*objectType*/,
-  std::uint64_t /*object*/, std::size_t /*location*/,
-  std::int32_t /*messageCode*/, char const* pLayerPrefix, char const* pMessage,
-  void* /*pUserData*/) {
-  if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT) {
-    GetLogger()->info("{}: {}", pLayerPrefix, pMessage);
-  } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-    GetLogger()->warn("{}: {}", pLayerPrefix, pMessage);
-  } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-    GetLogger()->error("{}: {}", pLayerPrefix, pMessage);
-  } else if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-    GetLogger()->error("{}: {}", pLayerPrefix, pMessage);
-  } else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-    GetLogger()->debug("{}: {}", pLayerPrefix, pMessage);
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+  VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
+  using namespace std::string_literals;
+
+  fmt::memory_buffer buf;
+  fmt::format_to(
+    buf, "{}: {}",
+    to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(messageTypes)),
+    pCallbackData->pMessage);
+  std::string const msg(buf.data(), buf.size());
+
+  buf.clear();
+  for (uint32_t i = 0; i < pCallbackData->objectCount; ++i) {
+    if (pCallbackData->pObjects[i].pObjectName) {
+      fmt::format_to(buf, "{}, ", pCallbackData->pObjects[i].pObjectName);
+    }
   }
+  std::string const objNames(buf.data(), buf.size());
+
+  switch(messageSeverity) {
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->trace(msg);
+    } else {
+      GetLogger()->trace("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->info(msg);
+    } else {
+      GetLogger()->info("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->warn(msg);
+    } else {
+      GetLogger()->warn("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->error(msg);
+    } else {
+      GetLogger()->error("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  default:
+    GetLogger()->error("Unhandled VkDebugUtilsMessengerSeverityFlagBitsEXT: {}",
+                       messageSeverity);
+    if (objNames.empty()) {
+      GetLogger()->error(msg);
+    } else {
+      GetLogger()->error("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  }
+
+  GetLogger()->flush();
   return VK_FALSE;
-} // DebugReportCallback
+} // DebugUtilsMessengerCallback
 
 /*! \brief Create a Vulkan Instance - \b MUST only be called from
  * \ref Initialize.
@@ -248,17 +287,18 @@ static std::error_code InitInstance(gsl::czstring<> appName,
     gsl::narrow_cast<std::uint32_t>(extensionNames.size());
   ci.ppEnabledExtensionNames = extensionNames.data();
 
-  VkDebugReportCallbackCreateInfoEXT drcci = {};
+  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
+  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
 
-  if (reportDebug) {
-    drcci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    drcci.flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-                  VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                  VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                  VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-    drcci.pfnCallback = &DebugReportCallback;
-    ci.pNext = &drcci;
-  }
+  if (reportDebug) ci.pNext = &dumci;
 
   result = vkCreateInstance(&ci, nullptr, &sInstance);
   if (result != VK_SUCCESS) {
@@ -269,42 +309,35 @@ static std::error_code InitInstance(gsl::czstring<> appName,
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
 
-  //GetLogger()->debug("Instance: {}", static_cast<void*>(sInstance));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // InitInstance
 
-/*! \brief Create the callback for Vulkan Debug Reporting - \b MUST only be
- * called from \ref Initialize.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.0-extensions/html/vkspec.html#debugging-debug-report-callbacks
- */
-static std::error_code CreateDebugReportCallback() noexcept {
+static std::error_code CreateDebugUtilsMessenger() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
-  VkDebugReportCallbackCreateInfoEXT drcci = {};
-  drcci.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-  drcci.flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
-                VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
-                VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
-  drcci.pfnCallback = &DebugReportCallback;
+  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
+  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
 
-  result = vkCreateDebugReportCallbackEXT(sInstance, &drcci, nullptr,
-                                          &sDebugReportCallback);
+  result = vkCreateDebugUtilsMessengerEXT(sInstance, &dumci, nullptr,
+                                          &sDebugUtilsMessenger);
   if (result != VK_SUCCESS) {
-    GetLogger()->warn("Cannot create debug report callback: {}",
+    GetLogger()->warn("Cannot create debug utils messenger: {}",
                       to_string(result));
   }
 
-  //GetLogger()->debug("Debug Report Callback: {}",
-  //                   static_cast<void*>(sDebugReportCallback));
   IRIS_LOG_LEAVE();
-
   return VulkanResult::kSuccess;
-} // CreateDebugReportCallback
+} // CreateDebugUtilsMessenger
 
 static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
                                int indentAmount = 0) noexcept {
@@ -552,8 +585,9 @@ static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
   GetLogger()->debug("{}  Queue Families:", indent);
   for (std::size_t i = 0; i < queueFamilyProperties.size(); ++i) {
     auto& qfProps = queueFamilyProperties[i].queueFamilyProperties;
-    GetLogger()->debug("{}    index: {} count: {} flags: {}", indent, i,
-                       qfProps.queueCount, to_string(qfProps.queueFlags));
+    GetLogger()->debug(
+      "{}    index: {} count: {} flags: {}", indent, i, qfProps.queueCount,
+      to_string(static_cast<VkQueueFlagBits>(qfProps.queueFlags)));
   }
 
   GetLogger()->debug("{}  Extensions:", indent);
@@ -891,10 +925,6 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
     return Error::kNoPhysicalDevice;
   }
 
-  //GetLogger()->debug("Physical Device: {} Graphics QueueFamilyIndex: {}",
-  //                   static_cast<void*>(sPhysicalDevice),
-  //                   sGraphicsQueueFamilyIndex);
-
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // ChoosePhysicalDevice
@@ -961,9 +991,6 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
                    &sGraphicsCommandQueue);
 
-  //GetLogger()->debug("Device: {}", static_cast<void*>(sDevice));
-  //GetLogger()->debug("Graphics Command Queue: {}",
-  //                   static_cast<void*>(sGraphicsCommandQueue));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateDevice
@@ -984,8 +1011,6 @@ static std::error_code CreateCommandPool() noexcept {
     return make_error_code(result);
   }
 
-  //GetLogger()->debug("Graphics Command Pool: {}",
-  //                   static_cast<void*>(sGraphicsCommandPool));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateCommandPool
@@ -1120,7 +1145,6 @@ static std::error_code CreateRenderPass() noexcept {
     return make_error_code(result);
   }
 
-  //GetLogger()->debug("RenderPass: {}", static_cast<void*>(sRenderPass));
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateRenderPass
@@ -1130,88 +1154,98 @@ public:
   shaderc_include_result* GetInclude(char const* requested_source,
       shaderc_include_type type,
       char const* requesting_source,
-      size_t include_depth[[maybe_unused]]) override {
-    IRIS_LOG_ENTER();
+      size_t include_depth[[maybe_unused]]) override;
 
-    if (type == shaderc_include_type_relative) {
-      filesystem::path parent(requesting_source);
-      parent = parent.parent_path();
-      includePaths_.push_back(parent / requested_source);
-    } else {
-      includePaths_.push_back(requested_source);
-    }
-
-    auto&& path = includePaths_.back();
-    try {
-      if (!filesystem::exists(path)) path.clear();
-    } catch (...) { path.clear(); }
-
-    if (!path.empty()) {
-      if (auto const& bytes = io::ReadFile(path)) {
-        includeSources_.push_back({bytes->data(), bytes->size()});
-      } else {
-        includeSources_.push_back("error reading file");
-      }
-    }
-
-    includeResults_.push_back(new shaderc_include_result);
-    auto&& result = includeResults_.back();
-
-    result->source_name_length = includePaths_.back().string().size();
-    result->source_name = includePaths_.back().string().c_str();
-    result->content_length = includeSources_.back().size();
-    result->content = includeSources_.back().data();
-    result->user_data = nullptr;
-
-    IRIS_LOG_LEAVE();
-    return result;
-  } // GetInclude
-
-  void ReleaseInclude(shaderc_include_result* data) override {
-    IRIS_LOG_ENTER();
-    for (std::size_t i = 0; i< includeResults_.size(); ++i) {
-      if (includeResults_[i] == data) {
-        includeResults_.erase(includeResults_.begin() + i);
-        break;
-      }
-    }
-    IRIS_LOG_LEAVE();
-  } // ReleaesInclude
+  void ReleaseInclude(shaderc_include_result* data) override;
 
 private:
-  std::vector<filesystem::path> includePaths_{};
-  std::vector<std::string> includeSources_{};
-  std::vector<shaderc_include_result*> includeResults_{};
+  struct Include {
+    filesystem::path path;
+    std::string source;
+    std::unique_ptr<shaderc_include_result> result;
+
+    Include(filesystem::path p, std::string s)
+      : path(std::move(p))
+      , source(std::move(s))
+      , result(new shaderc_include_result) {}
+  }; // struct Include
+
+  std::vector<Include> includes_{};
 }; // class ShaderIncluder
 
+shaderc_include_result* ShaderIncluder::GetInclude(
+  char const* requested_source, shaderc_include_type type,
+  char const* requesting_source, size_t include_depth[[maybe_unused]]) {
+  IRIS_LOG_ENTER();
+  filesystem::path path(requested_source);
+
+  if (type == shaderc_include_type_relative) {
+    filesystem::path parent(requesting_source);
+    parent = parent.parent_path();
+    path = parent / path;
+  }
+
+  try {
+    if (!filesystem::exists(path)) { path.clear(); }
+  } catch (...) { path.clear(); }
+
+  if (!path.empty()) {
+    if (auto s = io::ReadFile(path)) {
+      includes_.push_back(Include(path, std::string(s->data(), s->size())));
+    } else {
+      includes_.push_back(Include(path, s.error().message()));
+    }
+  } else {
+    includes_.push_back(Include(path, "file not found"));
+  }
+
+  Include& include = includes_.back();
+  shaderc_include_result* result = include.result.get();
+
+  result->source_name_length = include.path.string().size();
+  result->source_name = include.path.string().c_str();
+  result->content_length = include.source.size();
+  result->content = include.source.data();
+  result->user_data = nullptr;
+
+  IRIS_LOG_LEAVE();
+  return result;
+} // ShaderIncluder::GetInclude
+
+void ShaderIncluder::ReleaseInclude(shaderc_include_result* result) {
+  IRIS_LOG_ENTER();
+  for (std::size_t i = 0; i< includes_.size(); ++i) {
+    if (includes_[i].result.get() == result) {
+      includes_.erase(includes_.begin() + i);
+      break;
+    }
+  }
+  IRIS_LOG_LEAVE();
+} // ShaderIncluder::ReleaseInclude
+
 tl::expected<std::vector<std::uint32_t>, std::string>
-CompileShader(char const* fileName, shaderc_shader_kind kind) {
+CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
+              filesystem::path const& path, std::string const& entryPoint) {
   IRIS_LOG_ENTER();
   shaderc::Compiler compiler;
   shaderc::CompileOptions options;
-  options.SetOptimizationLevel(shaderc_optimization_level_size);
+  options.SetOptimizationLevel(shaderc_optimization_level_performance);
   options.SetIncluder(std::make_unique<ShaderIncluder>());
 
-  std::FILE* fh = std::fopen(fileName, "rb");
-  if (!fh) {
-    return tl::unexpected(
-      std::make_error_code(std::errc::no_such_file_or_directory).message());
-  }
+  auto const kind = [&shaderStage]() {
+    if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
+      return shaderc_vertex_shader;
+    } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
+      return shaderc_fragment_shader;
+    } else {
+      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
+      std::terminate();
+    }
+  }();
 
-  std::fseek(fh, 0L, SEEK_END);
-  std::vector<char> bytes(std::ftell(fh));
-  std::fseek(fh, 0L, SEEK_SET);
-  std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
-
-  if (std::ferror(fh) && !std::feof(fh)) {
-    std::fclose(fh);
-    return tl::unexpected(std::make_error_code(std::errc::io_error).message());
-  }
-
-  std::fclose(fh);
-
-  auto spv = compiler.CompileGlslToSpv(bytes.data(), bytes.size(), kind,
-      fileName, "main", options);
+  auto spv = compiler.CompileGlslToSpv(source.data(), source.size(), kind,
+                                       path.string().c_str(),
+                                       entryPoint.c_str(), options);
   if (spv.GetCompilationStatus() != shaderc_compilation_status_success) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(spv.GetErrorMessage());
@@ -1225,23 +1259,13 @@ CompileShader(char const* fileName, shaderc_shader_kind kind) {
 } // CompileShader
 
 tl::expected<VkShaderModule, std::error_code>
-CreateShader(gsl::czstring<> fileName,
-             VkShaderStageFlagBits shaderStage) noexcept {
+CreateShaderFromSource(std::string_view source,
+                       VkShaderStageFlagBits shaderStage,
+                       std::string const& entry = "main") noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
-  auto const kind = [&shaderStage]() {
-    if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
-      return shaderc_vertex_shader;
-    } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
-      return shaderc_fragment_shader;
-    } else {
-      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
-      std::terminate();
-    }
-  }();
-
-  if (auto code = CompileShader(fileName, kind)) {
+  if (auto code = CompileShader(source, shaderStage, "", entry)) {
     VkShaderModuleCreateInfo smci = {};
     smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     // codeSize is bytes, not count of words
@@ -1263,7 +1287,46 @@ CreateShader(gsl::czstring<> fileName,
     IRIS_LOG_LEAVE();
     return tl::unexpected(Error::kShaderCompileFailed);
   }
-} // CreateShader
+} // CreateShaderFromSource
+
+tl::expected<VkShaderModule, std::error_code>
+CreateShaderFromFile(filesystem::path const& path,
+                     VkShaderStageFlagBits shaderStage,
+                     std::string const& entry = "main") noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  std::vector<char> source;
+  if (auto s = io::ReadFile(path)) {
+    source = std::move(*s);
+  } else {
+    return tl::unexpected(s.error());
+  }
+
+  if (auto code = CompileShader({source.data(), source.size()}, shaderStage,
+                                path, entry)) {
+    VkShaderModuleCreateInfo smci = {};
+    smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    // codeSize is bytes, not count of words
+    smci.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
+    smci.pCode = code->data();
+
+    VkShaderModule module;
+    result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
+    if (result != VK_SUCCESS) {
+      GetLogger()->error("Cannot create shader module: {}", to_string(result));
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(make_error_code(result));
+    }
+
+    IRIS_LOG_LEAVE();
+    return module;
+  } else {
+    GetLogger()->error("Cannot compile shader: {}", code.error());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(Error::kShaderCompileFailed);
+  }
+} // CreateShaderFromFile
 
 std::error_code CreateBlankFSQPipeline() noexcept {
   IRIS_LOG_ENTER();
@@ -1287,19 +1350,21 @@ std::error_code CreateBlankFSQPipeline() noexcept {
      VK_SHADER_STAGE_FRAGMENT_BIT, VK_NULL_HANDLE, "main", nullptr},
   }};
 
-  std::string vsFN =
-    absl::StrCat(kIRISContentDirectory, "/assets/shaders/fsqEmpty.vert");
-  std::string fsFN =
-    absl::StrCat(kIRISContentDirectory, "/assets/shaders/fsqEmpty.frag");
+  auto const vsPath =
+    filesystem::path(kIRISContentDirectory) / "assets/shaders/fsqEmpty.vert";
+  auto const fsPath =
+    filesystem::path(kIRISContentDirectory) / "assets/shaders/fsqEmpty.frag";
 
-  if (auto module = CreateShader(vsFN.c_str(), VK_SHADER_STAGE_VERTEX_BIT)) {
+  if (auto module =
+        CreateShaderFromFile(vsPath.c_str(), VK_SHADER_STAGE_VERTEX_BIT)) {
     stages[0].module = *module;
   } else {
     IRIS_LOG_LEAVE();
     return module.error();
   }
 
-  if (auto module = CreateShader(fsFN.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (auto module =
+        CreateShaderFromFile(fsPath.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT)) {
     stages[1].module = *module;
   } else {
     IRIS_LOG_LEAVE();
@@ -1397,10 +1462,6 @@ std::error_code CreateBlankFSQPipeline() noexcept {
     return make_error_code(result);
   }
 
-  //GetLogger()->debug("Pipeline Layout: {}",
-  //                   static_cast<void*>(sBlankFSQPipelineLayout));
-  //GetLogger()->debug("Pipeline: {}", static_cast<void*>(sBlankFSQPipeline));
-
   vkDestroyShaderModule(sDevice, stages[0].module, nullptr);
   vkDestroyShaderModule(sDevice, stages[1].module, nullptr);
 
@@ -1450,7 +1511,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
-    instanceExtensionNames.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+    instanceExtensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
   // These are the features that we require from the physical device.
@@ -1489,7 +1550,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
-    CreateDebugReportCallback(); // ignore any returned error
+    CreateDebugUtilsMessenger(); // ignore any returned error
   }
 
   FindDeviceGroup();

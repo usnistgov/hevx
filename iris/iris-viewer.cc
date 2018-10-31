@@ -35,7 +35,7 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
   for (char* p = cmdLine; *p; ++p) {
     if (*p == ' ') {
       *p++ = '\0';
-      argv[argc++] = p;
+      if (*(p + 1)) argv[argc++] = p;
     }
   }
 
@@ -52,19 +52,19 @@ int main(int argc, char** argv) {
   auto const& files = args.positional();
 
   auto file_sink =
-    std::make_shared<spdlog::sinks::basic_file_sink_mt>("skel.log", true);
+    std::make_shared<spdlog::sinks::basic_file_sink_mt>("iris-viewer.log", true);
   file_sink->set_level(spdlog::level::trace);
 
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
 
-  spdlog::logger logger("skel", {console_sink, file_sink});
+  spdlog::logger logger("iris-viewer", {console_sink, file_sink});
   logger.set_level(spdlog::level::trace);
 
   logger.info("initialized");
 
   if (auto error = iris::Renderer::Initialize(
-        "skel",
+        "iris-viewer",
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers,
         0, {console_sink, file_sink})) {
