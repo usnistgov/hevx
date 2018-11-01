@@ -9,6 +9,7 @@
 #include "absl/strings/str_cat.h"
 #include "config.h"
 #include "error.h"
+#include "imgui.h"
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
@@ -118,14 +119,16 @@ tbb::concurrent_queue<TaskResult> sTasksResultsQueue;
 // These are the desired properties of all surfaces for the renderer.
 VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
                                        VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-VkFormat sSurfaceDepthFormat{VK_FORMAT_D32_SFLOAT};
+VkFormat sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
 VkSampleCountFlagBits sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 VkPresentModeKHR sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
-std::uint32_t sNumRenderPassAttachments{3};
+std::uint32_t sNumRenderPassAttachments{4};
 std::uint32_t sColorTargetAttachmentIndex{0};
-std::uint32_t sDepthTargetAttachmentIndex{1};
-std::uint32_t sResolveTargetAttachmentIndex{2};
+std::uint32_t sColorResolveAttachmentIndex{1};
+std::uint32_t sDepthStencilTargetAttachmentIndex{2};
+std::uint32_t sDepthStencilResolveAttachmentIndex{3};
+
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 absl::FixedArray<VkCommandBuffer> sCommandBuffers{2};
 std::uint32_t sCommandBufferIndex{0};
@@ -140,6 +143,51 @@ static bool sInitialized{false};
 static bool sRunning{false};
 
 VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
+
+std::string const sBlankFSQVertexShaderSource = R"(
+#version 450
+layout(location = 0) out vec2 fragCoord;
+void main() {
+  fragCoord = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
+    gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
+})";
+
+std::string const sBlankFSQFragmentShaderSource = R"(
+#version 450
+layout(location = 0) in vec2 fragCoord;
+layout(location = 0) out vec4 fragColor;
+void main() {
+})";
+
+std::string const sUIVertexShaderSource = R"(
+#version 450 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+layout(location = 2) in vec4 aColor;
+layout(push_constant) uniform uPushConstant {
+  vec2 uScale;
+  vec2 uTranslate;
+};
+layout(location = 0) out vec4 Color;
+layout(location = 1) out vec2 UV;
+out gl_PerVertex {
+  vec4 gl_Position;
+};
+void main() {
+  Color = aColor;
+  UV = aUV;
+  gl_Position = vec4(aPos * uScale + uTranslate, 0.f, 1.f);
+})";
+
+std::string const sUIFragmentShaderSource = R"(
+#version 450 core
+layout(set = 0, binding = 0) uniform sampler2D sTexture;
+layout(location = 0) in vec4 Color;
+layout(location = 1) in vec2 UV;
+layout(location = 0) out vec4 fColor;
+void main() {
+  fColor = Color * texture(sTexture, UV.st);
+})";
 
 struct Pipeline {
   VkPipelineLayout layout{VK_NULL_HANDLE};
@@ -1150,7 +1198,8 @@ static std::error_code CreateRenderPass() noexcept {
   // attachments that will match up with framebuffers that are rendered into.
   //
   // The resolve (2) attachment is then used for presenting the final image (1).
-  std::array<VkAttachmentDescription, 3> attachments;
+  absl::FixedArray<VkAttachmentDescription> attachments(
+    sNumRenderPassAttachments);
 
   // The multi-sampled color attachment needs to be cleared on load (loadOp).
   // We don't care what the input layout is (initialLayout) but the final
@@ -1160,31 +1209,16 @@ static std::error_code CreateRenderPass() noexcept {
     sSurfaceColorFormat.format,              // format
     sSurfaceSampleCount,                     // samples
     VK_ATTACHMENT_LOAD_OP_CLEAR,             // loadOp (color and depth)
-    VK_ATTACHMENT_STORE_OP_STORE,            // storeOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // storeOp (color and depth)
     VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
     VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
     VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
   };
 
-  // The multi-sampled depth attachment needs to be cleared on load (loadOp).
-  // We don't care what the input layout is (initialLayout) but the final
-  // layout must be DEPTH_STENCIL_ATTACHMENT_OPTIMAL to allow for resolving.
-  attachments[sDepthTargetAttachmentIndex] = VkAttachmentDescription{
-    0,                                // flags
-    sSurfaceDepthFormat,              // format
-    sSurfaceSampleCount,              // samples
-    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
-    VK_ATTACHMENT_STORE_OP_STORE,     // storeOp (color and depth)
-    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
-    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
-    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
-    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
-  };
-
   // The resolve color attachment has a single sample and stores the resolved
   // color. It will be transitioned to PRESENT_SRC_KHR for presentation.
-  attachments[sResolveTargetAttachmentIndex] = VkAttachmentDescription{
+  attachments[sColorResolveAttachmentIndex] = VkAttachmentDescription{
     0,                                // flags
     sSurfaceColorFormat.format,       // format
     VK_SAMPLE_COUNT_1_BIT,            // samples
@@ -1196,13 +1230,44 @@ static std::error_code CreateRenderPass() noexcept {
     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR   // finalLayout
   };
 
+  // The multi-sampled depth attachment needs to be cleared on load (loadOp).
+  // We don't care what the input layout is (initialLayout) but the final
+  // layout must be DEPTH_STENCIL_ATTACHMENT_OPTIMAL to allow for resolving.
+  attachments[sDepthStencilTargetAttachmentIndex] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceDepthStencilFormat,       // format
+    sSurfaceSampleCount,              // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  // The resolve depth attachment needs has a single sample and stores the
+  // resolve depth and stencil.
+  // We don't care what the input layout is (initialLayout) but the final
+  // layout must be COLOR_ATTACHMENT_OPTIMAL to allow for use as a texture.
+  attachments[sDepthStencilResolveAttachmentIndex] = VkAttachmentDescription{
+    0,                                       // flags
+    sSurfaceDepthStencilFormat,              // format
+    VK_SAMPLE_COUNT_1_BIT,                   // samples
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,            // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_STORE,            // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
   VkAttachmentReference color{sColorTargetAttachmentIndex,
                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-  VkAttachmentReference depthStencil{
-    sDepthTargetAttachmentIndex,
-    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-  VkAttachmentReference resolve{sResolveTargetAttachmentIndex,
+  VkAttachmentReference resolve{sColorResolveAttachmentIndex,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthStencil{
+    sDepthStencilTargetAttachmentIndex,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
   VkSubpassDescription subpass = {
     0,                               // flags
@@ -1217,16 +1282,27 @@ static std::error_code CreateRenderPass() noexcept {
     nullptr                          // pPreserveAttachments
   };
 
-  VkSubpassDependency dependency{
-    0,                                             // srcSubpass
-    VK_SUBPASS_EXTERNAL,                           // dstSubpass
-    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
-    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
-    0,                                             // srcAccessMask
-    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
-    VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
-  };
+  std::vector<VkSubpassDependency> dependencies{
+    {{
+       VK_SUBPASS_EXTERNAL,                           // srcSubpass
+       0,                                             // dstSubpass
+       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // srcStageMask
+       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
+       VK_ACCESS_MEMORY_READ_BIT,                     // srcAccessMask
+       VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
+       VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+     },
+     {
+       0,                                             // srcSubpass
+       VK_SUBPASS_EXTERNAL,                           // dstSubpass
+       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
+       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // dstStageMask
+       VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // srcAccessMask
+       VK_ACCESS_MEMORY_READ_BIT,              // dstAccessMask
+       VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+     }}};
 
   VkRenderPassCreateInfo rpci = {};
   rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1234,8 +1310,8 @@ static std::error_code CreateRenderPass() noexcept {
   rpci.pAttachments = attachments.data();
   rpci.subpassCount = 1;
   rpci.pSubpasses = &subpass;
-  rpci.dependencyCount = 1;
-  rpci.pDependencies = &dependency;
+  rpci.dependencyCount = gsl::narrow_cast<std::uint32_t>(dependencies.size());
+  rpci.pDependencies = dependencies.data();
 
   result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
   if (result != VK_SUCCESS) {
@@ -1258,7 +1334,8 @@ static std::error_code AllocateCommandBuffers() noexcept {
   ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   ai.commandPool = sGraphicsCommandPool;
   ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  ai.commandBufferCount = static_cast<std::uint32_t>(sCommandBuffers.size());
+  ai.commandBufferCount =
+    gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size());
 
   result = vkAllocateCommandBuffers(sDevice, &ai, sCommandBuffers.data());
   if (result != VK_SUCCESS) {
@@ -1477,21 +1554,16 @@ std::error_code CreateBlankFSQPipeline() noexcept {
      VK_SHADER_STAGE_FRAGMENT_BIT, VK_NULL_HANDLE, "main", nullptr},
   }};
 
-  auto const vsPath =
-    filesystem::path(kIRISContentDirectory) / "assets/shaders/fsqEmpty.vert";
-  auto const fsPath =
-    filesystem::path(kIRISContentDirectory) / "assets/shaders/fsqEmpty.frag";
-
-  if (auto module =
-        CreateShaderFromFile(vsPath.c_str(), VK_SHADER_STAGE_VERTEX_BIT)) {
+  if (auto module = CreateShaderFromSource(sBlankFSQVertexShaderSource,
+                                           VK_SHADER_STAGE_VERTEX_BIT)) {
     stages[0].module = *module;
   } else {
     IRIS_LOG_LEAVE();
     return module.error();
   }
 
-  if (auto module =
-        CreateShaderFromFile(fsPath.c_str(), VK_SHADER_STAGE_FRAGMENT_BIT)) {
+  if (auto module = CreateShaderFromSource(sBlankFSQFragmentShaderSource,
+                                           VK_SHADER_STAGE_FRAGMENT_BIT)) {
     stages[1].module = *module;
   } else {
     IRIS_LOG_LEAVE();
@@ -1766,7 +1838,7 @@ void iris::Renderer::Shutdown() noexcept {
   Windows().clear();
 
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
-                       static_cast<std::uint32_t>(sCommandBuffers.size()),
+                       gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size()),
                        sCommandBuffers.data());
 
   if (sRenderPass != VK_NULL_HANDLE) {
@@ -2079,31 +2151,119 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   return Error::kNone;
 } // iris::Renderer::Control
 
+tl::expected<std::vector<VkCommandBuffer>, std::error_code>
+iris::Renderer::AllocateCommandBuffers(std::uint32_t count,
+                                       VkCommandBufferLevel level) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sGraphicsCommandPool;
+  commandBufferAI.level = level;
+  commandBufferAI.commandBufferCount = count;
+
+  std::vector<VkCommandBuffer> commandBuffers(count);
+  result =
+    vkAllocateCommandBuffers(sDevice, &commandBufferAI, commandBuffers.data());
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Unable to allocate command buffers: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(make_error_code(result));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffers;
+} // iris::Renderer::AllocateCommandBuffers
+
+void iris::Renderer::FreeCommandBuffers(
+  std::vector<VkCommandBuffer>& commandBuffers) noexcept {
+  IRIS_LOG_ENTER();
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
+                       gsl::narrow_cast<std::uint32_t>(commandBuffers.size()),
+                       commandBuffers.data());
+  commandBuffers.clear();
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::FreeCommandBuffers
+
+tl::expected<VkCommandBuffer, std::error_code>
+iris::Renderer::BeginOneTimeSubmit() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+  VkCommandBuffer commandBuffer;
+
+  if (auto cbs = AllocateCommandBuffers(1)) {
+    commandBuffer = (*cbs)[0];
+  } else {
+    return tl::unexpected(cbs.error());
+  }
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+  if (result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    GetLogger()->error("Cannot begin one time submit command buffer: {}",
+                       to_string(result));
+    return tl::unexpected(make_error_code(result));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffer;
+} // iris::Renderer::BeginOneTimeSubmit
+
+std::error_code
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkSubmitInfo submit = {};
+  submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit.commandBufferCount = 1;
+  submit.pCommandBuffers = &commandBuffer;
+
+  result = vkEndCommandBuffer(commandBuffer);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot end one time submit command buffer: {}",
+                       to_string(result));
+    goto fail;
+  }
+
+  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmit);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot submit command buffer: {}", to_string(result));
+    goto fail;
+  }
+
+  result = vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot wait on one time submit fence: {}",
+                       to_string(result));
+    goto fail;
+  }
+
+  result = vkResetFences(sDevice, 1, &sOneTimeSubmit);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot reset one time submit fence: {}",
+                       to_string(result));
+    goto fail;
+  }
+
+  result = VK_SUCCESS;
+fail:
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+  IRIS_LOG_LEAVE();
+  return make_error_code(result);
+} // iris::Renderer::EndOneTimeSubmit
+
 std::error_code
 iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
                                 VkImageLayout newLayout,
                                 std::uint32_t mipLevels) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkCommandBufferAllocateInfo ai = {};
-  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sGraphicsCommandPool;
-  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  ai.commandBufferCount = 1;
-
-  VkCommandBuffer cb;
-  result = vkAllocateCommandBuffers(sDevice, &ai, &cb);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error allocating command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  VkCommandBufferBeginInfo bi = {};
-  bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  bi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
   VkImageMemoryBarrier barrier = {};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -2128,7 +2288,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
   VkPipelineStageFlagBits dstStage;
 
   if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -2158,48 +2318,19 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
     std::terminate();
   }
 
-  result = vkBeginCommandBuffer(cb, &bi);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error beginning command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
+  VkCommandBuffer commandBuffer;
+  if (auto cb = BeginOneTimeSubmit()) {
+    commandBuffer = *cb;
+  } else {
+    return cb.error();
   }
 
-  vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1,
-                       &barrier);
+  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
 
-  result = vkEndCommandBuffer(cb);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error ending command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
+  if (auto error = EndOneTimeSubmit(commandBuffer)) {
+    return error;
   }
-
-  VkSubmitInfo si = {};
-  si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  si.commandBufferCount = 1;
-  si.pCommandBuffers = &cb;
-
-  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sOneTimeSubmit);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error submitting command buffer for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  result = vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error waiting on fence for transition: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  vkResetFences(sDevice, 1, &sOneTimeSubmit);
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
 
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;

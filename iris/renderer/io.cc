@@ -35,50 +35,63 @@ public:
 private:
   filesystem::path path_;
 
-  TaskResult load() noexcept;
-  tbb::task* execute() override;
+  tbb::task* execute() override {
+    IRIS_LOG_ENTER();
+    sTasksResultsQueue.push(Load());
+    IRIS_LOG_LEAVE();
+    return nullptr;
+  }
+
+  TaskResult Load() noexcept;
+  TaskResult LoadJSON() noexcept;
+  TaskResult LoadGLTF() noexcept;
 }; // class LoadFileTask
 
-TaskResult LoadFileTask::load() noexcept {
+TaskResult LoadFileTask::Load() noexcept {
   IRIS_LOG_ENTER();
 
   GetLogger()->debug("Loading {}", path_.string());
   auto const& ext = path_.extension();
 
   if (ext.compare(".json") == 0) {
-    std::string json;
-    if (auto const& bytes = ReadFile(path_)) {
-      json = std::string(bytes->data(), bytes->size());
-    } else {
-      return bytes.error();
-    }
-
-    iris::Control::Control controlMessage;
-    if (auto status =
-          google::protobuf::util::JsonStringToMessage(json, &controlMessage);
-        !status.ok()) {
-      GetLogger()->error("Cannot parse {}: {}", path_.string(),
-                         status.ToString());
-      IRIS_LOG_LEAVE();
-      return std::make_error_code(std::errc::io_error);
-    } else {
-      IRIS_LOG_LEAVE();
-      return controlMessage;
-    }
+    return LoadJSON();
+  } else if (ext.compare(".gltf") == 0) {
+    return LoadGLTF();
   } else {
     GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
                        path_.string());
     IRIS_LOG_LEAVE();
     return make_error_code(Error::kFileNotSupported);
   }
-} // LoadFileTask::load
+} // LoadFileTask::Load
 
-tbb::task* LoadFileTask::execute() {
+TaskResult LoadFileTask::LoadJSON() noexcept {
   IRIS_LOG_ENTER();
-  sTasksResultsQueue.push(load());
+  std::string json;
+  if (auto const& bytes = ReadFile(path_)) {
+    json = std::string(bytes->data(), bytes->size());
+  } else {
+    return bytes.error();
+  }
+
+  iris::Control::Control cMsg;
+  if (auto status = google::protobuf::util::JsonStringToMessage(json, &cMsg);
+      status.ok()) {
+    IRIS_LOG_LEAVE();
+    return cMsg;
+  } else {
+    GetLogger()->error("Cannot parse {}: {}", path_.string(),
+                       status.ToString());
+    IRIS_LOG_LEAVE();
+    return std::make_error_code(std::errc::io_error);
+  }
+} // LoadFileTask::LoadJSON
+
+TaskResult LoadFileTask::LoadGLTF() noexcept {
+  IRIS_LOG_ENTER();
   IRIS_LOG_LEAVE();
-  return nullptr;
-} // LoadFileTask::execute
+  return make_error_code(Error::kFileNotSupported);
+} // LoadFileTask::LoadGLTF
 
 } // namespace iris::Renderer::io
 

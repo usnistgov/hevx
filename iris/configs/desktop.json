@@ -7,8 +7,8 @@
         "stereo": false,
         "x": 320,
         "y": 320,
-        "width": 720,
-        "height": 720,
+        "width": 1200,
+        "height": 1200,
         "decoration": true,
         "background": {
           "r": 0.25,

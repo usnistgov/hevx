@@ -29,13 +29,17 @@ struct Surface {
   std::vector<VkImage> colorImages{};
   std::vector<VkImageView> colorImageViews{};
 
+  VkImage depthStencilImage{VK_NULL_HANDLE};
+  VmaAllocation depthStencilImageAllocation{VK_NULL_HANDLE};
+  VkImageView depthStencilImageView{VK_NULL_HANDLE};
+
   VkImage colorTarget{VK_NULL_HANDLE};
   VmaAllocation colorTargetAllocation{VK_NULL_HANDLE};
   VkImageView colorTargetView{VK_NULL_HANDLE};
 
-  VkImage depthTarget{VK_NULL_HANDLE};
-  VmaAllocation depthTargetAllocation{VK_NULL_HANDLE};
-  VkImageView depthTargetView{VK_NULL_HANDLE};
+  VkImage depthStencilTarget{VK_NULL_HANDLE};
+  VmaAllocation depthStencilTargetAllocation{VK_NULL_HANDLE};
+  VkImageView depthStencilTargetView{VK_NULL_HANDLE};
 
   std::vector<VkFramebuffer> framebuffers{};
 
