@@ -1,4 +1,5 @@
 #include "renderer/window.h"
+#include "renderer/impl.h"
 #include "absl/strings/str_split.h"
 #include "error.h"
 #include "logging.h"

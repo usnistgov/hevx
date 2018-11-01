@@ -62,6 +62,15 @@ std::error_code TransitionImage(VkImage image, VkImageLayout oldLayout,
                                 VkImageLayout newLayout,
                                 std::uint32_t mipLevels = 1) noexcept;
 
+template <class T>
+void NameObject(VkObjectType objectType, T objectHandle,
+                gsl::czstring<> objectName) noexcept {
+  VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+    VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
+    reinterpret_cast<std::uint64_t>(objectHandle), objectName};
+  vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
+} // NameObject
+
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_IMPL_H_

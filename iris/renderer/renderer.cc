@@ -237,15 +237,6 @@ Windows() noexcept {
   return sWindows;
 } // Windows
 
-template <class T>
-void NameObject(VkObjectType objectType, T objectHandle,
-                gsl::czstring<> objectName) noexcept {
-  VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
-    VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
-    reinterpret_cast<std::uint64_t>(objectHandle), objectName};
-  vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
-} // NameObject
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT messageTypes,

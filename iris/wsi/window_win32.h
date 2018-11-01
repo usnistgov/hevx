@@ -60,6 +60,16 @@ public:
     return {pos.x, pos.y};
   }
 
+  /*! \brief Get the current title of the window.
+  *   \return the current title of the window.
+  */
+  std::string Title() const noexcept {
+    std::array<char, 128> buffer;
+    int length = ::GetWindowText(handle_.hWnd, buffer.data(), buffer.size());
+    buffer[length + 1] = '\0';
+    return std::string(buffer.data(), length);
+  }
+
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
    */

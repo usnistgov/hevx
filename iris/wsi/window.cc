@@ -49,6 +49,10 @@ glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
 }
 
+std::string iris::wsi::Window::Title() const noexcept {
+  return pImpl_->Title();
+}
+
 void iris::wsi::Window::Retitle(gsl::czstring<> title) noexcept {
   pImpl_->Retitle(title);
 }

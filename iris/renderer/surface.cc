@@ -244,6 +244,7 @@ std::error_code
 iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
+
   GetLogger()->debug("Surface resizing to ({}x{})", newSize[0], newSize[1]);
 
   VkSurfaceCapabilities2KHR surfaceCapabilities = {};
