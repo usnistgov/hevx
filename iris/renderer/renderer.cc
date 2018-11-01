@@ -2259,6 +2259,85 @@ fail:
   return make_error_code(result);
 } // iris::Renderer::EndOneTimeSubmit
 
+tl::expected<VkImageView, std::error_code>
+iris::Renderer::CreateImageView(VkImage image, VkFormat format,
+                                VkImageViewType viewType,
+                                VkImageSubresourceRange imageSubresourceRange,
+                                VkComponentMapping componentMapping) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkImageViewCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  ci.image = image;
+  ci.viewType = viewType;
+  ci.format = format;
+  ci.components = componentMapping;
+  ci.subresourceRange = imageSubresourceRange;
+
+  VkImageView imageView;
+  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create image view: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(make_error_code(result));
+  }
+
+  IRIS_LOG_LEAVE();
+  return imageView;
+} // iris::Renderer::CreateImageAndView
+
+tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::error_code>
+iris::Renderer::CreateImageAndView(
+  VkImageType imageType, VkFormat format, VkExtent3D extent,
+  std::uint32_t mipLevels, std::uint32_t arrayLayers,
+  VkSampleCountFlagBits samples, VkImageUsageFlags usage,
+  VmaMemoryUsage memoryUsage, VkImageViewType viewType,
+  VkImageSubresourceRange imageSubresourceRange,
+  VkComponentMapping componentMapping) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkImageCreateInfo ici = {};
+  ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  ici.imageType = imageType;
+  ici.format = format;
+  ici.extent = extent;
+  ici.mipLevels = mipLevels;
+  ici.arrayLayers = arrayLayers;
+  ici.samples = samples;
+  ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+  ici.usage = usage;
+  ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VmaAllocationCreateInfo aci = {};
+  aci.usage = memoryUsage;
+
+  VkImage image;
+  VmaAllocation allocation;
+
+  result = vmaCreateImage(sAllocator, &ici, &aci, &image, &allocation, nullptr);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error creating or allocating image: {}",
+                        to_string(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(make_error_code(result));
+  }
+
+  VkImageView view;
+  if (auto v = CreateImageView(image, format, viewType, imageSubresourceRange,
+                               componentMapping)) {
+    view = *v;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(v.error());
+  }
+
+  IRIS_LOG_LEAVE();
+  return std::make_tuple(image, allocation, view);
+} // iris::Renderer::CreateImageAndView
+
 std::error_code
 iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
                                 VkImageLayout newLayout,

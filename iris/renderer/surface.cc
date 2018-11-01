@@ -211,81 +211,6 @@ CreateSwapchain(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR caps,
   return newSwapchain;
 } // CreateSwapchain
 
-static tl::expected<VkImageView, std::error_code>
-CreateImageView(VkImage image, VkFormat format,
-                VkImageSubresourceRange isr) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkImageViewCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  ci.image = image;
-  ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  ci.format = format;
-  ci.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-                   VK_COMPONENT_SWIZZLE_IDENTITY,
-                   VK_COMPONENT_SWIZZLE_IDENTITY};
-  ci.subresourceRange = isr;
-
-  VkImageView imageView;
-  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create image view: {}", to_string(result));
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
-  }
-
-  IRIS_LOG_LEAVE();
-  return imageView;
-} // CreateImageView
-
-static tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>,
-                    std::error_code>
-CreateImageAndView(VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
-                   VkSampleCountFlagBits samples,
-                   VkImageSubresourceRange isr) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkImageCreateInfo ici = {};
-  ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  ici.imageType = VK_IMAGE_TYPE_2D;
-  ici.format = format;
-  ici.extent = extent;
-  ici.mipLevels = 1;
-  ici.arrayLayers = 1;
-  ici.samples = samples;
-  ici.tiling = VK_IMAGE_TILING_OPTIMAL;
-  ici.usage = usage;
-  ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-  VmaAllocationCreateInfo aci = {};
-  aci.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-  VkImage image;
-  VmaAllocation allocation;
-
-  result = vmaCreateImage(sAllocator, &ici, &aci, &image, &allocation, nullptr);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error creating or allocating image: {}",
-                        to_string(result));
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
-  }
-
-  VkImageView view;
-  if (auto v = CreateImageView(image, format, isr)) {
-    view = *v;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(v.error());
-  }
-
-  IRIS_LOG_LEAVE();
-  return std::make_tuple(image, allocation, view);
-} // CreateImageAndView
-
 static tl::expected<VkFramebuffer, std::error_code>
 CreateFramebuffer(gsl::span<VkImageView> attachments,
                   VkExtent2D extent) noexcept {
@@ -391,9 +316,9 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
 
   std::vector<VkImageView> newColorImageViews(numSwapchainImages);
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
-    if (auto view =
-          CreateImageView(newColorImages[i], sSurfaceColorFormat.format,
-                          {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    if (auto view = CreateImageView(
+          newColorImages[i], sSurfaceColorFormat.format, VK_IMAGE_VIEW_TYPE_2D,
+          {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
       newColorImageViews[i] = *view;
     } else {
       vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
@@ -419,9 +344,11 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
 
   std::error_code error;
 
-  if (auto dsi = CreateImageAndView(sSurfaceDepthStencilFormat, imageExtent,
-    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_SAMPLE_COUNT_1_BIT,
-    {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+  if (auto dsi = CreateImageAndView(
+        VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
+        VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
+        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     std::tie(newDepthStencilImage, newDepthStencilImageAllocation,
              newDepthStencilImageView) = *dsi;
   } else {
@@ -429,11 +356,13 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
     goto fail;
   }
 
-  if (auto ctv = CreateImageAndView(sSurfaceColorFormat.format, imageExtent,
-                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                      VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-                                    sSurfaceSampleCount,
-                                    {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+  if (auto ctv =
+        CreateImageAndView(VK_IMAGE_TYPE_2D, sSurfaceColorFormat.format,
+                           imageExtent, 1, 1, sSurfaceSampleCount,
+                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                           VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
+                           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     std::tie(newColorTarget, newColorTargetAllocation, newColorTargetView) =
       *ctv;
   } else {
@@ -449,8 +378,9 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
   }
 
   if (auto dstv = CreateImageAndView(
-        sSurfaceDepthStencilFormat, imageExtent,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, sSurfaceSampleCount,
+        VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
+        sSurfaceSampleCount, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
         {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     std::tie(newDepthStencilTarget, newDepthStencilTargetAllocation,
              newDepthStencilTargetView) = *dstv;
