@@ -98,7 +98,7 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 /////
 //
 // Here are the definitions from impl.h
-// 
+//
 /////
 
 namespace iris::Renderer {
@@ -110,7 +110,8 @@ std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
 VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
 VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
-VkFence sGraphicsCommandFence{VK_NULL_HANDLE};
+VkFence sOneTimeSubmit{VK_NULL_HANDLE};
+VkFence sFrameComplete{VK_NULL_HANDLE};
 VmaAllocator sAllocator;
 tbb::concurrent_queue<TaskResult> sTasksResultsQueue;
 
@@ -126,25 +127,76 @@ std::uint32_t sColorTargetAttachmentIndex{0};
 std::uint32_t sDepthTargetAttachmentIndex{1};
 std::uint32_t sResolveTargetAttachmentIndex{2};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
-VkPipelineLayout sBlankFSQPipelineLayout{VK_NULL_HANDLE};
-VkPipeline sBlankFSQPipeline{VK_NULL_HANDLE};
+absl::FixedArray<VkCommandBuffer> sCommandBuffers{2};
+std::uint32_t sCommandBufferIndex{0};
 
 /////
 //
 // Additional static private variables
-// 
+//
 /////
 
 static bool sInitialized{false};
 static bool sRunning{false};
 
-VkSemaphore sFrameComplete{VK_NULL_HANDLE};
+VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
+
+struct Pipeline {
+  VkPipelineLayout layout{VK_NULL_HANDLE};
+  VkPipeline pipeline{VK_NULL_HANDLE};
+
+  Pipeline() noexcept = default;
+  Pipeline(Pipeline const&) = delete;
+  Pipeline(Pipeline&&) noexcept;
+  Pipeline& operator=(Pipeline const&) = delete;
+  Pipeline& operator=(Pipeline&&) noexcept;
+  ~Pipeline() noexcept;
+}; // struct PipelineAndLayout
+
+Pipeline::Pipeline(Pipeline&& other) noexcept
+  : layout(other.layout)
+  , pipeline(other.pipeline) {
+  other.layout = VK_NULL_HANDLE;
+  other.pipeline = VK_NULL_HANDLE;
+} // Pipeline::Pipeline
+
+Pipeline& Pipeline::operator=(Pipeline&& rhs) noexcept {
+  if (this == &rhs) return *this;
+  layout = rhs.layout;
+  pipeline = rhs.pipeline;
+  rhs.layout = VK_NULL_HANDLE;
+  rhs.pipeline = VK_NULL_HANDLE;
+  return *this;
+} // Pipeline::operator=
+
+Pipeline::~Pipeline() noexcept {
+  if (pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(sDevice, pipeline, nullptr);
+  }
+  if (layout != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(sDevice, layout, nullptr);
+  }
+} // Pipeline::~Pipeline
+
+static absl::flat_hash_map<std::string, Pipeline>& Pipelines() noexcept {
+  static absl::flat_hash_map<std::string, Pipeline> sPipelines;
+  return sPipelines;
+} // Pipelines
 
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
 Windows() noexcept {
   static absl::flat_hash_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
 } // Windows
+
+template <class T>
+void NameObject(VkObjectType objectType, T objectHandle,
+                gsl::czstring<> objectName) noexcept {
+  VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+    VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
+    reinterpret_cast<std::uint64_t>(objectHandle), objectName};
+  vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
+} // NameObject
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -165,9 +217,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
       fmt::format_to(buf, "{}, ", pCallbackData->pObjects[i].pObjectName);
     }
   }
-  std::string const objNames(buf.data(), buf.size());
+  std::string const objNames(buf.data(), buf.size() == 0 ? 0 : buf.size() - 2);
 
-  switch(messageSeverity) {
+  switch (messageSeverity) {
   case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
     if (objNames.empty()) {
       GetLogger()->trace(msg);
@@ -783,8 +835,9 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 
   // Check for any required features
   if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
-    GetLogger()->debug("Requested feature not supported by device");// {}",
-                       //static_cast<void*>(device));
+    GetLogger()->debug(
+      "Requested feature not supported by device"); // {}",
+                                                    // static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -801,8 +854,9 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   }
 
   if (graphicsQueueFamilyIndex == UINT32_MAX) {
-    GetLogger()->debug("No graphics queue supported by device");// {}",
-                       //static_cast<void*>(device));
+    GetLogger()->debug(
+      "No graphics queue supported by device"); // {}",
+                                                // static_cast<void*>(device));
     return tl::unexpected(VulkanResult::kErrorFeatureNotPresent);
   }
 
@@ -818,8 +872,9 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
     }
 
     if (!found) {
-      GetLogger()->debug("Extension {} not supported by device", required);// {}", required,
-                         //static_cast<void*>(device));
+      GetLogger()->debug("Extension {} not supported by device",
+                         required); // {}", required,
+                                    // static_cast<void*>(device));
       return tl::unexpected(VulkanResult::kErrorExtensionNotPresent);
     }
   }
@@ -1001,7 +1056,6 @@ static std::error_code CreateCommandPool() noexcept {
 
   VkCommandPoolCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   ci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
 
   result = vkCreateCommandPool(sDevice, &ci, nullptr, &sGraphicsCommandPool);
@@ -1011,9 +1065,54 @@ static std::error_code CreateCommandPool() noexcept {
     return make_error_code(result);
   }
 
+  NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sGraphicsCommandPool,
+             "sGraphicsCommandPool");
+
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateCommandPool
+
+static std::error_code CreateFencesAndSemaphores() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkFenceCreateInfo fci = {};
+  fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+  result = vkCreateFence(sDevice, &fci, nullptr, &sOneTimeSubmit);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create fence: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  result = vkCreateFence(sDevice, &fci, nullptr, &sFrameComplete);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create fence: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  VkSemaphoreCreateInfo sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  result = vkCreateSemaphore(sDevice, &sci, nullptr, &sImagesReadyForPresent);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot create semaphore: {}", to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  NameObject(VK_OBJECT_TYPE_FENCE, sOneTimeSubmit, "sOneTimeSubmit");
+  NameObject(VK_OBJECT_TYPE_FENCE, sFrameComplete, "sFrameComplete");
+  NameObject(VK_OBJECT_TYPE_SEMAPHORE, sImagesReadyForPresent,
+             "sImagesReadyForPresent");
+
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // CreateFencesAndSemaphores
 
 static std::error_code CreateAllocator() noexcept {
   IRIS_LOG_ENTER();
@@ -1145,16 +1244,44 @@ static std::error_code CreateRenderPass() noexcept {
     return make_error_code(result);
   }
 
+  NameObject(VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
+
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // CreateRenderPass
 
+static std::error_code AllocateCommandBuffers() noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkCommandBufferAllocateInfo ai = {};
+  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  ai.commandPool = sGraphicsCommandPool;
+  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  ai.commandBufferCount = static_cast<std::uint32_t>(sCommandBuffers.size());
+
+  result = vkAllocateCommandBuffers(sDevice, &ai, sCommandBuffers.data());
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error allocating command buffers: {}",
+                       to_string(result));
+    IRIS_LOG_LEAVE();
+    return make_error_code(result);
+  }
+
+  for (auto&& commandBuffer : sCommandBuffers) {
+    NameObject(VK_OBJECT_TYPE_COMMAND_BUFFER, commandBuffer, "sCommandBuffers");
+  }
+
+  IRIS_LOG_LEAVE();
+  return VulkanResult::kSuccess;
+} // AllocateCommandBuffers
+
 class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
 public:
-  shaderc_include_result* GetInclude(char const* requested_source,
-      shaderc_include_type type,
-      char const* requesting_source,
-      size_t include_depth[[maybe_unused]]) override;
+  shaderc_include_result*
+  GetInclude(char const* requested_source, shaderc_include_type type,
+             char const* requesting_source,
+             size_t include_depth[[maybe_unused]]) override;
 
   void ReleaseInclude(shaderc_include_result* data) override;
 
@@ -1214,7 +1341,7 @@ shaderc_include_result* ShaderIncluder::GetInclude(
 
 void ShaderIncluder::ReleaseInclude(shaderc_include_result* result) {
   IRIS_LOG_ENTER();
-  for (std::size_t i = 0; i< includes_.size(); ++i) {
+  for (std::size_t i = 0; i < includes_.size(); ++i) {
     if (includes_[i].result.get() == result) {
       includes_.erase(includes_.begin() + i);
       break;
@@ -1331,12 +1458,12 @@ CreateShaderFromFile(filesystem::path const& path,
 std::error_code CreateBlankFSQPipeline() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
+  Pipeline pipeline;
 
   VkPipelineLayoutCreateInfo plci = {};
   plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-  result =
-    vkCreatePipelineLayout(sDevice, &plci, nullptr, &sBlankFSQPipelineLayout);
+  result = vkCreatePipelineLayout(sDevice, &plci, nullptr, &pipeline.layout);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot create pipeline layout: {}", to_string(result));
     IRIS_LOG_LEAVE();
@@ -1449,12 +1576,12 @@ std::error_code CreateBlankFSQPipeline() noexcept {
   gpci.pDepthStencilState = &depthStencilState;
   gpci.pColorBlendState = &colorBlendState;
   gpci.pDynamicState = &dynamicState;
-  gpci.layout = sBlankFSQPipelineLayout;
+  gpci.layout = pipeline.layout;
   gpci.renderPass = sRenderPass;
   gpci.subpass = 0;
 
   result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1, &gpci, nullptr,
-                                     &sBlankFSQPipeline);
+                                     &pipeline.pipeline);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot create graphics pipeline: {}",
                        to_string(result));
@@ -1464,6 +1591,11 @@ std::error_code CreateBlankFSQPipeline() noexcept {
 
   vkDestroyShaderModule(sDevice, stages[0].module, nullptr);
   vkDestroyShaderModule(sDevice, stages[1].module, nullptr);
+
+  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline.layout,
+             "sBlankFSQPipelineLayout");
+  NameObject(VK_OBJECT_TYPE_PIPELINE, pipeline.pipeline, "sBlankFSQPipeline");
+  Pipelines().insert(std::make_pair("BlankFSQ", std::move(pipeline)));
 
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
@@ -1572,23 +1704,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return Error::kInitializationFailed;
   }
 
-  VkFenceCreateInfo fci = {};
-  fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-  if (auto result =
-        vkCreateFence(sDevice, &fci, nullptr, &sGraphicsCommandFence);
-      result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create fence: {}", to_string(result));
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
-
-  VkSemaphoreCreateInfo sci = {};
-  sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-  if (auto result = vkCreateSemaphore(sDevice, &sci, nullptr, &sFrameComplete);
-      result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create semaphore: {}", to_string(result));
+  if (auto error = CreateFencesAndSemaphores()) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
@@ -1599,6 +1715,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   if (auto error = CreateRenderPass()) {
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
+  if (auto error = AllocateCommandBuffers()) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
@@ -1617,9 +1738,69 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
 void iris::Renderer::Shutdown() noexcept {
   IRIS_LOG_ENTER();
+
+  // Drain the queue of all tasks
+  TaskResult taskResult;
+
+  try {
+    while (sTasksResultsQueue.try_pop(taskResult)) {
+      std::visit(
+        [](auto&& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, std::error_code>) {
+            GetLogger()->error("Task result has error: {}", arg.message());
+          } else if constexpr (std::is_same_v<T, Control::Control>) {
+            Control(arg);
+          }
+        },
+        taskResult);
+    }
+  } catch (std::exception const& e) {
+    GetLogger()->critical(
+      "Exception encountered while processing task results: {}", e.what());
+    std::terminate();
+  }
+
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
   Windows().clear();
+
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
+                       static_cast<std::uint32_t>(sCommandBuffers.size()),
+                       sCommandBuffers.data());
+
+  if (sRenderPass != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(sDevice, sRenderPass, nullptr);
+  }
+
+  Pipelines().clear();
+
+  if (sAllocator != VK_NULL_HANDLE) { vmaDestroyAllocator(sAllocator); }
+
+  if (sImagesReadyForPresent != VK_NULL_HANDLE) {
+    vkDestroySemaphore(sDevice, sImagesReadyForPresent, nullptr);
+  }
+
+  if (sFrameComplete != VK_NULL_HANDLE) {
+    vkDestroyFence(sDevice, sFrameComplete, nullptr);
+  }
+
+  if (sOneTimeSubmit != VK_NULL_HANDLE) {
+    vkDestroyFence(sDevice, sOneTimeSubmit, nullptr);
+  }
+
+  if (sGraphicsCommandPool != VK_NULL_HANDLE) {
+    vkDestroyCommandPool(sDevice, sGraphicsCommandPool, nullptr);
+  }
+
+  if (sDevice != VK_NULL_HANDLE) { vkDestroyDevice(sDevice, nullptr); }
+
+  if (sDebugUtilsMessenger != VK_NULL_HANDLE) {
+    vkDestroyDebugUtilsMessengerEXT(sInstance, sDebugUtilsMessenger, nullptr);
+  }
+
+  if (sInstance != VK_NULL_HANDLE) { vkDestroyInstance(sInstance, nullptr); }
+
   IRIS_LOG_LEAVE();
 }
 
@@ -1655,6 +1836,8 @@ void iris::Renderer::Frame() noexcept {
     std::terminate();
   }
 
+  if (!sRunning) return;
+
   auto&& windows = Windows();
   if (windows.empty()) return;
 
@@ -1665,6 +1848,8 @@ void iris::Renderer::Frame() noexcept {
       window.resized = false;
     }
   }
+
+  for (auto&& iter : windows) iter.second.Frame();
 
   const std::size_t numWindows = windows.size();
   absl::FixedArray<std::uint32_t> imageIndices(numWindows);
@@ -1677,11 +1862,29 @@ void iris::Renderer::Frame() noexcept {
   absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
   absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
 
+  VkResult result;
+
+  result = vkWaitForFences(sDevice, 1, &sFrameComplete, VK_TRUE, UINT64_MAX);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error waiting on fence: {}", to_string(result));
+    return;
+  }
+
+  result = vkResetFences(sDevice, 1, &sFrameComplete);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error resetting fence: {}", to_string(result));
+    return;
+  }
+
+  result = vkResetCommandPool(sDevice, sGraphicsCommandPool, 0);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error resetting command pool: {}", to_string(result));
+    return;
+  }
+
   //
   // Acquire images/semaphores from all iris::Window objects
   //
-
-  VkResult result;
 
   std::size_t i = 0;
   for (auto&& iter : windows) {
@@ -1723,19 +1926,8 @@ void iris::Renderer::Frame() noexcept {
   // Build command buffers (or use pre-recorded ones)
   //
 
-  VkCommandBufferAllocateInfo ai = {};
-  ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sGraphicsCommandPool;
-  ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  ai.commandBufferCount = 1;
-
-  VkCommandBuffer cb;
-  result = vkAllocateCommandBuffers(sDevice, &ai, &cb);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error allocating command buffer: {}",
-                       to_string(result));
-    return;
-  }
+  sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
+  auto&& cb = sCommandBuffers[sCommandBufferIndex];
 
   VkCommandBufferBeginInfo cbi = {};
   cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1756,6 +1948,8 @@ void iris::Renderer::Frame() noexcept {
   rbi.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
 
+  Pipeline& blankFSQ = Pipelines()["BlankFSQ"];
+
   for (std::size_t j = 0; j < numWindows; ++j) {
     clearValues[0].color = clearColors[j];
     rbi.renderArea.extent = extents[j];
@@ -1767,7 +1961,7 @@ void iris::Renderer::Frame() noexcept {
     vkCmdSetViewport(cb, 0, 1, &viewports[j]);
     vkCmdSetScissor(cb, 0, 1, &scissors[j]);
 
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sBlankFSQPipeline);
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, blankFSQ.pipeline);
     vkCmdDraw(cb, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(cb);
@@ -1796,10 +1990,9 @@ void iris::Renderer::Frame() noexcept {
   si.commandBufferCount = 1;
   si.pCommandBuffers = &cb;
   si.signalSemaphoreCount = 1;
-  si.pSignalSemaphores = &sFrameComplete;
+  si.pSignalSemaphores = &sImagesReadyForPresent;
 
-  result =
-    vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
+  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sFrameComplete);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
@@ -1815,7 +2008,7 @@ void iris::Renderer::Frame() noexcept {
   VkPresentInfoKHR pi = {};
   pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   pi.waitSemaphoreCount = 1;
-  pi.pWaitSemaphores = &sFrameComplete;
+  pi.pWaitSemaphores = &sImagesReadyForPresent;
   pi.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
   pi.pSwapchains = swapchains.data();
   pi.pImageIndices = imageIndices.data();
@@ -1826,18 +2019,6 @@ void iris::Renderer::Frame() noexcept {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
     return;
   }
-
-  result =
-    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Error waiting on fence: {}", to_string(result));
-    return;
-  }
-
-  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
-
-  for (auto&& iter : windows) iter.second.Frame();
 } // iris::Renderer::Frame
 
 std::error_code
@@ -1959,7 +2140,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
     srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+             newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -2001,7 +2182,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
   si.commandBufferCount = 1;
   si.pCommandBuffers = &cb;
 
-  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sGraphicsCommandFence);
+  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sOneTimeSubmit);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer for transition: {}",
                        to_string(result));
@@ -2009,8 +2190,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
     return make_error_code(result);
   }
 
-  result =
-    vkWaitForFences(sDevice, 1, &sGraphicsCommandFence, VK_TRUE, UINT64_MAX);
+  result = vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error waiting on fence for transition: {}",
                        to_string(result));
@@ -2018,10 +2198,9 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
     return make_error_code(result);
   }
 
-  vkResetFences(sDevice, 1, &sGraphicsCommandFence);
+  vkResetFences(sDevice, 1, &sOneTimeSubmit);
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &cb);
 
   IRIS_LOG_LEAVE();
   return VulkanResult::kSuccess;
 } // iris::Renderer::TransitionImage
-

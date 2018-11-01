@@ -15,7 +15,7 @@ extern std::uint32_t sGraphicsQueueFamilyIndex;
 extern VkDevice sDevice;
 extern VkQueue sGraphicsCommandQueue;
 extern VkCommandPool sGraphicsCommandPool;
-extern VkFence sGraphicsCommandFence;
+extern VkFence sFrameComplete;
 extern VmaAllocator sAllocator;
 
 extern VkSurfaceFormatKHR sSurfaceColorFormat;
