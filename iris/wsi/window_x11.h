@@ -67,6 +67,12 @@ public:
     return childPos;
   }
 
+  std::string Title() noexcept {
+    ::XTextProperty prop;
+    ::XGetWMName(handle_.display, handle_.window, &prop);
+    return std::string(reinterpret_cast<char*>(prop.value), prop.nitems);
+  }
+
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
    */
