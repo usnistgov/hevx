@@ -24,11 +24,20 @@ static spdlog::logger* GetLogger() noexcept {
 #ifndef NDEBUG
 
 //! \brief Logs entry into a function.
-#define IRIS_LOG_ENTER() \
-  ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
+#define IRIS_LOG_ENTER()                                                       \
+  do {                                                                         \
+    ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__,        \
+                               __LINE__);                                      \
+    ::iris::GetLogger()->flush();                                              \
+  } while (false)
+
 //! \brief Logs leave from a function.
-#define IRIS_LOG_LEAVE() \
-  ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
+#define IRIS_LOG_LEAVE()                                                       \
+  do {                                                                         \
+    ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__,        \
+                               __LINE__);                                      \
+    ::iris::GetLogger()->flush();                                              \
+  } while (false)
 
 #else
 

@@ -13,20 +13,8 @@
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
-#include "renderer/tasks.h"
+#include "renderer/shader.h"
 #include "renderer/window.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
-#endif
-#include "shaderc/shaderc.hpp"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic pop
-#endif
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -84,10 +72,19 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
-  ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__, __LINE__)
+  do {                                                                         \
+    ::iris::GetLogger()->trace("ENTER: {} ({}:{})", __func__, __FILE__,        \
+                               __LINE__);                                      \
+    ::iris::GetLogger()->flush();                                              \
+  } while (false)
+
 //! \brief Logs leave from a function.
 #define IRIS_LOG_LEAVE()                                                       \
-  ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__, __LINE__)
+  do {                                                                         \
+    ::iris::GetLogger()->trace("LEAVE: {} ({}:{})", __func__, __FILE__,        \
+                               __LINE__);                                      \
+    ::iris::GetLogger()->flush();                                              \
+  } while (false)
 
 #else
 
@@ -113,8 +110,7 @@ VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
 VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
 VkFence sOneTimeSubmit{VK_NULL_HANDLE};
 VkFence sFrameComplete{VK_NULL_HANDLE};
-VmaAllocator sAllocator;
-tbb::concurrent_queue<TaskResult> sTasksResultsQueue;
+VmaAllocator sAllocator{VK_NULL_HANDLE};
 
 // These are the desired properties of all surfaces for the renderer.
 VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
@@ -140,11 +136,11 @@ std::uint32_t sCommandBufferIndex{0};
 /////
 
 static bool sInitialized{false};
-static bool sRunning{false};
+static std::atomic_bool sRunning{false};
 
-VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
+static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 
-std::string const sBlankFSQVertexShaderSource = R"(
+static std::string const sBlankFSQVertexShaderSource = R"(
 #version 450
 layout(location = 0) out vec2 fragCoord;
 void main() {
@@ -152,14 +148,14 @@ void main() {
     gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
 })";
 
-std::string const sBlankFSQFragmentShaderSource = R"(
+static std::string const sBlankFSQFragmentShaderSource = R"(
 #version 450
 layout(location = 0) in vec2 fragCoord;
 layout(location = 0) out vec4 fragColor;
 void main() {
 })";
 
-std::string const sUIVertexShaderSource = R"(
+static std::string const sUIVertexShaderSource = R"(
 #version 450 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
@@ -179,7 +175,7 @@ void main() {
   gl_Position = vec4(aPos * uScale + uTranslate, 0.f, 1.f);
 })";
 
-std::string const sUIFragmentShaderSource = R"(
+static std::string const sUIFragmentShaderSource = R"(
 #version 450 core
 layout(set = 0, binding = 0) uniform sampler2D sTexture;
 layout(location = 0) in vec4 Color;
@@ -1344,185 +1340,6 @@ static std::error_code AllocateCommandBuffers() noexcept {
   return VulkanResult::kSuccess;
 } // AllocateCommandBuffers
 
-class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
-public:
-  shaderc_include_result*
-  GetInclude(char const* requested_source, shaderc_include_type type,
-             char const* requesting_source,
-             size_t include_depth[[maybe_unused]]) override;
-
-  void ReleaseInclude(shaderc_include_result* data) override;
-
-private:
-  struct Include {
-    filesystem::path path;
-    std::string source;
-    std::unique_ptr<shaderc_include_result> result;
-
-    Include(filesystem::path p, std::string s)
-      : path(std::move(p))
-      , source(std::move(s))
-      , result(new shaderc_include_result) {}
-  }; // struct Include
-
-  std::vector<Include> includes_{};
-}; // class ShaderIncluder
-
-shaderc_include_result* ShaderIncluder::GetInclude(
-  char const* requested_source, shaderc_include_type type,
-  char const* requesting_source, size_t include_depth[[maybe_unused]]) {
-  IRIS_LOG_ENTER();
-  filesystem::path path(requested_source);
-
-  if (type == shaderc_include_type_relative) {
-    filesystem::path parent(requesting_source);
-    parent = parent.parent_path();
-    path = parent / path;
-  }
-
-  try {
-    if (!filesystem::exists(path)) { path.clear(); }
-  } catch (...) { path.clear(); }
-
-  if (!path.empty()) {
-    if (auto s = io::ReadFile(path)) {
-      includes_.push_back(Include(path, std::string(s->data(), s->size())));
-    } else {
-      includes_.push_back(Include(path, s.error().message()));
-    }
-  } else {
-    includes_.push_back(Include(path, "file not found"));
-  }
-
-  Include& include = includes_.back();
-  shaderc_include_result* result = include.result.get();
-
-  result->source_name_length = include.path.string().size();
-  result->source_name = include.path.string().c_str();
-  result->content_length = include.source.size();
-  result->content = include.source.data();
-  result->user_data = nullptr;
-
-  IRIS_LOG_LEAVE();
-  return result;
-} // ShaderIncluder::GetInclude
-
-void ShaderIncluder::ReleaseInclude(shaderc_include_result* result) {
-  IRIS_LOG_ENTER();
-  for (std::size_t i = 0; i < includes_.size(); ++i) {
-    if (includes_[i].result.get() == result) {
-      includes_.erase(includes_.begin() + i);
-      break;
-    }
-  }
-  IRIS_LOG_LEAVE();
-} // ShaderIncluder::ReleaseInclude
-
-tl::expected<std::vector<std::uint32_t>, std::string>
-CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
-              filesystem::path const& path, std::string const& entryPoint) {
-  IRIS_LOG_ENTER();
-  shaderc::Compiler compiler;
-  shaderc::CompileOptions options;
-  options.SetOptimizationLevel(shaderc_optimization_level_performance);
-  options.SetIncluder(std::make_unique<ShaderIncluder>());
-
-  auto const kind = [&shaderStage]() {
-    if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
-      return shaderc_vertex_shader;
-    } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
-      return shaderc_fragment_shader;
-    } else {
-      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
-      std::terminate();
-    }
-  }();
-
-  auto spv = compiler.CompileGlslToSpv(source.data(), source.size(), kind,
-                                       path.string().c_str(),
-                                       entryPoint.c_str(), options);
-  if (spv.GetCompilationStatus() != shaderc_compilation_status_success) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(spv.GetErrorMessage());
-  }
-
-  std::vector<std::uint32_t> code;
-  std::copy(std::begin(spv), std::end(spv), std::back_inserter(code));
-
-  IRIS_LOG_LEAVE();
-  return code;
-} // CompileShader
-
-tl::expected<VkShaderModule, std::error_code>
-CreateShaderFromSource(std::string_view source,
-                       VkShaderStageFlagBits shaderStage,
-                       std::string const& entry = "main") noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  if (auto code = CompileShader(source, shaderStage, "", entry)) {
-    VkShaderModuleCreateInfo smci = {};
-    smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    // codeSize is bytes, not count of words
-    smci.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
-    smci.pCode = code->data();
-
-    VkShaderModule module;
-    result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
-    if (result != VK_SUCCESS) {
-      GetLogger()->error("Cannot create shader module: {}", to_string(result));
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(make_error_code(result));
-    }
-
-    IRIS_LOG_LEAVE();
-    return module;
-  } else {
-    GetLogger()->error("Cannot compile shader: {}", code.error());
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kShaderCompileFailed);
-  }
-} // CreateShaderFromSource
-
-tl::expected<VkShaderModule, std::error_code>
-CreateShaderFromFile(filesystem::path const& path,
-                     VkShaderStageFlagBits shaderStage,
-                     std::string const& entry = "main") noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  std::vector<char> source;
-  if (auto s = io::ReadFile(path)) {
-    source = std::move(*s);
-  } else {
-    return tl::unexpected(s.error());
-  }
-
-  if (auto code = CompileShader({source.data(), source.size()}, shaderStage,
-                                path, entry)) {
-    VkShaderModuleCreateInfo smci = {};
-    smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    // codeSize is bytes, not count of words
-    smci.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
-    smci.pCode = code->data();
-
-    VkShaderModule module;
-    result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
-    if (result != VK_SUCCESS) {
-      GetLogger()->error("Cannot create shader module: {}", to_string(result));
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(make_error_code(result));
-    }
-
-    IRIS_LOG_LEAVE();
-    return module;
-  } else {
-    GetLogger()->error("Cannot compile shader: {}", code.error());
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kShaderCompileFailed);
-  }
-} // CreateShaderFromFile
-
 std::error_code CreateBlankFSQPipeline() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
@@ -1675,16 +1492,21 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+  if (sInitialized) {
+    IRIS_LOG_LEAVE();
+    return Error::kAlreadyInitialized;
+  }
+
+  if (auto error = io::Initialize()) {
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
   // over several sub-functions below. Each function is called in-order and
   // assumes the previous functions have all be called.
   ////
-
-  if (sInitialized) {
-    IRIS_LOG_LEAVE();
-    return Error::kAlreadyInitialized;
-  }
 
   std::vector<gsl::czstring<>> layerNames;
   if ((options & Options::kUseValidationLayers) ==
@@ -1802,28 +1624,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 void iris::Renderer::Shutdown() noexcept {
   IRIS_LOG_ENTER();
 
-  // Drain the queue of all tasks
-  TaskResult taskResult;
-
-  try {
-    while (sTasksResultsQueue.try_pop(taskResult)) {
-      std::visit(
-        [](auto&& arg) {
-          using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, std::error_code>) {
-            GetLogger()->error("Task result has error: {}", arg.message());
-          } else if constexpr (std::is_same_v<T, Control::Control>) {
-            Control(arg);
-          }
-        },
-        taskResult);
-    }
-  } catch (std::exception const& e) {
-    GetLogger()->critical(
-      "Exception encountered while processing task results: {}", e.what());
-    std::terminate();
-  }
-
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
   Windows().clear();
@@ -1864,6 +1664,8 @@ void iris::Renderer::Shutdown() noexcept {
 
   if (sInstance != VK_NULL_HANDLE) { vkDestroyInstance(sInstance, nullptr); }
 
+  io::Shutdown();
+
   IRIS_LOG_LEAVE();
 }
 
@@ -1878,28 +1680,11 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Frame() noexcept {
-  TaskResult taskResult;
-
-  try {
-    while (sTasksResultsQueue.try_pop(taskResult)) {
-      std::visit(
-        [](auto&& arg) {
-          using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, std::error_code>) {
-            GetLogger()->error("Task result has error: {}", arg.message());
-          } else if constexpr (std::is_same_v<T, Control::Control>) {
-            Control(arg);
-          }
-        },
-        taskResult);
-    }
-  } catch (std::exception const& e) {
-    GetLogger()->critical(
-      "Exception encountered while processing task results: {}", e.what());
-    std::terminate();
-  }
-
   if (!sRunning) return;
+
+  // Handle all IO results (completed requests)
+  std::vector<std::function<void(void)>> results = io::GetResults();
+  for (auto&& result : results) result();
 
   auto&& windows = Windows();
   if (windows.empty()) return;
@@ -1986,7 +1771,7 @@ void iris::Renderer::Frame() noexcept {
   }
 
   //
-  // Build command buffers (or use pre-recorded ones)
+  // Record primary command buffer for current frame
   //
 
   sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
@@ -2011,6 +1796,10 @@ void iris::Renderer::Frame() noexcept {
   rbi.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
 
+  //
+  // 1. Go wide and build secondary command buffers
+  //
+
   Pipeline& blankFSQ = Pipelines()["BlankFSQ"];
 
   for (std::size_t j = 0; j < numWindows; ++j) {
@@ -2024,8 +1813,16 @@ void iris::Renderer::Frame() noexcept {
     vkCmdSetViewport(cb, 0, 1, &viewports[j]);
     vkCmdSetScissor(cb, 0, 1, &scissors[j]);
 
+    //
+    // 2. Execute all secondary buffers
+    //
+
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, blankFSQ.pipeline);
     vkCmdDraw(cb, 3, 1, 0, 0);
+
+    //
+    // 3. Done rendering
+    //
 
     vkCmdEndRenderPass(cb);
   }

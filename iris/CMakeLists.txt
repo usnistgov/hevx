@@ -88,6 +88,7 @@ set(SOURCES
   renderer/io.cc
   renderer/renderer.cc
   renderer/surface.cc
+  renderer/shader.cc
   renderer/window.cc
   wsi/window.cc
 )
