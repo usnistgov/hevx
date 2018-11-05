@@ -140,21 +140,6 @@ static std::atomic_bool sRunning{false};
 
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 
-static std::string const sBlankFSQVertexShaderSource = R"(
-#version 450
-layout(location = 0) out vec2 fragCoord;
-void main() {
-  fragCoord = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
-    gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
-})";
-
-static std::string const sBlankFSQFragmentShaderSource = R"(
-#version 450
-layout(location = 0) in vec2 fragCoord;
-layout(location = 0) out vec4 fragColor;
-void main() {
-})";
-
 static std::string const sUIVertexShaderSource = R"(
 #version 450 core
 layout(location = 0) in vec2 aPos;
@@ -1340,147 +1325,6 @@ static std::error_code AllocateCommandBuffers() noexcept {
   return VulkanResult::kSuccess;
 } // AllocateCommandBuffers
 
-std::error_code CreateBlankFSQPipeline() noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-  Pipeline pipeline;
-
-  VkPipelineLayoutCreateInfo plci = {};
-  plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
-  result = vkCreatePipelineLayout(sDevice, &plci, nullptr, &pipeline.layout);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create pipeline layout: {}", to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  std::array<VkPipelineShaderStageCreateInfo, 2> stages{{
-    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-     VK_SHADER_STAGE_VERTEX_BIT, VK_NULL_HANDLE, "main", nullptr},
-    {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-     VK_SHADER_STAGE_FRAGMENT_BIT, VK_NULL_HANDLE, "main", nullptr},
-  }};
-
-  if (auto module = CreateShaderFromSource(sBlankFSQVertexShaderSource,
-                                           VK_SHADER_STAGE_VERTEX_BIT)) {
-    stages[0].module = *module;
-  } else {
-    IRIS_LOG_LEAVE();
-    return module.error();
-  }
-
-  if (auto module = CreateShaderFromSource(sBlankFSQFragmentShaderSource,
-                                           VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    stages[1].module = *module;
-  } else {
-    IRIS_LOG_LEAVE();
-    return module.error();
-  }
-
-  VkPipelineVertexInputStateCreateInfo vertexInputState = {};
-  vertexInputState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = {};
-  inputAssemblyState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-  VkPipelineViewportStateCreateInfo viewportState = {};
-  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportState.viewportCount = 1;
-  viewportState.pViewports = nullptr;
-  viewportState.scissorCount = 1;
-  viewportState.pScissors = nullptr;
-
-  VkPipelineRasterizationStateCreateInfo rasterizationState = {};
-  rasterizationState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizationState.depthClampEnable = VK_FALSE;
-  rasterizationState.rasterizerDiscardEnable = VK_FALSE;
-  rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
-  rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizationState.depthBiasEnable = VK_FALSE;
-  rasterizationState.lineWidth = 1.f;
-
-  VkPipelineMultisampleStateCreateInfo multisampleState = {};
-  multisampleState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampleState.rasterizationSamples = sSurfaceSampleCount;
-  multisampleState.sampleShadingEnable = VK_FALSE;
-  multisampleState.minSampleShading = 1.f;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
-  depthStencilState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencilState.depthTestEnable = VK_TRUE;
-  depthStencilState.depthWriteEnable = VK_TRUE;
-  depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-  depthStencilState.depthBoundsTestEnable = VK_FALSE;
-  depthStencilState.stencilTestEnable = VK_FALSE;
-
-  VkPipelineColorBlendAttachmentState colorBlendStateAttachment = {};
-  colorBlendStateAttachment.colorWriteMask =
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  colorBlendStateAttachment.blendEnable = VK_FALSE;
-
-  VkPipelineColorBlendStateCreateInfo colorBlendState = {};
-  colorBlendState.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlendState.logicOpEnable = VK_FALSE;
-  colorBlendState.logicOp = VK_LOGIC_OP_COPY;
-  colorBlendState.attachmentCount = 1;
-  colorBlendState.pAttachments = &colorBlendStateAttachment;
-
-  std::array<VkDynamicState, 2> dynamicStates{
-    {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR}};
-
-  VkPipelineDynamicStateCreateInfo dynamicState = {};
-  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.dynamicStateCount =
-    gsl::narrow_cast<std::uint32_t>(dynamicStates.size());
-  dynamicState.pDynamicStates = dynamicStates.data();
-
-  VkGraphicsPipelineCreateInfo gpci = {};
-  gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  gpci.stageCount = gsl::narrow_cast<std::uint32_t>(stages.size());
-  gpci.pStages = stages.data();
-  gpci.pVertexInputState = &vertexInputState;
-  gpci.pInputAssemblyState = &inputAssemblyState;
-  gpci.pViewportState = &viewportState;
-  gpci.pRasterizationState = &rasterizationState;
-  gpci.pMultisampleState = &multisampleState;
-  gpci.pDepthStencilState = &depthStencilState;
-  gpci.pColorBlendState = &colorBlendState;
-  gpci.pDynamicState = &dynamicState;
-  gpci.layout = pipeline.layout;
-  gpci.renderPass = sRenderPass;
-  gpci.subpass = 0;
-
-  result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1, &gpci, nullptr,
-                                     &pipeline.pipeline);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create graphics pipeline: {}",
-                       to_string(result));
-    IRIS_LOG_LEAVE();
-    return make_error_code(result);
-  }
-
-  vkDestroyShaderModule(sDevice, stages[0].module, nullptr);
-  vkDestroyShaderModule(sDevice, stages[1].module, nullptr);
-
-  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline.layout,
-             "sBlankFSQPipelineLayout");
-  NameObject(VK_OBJECT_TYPE_PIPELINE, pipeline.pipeline, "sBlankFSQPipeline");
-  Pipelines().insert(std::make_pair("BlankFSQ", std::move(pipeline)));
-
-  IRIS_LOG_LEAVE();
-  return VulkanResult::kSuccess;
-} // CreateBlankFSQPipeline
-
 } // namespace iris::Renderer
 
 std::error_code
@@ -1605,11 +1449,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   if (auto error = AllocateCommandBuffers()) {
-    IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
-  }
-
-  if (auto error = CreateBlankFSQPipeline()) {
     IRIS_LOG_LEAVE();
     return Error::kInitializationFailed;
   }
@@ -1800,8 +1639,6 @@ void iris::Renderer::Frame() noexcept {
   // 1. Go wide and build secondary command buffers
   //
 
-  Pipeline& blankFSQ = Pipelines()["BlankFSQ"];
-
   for (std::size_t j = 0; j < numWindows; ++j) {
     clearValues[0].color = clearColors[j];
     rbi.renderArea.extent = extents[j];
@@ -1812,13 +1649,6 @@ void iris::Renderer::Frame() noexcept {
 
     vkCmdSetViewport(cb, 0, 1, &viewports[j]);
     vkCmdSetScissor(cb, 0, 1, &scissors[j]);
-
-    //
-    // 2. Execute all secondary buffers
-    //
-
-    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, blankFSQ.pipeline);
-    vkCmdDraw(cb, 3, 1, 0, 0);
 
     //
     // 3. Done rendering
