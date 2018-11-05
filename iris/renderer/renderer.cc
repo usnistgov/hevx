@@ -14,6 +14,7 @@
 #include "renderer/impl.h"
 #include "renderer/io.h"
 #include "renderer/shader.h"
+#include "renderer/ui.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -139,78 +140,6 @@ static bool sInitialized{false};
 static std::atomic_bool sRunning{false};
 
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
-
-static std::string const sUIVertexShaderSource = R"(
-#version 450 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 2) in vec4 aColor;
-layout(push_constant) uniform uPushConstant {
-  vec2 uScale;
-  vec2 uTranslate;
-};
-layout(location = 0) out vec4 Color;
-layout(location = 1) out vec2 UV;
-out gl_PerVertex {
-  vec4 gl_Position;
-};
-void main() {
-  Color = aColor;
-  UV = aUV;
-  gl_Position = vec4(aPos * uScale + uTranslate, 0.f, 1.f);
-})";
-
-static std::string const sUIFragmentShaderSource = R"(
-#version 450 core
-layout(set = 0, binding = 0) uniform sampler2D sTexture;
-layout(location = 0) in vec4 Color;
-layout(location = 1) in vec2 UV;
-layout(location = 0) out vec4 fColor;
-void main() {
-  fColor = Color * texture(sTexture, UV.st);
-})";
-
-struct Pipeline {
-  VkPipelineLayout layout{VK_NULL_HANDLE};
-  VkPipeline pipeline{VK_NULL_HANDLE};
-
-  Pipeline() noexcept = default;
-  Pipeline(Pipeline const&) = delete;
-  Pipeline(Pipeline&&) noexcept;
-  Pipeline& operator=(Pipeline const&) = delete;
-  Pipeline& operator=(Pipeline&&) noexcept;
-  ~Pipeline() noexcept;
-}; // struct PipelineAndLayout
-
-Pipeline::Pipeline(Pipeline&& other) noexcept
-  : layout(other.layout)
-  , pipeline(other.pipeline) {
-  other.layout = VK_NULL_HANDLE;
-  other.pipeline = VK_NULL_HANDLE;
-} // Pipeline::Pipeline
-
-Pipeline& Pipeline::operator=(Pipeline&& rhs) noexcept {
-  if (this == &rhs) return *this;
-  layout = rhs.layout;
-  pipeline = rhs.pipeline;
-  rhs.layout = VK_NULL_HANDLE;
-  rhs.pipeline = VK_NULL_HANDLE;
-  return *this;
-} // Pipeline::operator=
-
-Pipeline::~Pipeline() noexcept {
-  if (pipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(sDevice, pipeline, nullptr);
-  }
-  if (layout != VK_NULL_HANDLE) {
-    vkDestroyPipelineLayout(sDevice, layout, nullptr);
-  }
-} // Pipeline::~Pipeline
-
-static absl::flat_hash_map<std::string, Pipeline>& Pipelines() noexcept {
-  static absl::flat_hash_map<std::string, Pipeline> sPipelines;
-  return sPipelines;
-} // Pipelines
 
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
 Windows() noexcept {
@@ -1453,6 +1382,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return Error::kInitializationFailed;
   }
 
+  if (auto error = ui::Initialize()) {
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
+
   sInitialized = true;
   sRunning = true;
 
@@ -1465,6 +1399,8 @@ void iris::Renderer::Shutdown() noexcept {
 
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
+
+  ui::Shutdown();
   Windows().clear();
 
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
@@ -1474,8 +1410,6 @@ void iris::Renderer::Shutdown() noexcept {
   if (sRenderPass != VK_NULL_HANDLE) {
     vkDestroyRenderPass(sDevice, sRenderPass, nullptr);
   }
-
-  Pipelines().clear();
 
   if (sAllocator != VK_NULL_HANDLE) { vmaDestroyAllocator(sAllocator); }
 
@@ -1530,6 +1464,7 @@ void iris::Renderer::Frame() noexcept {
 
   for (auto&& iter : windows) {
     auto&& window = iter.second;
+
     if (window.resized) {
       window.surface.Resize(window.window.Extent());
       window.resized = false;
@@ -1566,6 +1501,11 @@ void iris::Renderer::Frame() noexcept {
   result = vkResetCommandPool(sDevice, sGraphicsCommandPool, 0);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error resetting command pool: {}", to_string(result));
+    return;
+  }
+
+  if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) {
+    Renderer::Terminate();
     return;
   }
 
@@ -1650,6 +1590,12 @@ void iris::Renderer::Frame() noexcept {
     vkCmdSetViewport(cb, 0, 1, &viewports[j]);
     vkCmdSetScissor(cb, 0, 1, &scissors[j]);
 
+    if (auto uiCB = ui::Frame({viewports[j].width, viewports[j].height})) {
+      vkCmdExecuteCommands(cb, 1, &(*uiCB));
+    } else {
+      GetLogger()->error("Error rendering UI: {}", uiCB.error().message());
+    }
+
     //
     // 3. Done rendering
     //
@@ -1733,7 +1679,6 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
         options |= Window::Options::kDecorated;
       }
       if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-      if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
       if (auto win =
             Window::Create(windowMessage.name().c_str(),
@@ -1754,7 +1699,6 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
       options |= Window::Options::kDecorated;
     }
     if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-    if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
     if (auto win = Window::Create(
           windowMessage.name().c_str(), {windowMessage.x(), windowMessage.y()},
@@ -1883,158 +1827,51 @@ fail:
   return make_error_code(result);
 } // iris::Renderer::EndOneTimeSubmit
 
-tl::expected<VkImageView, std::error_code>
-iris::Renderer::CreateImageView(VkImage image, VkFormat format,
-                                VkImageViewType viewType,
-                                VkImageSubresourceRange imageSubresourceRange,
-                                VkComponentMapping componentMapping) noexcept {
+tl::expected<
+  std::pair<VkDescriptorSetLayout, absl::FixedArray<VkDescriptorSet>>,
+  std::error_code>
+iris::Renderer::CreateDescriptors(
+  gsl::span<VkDescriptorSetLayoutBinding> bindings) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
-  VkImageViewCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  ci.image = image;
-  ci.viewType = viewType;
-  ci.format = format;
-  ci.components = componentMapping;
-  ci.subresourceRange = imageSubresourceRange;
+  VkDescriptorSetLayout layout;
+  absl::FixedArray<VkDescriptorSet> descriptorSets(bindings.size());
 
-  VkImageView imageView;
-  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
+  VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
+  descriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(bindings.size());
+  descriptorSetLayoutCI.pBindings = bindings.data();
+
+  result = vkCreateDescriptorSetLayout(sDevice, &descriptorSetLayoutCI, nullptr,
+                                       &layout);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create image view: {}", to_string(result));
+    GetLogger()->error("Cannot create descriptor set layout: {}",
+                       to_string(result));
     IRIS_LOG_LEAVE();
     return tl::unexpected(make_error_code(result));
   }
 
-  IRIS_LOG_LEAVE();
-  return imageView;
-} // iris::Renderer::CreateImageAndView
+  absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts(bindings.size(),
+                                                               layout);
 
-tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::error_code>
-iris::Renderer::CreateImageAndView(
-  VkImageType imageType, VkFormat format, VkExtent3D extent,
-  std::uint32_t mipLevels, std::uint32_t arrayLayers,
-  VkSampleCountFlagBits samples, VkImageUsageFlags usage,
-  VmaMemoryUsage memoryUsage, VkImageViewType viewType,
-  VkImageSubresourceRange imageSubresourceRange,
-  VkComponentMapping componentMapping) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
+  VkDescriptorSetAllocateInfo descriptorSetAI = {};
+  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptorSetAI.descriptorPool = sDescriptorPool;
+  descriptorSetAI.descriptorSetCount =
+    static_cast<uint32_t>(descriptorSetLayouts.size());
+  descriptorSetAI.pSetLayouts = descriptorSetLayouts.data();
 
-  VkImageCreateInfo ici = {};
-  ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  ici.imageType = imageType;
-  ici.format = format;
-  ici.extent = extent;
-  ici.mipLevels = mipLevels;
-  ici.arrayLayers = arrayLayers;
-  ici.samples = samples;
-  ici.tiling = VK_IMAGE_TILING_OPTIMAL;
-  ici.usage = usage;
-  ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-  VmaAllocationCreateInfo aci = {};
-  aci.usage = memoryUsage;
-
-  VkImage image;
-  VmaAllocation allocation;
-
-  result = vmaCreateImage(sAllocator, &ici, &aci, &image, &allocation, nullptr);
+  result =
+    vkAllocateDescriptorSets(sDevice, &descriptorSetAI, descriptorSets.data());
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Error creating or allocating image: {}",
-                        to_string(result));
+    GetLogger()->error("Cannot create descriptor sets: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::make_unexpected(make_error_code(result));
   }
 
-  VkImageView view;
-  if (auto v = CreateImageView(image, format, viewType, imageSubresourceRange,
-                               componentMapping)) {
-    view = *v;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(v.error());
-  }
-
+  return std::make_pair(layout, descriptorSets);
   IRIS_LOG_LEAVE();
-  return std::make_tuple(image, allocation, view);
-} // iris::Renderer::CreateImageAndView
+} // iris::Renderer::CreateDescriptors
 
-std::error_code
-iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
-                                VkImageLayout newLayout,
-                                std::uint32_t mipLevels) noexcept {
-  IRIS_LOG_ENTER();
-
-  VkImageMemoryBarrier barrier = {};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.oldLayout = oldLayout;
-  barrier.newLayout = newLayout;
-  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = image;
-  barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount = mipLevels;
-  barrier.subresourceRange.baseArrayLayer = 0;
-  barrier.subresourceRange.layerCount = 1;
-
-  if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    // FIXME: handle stencil
-  } else {
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  }
-
-  VkPipelineStageFlagBits srcStage;
-  VkPipelineStageFlagBits dstStage;
-
-  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-             newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  } else {
-    GetLogger()->critical("Logic error: unsupported layout transition");
-    std::terminate();
-  }
-
-  VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit()) {
-    commandBuffer = *cb;
-  } else {
-    return cb.error();
-  }
-
-  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
-                       nullptr, 1, &barrier);
-
-  if (auto error = EndOneTimeSubmit(commandBuffer)) {
-    return error;
-  }
-
-  IRIS_LOG_LEAVE();
-  return VulkanResult::kSuccess;
-} // iris::Renderer::TransitionImage

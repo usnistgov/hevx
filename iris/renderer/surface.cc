@@ -2,6 +2,7 @@
 #include "absl/container/fixed_array.h"
 #include "glm/common.hpp"
 #include "logging.h"
+#include "renderer/image.h"
 #include "renderer/impl.h"
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 #include "wsi/window_x11.h"

@@ -29,7 +29,7 @@ static void ReleaseErrorHandler(::Display* disp) noexcept {
 
 namespace iris::wsi {
 
-static Keys TranslateKeySym(::KeySym keysym) {
+static int TranslateKeySym(::KeySym keysym) {
   using namespace iris::wsi;
 
   switch (keysym) {
@@ -287,7 +287,7 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
 
   case KeyPress:
     if (event.xkey.window != handle_.window) break;
-    keys_.set(keyLUT_[event.xkey.keycode]);
+    ImGui::GetIO().KeysDown[keyLUT_[event.xkey.keycode]] = true;
     break;
 
   case KeyRelease:
@@ -297,27 +297,26 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
       ::XPeekEvent(handle_.display, &next);
       if (next.type == KeyPress && next.xkey.window == handle_.window &&
           next.xkey.time == event.xkey.time &&
-          next.xkey.keycode == event.xkey.keycode) {}
-      // Next event is a KeyPress with identical window, time, and keycode;
-      // thus key wasn't physically released, so consume next event now.
-      ::XNextEvent(handle_.display, &next);
+          next.xkey.keycode == event.xkey.keycode) {
+        // Next event is a KeyPress with identical window, time, and keycode;
+        // thus key wasn't physically released, so consume next event now.
+        ::XNextEvent(handle_.display, &next);
+      }
       break;
     }
 
-    keys_.reset(keyLUT_[event.xkey.keycode]);
+    ImGui::GetIO().KeysDown[keyLUT_[event.xkey.keycode]] = false;
     break;
 
   case ButtonPress:
     if (event.xbutton.window != handle_.window) break;
     switch (event.xbutton.button) {
-    case Button1: buttons_.set(Buttons::k1); break;
-    case Button2: buttons_.set(Buttons::k2); break;
-    case Button3: buttons_.set(Buttons::k3); break;
+    case Button1: ImGui::GetIO().MouseDown[0] = true; break;
+    case Button2: ImGui::GetIO().MouseDown[1] = true; break;
+    case Button3: ImGui::GetIO().MouseDown[2] = true; break;
     // case Button4: scroll_ += 1; break;
     // case Button5: scroll_ -= 1; break;
     default:
-      buttons_.set(
-        static_cast<enum Buttons>(event.xbutton.button - Button1 - 4));
       break;
     }
     break;
@@ -325,16 +324,14 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
   case ButtonRelease:
     if (event.xbutton.window != handle_.window) break;
     switch (event.xbutton.button) {
-    case Button1: buttons_.reset(Buttons::k1); break;
-    case Button2: buttons_.reset(Buttons::k2); break;
-    case Button3: buttons_.reset(Buttons::k3); break;
+    case Button1: ImGui::GetIO().MouseDown[0] = true; break;
+    case Button2: ImGui::GetIO().MouseDown[1] = true; break;
+    case Button3: ImGui::GetIO().MouseDown[2] = true; break;
     default:
-      buttons_.reset(
-        static_cast<enum Buttons>(event.xbutton.button - Button1 - 4));
       break;
     }
     break;
-
+#endif
   case ClientMessage:
     if (event.xclient.message_type == None) break;
     if (event.xclient.message_type != atoms_[WM_PROTOCOLS]) break;

@@ -59,10 +59,12 @@ void iris::Renderer::Window::Close() noexcept {
 
 std::error_code iris::Renderer::Window::Frame() noexcept {
   window.PollEvents();
+
   if (resized) {
     surface.Resize(window.Extent());
     resized = false;
   }
+
   return Error::kNone;
 } // iris::Renderer::Window::Frame
 

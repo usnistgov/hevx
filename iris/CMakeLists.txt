@@ -85,10 +85,13 @@ configure_file(config.h.in config.h)
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
+  renderer/buffer.cc
+  renderer/image.cc
   renderer/io.cc
   renderer/renderer.cc
   renderer/surface.cc
   renderer/shader.cc
+  renderer/ui.cc
   renderer/window.cc
   wsi/window.cc
 )

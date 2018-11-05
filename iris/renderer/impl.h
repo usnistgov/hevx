@@ -3,6 +3,8 @@
 
 #include "config.h"
 #include "error.h"
+#include "absl/container/fixed_array.h"
+#include "gsl/gsl"
 #include "renderer/renderer.h"
 #include "renderer/vulkan.h"
 #include <cstdint>
@@ -39,28 +41,20 @@ void FreeCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers) noexcept;
 tl::expected<VkCommandBuffer, std::error_code> BeginOneTimeSubmit() noexcept;
 std::error_code EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
 
-tl::expected<VkImageView, std::error_code> CreateImageView(
-  VkImage image, VkFormat format, VkImageViewType viewType,
-  VkImageSubresourceRange imageSubresourceRange,
-  VkComponentMapping componentMapping = {
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY}) noexcept;
+tl::expected<
+  std::pair<VkDescriptorSetLayout, absl::FixedArray<VkDescriptorSet>>,
+  std::error_code>
+CreateDescriptors(gsl::span<VkDescriptorSetLayoutBinding> bindings) noexcept;
 
-tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::error_code>
-CreateImageAndView(VkImageType imageType, VkFormat format, VkExtent3D extent,
-                   std::uint32_t mipLevels, std::uint32_t arrayLayers,
-                   VkSampleCountFlagBits samples, VkImageUsageFlags usage,
-                   VmaMemoryUsage memoryUsage, VkImageViewType viewType,
-                   VkImageSubresourceRange imageSubresourceRange,
-                   VkComponentMapping componentMapping = {
-                     VK_COMPONENT_SWIZZLE_IDENTITY,
-                     VK_COMPONENT_SWIZZLE_IDENTITY,
-                     VK_COMPONENT_SWIZZLE_IDENTITY,
-                     VK_COMPONENT_SWIZZLE_IDENTITY}) noexcept;
-
-std::error_code TransitionImage(VkImage image, VkImageLayout oldLayout,
-                                VkImageLayout newLayout,
-                                std::uint32_t mipLevels = 1) noexcept;
+inline void UpdateDescriptorSets(
+  gsl::span<VkWriteDescriptorSet> writeDescriptorSets,
+  gsl::span<VkCopyDescriptorSet> copyDescriptorSets = {}) noexcept {
+  vkUpdateDescriptorSets(sDevice,
+                         static_cast<uint32_t>(writeDescriptorSets.size()),
+                         writeDescriptorSets.data(),
+                         static_cast<uint32_t>(copyDescriptorSets.size()),
+                         copyDescriptorSets.data());
+} // UpdateDescriptorSets
 
 template <class T>
 void NameObject(VkObjectType objectType, T objectHandle,

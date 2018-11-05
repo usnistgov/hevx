@@ -3,12 +3,13 @@
  */
 #include "wsi/window_win32.h"
 #include "absl/base/macros.h"
+#include "imgui.h"
 #include "logging.h"
 #include "wsi/error.h"
 
 namespace iris::wsi {
 
-Keys TranslateKeycode(WPARAM keyCode) {
+int TranslateKeycode(WPARAM keyCode) {
   switch (keyCode) {
   case VK_BACK: return Keys::kBackspace;
   case VK_TAB: return Keys::kTab;
@@ -169,7 +170,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
     }
   }
 
-  for (int i = 0; i < Keyset::kMaxKeys; ++i) {
+  for (int i = 0; i < Keys::kMaxKeys; ++i) {
     pWin->keyLUT_[i] = TranslateKeycode(i);
   }
 
@@ -208,6 +209,43 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
 
+iris::wsi::Window::Impl::Impl(Impl&& other) noexcept
+  : rect_(other.rect_)
+  , handle_(other.handle_)
+  , dwStyle_(other.dwStyle_)
+  , closed_(other.closed_)
+  , closeDelegate_(std::move(other.closeDelegate_))
+  , resizeDelegate_(std::move(other.resizeDelegate_)) {
+
+  for (int i = 0; i < Keys::kMaxKeys; ++i) {
+    keyLUT_[i] = other.keyLUT_[i];
+  }
+
+  ::SetWindowLongPtrA(handle_.hWnd, GWLP_USERDATA,
+                      reinterpret_cast<::LONG_PTR>(this));
+} // iris::wsi::Window::Impl::Impl
+
+iris::wsi::Window::Impl& iris::wsi::Window::Impl::
+operator=(Impl&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  rect_ = rhs.rect_;
+  handle_ = rhs.handle_;
+  dwStyle_ = rhs.dwStyle_;
+  closed_ = rhs.closed_;
+  closeDelegate_ = std::move(rhs.closeDelegate_);
+  resizeDelegate_ = std::move(rhs.resizeDelegate_);
+
+  for (int i = 0; i < Keys::kMaxKeys; ++i) {
+    keyLUT_[i] = rhs.keyLUT_[i];
+  }
+
+  ::SetWindowLongPtrA(handle_.hWnd, GWLP_USERDATA,
+                      reinterpret_cast<::LONG_PTR>(this));
+
+  return *this;
+} // iris::wsi::Window::impl::operator&
+
 iris::wsi::Window::Impl::~Impl() noexcept {
   IRIS_LOG_ENTER();
   IRIS_LOG_LEAVE();
@@ -219,27 +257,35 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   ::LRESULT res = 0;
 
   switch (uMsg) {
-  case WM_KEYDOWN: keys_.set(keyLUT_[wParam]); break;
-  case WM_KEYUP: keys_.reset(keyLUT_[wParam]); break;
+  case WM_KEYDOWN:
+    ImGui::GetIO().KeysDown[keyLUT_[wParam]] = true;
+    break;
+  case WM_KEYUP: ImGui::GetIO().KeysDown[keyLUT_[wParam]] = false; break;
 
-  case WM_LBUTTONDOWN: buttons_.set(wsi::Buttons::k1); break;
-  case WM_MBUTTONDOWN: buttons_.set(wsi::Buttons::k2); break;
-  case WM_RBUTTONDOWN: buttons_.set(wsi::Buttons::k3); break;
+  case WM_LBUTTONDOWN: ImGui::GetIO().MouseDown[0] = true; break;
+  case WM_RBUTTONDOWN: ImGui::GetIO().MouseDown[1] = true; break;
+  case WM_MBUTTONDOWN: ImGui::GetIO().MouseDown[2] = true; break;
   case WM_XBUTTONDOWN:
-    buttons_.set((GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? wsi::Buttons::k4
-                                                          : wsi::Buttons::k5);
+    switch(GET_XBUTTON_WPARAM(wParam)) {
+      case XBUTTON1: ImGui::GetIO().MouseDown[4] = true; break;
+      case XBUTTON2: ImGui::GetIO().MouseDown[5] = true; break;
+    }
     break;
 
-  case WM_LBUTTONUP: buttons_.reset(wsi::Buttons::k1); break;
-  case WM_MBUTTONUP: buttons_.reset(wsi::Buttons::k2); break;
-  case WM_RBUTTONUP: buttons_.reset(wsi::Buttons::k3); break;
+  case WM_LBUTTONUP: ImGui::GetIO().MouseDown[0] = false; break;
+  case WM_RBUTTONUP: ImGui::GetIO().MouseDown[1] = false; break;
+  case WM_MBUTTONUP: ImGui::GetIO().MouseDown[2] = false; break;
   case WM_XBUTTONUP:
-    buttons_.reset((GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? wsi::Buttons::k4
-                                                            : wsi::Buttons::k5);
+    switch(GET_XBUTTON_WPARAM(wParam)) {
+      case XBUTTON1: ImGui::GetIO().MouseDown[4] = false; break;
+      case XBUTTON2: ImGui::GetIO().MouseDown[5] = false; break;
+    }
     break;
 
   case WM_MOUSEWHEEL:
-    // scroll_ += GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+    ImGui::GetIO().MouseWheel +=
+      static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+      static_cast<float>(WHEEL_DELTA);
     break;
 
   case WM_MOVE:

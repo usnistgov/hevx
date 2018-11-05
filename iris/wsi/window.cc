@@ -37,14 +37,6 @@ glm::uvec2 iris::wsi::Window::Extent() const noexcept {
   return pImpl_->Extent();
 }
 
-iris::wsi::Keyset iris::wsi::Window::Keys() const noexcept {
-  return pImpl_->Keys();
-}
-
-iris::wsi::Buttonset iris::wsi::Window::Buttons() const noexcept {
-  return pImpl_->Buttons();
-}
-
 glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
 }

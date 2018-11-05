@@ -5,6 +5,7 @@
  */
 
 #include "wsi/window.h"
+#include "absl/container/fixed_array.h"
 #include <Windows.h>
 
 namespace iris::wsi {
@@ -40,16 +41,6 @@ public:
    *  \return the current window extent in screen coordinates.
    */
   glm::uvec2 Extent() const noexcept { return rect_.extent; }
-
-  /*! \brief Get the current state of the keyboard.
-   *  \return the current state of the keyboard.
-   */
-  Keyset Keys() const noexcept { return keys_; }
-
-  /*! \brief Get the current state of the buttons.
-   *  \return the current state of the buttons.
-   */
-  Buttonset Buttons() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
@@ -145,6 +136,11 @@ public:
   //! \brief Default constructor: no initialization.
   Impl() = default;
 
+  Impl(Impl const&) = delete;
+  Impl(Impl&& other) noexcept;
+  Impl& operator=(Impl const&) = delete;
+  Impl& operator=(Impl&& rhs) noexcept;
+
   //! \brief Destructor.
   ~Impl() noexcept;
 
@@ -153,9 +149,7 @@ private:
   NativeHandle_t handle_{};
   DWORD dwStyle_{};
   bool closed_{false};
-  wsi::Keys keyLUT_[Keyset::kMaxKeys]{};
-  Keyset keys_{};
-  Buttonset buttons_{};
+  int keyLUT_[Keys::kMaxKeys]{};
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};
