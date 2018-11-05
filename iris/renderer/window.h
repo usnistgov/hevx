@@ -16,6 +16,7 @@ struct Window {
     kDecorated = (1 << 0), //!< The window has decorations (title bar, borders).
     kSizeable = (1 << 1),  //!< The window is sizeable.
     kStereo = (1 << 2),    //!< The window will have stereo output.
+    kShowUI = (1 << 3),    //!< The window will have UI shown on it.
   };
 
   // forward-declare this so that it can be used below in Create

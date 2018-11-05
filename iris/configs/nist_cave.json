@@ -4,66 +4,70 @@
     "windows": [
       {
         "name": "frontWindow",
-        "stereo": true,
+        "is_stereo": true,
         "x": 0,
         "y": 0,
         "width": 1600,
         "height": 1200,
-        "decoration": false,
-        "background": {
+        "show_system_decoration": false,
+        "background_color": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
         },
+        "show_ui":  true,
         "display": 1
       },
       {
         "name": "leftWindow",
-        "stereo": true,
+        "is_stereo": true,
         "x": 0,
         "y": 0,
         "width": 1600,
         "height": 1200,
-        "decoration": false,
-        "background": {
+        "show_system_decoration": false,
+        "background_color": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
         },
+        "show_ui":  false,
         "display": 2
       },
       {
         "name": "floorWindow",
-        "stereo": true,
+        "is_stereo": true,
         "x": 0,
         "y": 0,
         "width": 1600,
         "height": 1200,
-        "decoration": false,
-        "background": {
+        "show_system_decoration": false,
+        "background_color": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
         },
+        "show_ui":  false,
         "display": 3
       },
       {
         "name": "consoleWindow",
-        "stereo": false,
+        "is_stereo": false,
         "x": 320,
         "y": 320,
         "width": 720,
         "height": 720,
-        "decoration": true,
-        "background": {
+        "show_system_decoration": true,
+        "background_color": {
           "r": 0,
           "g": 0,
           "b": 0,
           "a": 1
-        }
+        },
+        "show_ui":  true
       }
     ]
   }

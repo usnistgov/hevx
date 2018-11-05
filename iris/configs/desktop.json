@@ -4,18 +4,19 @@
     "windows": [
       {
         "name": "desktopWindow",
-        "stereo": false,
+        "is_stereo": false,
         "x": 320,
         "y": 320,
         "width": 1200,
         "height": 1200,
-        "decoration": true,
-        "background": {
+        "show_system_decoration": true,
+        "background_color": {
           "r": 0.25,
           "g": 0.5,
           "b": 0.75,
           "a": 1.0
-        }
+        },
+        "show_ui": true
       }
     ]
   }

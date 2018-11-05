@@ -1726,11 +1726,14 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   case iris::Control::Control_Type_DISPLAYS:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
-      auto const& bg = windowMessage.background();
+      auto const& bg = windowMessage.background_color();
 
       Window::Options options = Window::Options::kNone;
-      if (windowMessage.decoration()) options |= Window::Options::kDecorated;
-      if (windowMessage.stereo()) options |= Window::Options::kStereo;
+      if (windowMessage.show_system_decoration()) {
+        options |= Window::Options::kDecorated;
+      }
+      if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
+      if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
       if (auto win =
             Window::Create(windowMessage.name().c_str(),
@@ -1744,11 +1747,14 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     break;
   case iris::Control::Control_Type_WINDOW: {
     auto&& windowMessage = controlMessage.window();
-    auto const& bg = windowMessage.background();
+    auto const& bg = windowMessage.background_color();
 
     Window::Options options = Window::Options::kNone;
-    if (windowMessage.decoration()) options |= Window::Options::kDecorated;
-    if (windowMessage.stereo()) options |= Window::Options::kStereo;
+    if (windowMessage.show_system_decoration()) {
+      options |= Window::Options::kDecorated;
+    }
+    if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
+    if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
     if (auto win = Window::Create(
           windowMessage.name().c_str(), {windowMessage.x(), windowMessage.y()},
