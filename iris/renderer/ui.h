@@ -10,8 +10,10 @@ namespace iris::Renderer::ui {
 
 std::error_code Initialize() noexcept;
 
+std::error_code BeginFrame(glm::vec2 const& size) noexcept;
+
 tl::expected<VkCommandBuffer, std::error_code>
-Frame(glm::vec2 const& size) noexcept;
+EndFrame(VkFramebuffer framebuffer) noexcept;
 
 void Shutdown() noexcept;
 

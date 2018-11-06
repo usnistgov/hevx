@@ -34,7 +34,8 @@ CreateImageFromMemory(VkImageType imageType, VkFormat format, VkExtent3D extent,
 
 std::error_code TransitionImage(VkImage image, VkImageLayout oldLayout,
                                 VkImageLayout newLayout,
-                                std::uint32_t mipLevels = 1) noexcept;
+                                std::uint32_t mipLevels = 1,
+                                std::uint32_t arrayLayers = 1) noexcept;
 
 } // namespace iris::Renderer
 

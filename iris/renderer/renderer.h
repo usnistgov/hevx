@@ -42,7 +42,8 @@ void Shutdown() noexcept;
 void Terminate() noexcept;
 bool IsRunning() noexcept;
 
-void Frame() noexcept;
+bool BeginFrame() noexcept;
+void EndFrame() noexcept;
 
 std::error_code Control(iris::Control::Control const& control) noexcept;
 

@@ -1,5 +1,6 @@
 #include "renderer/ui.h"
 #include "absl/container/fixed_array.h"
+#include "glm/gtc/type_ptr.hpp"
 #include "renderer/buffer.h"
 #include "renderer/image.h"
 #include "renderer/impl.h"
@@ -8,6 +9,7 @@
 #include "logging.h"
 #include "wsi/input.h"
 #include "imgui.h"
+#include <chrono>
 
 namespace iris::Renderer::ui {
 
@@ -41,18 +43,26 @@ void main() {
   fColor = Color * texture(sTexture, UV.st);
 })";
 
+static std::vector<VkCommandBuffer> sCommandBuffers{2};
+static std::uint32_t sCommandBufferIndex{0};
 static VkImage sFontImage{VK_NULL_HANDLE};
 static VmaAllocation sFontImageAllocation{VK_NULL_HANDLE};
 static VkImageView sFontImageView{VK_NULL_HANDLE};
 static VkSampler sFontImageSampler{VK_NULL_HANDLE};
+static VkDeviceSize sVertexBufferSize{0};
 static VkBuffer sVertexBuffer{VK_NULL_HANDLE};
 static VmaAllocation sVertexBufferAllocation{VK_NULL_HANDLE};
+static VkDeviceSize sIndexBufferSize{0};
 static VkBuffer sIndexBuffer{VK_NULL_HANDLE};
 static VmaAllocation sIndexBufferAllocation{VK_NULL_HANDLE};
 static VkDescriptorSetLayout sDescriptorSetLayout{VK_NULL_HANDLE};
-static absl::FixedArray<VkDescriptorSet> sDescriptorSets;
+static std::vector<VkDescriptorSet> sDescriptorSets;
 static VkPipelineLayout sPipelineLayout{VK_NULL_HANDLE};
 static VkPipeline sPipeline{VK_NULL_HANDLE};
+
+using Duration = std::chrono::duration<float, std::ratio<1, 1>>;
+using TimePoint = std::chrono::time_point<std::chrono::steady_clock, Duration>;
+static TimePoint sPreviousTime;
 
 } // namespace iris::ui::Renderer
 
@@ -60,7 +70,16 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
+  if (auto cbs = AllocateCommandBuffers(2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
+    sCommandBuffers = std::move(*cbs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return cbs.error();
+  }
+
   ImGui::CreateContext();
+  ImGui::StyleColorsDark();
+
   ImGuiIO& io = ImGui::GetIO();
 
   io.KeyMap[ImGuiKey_Tab] = wsi::Keys::kTab;
@@ -84,6 +103,15 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   io.KeyMap[ImGuiKey_X] = wsi::Keys::kX;
   io.KeyMap[ImGuiKey_Y] = wsi::Keys::kY;
   io.KeyMap[ImGuiKey_Z] = wsi::Keys::kZ;
+
+  if (!io.Fonts->AddFontFromFileTTF((std::string(kIRISContentDirectory) +
+                                     "/assets/fonts/SourceSansPro-Regular.ttf")
+                                      .c_str(),
+                                    16.f)) {
+    GetLogger()->error("Cannot load UI font file");
+    IRIS_LOG_LEAVE();
+    return Error::kInitializationFailed;
+  }
 
   unsigned char* pixels;
   int width, height, bytes_per_pixel;
@@ -128,27 +156,29 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   samplerCI.unnormalizedCoordinates = VK_FALSE;
 
-  if (auto result =
-        vkCreateSampler(sDevice, &samplerCI, nullptr, &sFontImageSampler);
-      result != VK_SUCCESS) {
+  result = vkCreateSampler(sDevice, &samplerCI, nullptr, &sFontImageSampler);
+  if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot create sampler for UI font texture: {}",
                        to_string(result));
     IRIS_LOG_LEAVE();
     return make_error_code(result);
   }
 
-  if (auto vb = CreateBuffer(1024 * sizeof(ImDrawVert),
-                             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                             VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  sVertexBufferSize = 1024 * sizeof(ImDrawVert);
+
+  if (auto vb =
+        CreateBuffer(sVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(sVertexBuffer, sVertexBufferAllocation) = *vb;
   } else {
     IRIS_LOG_LEAVE();
     return vb.error();
   }
 
-  if (auto ib =
-        CreateBuffer(1024 * sizeof(ImDrawIdx), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                     VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  sIndexBufferSize = 1024 * sizeof(ImDrawIdx);
+
+  if (auto ib = CreateBuffer(sIndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                             VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(sIndexBuffer, sIndexBufferAllocation) = *ib;
   } else {
     IRIS_LOG_LEAVE();
@@ -173,19 +203,16 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     return fs.error();
   }
 
-  VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
-  descriptorSetLayoutBinding.binding = 0;
-  descriptorSetLayoutBinding.descriptorType =
-    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  descriptorSetLayoutBinding.descriptorCount = 1;
-  descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  descriptorSetLayoutBinding.pImmutableSamplers = &sFontImageSampler;
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(1);
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                   1, VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   &sFontImageSampler};
 
-  if (auto d = CreateDescriptors({descriptorSetLayoutBinding})) {
+  if (auto d = CreateDescriptors(descriptorSetLayoutBinding)) {
     std::tie(sDescriptorSetLayout, sDescriptorSets) = *d;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::make_unexpected(d.error());
+    return d.error();
   }
 
   VkDescriptorImageInfo descriptorImageI = {};
@@ -200,12 +227,15 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     VkWriteDescriptorSet& writeDS = writeDescriptorSets[i];
 
     writeDS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDS.pNext = nullptr;
     writeDS.dstSet = sDescriptorSets[i];
     writeDS.dstBinding = 0;
     writeDS.dstArrayElement = 0;
-    writeDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writeDS.descriptorCount = 1;
+    writeDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writeDS.pImageInfo = &descriptorImageI;
+    writeDS.pBufferInfo = nullptr;
+    writeDS.pTexelBufferView = nullptr;
   }
 
   UpdateDescriptorSets(writeDescriptorSets);
@@ -372,8 +402,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   return Error::kNone;
 } // iris::Renderer::ui::Initialize
 
-tl::expected<VkCommandBuffer, std::error_code>
-iris::Renderer::ui::Frame(glm::vec2 const& size) noexcept {
+std::error_code iris::Renderer::ui::BeginFrame(glm::vec2 const& size) noexcept {
   ImGuiIO& io = ImGui::GetIO();
 
   io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
@@ -385,21 +414,178 @@ iris::Renderer::ui::Frame(glm::vec2 const& size) noexcept {
 
   ImVec2 mouseSaved = io.MousePos;
   io.MousePos = {-FLT_MAX, -FLT_MAX};
+  // update io.MousePos with current mouse position
+
+  TimePoint currentTime = std::chrono::steady_clock::now();
+  io.DeltaTime = (currentTime > sPreviousTime)
+                   ? (currentTime - sPreviousTime).count()
+                   : 1.f / 60.f;
 
   io.DisplaySize = {size.x, size.y};
   io.DisplayFramebufferScale = {1.f, 1.f};
 
   ImGui::NewFrame();
 
-  VkCommandBuffer cb;
-  if (auto cbs = AllocateCommandBuffers(1, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
-    cb = (*cbs)[0];
+  return Error::kNone;
+} // iris::Renderer::ui::Frame
+
+tl::expected<VkCommandBuffer, std::error_code>
+iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
+  VkResult result;
+
+  ImGui::EndFrame();
+  ImGui::Render();
+
+  ImDrawData* drawData = ImGui::GetDrawData();
+  if (drawData->TotalVtxCount == 0) return VkCommandBuffer{VK_NULL_HANDLE};
+
+  VkDeviceSize newBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
+  if (newBufferSize > sVertexBufferSize) {
+    if (auto newVB =
+          CreateBuffer(newBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+      vmaDestroyBuffer(sAllocator, sVertexBuffer, sVertexBufferAllocation);
+      std::tie(sVertexBuffer, sVertexBufferAllocation) = *newVB;
+      sVertexBufferSize = newBufferSize;
+      NameObject(VK_OBJECT_TYPE_BUFFER, sVertexBuffer, "ui::sVertexBuffer");
+    } else {
+      GetLogger()->error("Cannot resize vertex buffer: {}",
+                         newVB.error().message());
+      return tl::unexpected(newVB.error());
+    }
+  }
+
+  newBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
+  if (newBufferSize > sIndexBufferSize) {
+    if (auto newIB =
+          CreateBuffer(newBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                       VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+      vmaDestroyBuffer(sAllocator, sIndexBuffer, sIndexBufferAllocation);
+      std::tie(sIndexBuffer, sIndexBufferAllocation) = *newIB;
+      sIndexBufferSize = newBufferSize;
+      NameObject(VK_OBJECT_TYPE_BUFFER, sIndexBuffer, "ui::sIndexBuffer");
+    } else {
+      GetLogger()->error("Cannot resize index buffer: {}",
+                         newIB.error().message());
+      return tl::unexpected(newIB.error());
+    }
+  }
+
+  ImDrawVert* pVerts;
+  if (auto p = MapMemory(sVertexBufferAllocation)) {
+    pVerts = reinterpret_cast<ImDrawVert*>(*p);
   } else {
-    return tl::unexpected(cbs.error());
+    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
+    return tl::unexpected(p.error());
+  }
+
+  ImDrawIdx* pIndxs;
+  if (auto p = MapMemory(sIndexBufferAllocation)) {
+    pIndxs = reinterpret_cast<ImDrawIdx*>(*p);
+  } else {
+    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
+    return tl::unexpected(p.error());
+  }
+
+  for (int i = 0; i < drawData->CmdListsCount; ++i) {
+    ImDrawList const* cmdList = drawData->CmdLists[i];
+    std::memcpy(pVerts, cmdList->VtxBuffer.Data,
+                cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+    std::memcpy(pIndxs, cmdList->IdxBuffer.Data,
+                cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+    pVerts += cmdList->VtxBuffer.Size;
+    pIndxs += cmdList->IdxBuffer.Size;
+  }
+
+  UnmapMemory(sVertexBufferAllocation, 0, VK_WHOLE_SIZE);
+  UnmapMemory(sIndexBufferAllocation, 0, VK_WHOLE_SIZE);
+
+  absl::FixedArray<VkClearValue> clearValues(4);
+  clearValues[sColorTargetAttachmentIndex].color = {0, 0, 0, 0};
+  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
+
+  sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
+  auto&& cb = sCommandBuffers[sCommandBufferIndex];
+
+  VkCommandBufferInheritanceInfo inheritanceInfo = {};
+  inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  inheritanceInfo.renderPass = sRenderPass;
+  inheritanceInfo.framebuffer = framebuffer;
+
+  VkCommandBufferBeginInfo beginInfo = {};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                    VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  beginInfo.pInheritanceInfo = &inheritanceInfo;
+
+  result = vkBeginCommandBuffer(cb, &beginInfo);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot begin UI command buffer: {}", to_string(result));
+    return tl::unexpected(make_error_code(result));
+  }
+
+  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sPipeline);
+  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sPipelineLayout,
+                          0, 1, &sDescriptorSets[0], 0, nullptr);
+
+  VkDeviceSize bindingOffset = 0;
+  vkCmdBindVertexBuffers(cb, 0, 1, &sVertexBuffer, &bindingOffset);
+  vkCmdBindIndexBuffer(cb, sIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+  glm::vec2 const displaySize{drawData->DisplaySize.x, drawData->DisplaySize.y};
+  glm::vec2 const displayPos{drawData->DisplayPos.x, drawData->DisplayPos.y};
+
+  VkViewport viewport = {0, 0, displaySize.x, displaySize.y, 0.f, 1.f};
+  vkCmdSetViewport(cb, 0, 1, &viewport);
+
+  glm::vec2 const scale = glm::vec2{2.f, 2.f} / displaySize;
+  glm::vec2 const translate = glm::vec2{1.f, 1.f} - displayPos * scale;
+
+  vkCmdPushConstants(cb, sPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                     sizeof(glm::vec2), glm::value_ptr(scale));
+  vkCmdPushConstants(cb, sPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                     sizeof(glm::vec2), sizeof(glm::vec2),
+                     glm::value_ptr(translate));
+
+  for (int i = 0, idxOff = 0, vtxOff = 0; i < drawData->CmdListsCount; ++i) {
+    ImDrawList* cmdList = drawData->CmdLists[i];
+
+    for (int j = 0; j < cmdList->CmdBuffer.size(); ++j) {
+      ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[j];
+
+      if (drawCmd->UserCallback) {
+        drawCmd->UserCallback(cmdList, drawCmd);
+      } else {
+        VkRect2D scissor;
+        scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
+                             ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
+                             : 0;
+        scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
+                             ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
+                             : 0;
+        scissor.extent.width =
+          (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+        scissor.extent.height = (uint32_t)(
+          drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1); // FIXME: Why +1 here?
+
+        vkCmdSetScissor(cb, 0, 1, &scissor);
+        vkCmdDrawIndexed(cb, drawCmd->ElemCount, 1, idxOff, vtxOff, 0);
+      }
+
+      idxOff += drawCmd->ElemCount;
+    }
+
+    vtxOff += cmdList->VtxBuffer.Size;
+  }
+
+  result = vkEndCommandBuffer(cb);
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Cannot end UI command buffer: {}", to_string(result));
+    return tl::unexpected(make_error_code(result));
   }
 
   return cb;
-} // iris::Renderer::ui::Frame
+} // iris::Renderer::ui::EndFrame
 
 void iris::Renderer::ui::Shutdown() noexcept {
   ImGui::DestroyContext();

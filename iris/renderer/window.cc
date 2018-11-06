@@ -57,7 +57,7 @@ void iris::Renderer::Window::Close() noexcept {
   Renderer::Terminate();
 } // iris::Renderer::Window::Close
 
-std::error_code iris::Renderer::Window::Frame() noexcept {
+std::error_code iris::Renderer::Window::BeginFrame() noexcept {
   window.PollEvents();
 
   if (resized) {
@@ -66,7 +66,10 @@ std::error_code iris::Renderer::Window::Frame() noexcept {
   }
 
   return Error::kNone;
-} // iris::Renderer::Window::Frame
+} // iris::Renderer::Window::BeginFrame
+
+void iris::Renderer::Window::EndFrame() noexcept {
+} // iris::Renderer::Window::EndFrame
 
 iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)

@@ -1,9 +1,9 @@
 #ifndef HEV_IRIS_RENDERER_IMPL_H_
 #define HEV_IRIS_RENDERER_IMPL_H_
 
+#include "absl/container/fixed_array.h"
 #include "config.h"
 #include "error.h"
-#include "absl/container/fixed_array.h"
 #include "gsl/gsl"
 #include "renderer/renderer.h"
 #include "renderer/vulkan.h"
@@ -16,7 +16,6 @@ extern VkPhysicalDevice sPhysicalDevice;
 extern std::uint32_t sGraphicsQueueFamilyIndex;
 extern VkDevice sDevice;
 extern VkQueue sGraphicsCommandQueue;
-extern VkCommandPool sGraphicsCommandPool;
 extern VkFence sFrameComplete;
 extern VmaAllocator sAllocator;
 
@@ -41,9 +40,8 @@ void FreeCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers) noexcept;
 tl::expected<VkCommandBuffer, std::error_code> BeginOneTimeSubmit() noexcept;
 std::error_code EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
 
-tl::expected<
-  std::pair<VkDescriptorSetLayout, absl::FixedArray<VkDescriptorSet>>,
-  std::error_code>
+tl::expected<std::pair<VkDescriptorSetLayout, std::vector<VkDescriptorSet>>,
+             std::error_code>
 CreateDescriptors(gsl::span<VkDescriptorSetLayoutBinding> bindings) noexcept;
 
 inline void UpdateDescriptorSets(
@@ -55,6 +53,25 @@ inline void UpdateDescriptorSets(
                          static_cast<uint32_t>(copyDescriptorSets.size()),
                          copyDescriptorSets.data());
 } // UpdateDescriptorSets
+
+
+inline tl::expected<void*, std::error_code>
+MapMemory(VmaAllocation allocation) noexcept {
+  void* ptr;
+  if (auto result = vmaMapMemory(sAllocator, allocation, &ptr);
+      result != VK_SUCCESS) {
+    return tl::unexpected(make_error_code(result));
+  }
+  return ptr;
+} // MapMemory
+
+inline void UnmapMemory(VmaAllocation allocation, VkDeviceSize flushOffset = 0,
+                        VkDeviceSize flushSize = 0) {
+  if (flushSize > 0) {
+    vmaFlushAllocation(sAllocator, allocation, flushOffset, flushSize);
+  }
+  vmaUnmapMemory(sAllocator, allocation);
+} // UnmapMemory
 
 template <class T>
 void NameObject(VkObjectType objectType, T objectHandle,

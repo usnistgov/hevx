@@ -1,16 +1,17 @@
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
-#include "iris/config.h"
-#include "iris/renderer/renderer.h"
-#include "iris/renderer/io.h"
-#include "iris/wsi/window.h"
 #include "fmt/format.h"
+#include "imgui.h"
+#include "iris/config.h"
+#include "iris/renderer/io.h"
+#include "iris/renderer/renderer.h"
+#include "iris/wsi/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
-#pragma warning(disable: 4127)
+#pragma warning(disable : 4127)
 #endif
-#include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/sinks/basic_file_sink.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -73,8 +74,26 @@ int main(int argc, char** argv) {
   }
 
   for (auto&& file : files) iris::Renderer::io::LoadFile(std::string(file));
+  bool showDemoWindow = true;
 
-  while (iris::Renderer::IsRunning()) { iris::Renderer::Frame(); }
+  while (iris::Renderer::IsRunning()) {
+    if (!iris::Renderer::BeginFrame()) continue;
+
+    if (!ImGui::GetIO().WantCaptureKeyboard) {
+      if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
+        iris::Renderer::Terminate();
+      }
+    }
+
+    ImGui::ShowDemoWindow(&showDemoWindow);
+
+    ImGui::Begin("Status");
+    ImGui::Text("Average %.3f ms/frame (%.1 FPS)",
+                1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::End();
+
+    iris::Renderer::EndFrame();
+  }
 
   iris::Renderer::Shutdown();
   logger.info("exiting");

@@ -33,7 +33,8 @@ struct Window {
   void Resize(glm::uvec2 const& newExtent) noexcept;
   void Close() noexcept;
 
-  std::error_code Frame() noexcept;
+  std::error_code BeginFrame() noexcept;
+  void EndFrame() noexcept;
 
   Window() = default;
   Window(Window const&) = delete;

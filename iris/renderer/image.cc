@@ -133,16 +133,14 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     return tl::unexpected(sb.error());
   }
 
-  void* pBuffer;
-  result = vmaMapMemory(sAllocator, stagingBufferAllocation, &pBuffer);
-  if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot map staging buffer: {}", to_string(result));
-    return tl::unexpected(make_error_code(result));
+  if (auto p = MapMemory(stagingBufferAllocation)) {
+    std::memcpy(*p, pixels, imageSize);
+  } else {
+    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
+    return tl::unexpected(p.error());
   }
 
-  std::memcpy(pBuffer, pixels, imageSize);
-  vmaFlushAllocation(sAllocator, stagingBufferAllocation, 0, VK_WHOLE_SIZE);
-  vmaUnmapMemory(sAllocator, stagingBufferAllocation);
+  UnmapMemory(stagingBufferAllocation, 0, VK_WHOLE_SIZE);
 
   VkImageCreateInfo imageCI = {};
   imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -186,7 +184,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   region.bufferRowLength = 0;
   region.bufferImageHeight = 0;
   region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-  region.imageOffset = {0, 0};
+  region.imageOffset = {0, 0, 0};
   region.imageExtent = extent;
 
   vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
@@ -211,10 +209,9 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   return std::make_pair(image, allocation);
 } // iris::Renderer::CreateImageFromMemory
 
-std::error_code
-iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
-                                VkImageLayout newLayout,
-                                std::uint32_t mipLevels) noexcept {
+std::error_code iris::Renderer::TransitionImage(
+  VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
+  std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
 
   VkImageMemoryBarrier barrier = {};
@@ -227,7 +224,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = mipLevels;
   barrier.subresourceRange.baseArrayLayer = 0;
-  barrier.subresourceRange.layerCount = 1;
+  barrier.subresourceRange.layerCount = arrayLayers;
 
   if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -248,7 +245,7 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
   } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
              newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
