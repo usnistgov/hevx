@@ -331,7 +331,7 @@ void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
       break;
     }
     break;
-#endif
+
   case ClientMessage:
     if (event.xclient.message_type == None) break;
     if (event.xclient.message_type != atoms_[WM_PROTOCOLS]) break;

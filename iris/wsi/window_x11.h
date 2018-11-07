@@ -124,6 +124,11 @@ public:
     ::XFlush(handle_.display);
   }
 
+  /*! \brief Indicates if this window currently has the WSI focus.
+   *  \return true if this window is the focused window, false if not.
+   */
+  bool IsFocused() const noexcept { return focused_; }
+
   //! \brief Poll for all outstanding window events. Must be regularly called.
   void PollEvents() noexcept {
     ::XEvent event = {};
@@ -175,6 +180,7 @@ private:
   NativeHandle_t handle_{};
   ::Visual* visual_{nullptr};
   bool closed_{false};
+  bool focused_{false};
   int keyLUT_[Keys::kMaxKeys]{};
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
