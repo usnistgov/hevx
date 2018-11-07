@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     }
 
     ImGui::Begin("Status");
-    ImGui::Text("Last Frame Average %.3f ms", ImGui::GetIO().DeltaTime);
+    ImGui::Text("Last Frame %.3f ms", ImGui::GetIO().DeltaTime);
     ImGui::Text("Average %.3f ms/frame (%.1f FPS)",
                 1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
