@@ -23,7 +23,7 @@ iris::Renderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
                            &allocation, nullptr);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Error creating buffer: {}", to_string(result));
-    return tl::make_unexpected(make_error_code(result));
+    return tl::unexpected(make_error_code(result));
   }
 
   IRIS_LOG_LEAVE();

@@ -9,6 +9,7 @@
 #include "iris/wsi/input.h"
 #include "tl/expected.hpp"
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <string>
@@ -22,10 +23,33 @@
  */
 namespace iris::wsi {
 
-struct Rect {
-  glm::uvec2 offset;
-  glm::uvec2 extent;
-}; // struct Rect
+struct Offset2D {
+  std::int16_t x{0}, y{0};
+
+  constexpr Offset2D() noexcept = default;
+  constexpr explicit Offset2D(std::int16_t x_, std::int16_t y_) noexcept
+    : x(std::move(x_))
+    , y(std::move(y_)) {}
+}; // struct Offset2D
+
+struct Extent2D {
+  std::uint16_t width{0}, height{0};
+
+  constexpr Extent2D() noexcept = default;
+  constexpr explicit Extent2D(std::uint16_t w, std::uint16_t h) noexcept
+    : width(std::move(w))
+    , height(std::move(h)) {}
+}; // struct Extent2D
+
+struct Rect2D {
+  Offset2D offset{};
+  Extent2D extent{};
+
+  constexpr Rect2D() noexcept = default;
+  constexpr explicit Rect2D(Offset2D o, Extent2D e) noexcept
+    : offset(std::move(o))
+    , extent(std::move(e)) {}
+}; // struct Rect2D
 
 /*! \brief Manages a platform-specific Window.
  *
@@ -47,24 +71,28 @@ public:
 
   /*! \brief Create a new Window.
    * \param[in] title the window title.
+   * \param[in] offset the window offset in screen coordinates.
    * \param[in] extent the window extent in screen coordinates.
    * \param[in] options the Options describing how to create the window.
-   * \return a std::expected of either the Window or a std::error_code.
+   * \return a std::expected of either the Window or a std::exception.
    */
-  static tl::expected<Window, std::error_code> Create(gsl::czstring<> title,
-                                                      Rect rect,
-                                                      Options const& options,
-                                                      int display) noexcept;
+  static tl::expected<Window, std::exception>
+  Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
+         Options const& options, int display) noexcept;
 
-  /*! \brief Get the current window offset in screen coordinates.
-   * \return the current window offset in screen coordinates.
-   */
-  glm::uvec2 Offset() const noexcept;
+  Rect2D Rect() const noexcept;
+  Offset2D Offset() const noexcept;
+  Extent2D Extent() const noexcept;
 
-  /*! \brief Get the current window extent in screen coordinates.
-   *  \return the current window extent in screen coordinates.
+  /*! \brief Get the current state of the keyboard.
+   *  \return the current state of the keyboard.
    */
-  glm::uvec2 Extent() const noexcept;
+  Keyset Keys() const noexcept;
+
+  /*! \brief Get the current state of the mouse buttons.
+   *  \return the current state of the mouse buttons.
+   */
+  Buttonset Buttons() const noexcept;
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
@@ -84,12 +112,12 @@ public:
   /*! \brief Move this window.
    * \param[in] offset the new window offset in screen coordinates.
    */
-  void Move(glm::uvec2 const& offset);
+  void Move(Offset2D const& offset);
 
   /*! \brief Resize this window.
    * \param[in] extent the new window extent in screen coordinate.s
    */
-  void Resize(glm::uvec2 const& extent);
+  void Resize(Extent2D const& extent);
 
   /*! \brief Indicates if this window has been closed.
    * \return true if this window has been closed, false if not.
@@ -124,7 +152,7 @@ public:
   /*! \brief Delegate function called when the window is moved.
    * \param[in] newOffset the new window offset in screen coordinates.
    */
-  using MoveDelegate = std::function<void(glm::uvec2 const& newOffset)>;
+  using MoveDelegate = std::function<void(Offset2D const& newOffset)>;
 
   /*! \brief Set the delegate to be called on window move.
    * \param[in] delegate the \ref MoveDelegate.
@@ -134,7 +162,7 @@ public:
   /*! \brief Delegate function called when the window is resized.
    * \param[in] newExtent the new window extent in screen coordinates.
    */
-  using ResizeDelegate = std::function<void(glm::uvec2 const& newExtent)>;
+  using ResizeDelegate = std::function<void(Extent2D const& newExtent)>;
 
   /*! \brief Set the delegate to be called on window resize.
    * \param[in] delegate the \ref ResizeDelegate.

@@ -4,8 +4,8 @@
  * \brief \ref iris::wsi::Window::Impl declaration for Win32.
  */
 
-#include "wsi/window.h"
 #include "absl/container/fixed_array.h"
+#include "wsi/window.h"
 #include <Windows.h>
 
 namespace iris::wsi {
@@ -31,16 +31,6 @@ public:
    */
   static tl::expected<std::unique_ptr<Impl>, std::error_code>
   Create(gsl::czstring<> title, Rect rect, Options const& options, int);
-
-  /*! \brief Get the current window offset in screen coordinates.
-   * \return the current window offset in screen coordinates.
-   */
-  glm::uvec2 Offset() const noexcept { return rect_.offset; }
-
-  /*! \brief Get the current window extent in screen coordinates.
-   *  \return the current window extent in screen coordinates.
-   */
-  glm::uvec2 Extent() const noexcept { return rect_.extent; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
@@ -94,7 +84,12 @@ public:
   bool IsClosed() const noexcept { return closed_; }
 
   //! \brief Close this window.
-  void Close() noexcept { ::SendMessageA(handle_.hWnd, WM_CLOSE, 0, 0); }
+  void Close() noexcept {
+    closed_ = true;
+    closeDelegate_();
+    ::DestroyWindow(handle_.hWnd);
+    //::SendMessageA(handle_.hWnd, WM_CLOSE, 0, 0);
+  }
 
   //! \brief Show this window.
   void Show() noexcept { ::ShowWindow(handle_.hWnd, SW_SHOW); }
@@ -140,7 +135,8 @@ public:
   NativeHandle_t NativeHandle() const noexcept { return handle_; }
 
   //! \brief Default constructor: no initialization.
-  Impl() = default;
+  Impl()
+    : keyLUT_(Keyset::kMaxKeys) {}
 
   Impl(Impl const&) = delete;
   Impl(Impl&& other) noexcept;
@@ -156,7 +152,7 @@ private:
   DWORD dwStyle_{};
   bool closed_{false};
   bool focused_{false};
-  int keyLUT_[Keys::kMaxKeys]{};
+  absl::FixedArray<wsi::Keys> keyLUT_;
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

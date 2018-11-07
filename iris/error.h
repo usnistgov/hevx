@@ -11,12 +11,10 @@ namespace iris {
 
 //! \brief IRIS errors.
 enum class Error {
-  kNone = 0,                //!< No error
-  kInitializationFailed,    //!< Initialization failed for some reason.
-  kAlreadyInitialized,      //!< The renderer has already been initialized.
-  kNoPhysicalDevice,        //!< No physical device available.
-  kSurfaceCreationFailed,   //!< Surface creation failed for some reason.
-  kSurfaceNotSupported,   //!< Surface is not supported by the physical device.
+  kNone = 0,              //!< No error
+  kInitializationFailed,  //!< Initialization failed for some reason.
+  kAlreadyInitialized,    //!< The renderer has already been initialized.
+  kNoPhysicalDevice,      //!< No physical device available.
   kFileNotSupported,      //!< File is not supported.
   kControlMessageInvalid, //!< Control message invalid.
   kShaderCompileFailed,   //!< Shader compile failed.
@@ -40,8 +38,6 @@ public:
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device"s;
-    case Error::kSurfaceCreationFailed: return "surface creation failed"s;
-    case Error::kSurfaceNotSupported: return "surface not supported"s;
     case Error::kFileNotSupported: return "file not supported"s;
     case Error::kControlMessageInvalid: return "control message invalid"s;
     case Error::kShaderCompileFailed: return "shader compile failed"s;

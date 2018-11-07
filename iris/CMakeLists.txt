@@ -1,7 +1,18 @@
 find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
-find_package(X11 REQUIRED)
+
+if(UNIX)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(X11_XCB REQUIRED x11-xcb)
+  pkg_check_modules(XCB_KEYSYMS REQUIRED xcb-keysyms)
+  pkg_check_modules(XCB_XINPUT REQUIRED xcb-xinput)
+  pkg_check_modules(XCB_ICCCM REQUIRED xcb-icccm)
+  pkg_check_modules(XCB_RANDR REQUIRED xcb-randr)
+  pkg_check_modules(XCB_XKB REQUIRED xcb-xkb)
+  pkg_check_modules(XCB_UTIL REQUIRED xcb-util)
+  pkg_check_modules(XCB_CURSOR REQUIRED xcb-cursor)
+endif()
 
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
@@ -49,8 +60,8 @@ target_compile_options(protos
 
 if(WIN32)
   set(_flextvk_profile vk_win32_khr.txt)
-else()
-  set(_flextvk_profile vk_xlib_khr.txt)
+elseif(UNIX)
+  set(_flextvk_profile vk_xcb_khr.txt)
 endif()
 
 add_custom_command(
@@ -109,7 +120,10 @@ target_link_libraries(iris
     flags imgui vma
     gsl glm expected CXX::Filesystem fmt spdlog
     absl::base absl::strings absl::container absl::hash
-    shaderc Vulkan::Vulkan ${X11_LIBRARIES}
+    shaderc Vulkan::Vulkan
+    ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
+    ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
+    ${XCB_CURSOR_LIBRARIES}
     protobuf::libprotobuf nng
     TBB::tbb Threads::Threads
     $<$<PLATFORM_ID:Linux>:-ldl>
@@ -132,7 +146,7 @@ target_compile_definitions(iris
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX>
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
-    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XLIB_KHR VK_USE_PLATFORM_XLIB_XRANDR_EXT>
+    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
     $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
 )
 
@@ -157,3 +171,6 @@ if(WIN32)
   endforeach()
   unset(tbb_dlls)
 endif()
+
+add_executable(window_test window_test.cc)
+target_link_libraries(window_test iris absl::failure_signal_handler)

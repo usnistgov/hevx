@@ -82,27 +82,27 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
 
   ImGuiIO& io = ImGui::GetIO();
 
-  io.KeyMap[ImGuiKey_Tab] = wsi::Keys::kTab;
-  io.KeyMap[ImGuiKey_LeftArrow] = wsi::Keys::kLeft;
-  io.KeyMap[ImGuiKey_RightArrow] = wsi::Keys::kRight;
-  io.KeyMap[ImGuiKey_UpArrow] = wsi::Keys::kUp;
-  io.KeyMap[ImGuiKey_DownArrow] = wsi::Keys::kDown;
-  io.KeyMap[ImGuiKey_PageUp] = wsi::Keys::kPageUp;
-  io.KeyMap[ImGuiKey_PageDown] = wsi::Keys::kPageDown;
-  io.KeyMap[ImGuiKey_Home] = wsi::Keys::kHome;
-  io.KeyMap[ImGuiKey_End] = wsi::Keys::kEnd;
-  io.KeyMap[ImGuiKey_Insert] = wsi::Keys::kInsert;
-  io.KeyMap[ImGuiKey_Delete] = wsi::Keys::kDelete;
-  io.KeyMap[ImGuiKey_Backspace] = wsi::Keys::kBackspace;
-  io.KeyMap[ImGuiKey_Space] = wsi::Keys::kSpace;
-  io.KeyMap[ImGuiKey_Enter] = wsi::Keys::kEnter;
-  io.KeyMap[ImGuiKey_Escape] = wsi::Keys::kEscape;
-  io.KeyMap[ImGuiKey_A] = wsi::Keys::kA;
-  io.KeyMap[ImGuiKey_C] = wsi::Keys::kC;
-  io.KeyMap[ImGuiKey_V] = wsi::Keys::kV;
-  io.KeyMap[ImGuiKey_X] = wsi::Keys::kX;
-  io.KeyMap[ImGuiKey_Y] = wsi::Keys::kY;
-  io.KeyMap[ImGuiKey_Z] = wsi::Keys::kZ;
+  io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
+  io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
+  io.KeyMap[ImGuiKey_RightArrow] = static_cast<int>(wsi::Keys::kRight);
+  io.KeyMap[ImGuiKey_UpArrow] = static_cast<int>(wsi::Keys::kUp);
+  io.KeyMap[ImGuiKey_DownArrow] = static_cast<int>(wsi::Keys::kDown);
+  io.KeyMap[ImGuiKey_PageUp] = static_cast<int>(wsi::Keys::kPageUp);
+  io.KeyMap[ImGuiKey_PageDown] = static_cast<int>(wsi::Keys::kPageDown);
+  io.KeyMap[ImGuiKey_Home] = static_cast<int>(wsi::Keys::kHome);
+  io.KeyMap[ImGuiKey_End] = static_cast<int>(wsi::Keys::kEnd);
+  io.KeyMap[ImGuiKey_Insert] = static_cast<int>(wsi::Keys::kInsert);
+  io.KeyMap[ImGuiKey_Delete] = static_cast<int>(wsi::Keys::kDelete);
+  io.KeyMap[ImGuiKey_Backspace] = static_cast<int>(wsi::Keys::kBackspace);
+  io.KeyMap[ImGuiKey_Space] = static_cast<int>(wsi::Keys::kSpace);
+  io.KeyMap[ImGuiKey_Enter] = static_cast<int>(wsi::Keys::kEnter);
+  io.KeyMap[ImGuiKey_Escape] = static_cast<int>(wsi::Keys::kEscape);
+  io.KeyMap[ImGuiKey_A] = static_cast<int>(wsi::Keys::kA);
+  io.KeyMap[ImGuiKey_C] = static_cast<int>(wsi::Keys::kC);
+  io.KeyMap[ImGuiKey_V] = static_cast<int>(wsi::Keys::kV);
+  io.KeyMap[ImGuiKey_X] = static_cast<int>(wsi::Keys::kX);
+  io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
+  io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
 
   if (!io.Fonts->AddFontFromFileTTF((std::string(kIRISContentDirectory) +
                                      "/assets/fonts/SourceSansPro-Regular.ttf")
@@ -407,13 +407,14 @@ iris::Renderer::ui::BeginFrame(glm::vec2 const& windowSize,
                                glm::vec2 const& mousePos) noexcept {
   ImGuiIO& io = ImGui::GetIO();
 
+#if 0
   io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
                io.KeysDown[wsi::Keys::kRightControl];
   io.KeyShift =
     io.KeysDown[wsi::Keys::kLeftShift] || io.KeysDown[wsi::Keys::kRightShift];
   io.KeyAlt =
     io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
-
+#endif
   if (mousePos.x > -FLT_MAX && mousePos.y > -FLT_MAX) {
     io.MousePos = {mousePos.x, mousePos.y};
   }

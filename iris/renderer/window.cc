@@ -5,9 +5,10 @@
 #include "logging.h"
 #include "renderer/renderer.h"
 
-tl::expected<iris::Renderer::Window, std::error_code>
-iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
-                               glm::uvec2 extent, glm::vec4 const& clearColor,
+tl::expected<iris::Renderer::Window, std::exception>
+iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
+                               wsi::Extent2D extent,
+                               glm::vec4 const& clearColor,
                                Options const& options, int display) noexcept {
   IRIS_LOG_ENTER();
 
@@ -17,13 +18,10 @@ iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
   }
 
   Window window;
-  if (auto win =
-        wsi::Window::Create(title, {std::move(offset), std::move(extent)},
-                            windowOptions, display)) {
+  if (auto win = wsi::Window::Create(
+        title, std::move(offset), std::move(extent), windowOptions, display)) {
     window.window = std::move(*win);
   } else {
-    GetLogger()->error("Cannot create Window window: {}",
-                       win.error().message());
     IRIS_LOG_LEAVE();
     return tl::unexpected(win.error());
   }
@@ -31,8 +29,6 @@ iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
   if (auto sfc = Surface::Create(window.window, clearColor)) {
     window.surface = std::move(*sfc);
   } else {
-    GetLogger()->error("Cannot create Window surface: {}",
-                       sfc.error().message());
     IRIS_LOG_LEAVE();
     return tl::unexpected(sfc.error());
   }
@@ -47,8 +43,9 @@ iris::Renderer::Window::Create(gsl::czstring<> title, glm::uvec2 offset,
   return std::move(window);
 } // iris::Renderer::Window::Create
 
-void iris::Renderer::Window::Resize(glm::uvec2 const& newExtent) noexcept {
-  GetLogger()->debug("Window resized: ({}x{})", newExtent[0], newExtent[1]);
+void iris::Renderer::Window::Resize(wsi::Extent2D const& newExtent) noexcept {
+  GetLogger()->debug("Window resized: ({}x{})", newExtent.width,
+                     newExtent.height);
   resized = true;
 } // iris::Renderer::Window::Resize
 
@@ -61,7 +58,8 @@ std::error_code iris::Renderer::Window::BeginFrame() noexcept {
   window.PollEvents();
 
   if (resized) {
-    surface.Resize(window.Extent());
+    auto const extent = window.Extent();
+    surface.Resize({extent.width, extent.height});
     resized = false;
   }
 
@@ -94,3 +92,4 @@ operator=(Window&& other) noexcept {
 
   return *this;
 } // iris::Renderer::Window::operator=
+

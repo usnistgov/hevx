@@ -4,6 +4,7 @@
 #include "iris/renderer/surface.h"
 #include "tl/expected.hpp"
 #include "glm/vec4.hpp"
+#include <exception>
 #include <memory>
 #include <system_error>
 
@@ -21,8 +22,8 @@ struct Window {
   // forward-declare this so that it can be used below in Create
   friend Options operator|(Options const& lhs, Options const& rhs) noexcept;
 
-  static tl::expected<Window, std::error_code>
-  Create(gsl::czstring<> title, glm::uvec2 offset, glm::uvec2 extent,
+  static tl::expected<Window, std::exception>
+  Create(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
          glm::vec4 const& clearColor, Options const& options,
          int display) noexcept;
 
@@ -30,7 +31,7 @@ struct Window {
   wsi::Window window{};
   Surface surface{};
 
-  void Resize(glm::uvec2 const& newExtent) noexcept;
+  void Resize(wsi::Extent2D const& newExtent) noexcept;
   void Close() noexcept;
 
   std::error_code BeginFrame() noexcept;

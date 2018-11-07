@@ -4,7 +4,7 @@
 #include "logging.h"
 #include "renderer/image.h"
 #include "renderer/impl.h"
-#if defined(VK_USE_PLATFORM_XLIB_KHR)
+#if defined(VK_USE_PLATFORM_XCB_KHR)
 #include "wsi/window_x11.h"
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
 #include "wsi/window_win32.h"
@@ -13,24 +13,24 @@
 
 namespace iris::Renderer {
 
-tl::expected<VkSurfaceKHR, std::error_code>
+tl::expected<VkSurfaceKHR, std::exception>
 static CreateSurface(wsi::Window& window) noexcept {
   IRIS_LOG_ENTER();
   VkSurfaceKHR surface;
   auto native = window.NativeHandle();
 
-#if defined(VK_USE_PLATFORM_XLIB_KHR)
+#if defined(VK_USE_PLATFORM_XCB_KHR)
 
-  VkXlibSurfaceCreateInfoKHR sci = {};
-  sci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-  sci.dpy = native.display;
+  VkXcbSurfaceCreateInfoKHR sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+  sci.connection = native.connection;
   sci.window = native.window;
 
-  VkResult result = vkCreateXlibSurfaceKHR(sInstance, &sci, nullptr, &surface);
+  VkResult result = vkCreateXcbSurfaceKHR(sInstance, &sci, nullptr, &surface);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create surface: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kSurfaceCreationFailed);
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create surface"));
   }
 
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -42,9 +42,9 @@ static CreateSurface(wsi::Window& window) noexcept {
 
   VkResult result = vkCreateWin32SurfaceKHR(sInstance, &sci, nullptr, &surface);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create surface: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create surface"));
   }
 
 #endif
@@ -53,24 +53,24 @@ static CreateSurface(wsi::Window& window) noexcept {
   return surface;
 } // CreateSurface
 
-tl::expected<bool, std::error_code>
+tl::expected<bool, std::exception>
 static CheckSurfaceSupport(VkSurfaceKHR surface) noexcept {
   IRIS_LOG_ENTER();
   VkBool32 support;
   VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(
     sPhysicalDevice, sGraphicsQueueFamilyIndex, surface, &support);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot check for physical device surface support: {}",
-                        to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot check for physical device surface support"));
   }
 
   IRIS_LOG_LEAVE();
   return (support == VK_TRUE);
 } // CheckSurfaceSupport
 
-tl::expected<bool, std::error_code> static CheckSurfaceFormat(
+tl::expected<bool, std::exception> static CheckSurfaceFormat(
   VkSurfaceKHR surface, VkSurfaceFormatKHR desired) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
@@ -79,20 +79,18 @@ tl::expected<bool, std::error_code> static CheckSurfaceFormat(
   result = vkGetPhysicalDeviceSurfaceFormatsKHR(sPhysicalDevice, surface,
                                                 &numSurfaceFormats, nullptr);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot get physical device surface formats: {}",
-                        to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot get physical device surface formats"));
   }
 
   absl::FixedArray<VkSurfaceFormatKHR> surfaceFormats(numSurfaceFormats);
   result = vkGetPhysicalDeviceSurfaceFormatsKHR(
     sPhysicalDevice, surface, &numSurfaceFormats, surfaceFormats.data());
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot get physical device surface formats: {}",
-                        to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot get physical device surface formats"));
   }
 
   if (numSurfaceFormats == 1 &&
@@ -115,7 +113,7 @@ tl::expected<bool, std::error_code> static CheckSurfaceFormat(
 
 } // namespace iris::Renderer
 
-tl::expected<iris::Renderer::Surface, std::error_code>
+tl::expected<iris::Renderer::Surface, std::exception>
 iris::Renderer::Surface::Create(wsi::Window& window,
                                 glm::vec4 const& clearColor) noexcept {
   IRIS_LOG_ENTER();
@@ -135,9 +133,9 @@ iris::Renderer::Surface::Create(wsi::Window& window,
 
   if (auto chk = CheckSurfaceSupport(surface.handle)) {
     if (!*chk) {
-      GetLogger()->error("Surface is not supported by the physical device.");
       IRIS_LOG_LEAVE();
-      return tl::unexpected(Error::kSurfaceNotSupported);
+      return tl::unexpected(
+        std::runtime_error("Surface is not supported by the physical device."));
     }
   } else {
     IRIS_LOG_LEAVE();
@@ -146,9 +144,9 @@ iris::Renderer::Surface::Create(wsi::Window& window,
 
   if (auto chk = CheckSurfaceFormat(surface.handle, sSurfaceColorFormat)) {
     if (!*chk) {
-      GetLogger()->error("Surface format is not supported.");
       IRIS_LOG_LEAVE();
-      return tl::unexpected(Error::kSurfaceNotSupported);
+      return tl::unexpected(std::runtime_error(
+        "Surface format is not supported by the physical device."));
     }
   } else {
     IRIS_LOG_LEAVE();
@@ -160,14 +158,16 @@ iris::Renderer::Surface::Create(wsi::Window& window,
   if (auto result =
         vkCreateSemaphore(sDevice, &sci, nullptr, &surface.imageAvailable);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create semaphore: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create semaphore"));
   }
 
-  if (auto error = surface.Resize(window.Extent())) {
+  auto extent = window.Extent();
+  if (auto errorCode = surface.Resize({extent.width, extent.height})) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return tl::unexpected(
+      std::system_error(errorCode, "Cannot resize surface"));
   }
 
   IRIS_LOG_LEAVE();
@@ -242,11 +242,12 @@ CreateFramebuffer(gsl::span<VkImageView> attachments,
 } // namespace iris::Renderer
 
 std::error_code
-iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
+iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
-  GetLogger()->debug("Surface resizing to ({}x{})", newSize[0], newSize[1]);
+  GetLogger()->debug("Surface resizing to ({}x{})", newExtent.width,
+                     newExtent.height);
 
   VkSurfaceCapabilities2KHR surfaceCapabilities = {};
   surfaceCapabilities.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR;
@@ -259,23 +260,23 @@ iris::Renderer::Surface::Resize(glm::uvec2 const& newSize) noexcept {
     sPhysicalDevice, &surfaceInfo, &surfaceCapabilities);
   if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot query for surface capabilities: {}",
-                        to_string(result));
+                       to_string(result));
     IRIS_LOG_LEAVE();
     return make_error_code(result);
-  } 
+  }
 
   VkSurfaceCapabilitiesKHR caps = surfaceCapabilities.surfaceCapabilities;
 
-  VkExtent2D newExtent = {
-    caps.currentExtent.width == UINT32_MAX
-      ? glm::clamp(newSize[0], caps.minImageExtent.width,
-                   caps.maxImageExtent.width)
-      : caps.currentExtent.width,
+  newExtent.width = caps.currentExtent.width == UINT32_MAX
+                      ? glm::clamp(newExtent.width, caps.minImageExtent.width,
+                                   caps.maxImageExtent.width)
+                      : caps.currentExtent.width;
+
+  newExtent.height =
     caps.currentExtent.height == UINT32_MAX
-      ? glm::clamp(newSize[1], caps.minImageExtent.height,
+      ? glm::clamp(newExtent.height, caps.minImageExtent.height,
                    caps.maxImageExtent.height)
-      : caps.currentExtent.height,
-  };
+      : caps.currentExtent.height;
 
   VkExtent3D imageExtent{newExtent.width, newExtent.height, 1};
 

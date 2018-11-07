@@ -5,11 +5,41 @@
 #include "absl/base/macros.h"
 #include "fmt/format.h"
 #include "logging.h"
-#include "wsi/error.h"
 #include <cstdint>
 #include <exception>
 #include <memory>
 
+namespace iris::wsi {
+
+//! \brief Implements a std::error_category for \ref X errors
+class XCategory : public std::error_category {
+public:
+  virtual ~XCategory() {}
+
+  //! \brief Get the name of this category.
+  virtual const char* name() const noexcept override {
+    return "iris::wsi::XCategory";
+  }
+
+  //! \brief Convert an int representing an ErrorCodes into a std::string.
+  virtual std::string message(int code) const override {
+    return fmt::format("{}", code);
+  }
+}; // class ErrorCodesCategory
+
+//! The global instance of the ErrorCodesCategory.
+inline XCategory const gXCategory;
+
+/*! \brief Get the global instance of the ErrorCodesCategory.
+ * \return \ref gErrorCodesCategory
+ */
+inline std::error_category const& GetXCategory() {
+  return gXCategory;
+}
+
+} // namespace iris::wsi
+
+#if 0
 static std::uint8_t sErrorCode{0};
 
 static int ErrorHandler(::Display*, ::XErrorEvent* ev) noexcept {
@@ -26,10 +56,10 @@ static void ReleaseErrorHandler(::Display* disp) noexcept {
   ::XSync(disp, False);
   ::XSetErrorHandler(nullptr);
 }
-
+#endif
 namespace iris::wsi {
-
-static int TranslateKeySym(::KeySym keysym) {
+#if 0
+static Keys TranslateKeySym(::KeySym keysym) {
   using namespace iris::wsi;
 
   switch (keysym) {
@@ -156,85 +186,145 @@ static int TranslateKeySym(::KeySym keysym) {
 
   return Keys::kUnknown;
 } // TranslateKeySym
-
+#endif
 } // namespace iris::wsi
 
-tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::error_code>
-iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
-                                Options const& options, int display) {
+tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
+iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
+                                Extent2D extent, Options const& options[[maybe_unused]],
+                                int display) noexcept {
   IRIS_LOG_ENTER();
 
-  auto pWin = std::make_unique<Impl>();
-  if (!pWin) {
+  std::unique_ptr<iris::wsi::Window::Impl> pWin;
+
+  try {
+    pWin = std::make_unique<Impl>();
+  } catch (std::bad_alloc const& e) {
     GetLogger()->critical("Cannot allocate memory");
     std::terminate();
+  } catch (std::exception const& e) {
+    GetLogger()->critical("Unhandled exception from std::make_unique<Impl>");
+    return tl::unexpected(e);
   }
-
-  pWin->rect_ = std::move(rect);
 
   std::string const displayName = fmt::format(":0.{}", display);
   GetLogger()->debug("Opening display {}", displayName);
 
-  pWin->handle_.display = ::XOpenDisplay(displayName.c_str());
-  if (!pWin->handle_.display) {
-    GetLogger()->error("Cannot open default display");
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kNoDisplay);
+  pWin->handle_.connection = ::xcb_connect(displayName.c_str(), nullptr);
+  if (int error = ::xcb_connection_has_error(pWin->handle_.connection) > 0) {
+    return tl::unexpected(
+      std::system_error(std::error_code(error, GetXCategory()),
+                        "Cannot open display connection"));
   }
 
-  int minKeycode, maxKeycode, numKeycodes;
-  ::XDisplayKeycodes(pWin->handle_.display, &minKeycode, &maxKeycode);
-  ::KeySym* keySyms = ::XGetKeyboardMapping(
-    pWin->handle_.display, minKeycode, maxKeycode - minKeycode, &numKeycodes);
+  // Get the first screen on the display
+  auto conn = pWin->handle_.connection;
+  xcb_screen_t* screen = ::xcb_setup_roots_iterator(::xcb_get_setup(conn)).data;
 
-  for (int i = minKeycode; i < maxKeycode; ++i) {
-    pWin->keyLUT_[i - minKeycode] =
-      TranslateKeySym(keySyms[(i - minKeycode) * numKeycodes]);
-  }
-  ::XFree(keySyms);
+  std::uint32_t mask = XCB_CW_EVENT_MASK;
+  std::uint32_t maskValues[1];
+  maskValues[0] = XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
+                  XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
+                  XCB_EVENT_MASK_STRUCTURE_NOTIFY;
 
-  int const screen = DefaultScreen(pWin->handle_.display);
-  pWin->visual_ = DefaultVisual(pWin->handle_.display, screen);
+  pWin->handle_.window = ::xcb_generate_id(conn);
+  auto win = pWin->handle_.window;
 
-  XSetWindowAttributes attrs = {};
-  attrs.border_pixel = 0;
-  attrs.colormap = DefaultColormap(pWin->handle_.display, screen);
-  attrs.event_mask = StructureNotifyMask | KeyPressMask | KeyReleaseMask |
-                     ButtonPressMask | ButtonReleaseMask | ExposureMask |
-                     VisibilityChangeMask | PropertyChangeMask;
+  auto windowCookie =
+    ::xcb_create_window_checked(conn,                 // connection
+                                XCB_COPY_FROM_PARENT, // depth (same as root)
+                                win,                  // window id
+                                screen->root,         // parent window
+                                offset.x, offset.y, extent.width, extent.height,
+                                0,                             // border width
+                                XCB_WINDOW_CLASS_INPUT_OUTPUT, // window class
+                                screen->root_visual,           // visual
+                                mask, maskValues);
 
-  GetLogger()->debug("Window rect {{({}, {}), ({}, {})}}",
-                     pWin->rect_.offset[0], pWin->rect_.offset[1],
-                     pWin->rect_.extent[0], pWin->rect_.extent[1]);
+  absl::FixedArray<::xcb_intern_atom_cookie_t> atomCookies(kNumAtoms);
+  atomCookies[WM_NAME] = ::xcb_intern_atom(conn, 0, 7, "WM_NAME");
+  atomCookies[WM_ICON_NAME] = ::xcb_intern_atom(conn, 0, 11, "WM_ICON_NAME");
+  atomCookies[WM_PROTOCOLS] = ::xcb_intern_atom(conn, 0, 12, "WM_PROTOCOLS");
+  atomCookies[WM_DELETE_WINDOW] =
+    ::xcb_intern_atom(conn, 0, 16, "WM_DELETE_WINDOW");
+  atomCookies[_MOTIF_WM_HINTS] =
+    ::xcb_intern_atom(conn, 0, 16, "_MOTIF_WM_HINTS");
 
-  GrabErrorHandler(pWin->handle_.display);
-  pWin->handle_.window = ::XCreateWindow(
-    pWin->handle_.display, DefaultRootWindow(pWin->handle_.display),
-    pWin->rect_.offset[0], pWin->rect_.offset[1], pWin->rect_.extent[0],
-    pWin->rect_.extent[1], 0, DefaultDepth(pWin->handle_.display, screen),
-    InputOutput, pWin->visual_, CWBorderPixel | CWColormap | CWEventMask,
-    &attrs);
-  ReleaseErrorHandler(pWin->handle_.display);
-
-  if (sErrorCode != Success) {
-    char str[1024];
-    ::XGetErrorText(pWin->handle_.display, sErrorCode, str,
-                    ABSL_ARRAYSIZE(str));
-    GetLogger()->error("Cannot create window: {}", str);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kXError);
+  if (auto error = ::xcb_request_check(conn, windowCookie)) {
+    auto const errorCode = error->error_code;
+    std::free(error);
+    return tl::unexpected(std::system_error(
+      std::error_code(errorCode, GetXCategory()), "Cannot create window"));
   }
 
-  for (int i = 0; i < kNumAtoms; ++i) {
-    pWin->atoms_[i] = ::XInternAtom(pWin->handle_.display,
-                                    AtomToString(static_cast<Atoms>(i)), False);
+  auto getAtomReply =
+    [&conn](auto cookie) -> tl::expected<::xcb_atom_t, std::error_code> {
+    ::xcb_generic_error_t* error{nullptr};
+    if (auto reply = ::xcb_intern_atom_reply(conn, cookie, &error)) {
+      ::xcb_atom_t atom = reply->atom;
+      std::free(reply);
+      return atom;
+    }
+
+    auto const errorCode = error->error_code;
+    std::free(error);
+    return tl::unexpected(std::error_code(errorCode, GetXCategory()));
+  };
+
+  if (auto atom = getAtomReply(atomCookies[WM_NAME])) {
+    pWin->atoms_[WM_NAME] = *atom;
+  } else {
+    return tl::unexpected(
+      std::system_error(atom.error(), "Cannot intern WM_NAME atom"));
   }
 
-  ::XSetWMProtocols(pWin->handle_.display, pWin->handle_.window,
-                    &pWin->atoms_[WM_DELETE_WINDOW], 1);
+  if (auto atom = getAtomReply(atomCookies[WM_ICON_NAME])) {
+    pWin->atoms_[WM_ICON_NAME] = *atom;
+  } else {
+    return tl::unexpected(
+      std::system_error(atom.error(), "Cannot intern WM_ICON_NAME atom"));
+  }
+
+  if (auto atom = getAtomReply(atomCookies[WM_PROTOCOLS])) {
+    pWin->atoms_[WM_PROTOCOLS] = *atom;
+  } else {
+    return tl::unexpected(
+      std::system_error(atom.error(), "Cannot intern WM_PROTOCOLS atom"));
+  }
+
+  if (auto atom = getAtomReply(atomCookies[WM_DELETE_WINDOW])) {
+    pWin->atoms_[WM_DELETE_WINDOW] = *atom;
+  } else {
+    return tl::unexpected(
+      std::system_error(atom.error(), "Cannot intern WM_DELETE_WINDOW atom"));
+  }
+
+  if (auto atom = getAtomReply(atomCookies[_MOTIF_WM_HINTS])) {
+    pWin->atoms_[_MOTIF_WM_HINTS] = *atom;
+  } else {
+    return tl::unexpected(
+      std::system_error(atom.error(), "Cannot intern _MOTIF_WM_HINTS atom"));
+  }
+
+  auto protocolsCookie =
+    ::xcb_change_property_checked(conn, XCB_PROP_MODE_REPLACE, win,
+                                  pWin->atoms_[WM_PROTOCOLS], // property
+                                  XCB_ATOM_ATOM,              // type
+                                  32,                         // format
+                                  1,                          // data_len
+                                  &pWin->atoms_[WM_DELETE_WINDOW]);
+
+  if (auto error = ::xcb_request_check(conn, protocolsCookie)) {
+    auto const errorCode = error->error_code;
+    std::free(error);
+    return tl::unexpected(
+      std::system_error(std::error_code(errorCode, GetXCategory()),
+                        "Cannot set WM_PROTOCOLS/WM_DELETE_WINDOW property"));
+  }
 
   if ((options & Options::kDecorated) != Options::kDecorated) {
     // remove decorations
+    GetLogger()->debug("Removing decorations on {}", title);
     struct {
       unsigned long flags;
       unsigned long functions;
@@ -243,141 +333,111 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
       unsigned long status;
     } hints{2, 0, 0, 0, 0};
 
-    ::XChangeProperty(pWin->handle_.display, pWin->handle_.window,
-                      pWin->atoms_[_MOTIF_WM_HINTS],
-                      pWin->atoms_[_MOTIF_WM_HINTS], 32, PropModeReplace,
-                      reinterpret_cast<unsigned char*>(&hints),
-                      sizeof(hints) / sizeof(long));
+    auto decorationsCookie = ::xcb_change_property_checked(
+      conn, XCB_PROP_MODE_REPLACE, win,
+      pWin->atoms_[_MOTIF_WM_HINTS],         // property
+      pWin->atoms_[_MOTIF_WM_HINTS],         // type
+      32,                                    // format
+      sizeof(hints) / sizeof(std::uint32_t), // data_len
+      reinterpret_cast<unsigned char*>(&hints));
+
+    if (auto error = ::xcb_request_check(conn, decorationsCookie)) {
+      auto const errorCode = error->error_code;
+      std::free(error);
+      return tl::unexpected(
+        std::system_error(std::error_code(errorCode, GetXCategory()),
+                          "Cannot set (no) window decorations property"));
+    }
   }
 
-  ::XWMHints* wmHints = ::XAllocWMHints();
-  wmHints->flags = StateHint;
-  wmHints->initial_state = NormalState;
-  ::XSetWMHints(pWin->handle_.display, pWin->handle_.window, wmHints);
-  ::XFree(wmHints);
-
-  ::XSizeHints* szHints = ::XAllocSizeHints();
   if ((options & Options::kSizeable) != Options::kSizeable) {
-    // remove sizeability
-    szHints->flags |= (PMinSize | PMaxSize);
-    szHints->min_width = szHints->max_width = pWin->rect_.extent[0];
-    szHints->min_height = szHints->max_height = pWin->rect_.extent[1];
+    // remove resizeability
+    GetLogger()->debug("Removing resizeability on {}", title);
+
+    xcb_size_hints_t sizeHints = {};
+    sizeHints.max_width = sizeHints.min_width = extent.width;
+    sizeHints.max_height = sizeHints.min_height = extent.height;
+    sizeHints.flags =
+      XCB_ICCCM_SIZE_HINT_P_MIN_SIZE | XCB_ICCCM_SIZE_HINT_P_MAX_SIZE;
+
+    auto normalHintsCookie =
+      xcb_icccm_set_wm_normal_hints_checked(conn, win, &sizeHints);
+
+    if (auto error = ::xcb_request_check(conn, normalHintsCookie)) {
+      auto const errorCode = error->error_code;
+      std::free(error);
+      return tl::unexpected(
+        std::system_error(std::error_code(errorCode, GetXCategory()),
+                          "Cannot set window size hints"));
+    }
   }
 
-  szHints->flags |= PWinGravity;
-  szHints->win_gravity = StaticGravity;
-  ::XSetWMNormalHints(pWin->handle_.display, pWin->handle_.window, szHints);
-  ::XFree(szHints);
+  //
+  // TODO: get the key lut
+  //
+
+  pWin->rect_.offset = std::move(offset);
+  pWin->rect_.extent = std::move(extent);
 
   pWin->Retitle(title);
   pWin->Show();
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);
-} // iris::wsi::Window::Impl::Create
+}
 
 iris::wsi::Window::Impl::~Impl() noexcept {
   IRIS_LOG_ENTER();
-  ::XCloseDisplay(handle_.display);
+  xcb_disconnect(handle_.connection);
   IRIS_LOG_LEAVE();
 } // iris::wsi::Window::Impl::~Impl
 
-void iris::wsi::Window::Impl::Dispatch(::XEvent const& event) noexcept {
-  switch (event.type) {
+void iris::wsi::Window::Impl::Dispatch(
+  gsl::not_null<::xcb_generic_event_t*> event) noexcept {
+  switch (event->response_type & ~0x80) {
+  case XCB_KEY_PRESS: {
+    auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
+    if (ev->event != handle_.window) break;
+    GetLogger()->debug("KEY_PRESS: {:x} state: {}", ev->detail, ev->state);
+  } break;
 
-  case KeyPress:
-    if (event.xkey.window != handle_.window) break;
-    ImGui::GetIO().KeysDown[keyLUT_[event.xkey.keycode]] = true;
-    break;
+  case XCB_KEY_RELEASE: {
+    auto ev = reinterpret_cast<::xcb_key_release_event_t*>(event.get());
+    if (ev->event != handle_.window) break;
+    GetLogger()->debug("KEY_RELEASE: {:x} state: {}", ev->detail, ev->state);
+  } break;
 
-  case KeyRelease:
-    if (event.xkey.window != handle_.window) break;
-    if (::XEventsQueued(handle_.display, QueuedAfterReading)) {
-      ::XEvent next;
-      ::XPeekEvent(handle_.display, &next);
-      if (next.type == KeyPress && next.xkey.window == handle_.window &&
-          next.xkey.time == event.xkey.time &&
-          next.xkey.keycode == event.xkey.keycode) {
-        // Next event is a KeyPress with identical window, time, and keycode;
-        // thus key wasn't physically released, so consume next event now.
-        ::XNextEvent(handle_.display, &next);
+  case XCB_BUTTON_PRESS: {
+    auto ev = reinterpret_cast<::xcb_button_press_event_t*>(event.get());
+    if (ev->event != handle_.window) break;
+    GetLogger()->debug("BUTTON_PRESS: {:x} state: {}", ev->detail, ev->state);
+  } break;
+
+  case XCB_BUTTON_RELEASE: {
+    auto ev = reinterpret_cast<::xcb_button_release_event_t*>(event.get());
+    if (ev->event != handle_.window) break;
+    GetLogger()->debug("BUTTON_RELEASE: {:x} state: {}", ev->detail, ev->state);
+  } break;
+
+  case XCB_CLIENT_MESSAGE: {
+    auto ev = reinterpret_cast<::xcb_client_message_event_t*>(event.get());
+    if (ev->type != atoms_[WM_PROTOCOLS]) break;
+    if (ev->data.data32[0] == atoms_[WM_DELETE_WINDOW]) Close();
+  } break;
+
+  case XCB_CONFIGURE_NOTIFY: {
+    auto ev = reinterpret_cast<::xcb_configure_notify_event_t*>(event.get());
+    if (ev->window != handle_.window) break;
+    if (rect_.extent.width == ev->width && rect_.extent.height == ev->height) {
+      if (rect_.offset.x != ev->x || rect_.offset.y != ev->y) {
+        rect_.offset = Offset2D(ev->x, ev->y);
+        moveDelegate_(rect_.offset);
       }
-      break;
-    }
-
-    ImGui::GetIO().KeysDown[keyLUT_[event.xkey.keycode]] = false;
-    break;
-
-  case ButtonPress:
-    if (event.xbutton.window != handle_.window) break;
-    switch (event.xbutton.button) {
-    case Button1: ImGui::GetIO().MouseDown[0] = true; break;
-    case Button2: ImGui::GetIO().MouseDown[1] = true; break;
-    case Button3: ImGui::GetIO().MouseDown[2] = true; break;
-    // case Button4: scroll_ += 1; break;
-    // case Button5: scroll_ -= 1; break;
-    default:
-      break;
-    }
-    break;
-
-  case ButtonRelease:
-    if (event.xbutton.window != handle_.window) break;
-    switch (event.xbutton.button) {
-    case Button1: ImGui::GetIO().MouseDown[0] = true; break;
-    case Button2: ImGui::GetIO().MouseDown[1] = true; break;
-    case Button3: ImGui::GetIO().MouseDown[2] = true; break;
-    default:
-      break;
-    }
-    break;
-
-  case ClientMessage:
-    if (event.xclient.message_type == None) break;
-    if (event.xclient.message_type != atoms_[WM_PROTOCOLS]) break;
-    if (event.xclient.data.l[0] == None) break;
-
-    closed_ =
-      (static_cast<Atom>(event.xclient.data.l[0]) == atoms_[WM_DELETE_WINDOW]);
-    if (closed_) {
-      closeDelegate_();
-      ::XDestroyWindow(handle_.display, handle_.window);
-    }
-    break;
-
-  case ConfigureNotify:
-    if (event.xconfigure.window != handle_.window) break;
-    if (rect_.extent[0] == static_cast<unsigned int>(event.xconfigure.width) &&
-        rect_.extent[1] == static_cast<unsigned int>(event.xconfigure.height)) {
-      if (rect_.offset[0] == static_cast<unsigned int>(event.xconfigure.x) &&
-          rect_.offset[1] == static_cast<unsigned int>(event.xconfigure.y)) {
-        break;
-      }
-      rect_.offset = {event.xconfigure.x, event.xconfigure.y};
-      moveDelegate_(rect_.offset);
     } else {
-      rect_.extent = {event.xconfigure.width, event.xconfigure.height};
+      rect_.extent = Extent2D(ev->width, ev->height);
       resizeDelegate_(rect_.extent);
     }
-    break;
-
-  default: break;
+  } break;
   }
 } // iris::wsi::Window::Impl::Dispatch
-
-gsl::czstring<> iris::wsi::Window::Impl::AtomToString(::Atom atom) noexcept {
-  switch (atom) {
-#define STR(r)                                                                 \
-  case r: return #r
-    STR(WM_PROTOCOLS);
-    STR(WM_DELETE_WINDOW);
-    STR(NET_WM_NAME);
-    STR(NET_WM_ICON_NAME);
-    STR(_MOTIF_WM_HINTS);
-#undef STR
-  case iris::wsi::Window::Impl::kNumAtoms: break;
-  }
-
-  return "UNKNOWN";
-} // iris::wsi::Window::Impl::AtomToString
 

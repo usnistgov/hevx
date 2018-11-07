@@ -170,7 +170,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Rect rect,
     }
   }
 
-  for (int i = 0; i < Keys::kMaxKeys; ++i) {
+  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
     pWin->keyLUT_[i] = TranslateKeycode(i);
   }
 
@@ -261,6 +261,9 @@ iris::wsi::Window::Impl::~Impl() noexcept {
     focused_ = (LOWORD(wParam) == WA_ACTIVE);
     break;
 
+  case WM_CHAR:
+    break;
+
   case WM_KEYDOWN:
     ImGui::GetIO().KeysDown[keyLUT_[wParam]] = true;
     break;
@@ -307,9 +310,7 @@ iris::wsi::Window::Impl::~Impl() noexcept {
     break;
 
   case WM_CLOSE:
-    closed_ = true;
-    closeDelegate_();
-    ::DestroyWindow(handle_.hWnd);
+    Close();
     break;
 
   case WM_DESTROY: ::PostQuitMessage(0); break;

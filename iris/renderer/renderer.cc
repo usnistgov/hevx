@@ -25,7 +25,6 @@
 #pragma warning(pop)
 #endif
 #include "tl/expected.hpp"
-#include "wsi/error.h"
 #include "wsi/window.h"
 #if PLATFORM_WINDOWS
 #include "wsi/window_win32.h"
@@ -1579,7 +1578,8 @@ void iris::Renderer::EndFrame() noexcept {
 
     if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
       GetLogger()->warn("Swapchains out of date; resizing and re-acquiring");
-      window.surface.Resize(window.window.Extent());
+      auto const extent = window.window.Extent();
+      window.surface.Resize({extent.width, extent.height});
       window.resized = false;
 
       result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
@@ -1743,12 +1743,14 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
       }
       if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
 
-      if (auto win =
-            Window::Create(windowMessage.name().c_str(),
-                           {windowMessage.x(), windowMessage.y()},
-                           {windowMessage.width(), windowMessage.height()},
-                           {bg.r(), bg.g(), bg.b(), bg.a()}, options,
-                           windowMessage.display())) {
+      if (auto win = Window::Create(
+            windowMessage.name().c_str(),
+            wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
+                          static_cast<std::int16_t>(windowMessage.y())},
+            wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
+                          static_cast<std::uint16_t>(windowMessage.height())},
+            {bg.r(), bg.g(), bg.b(), bg.a()}, options,
+            windowMessage.display())) {
         Windows().emplace(windowMessage.name(), std::move(*win));
       }
     }
@@ -1764,8 +1766,11 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
 
     if (auto win = Window::Create(
-          windowMessage.name().c_str(), {windowMessage.x(), windowMessage.y()},
-          {windowMessage.width(), windowMessage.height()},
+          windowMessage.name().c_str(),
+          wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
+                        static_cast<std::int16_t>(windowMessage.y())},
+          wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
+                        static_cast<std::uint16_t>(windowMessage.height())},
           {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display())) {
       Windows().emplace(windowMessage.name(), std::move(*win));
     }
@@ -1930,7 +1935,7 @@ iris::Renderer::CreateDescriptors(
   if (result != VK_SUCCESS) {
     GetLogger()->error("Cannot create descriptor sets: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::make_unexpected(make_error_code(result));
+    return tl::unexpected(make_error_code(result));
   }
 
   IRIS_LOG_LEAVE();

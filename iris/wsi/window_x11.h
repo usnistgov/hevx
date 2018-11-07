@@ -4,19 +4,19 @@
  * \brief \ref iris::wsi::Window::Impl declaration for X11.
  */
 
+#include "absl/container/fixed_array.h"
 #include "wsi/window.h"
-#include <X11/X.h>
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
+#include <xcb/xcb.h>
+#include <xcb/xproto.h>
+#include <xcb/xcb_icccm.h>
 #include <cstring>
 
 namespace iris::wsi {
 
 //! \brief Platform-defined window handle.
 struct Window::NativeHandle_t {
-  ::Display* display{nullptr}; //!< The X11 Display connection.
-  ::Window window{0};          //!< The X11 Window handle
+  ::xcb_connection_t* connection{nullptr}; //!< The XCB connection.
+  ::xcb_window_t window{}; //!< The XCB window.
 };
 
 /*! \brief Platform-specific window for X11.
@@ -30,37 +30,43 @@ public:
    * \param[in] title the window title.
    * \param[in] extent the window extent in screen coordinates.
    * \param[in] options the Options describing how to create the window.
-   * \return a std::expected of either the Impl pointer or a std::error_code.
+   * \return a std::expected of either the Impl pointer or a std::exception.
    */
-  static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, Rect rect, Options const& options, int display);
+  static tl::expected<std::unique_ptr<Impl>, std::exception>
+  Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
+         Options const& options, int display) noexcept;
 
-  /*! \brief Get the current window offset in screen coordinates.
-   * \return the current window offset in screen coordinates.
-   */
-  glm::uvec2 Offset() const noexcept { return rect_.offset; }
+  Rect2D Rect() const noexcept { return rect_; }
+  Offset2D Offset() const noexcept { return rect_.offset; }
+  Extent2D Extent() const noexcept { return rect_.extent; }
 
-  /*! \brief Get the current window extent in screen coordinates.
-   *  \return the current window extent in screen coordinates.
+  /*! \brief Get the current state of the keyboard.
+   *  \return the current state of the keyboard.
    */
-  glm::uvec2 Extent() const noexcept { return rect_.extent; }
+  Keyset Keys() const noexcept { return keys_; }
+
+  /*! \brief Get the current state of the mouse buttons.
+   *  \return the current state of the mouse buttons.
+   */
+  Buttonset Buttons() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
   glm::uvec2 CursorPos() const noexcept {
-    ::Window root, child;
-    glm::ivec2 rootPos, childPos;
-    unsigned int mask;
-    ::XQueryPointer(handle_.display, handle_.window, &root, &child, &rootPos[0],
-                    &rootPos[1], &childPos[0], &childPos[1], &mask);
-    return childPos;
+    return {0, 0};
+    //::Window root, child;
+    //glm::ivec2 rootPos, childPos;
+    //unsigned int mask;
+    //::XQueryPointer(handle_.display, handle_.window, &root, &child, &rootPos[0],
+                    //&rootPos[1], &childPos[0], &childPos[1], &mask);
+    //return childPos;
   }
 
   std::string Title() noexcept {
-    ::XTextProperty prop;
-    ::XGetWMName(handle_.display, handle_.window, &prop);
-    return std::string(reinterpret_cast<char*>(prop.value), prop.nitems);
+    //::XTextProperty prop;
+    //::XGetWMName(handle_.display, handle_.window, &prop);
+    return "";//std::string(reinterpret_cast<char*>(prop.value), prop.nitems);
   }
 
   /*! \brief Change the title of this window.
@@ -68,28 +74,34 @@ public:
    */
   void Retitle(gsl::czstring<> title) noexcept {
     auto const len = std::strlen(title);
-    ::XmbSetWMProperties(handle_.display, handle_.window, title, title, nullptr,
-                         0, nullptr, nullptr, nullptr);
-    ::XChangeProperty(handle_.display, handle_.window, atoms_[NET_WM_NAME],
-                      XA_STRING, 8, PropModeReplace,
-                      reinterpret_cast<unsigned char const*>(title), len);
-    ::XChangeProperty(handle_.display, handle_.window, atoms_[NET_WM_ICON_NAME],
-                      XA_STRING, 8, PropModeReplace,
-                      reinterpret_cast<unsigned char const*>(title), len);
+    ::xcb_change_property(handle_.connection, XCB_PROP_MODE_REPLACE,
+                          handle_.window, atoms_[WM_NAME], XCB_ATOM_STRING, 8,
+                          len, title);
+    ::xcb_change_property(handle_.connection, XCB_PROP_MODE_REPLACE,
+                          handle_.window, atoms_[WM_ICON_NAME], XCB_ATOM_STRING,
+                          8, len, title);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Move this window.
    * \param[in] offset the new window offset in screen coordinates.
    */
-  void Move(glm::uvec2 const& offset) {
-    ::XMoveWindow(handle_.display, handle_.window, offset[0], offset[1]);
+  void Move(Offset2D const& offset) {
+    std::int16_t values[2] = {offset.x, offset.y};
+    ::xcb_configure_window(handle_.connection, handle_.window,
+                           XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Resize this window.
    * \param[in] extent the new window extent in screen coordinate.s
    */
-  void Resize(glm::uvec2 const& extent) {
-    ::XResizeWindow(handle_.display, handle_.window, extent[0], extent[1]);
+  void Resize(Extent2D const& extent) {
+    std::uint32_t values[2] = {extent.width, extent.height};
+    ::xcb_configure_window(handle_.connection, handle_.window,
+                           XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT,
+                           values);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Indicates if this window has been closed.
@@ -99,29 +111,22 @@ public:
 
   //! \brief Close this window.
   void Close() noexcept {
-    ::XEvent ev = {};
-    ev.type = ClientMessage;
-    ev.xclient.type = ClientMessage;
-    ev.xclient.display = handle_.display;
-    ev.xclient.window = handle_.window;
-    ev.xclient.message_type = atoms_[WM_PROTOCOLS];
-    ev.xclient.format = 32;
-    ev.xclient.data.l[0] = atoms_[WM_DELETE_WINDOW];
-
-    ::XSendEvent(handle_.display, handle_.window, False, 0, &ev);
-    ::XFlush(handle_.display);
+    closed_ = true;
+    closeDelegate_();
+    ::xcb_destroy_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
   }
 
   //! \brief Show this window.
   void Show() noexcept {
-    ::XMapWindow(handle_.display, handle_.window);
-    ::XFlush(handle_.display);
+    ::xcb_map_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
   }
 
   //! \brief Hide this window.
   void Hide() noexcept {
-    ::XUnmapWindow(handle_.display, handle_.window);
-    ::XFlush(handle_.display);
+    ::xcb_unmap_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Indicates if this window currently has the WSI focus.
@@ -131,10 +136,9 @@ public:
 
   //! \brief Poll for all outstanding window events. Must be regularly called.
   void PollEvents() noexcept {
-    ::XEvent event = {};
-    while (::XPending(handle_.display) > 0) {
-      ::XNextEvent(handle_.display, &event);
-      Dispatch(event);
+    ::xcb_generic_event_t* event = nullptr;
+    while ((event = ::xcb_poll_for_event(handle_.connection)) != nullptr) {
+      Dispatch(gsl::not_null(event));
     }
   }
 
@@ -161,34 +165,36 @@ public:
   NativeHandle_t NativeHandle() const noexcept { return handle_; }
 
   //! \brief Default constructor: no initialization.
-  Impl() = default;
+  Impl() noexcept
+    : atoms_(kNumAtoms)
+    , keyLUT_(Keyset::kMaxKeys) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
 
 private:
   enum Atoms {
+    WM_NAME,
+    WM_ICON_NAME,
     WM_PROTOCOLS,
     WM_DELETE_WINDOW,
-    NET_WM_NAME,
-    NET_WM_ICON_NAME,
     _MOTIF_WM_HINTS,
     kNumAtoms
   }; // enum Atoms
 
-  Rect rect_{};
+  Rect2D rect_{Offset2D{}, Extent2D{}};
+  Keyset keys_{};
+  Buttonset buttons_{};
   NativeHandle_t handle_{};
-  ::Visual* visual_{nullptr};
+  absl::FixedArray<::xcb_atom_t> atoms_;
   bool closed_{false};
   bool focused_{false};
-  int keyLUT_[Keys::kMaxKeys]{};
+  absl::FixedArray<wsi::Keys> keyLUT_;
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};
-  ::Atom atoms_[kNumAtoms]{};
 
-  void Dispatch(::XEvent const& event) noexcept;
-  static gsl::czstring<> AtomToString(::Atom atom) noexcept;
+  void Dispatch(gsl::not_null<::xcb_generic_event_t*> event) noexcept;
 }; // class Window::Impl
 
 } // namespace iris::wsi

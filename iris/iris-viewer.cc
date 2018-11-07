@@ -79,9 +79,9 @@ int main(int argc, char** argv) {
     if (!iris::Renderer::BeginFrame()) continue;
 
     if (!ImGui::GetIO().WantCaptureKeyboard) {
-      if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
-        iris::Renderer::Terminate();
-      }
+      //if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
+        //iris::Renderer::Terminate();
+      //}
     }
 
     ImGui::Begin("Status");

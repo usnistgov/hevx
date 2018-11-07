@@ -1,41 +1,50 @@
 #include "wsi/window.h"
 #include "config.h"
 #include "logging.h"
-#include "wsi/error.h"
-#if defined(VK_USE_PLATFORM_XLIB_KHR)
+#include "wsi/error_codes.h"
+#if defined(PLATFORM_LINUX)
 #include "wsi/window_x11.h"
-#elif defined(VK_USE_PLATFORM_WIN32_KHR)
+#elif defined(PLATFORM_WINDOWS)
 #include "wsi/window_win32.h"
 #endif
 /*! \file
  * \brief \ref iris::wsi::Window definition.
  */
 
-tl::expected<iris::wsi::Window, std::error_code>
-iris::wsi::Window::Create(gsl::czstring<> title, Rect rect,
-                          Options const& options, int display) noexcept {
-  try {
-    Window window;
-    if (auto pImpl = Impl::Create(title, std::move(rect), options, display)) {
-      window.pImpl_ = std::move(*pImpl);
-    } else {
-      return tl::unexpected(pImpl.error());
-    }
-
-    return std::move(window);
-  } catch (std::exception const& e) {
-    GetLogger()->error("Exception while creating window: {}", e.what());
-    return tl::unexpected(Error::kCreateFailed);
+tl::expected<iris::wsi::Window, std::exception>
+iris::wsi::Window::Create(gsl::czstring<> title, Offset2D offset,
+                          Extent2D extent, Options const& options,
+                          int display) noexcept {
+  Window window;
+  if (auto pImpl = Impl::Create(title, std::move(offset), std::move(extent),
+                                options, display)) {
+    window.pImpl_ = std::move(*pImpl);
+  } else {
+    return tl::unexpected(pImpl.error());
   }
+
+  return std::move(window);
 }
 
-glm::uvec2 iris::wsi::Window::Offset() const noexcept {
+iris::wsi::Rect2D iris::wsi::Window::Rect() const noexcept {
+  return pImpl_->Rect();
+} // iris::wsi::Window::Rect
+
+iris::wsi::Offset2D iris::wsi::Window::Offset() const noexcept {
   return pImpl_->Offset();
-}
+} // iris::wsi::Window::Offset
 
-glm::uvec2 iris::wsi::Window::Extent() const noexcept {
+iris::wsi::Extent2D iris::wsi::Window::Extent() const noexcept {
   return pImpl_->Extent();
-}
+} // iris::wsi::Window::Extent
+
+iris::wsi::Keyset iris::wsi::Window::Keys() const noexcept {
+  return pImpl_->Keys();
+} // iris::wsi::Window::Keys
+
+iris::wsi::Buttonset iris::wsi::Window::Buttons() const noexcept {
+  return pImpl_->Buttons();
+} // iris::wsi::Window::Buttons
 
 glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
@@ -49,11 +58,11 @@ void iris::wsi::Window::Retitle(gsl::czstring<> title) noexcept {
   pImpl_->Retitle(title);
 }
 
-void iris::wsi::Window::Move(glm::uvec2 const& offset) {
+void iris::wsi::Window::Move(Offset2D const& offset) {
   pImpl_->Move(offset);
 }
 
-void iris::wsi::Window::Resize(glm::uvec2 const& extent) {
+void iris::wsi::Window::Resize(Extent2D const& extent) {
   pImpl_->Resize(extent);
 }
 
@@ -106,3 +115,4 @@ iris::wsi::Window::~Window() noexcept {
   IRIS_LOG_ENTER();
   IRIS_LOG_LEAVE();
 }
+
