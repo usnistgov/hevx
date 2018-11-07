@@ -402,7 +402,9 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   return Error::kNone;
 } // iris::Renderer::ui::Initialize
 
-std::error_code iris::Renderer::ui::BeginFrame(glm::vec2 const& size) noexcept {
+std::error_code
+iris::Renderer::ui::BeginFrame(glm::vec2 const& windowSize,
+                               glm::vec2 const& mousePos) noexcept {
   ImGuiIO& io = ImGui::GetIO();
 
   io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
@@ -412,17 +414,18 @@ std::error_code iris::Renderer::ui::BeginFrame(glm::vec2 const& size) noexcept {
   io.KeyAlt =
     io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
 
-  ImVec2 mouseSaved = io.MousePos;
-  io.MousePos = {-FLT_MAX, -FLT_MAX};
-  // update io.MousePos with current mouse position
+  if (mousePos.x > -FLT_MAX && mousePos.y > -FLT_MAX) {
+    io.MousePos = {mousePos.x, mousePos.y};
+  }
 
   TimePoint currentTime = std::chrono::steady_clock::now();
-  io.DeltaTime = (currentTime > sPreviousTime)
+  io.DeltaTime = sPreviousTime.time_since_epoch().count() > 0
                    ? (currentTime - sPreviousTime).count()
                    : 1.f / 60.f;
+  sPreviousTime = currentTime;
 
-  io.DisplaySize = {size.x, size.y};
-  io.DisplayFramebufferScale = {1.f, 1.f};
+  io.DisplaySize = {windowSize.x, windowSize.y};
+  io.DisplayFramebufferScale = {0.f, 0.f};
 
   ImGui::NewFrame();
 
@@ -539,7 +542,7 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
   vkCmdSetViewport(cb, 0, 1, &viewport);
 
   glm::vec2 const scale = glm::vec2{2.f, 2.f} / displaySize;
-  glm::vec2 const translate = glm::vec2{1.f, 1.f} - displayPos * scale;
+  glm::vec2 const translate = glm::vec2{-1.f, -1.f} - displayPos * scale;
 
   vkCmdPushConstants(cb, sPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                      sizeof(glm::vec2), glm::value_ptr(scale));

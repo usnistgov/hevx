@@ -73,6 +73,10 @@ void iris::wsi::Window::Hide() const noexcept {
   pImpl_->Hide();
 }
 
+bool iris::wsi::Window::IsFocused() const noexcept {
+  return pImpl_->IsFocused();
+}
+
 void iris::wsi::Window::PollEvents() noexcept {
   pImpl_->PollEvents();
 }

@@ -1514,8 +1514,13 @@ bool iris::Renderer::BeginFrame() noexcept {
     auto&& window = iter.second;
     window.BeginFrame();
 
-    if (auto error = ui::BeginFrame(
-          {window.surface.viewport.width, window.surface.viewport.height})) {
+    glm::vec2 const windowSize{window.surface.viewport.width,
+                               window.surface.viewport.height};
+
+    glm::vec2 mousePos{-FLT_MAX, -FLT_MAX};
+    if (window.window.IsFocused()) mousePos = window.window.CursorPos();
+
+    if (auto error = ui::BeginFrame(windowSize)) {
       GetLogger()->error("Error beginning UI: {}", error.message());
       return false;
     }

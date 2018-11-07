@@ -105,6 +105,11 @@ public:
   //! \brief Hide this window.
   void Hide() const noexcept;
 
+  /*! \brief Indicates if this window currently has the WSI focus.
+   *  \return true if this window is the focused window, false if not.
+   */
+  bool IsFocused() const noexcept;
+
   //! \brief Poll for all outstanding window events. Must be regularly called.
   void PollEvents() noexcept;
 

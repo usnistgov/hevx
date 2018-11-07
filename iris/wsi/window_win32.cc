@@ -257,6 +257,10 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   ::LRESULT res = 0;
 
   switch (uMsg) {
+  case WM_ACTIVATE:
+    focused_ = (LOWORD(wParam) == WA_ACTIVE);
+    break;
+
   case WM_KEYDOWN:
     ImGui::GetIO().KeysDown[keyLUT_[wParam]] = true;
     break;

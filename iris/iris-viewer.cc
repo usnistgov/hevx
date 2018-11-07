@@ -73,8 +73,7 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  for (auto&& file : files) iris::Renderer::io::LoadFile(std::string(file));
-  bool showDemoWindow = true;
+  for (auto&& file : files) iris::Renderer::io::LoadFile(file);
 
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
@@ -85,10 +84,9 @@ int main(int argc, char** argv) {
       }
     }
 
-    ImGui::ShowDemoWindow(&showDemoWindow);
-
     ImGui::Begin("Status");
-    ImGui::Text("Average %.3f ms/frame (%.1 FPS)",
+    ImGui::Text("Last Frame Average %.3f ms", ImGui::GetIO().DeltaTime);
+    ImGui::Text("Average %.3f ms/frame (%.1f FPS)",
                 1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
 
