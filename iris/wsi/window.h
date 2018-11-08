@@ -86,7 +86,7 @@ public:
 
   Keyset KeyboardState() const noexcept;
 
-  Buttonset Buttons() const noexcept;
+  Buttonset ButtonState() const noexcept;
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.

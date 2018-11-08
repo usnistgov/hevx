@@ -5,20 +5,148 @@
 #include "absl/base/macros.h"
 #include "logging.h"
 
+namespace iris::wsi {
+
+static int KeysToKeycode(Keys key) noexcept {
+  switch(key) {
+  case Keys::kSpace: return VK_SPACE;
+  case Keys::kApostrophe: return 0; // FIXME
+  case Keys::kComma: return 0; // FIXME
+  case Keys::kMinus: return 0; // FIXME
+  case Keys::kPeriod: return 0; // FIXME
+  case Keys::kSlash: return 0; // FIXME
+  case Keys::k0: return 0x30;
+  case Keys::k1: return 0x31;
+  case Keys::k2: return 0x32;
+  case Keys::k3: return 0x33;
+  case Keys::k4: return 0x34;
+  case Keys::k5: return 0x35;
+  case Keys::k6: return 0x36;
+  case Keys::k7: return 0x37;
+  case Keys::k8: return 0x38;
+  case Keys::k9: return 0x39;
+  case Keys::kSemicolon: return 0; // FIXME
+  case Keys::kEqual: return 0; // FIXME
+  case Keys::kA: return 0x41;
+  case Keys::kB: return 0x42;
+  case Keys::kC: return 0x43;
+  case Keys::kD: return 0x44;
+  case Keys::kE: return 0x45;
+  case Keys::kF: return 0x46;
+  case Keys::kG: return 0x47;
+  case Keys::kH: return 0x48;
+  case Keys::kI: return 0x49;
+  case Keys::kJ: return 0x4A;
+  case Keys::kK: return 0x4B;
+  case Keys::kL: return 0x4C;
+  case Keys::kM: return 0x4D;
+  case Keys::kN: return 0x4E;
+  case Keys::kO: return 0x4F;
+  case Keys::kP: return 0x50;
+  case Keys::kQ: return 0x51;
+  case Keys::kR: return 0x52;
+  case Keys::kS: return 0x53;
+  case Keys::kT: return 0x54;
+  case Keys::kU: return 0x55;
+  case Keys::kV: return 0x56;
+  case Keys::kW: return 0x57;
+  case Keys::kX: return 0x58;
+  case Keys::kY: return 0x59;
+  case Keys::kZ: return 0x5A;
+  case Keys::kLeftBracket: return 0; // FIXME
+  case Keys::kBackslash: return 0; // FIXME
+  case Keys::kRightBracket: return 0; // FIXME
+  case Keys::kGraveAccent: return 0; // FIXME
+  case Keys::kEscape: return VK_ESCAPE;
+  case Keys::kEnter: return VK_RETURN;
+  case Keys::kTab: return VK_TAB;
+  case Keys::kBackspace: return VK_BACK;
+  case Keys::kInsert: return VK_INSERT;
+  case Keys::kDelete: return VK_DELETE;
+  case Keys::kRight: return VK_RIGHT;
+  case Keys::kLeft: return VK_LEFT;
+  case Keys::kDown: return VK_DOWN;
+  case Keys::kUp: return VK_UP;
+  case Keys::kPageUp: return VK_PRIOR;
+  case Keys::kPageDown: return VK_NEXT;
+  case Keys::kHome: return VK_HOME;
+  case Keys::kEnd: return VK_END;
+  case Keys::kCapsLock: return 0; // FIXME
+  case Keys::kScrollLock: return 0; // FIXME
+  case Keys::kNumLock: return 0; // FIXME
+  case Keys::kPrintScreen: return 0; // FIXME
+  case Keys::kPause: return 0; // FIXME
+  case Keys::kF1: return VK_F1;
+  case Keys::kF2: return VK_F2;
+  case Keys::kF3: return VK_F3;
+  case Keys::kF4: return VK_F4;
+  case Keys::kF5: return VK_F5;
+  case Keys::kF6: return VK_F6;
+  case Keys::kF7: return VK_F7;
+  case Keys::kF8: return VK_F8;
+  case Keys::kF9: return VK_F9;
+  case Keys::kF10: return VK_F10;
+  case Keys::kF11: return VK_F11;
+  case Keys::kF12: return VK_F12;
+  case Keys::kF13: return VK_F13;
+  case Keys::kF14: return VK_F14;
+  case Keys::kF15: return VK_F15;
+  case Keys::kF16: return VK_F16;
+  case Keys::kF17: return VK_F17;
+  case Keys::kF18: return VK_F19;
+  case Keys::kF19: return VK_F19;
+  case Keys::kF20: return VK_F20;
+  case Keys::kF21: return VK_F21;
+  case Keys::kF22: return VK_F22;
+  case Keys::kF23: return VK_F23;
+  case Keys::kF24: return VK_F24;
+  case Keys::kKeypad0: return VK_NUMPAD0;
+  case Keys::kKeypad1: return VK_NUMPAD1;
+  case Keys::kKeypad2: return VK_NUMPAD2;
+  case Keys::kKeypad3: return VK_NUMPAD3;
+  case Keys::kKeypad4: return VK_NUMPAD4;
+  case Keys::kKeypad5: return VK_NUMPAD5;
+  case Keys::kKeypad6: return VK_NUMPAD6;
+  case Keys::kKeypad7: return VK_NUMPAD7;
+  case Keys::kKeypad8: return VK_NUMPAD8;
+  case Keys::kKeypad9: return VK_NUMPAD9;
+  case Keys::kKeypadDecimal: return VK_DECIMAL;
+  case Keys::kKeypadDivide: return VK_DIVIDE;
+  case Keys::kKeypadMultiply: return VK_MULTIPLY;
+  case Keys::kKeypadSubtract: return VK_SUBTRACT;
+  case Keys::kKeypadAdd: return VK_ADD;
+  case Keys::kKeypadEnter: return 0; // FIXME
+  case Keys::kKeypadEqual: return 0; // FIXME
+  case Keys::kLeftShift: return VK_LSHIFT;
+  case Keys::kLeftControl: return VK_LCONTROL;
+  case Keys::kLeftAlt: return VK_LMENU;
+  case Keys::kLeftSuper: return 0; // FIXME
+  case Keys::kRightShift: return VK_RSHIFT;
+  case Keys::kRightControl: return VK_RCONTROL;
+  case Keys::kRightAlt: return VK_RMENU;
+  case Keys::kRightSuper: return 0; // FIXME
+  case Keys::kMenu: return 0; // FIXME
+  default: return 0; //FIXME
+  }
+} // KeysToKeycode
+
+} // namespace iris::wsi
+
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
                                 Extent2D extent, Options const& options, int) {
   IRIS_LOG_ENTER();
-
   std::unique_ptr<Impl> pWin;
 
   try {
     pWin = std::make_unique<Impl>();
   } catch (std::bad_alloc const&) {
     GetLogger()->critical("Cannot allocate memory");
+    IRIS_LOG_LEAVE();
     std::terminate();
   } catch (std::exception const& e) {
     GetLogger()->critical("Unhandled exception from std::make_unique<Impl>");
+    IRIS_LOG_LEAVE();
     return tl::unexpected(e);
   }
 
@@ -72,132 +200,13 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.offset = std::move(offset);
   pWin->rect_.extent = std::move(extent);
 
+  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
+    pWin->keyLUT_[i] = KeysToKeycode(static_cast<Keys>(i));
+  }
+
   IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
-
-static int ToKeycode(iris::wsi::Keys key) noexcept {
-  switch(key) {
-  case iris::wsi::Keys::kSpace: return VK_SPACE;
-  case iris::wsi::Keys::kApostrophe: return 0; // FIXME
-  case iris::wsi::Keys::kComma: return 0; // FIXME
-  case iris::wsi::Keys::kMinus: return 0; // FIXME
-  case iris::wsi::Keys::kPeriod: return 0; // FIXME
-  case iris::wsi::Keys::kSlash: return 0; // FIXME
-  case iris::wsi::Keys::k0: return 0x30;
-  case iris::wsi::Keys::k1: return 0x31;
-  case iris::wsi::Keys::k2: return 0x32;
-  case iris::wsi::Keys::k3: return 0x33;
-  case iris::wsi::Keys::k4: return 0x34;
-  case iris::wsi::Keys::k5: return 0x35;
-  case iris::wsi::Keys::k6: return 0x36;
-  case iris::wsi::Keys::k7: return 0x37;
-  case iris::wsi::Keys::k8: return 0x38;
-  case iris::wsi::Keys::k9: return 0x39;
-  case iris::wsi::Keys::kSemicolon: return 0; // FIXME
-  case iris::wsi::Keys::kEqual: return 0; // FIXME
-  case iris::wsi::Keys::kA: return 0x41;
-  case iris::wsi::Keys::kB: return 0x42;
-  case iris::wsi::Keys::kC: return 0x43;
-  case iris::wsi::Keys::kD: return 0x44;
-  case iris::wsi::Keys::kE: return 0x45;
-  case iris::wsi::Keys::kF: return 0x46;
-  case iris::wsi::Keys::kG: return 0x47;
-  case iris::wsi::Keys::kH: return 0x48;
-  case iris::wsi::Keys::kI: return 0x49;
-  case iris::wsi::Keys::kJ: return 0x4A;
-  case iris::wsi::Keys::kK: return 0x4B;
-  case iris::wsi::Keys::kL: return 0x4C;
-  case iris::wsi::Keys::kM: return 0x4D;
-  case iris::wsi::Keys::kN: return 0x4E;
-  case iris::wsi::Keys::kO: return 0x4F;
-  case iris::wsi::Keys::kP: return 0x50;
-  case iris::wsi::Keys::kQ: return 0x51;
-  case iris::wsi::Keys::kR: return 0x52;
-  case iris::wsi::Keys::kS: return 0x53;
-  case iris::wsi::Keys::kT: return 0x54;
-  case iris::wsi::Keys::kU: return 0x55;
-  case iris::wsi::Keys::kV: return 0x56;
-  case iris::wsi::Keys::kW: return 0x57;
-  case iris::wsi::Keys::kX: return 0x58;
-  case iris::wsi::Keys::kY: return 0x59;
-  case iris::wsi::Keys::kZ: return 0x5A;
-  case iris::wsi::Keys::kLeftBracket: return 0; // FIXME
-  case iris::wsi::Keys::kBackslash: return 0; // FIXME
-  case iris::wsi::Keys::kRightBracket: return 0; // FIXME
-  case iris::wsi::Keys::kGraveAccent: return 0; // FIXME
-  case iris::wsi::Keys::kEscape: return VK_ESCAPE;
-  case iris::wsi::Keys::kEnter: return VK_RETURN;
-  case iris::wsi::Keys::kTab: return VK_TAB;
-  case iris::wsi::Keys::kBackspace: return VK_BACK;
-  case iris::wsi::Keys::kInsert: return VK_INSERT;
-  case iris::wsi::Keys::kDelete: return VK_DELETE;
-  case iris::wsi::Keys::kRight: return VK_RIGHT;
-  case iris::wsi::Keys::kLeft: return VK_LEFT;
-  case iris::wsi::Keys::kDown: return VK_DOWN;
-  case iris::wsi::Keys::kUp: return VK_UP;
-  case iris::wsi::Keys::kPageUp: return VK_PRIOR;
-  case iris::wsi::Keys::kPageDown: return VK_NEXT;
-  case iris::wsi::Keys::kHome: return VK_HOME;
-  case iris::wsi::Keys::kEnd: return VK_END;
-  case iris::wsi::Keys::kCapsLock: return 0; // FIXME
-  case iris::wsi::Keys::kScrollLock: return 0; // FIXME
-  case iris::wsi::Keys::kNumLock: return 0; // FIXME
-  case iris::wsi::Keys::kPrintScreen: return 0; // FIXME
-  case iris::wsi::Keys::kPause: return 0; // FIXME
-  case iris::wsi::Keys::kF1: return VK_F1;
-  case iris::wsi::Keys::kF2: return VK_F2;
-  case iris::wsi::Keys::kF3: return VK_F3;
-  case iris::wsi::Keys::kF4: return VK_F4;
-  case iris::wsi::Keys::kF5: return VK_F5;
-  case iris::wsi::Keys::kF6: return VK_F6;
-  case iris::wsi::Keys::kF7: return VK_F7;
-  case iris::wsi::Keys::kF8: return VK_F8;
-  case iris::wsi::Keys::kF9: return VK_F9;
-  case iris::wsi::Keys::kF10: return VK_F10;
-  case iris::wsi::Keys::kF11: return VK_F11;
-  case iris::wsi::Keys::kF12: return VK_F12;
-  case iris::wsi::Keys::kF13: return VK_F13;
-  case iris::wsi::Keys::kF14: return VK_F14;
-  case iris::wsi::Keys::kF15: return VK_F15;
-  case iris::wsi::Keys::kF16: return VK_F16;
-  case iris::wsi::Keys::kF17: return VK_F17;
-  case iris::wsi::Keys::kF18: return VK_F19;
-  case iris::wsi::Keys::kF19: return VK_F19;
-  case iris::wsi::Keys::kF20: return VK_F20;
-  case iris::wsi::Keys::kF21: return VK_F21;
-  case iris::wsi::Keys::kF22: return VK_F22;
-  case iris::wsi::Keys::kF23: return VK_F23;
-  case iris::wsi::Keys::kF24: return VK_F24;
-  case iris::wsi::Keys::kKeypad0: return VK_NUMPAD0;
-  case iris::wsi::Keys::kKeypad1: return VK_NUMPAD1;
-  case iris::wsi::Keys::kKeypad2: return VK_NUMPAD2;
-  case iris::wsi::Keys::kKeypad3: return VK_NUMPAD3;
-  case iris::wsi::Keys::kKeypad4: return VK_NUMPAD4;
-  case iris::wsi::Keys::kKeypad5: return VK_NUMPAD5;
-  case iris::wsi::Keys::kKeypad6: return VK_NUMPAD6;
-  case iris::wsi::Keys::kKeypad7: return VK_NUMPAD7;
-  case iris::wsi::Keys::kKeypad8: return VK_NUMPAD8;
-  case iris::wsi::Keys::kKeypad9: return VK_NUMPAD9;
-  case iris::wsi::Keys::kKeypadDecimal: return VK_DECIMAL;
-  case iris::wsi::Keys::kKeypadDivide: return VK_DIVIDE;
-  case iris::wsi::Keys::kKeypadMultiply: return VK_MULTIPLY;
-  case iris::wsi::Keys::kKeypadSubtract: return VK_SUBTRACT;
-  case iris::wsi::Keys::kKeypadAdd: return VK_ADD;
-  case iris::wsi::Keys::kKeypadEnter: return 0; // FIXME
-  case iris::wsi::Keys::kKeypadEqual: return 0; // FIXME
-  case iris::wsi::Keys::kLeftShift: return VK_LSHIFT;
-  case iris::wsi::Keys::kLeftControl: return VK_LCONTROL;
-  case iris::wsi::Keys::kLeftAlt: return VK_LMENU;
-  case iris::wsi::Keys::kLeftSuper: return 0; // FIXME
-  case iris::wsi::Keys::kRightShift: return VK_RSHIFT;
-  case iris::wsi::Keys::kRightControl: return VK_RCONTROL;
-  case iris::wsi::Keys::kRightAlt: return VK_RMENU;
-  case iris::wsi::Keys::kRightSuper: return 0; // FIXME
-  case iris::wsi::Keys::kMenu: return 0; // FIXME
-  default: return 0; //FIXME
-  }
-} // ToKeycode
 
 iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
   Keyset keyboardState;
@@ -208,9 +217,8 @@ iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
     return keyboardState;
   }
 
-  for (int i = 0; i < Keyset::kMaxKeys; ++i) {
-    keyboardState[static_cast<Keys>(i)] =
-      (rawState[ToKeycode(static_cast<Keys>(i))] & 0x80);
+  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
+    keyboardState[static_cast<Keys>(i)] = (rawState[keyLUT_[i]] & 0x80);
   }
 
   return keyboardState;

@@ -43,22 +43,14 @@ public:
 
   Keyset KeyboardState() const noexcept;
 
-  Buttonset Buttons() const noexcept { return buttons_; }
+  Buttonset ButtonState() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
-  glm::uvec2 CursorPos() const noexcept {
-    return glm::vec2(0, 0);
-    //::Window root, child;
-    //glm::ivec2 rootPos, childPos;
-    //unsigned int mask;
-    //::XQueryPointer(handle_.display, handle_.window, &root, &child, &rootPos[0],
-                    //&rootPos[1], &childPos[0], &childPos[1], &mask);
-    //return childPos;
-  }
+  glm::uvec2 CursorPos() const noexcept;
 
-  glm::uvec2 ScrollWheel() const noexcept { return scroll_; }
+  glm::vec2 ScrollWheel() const noexcept { return scroll_; }
 
   std::string Title() noexcept {
     //::XTextProperty prop;
@@ -163,7 +155,8 @@ public:
 
   //! \brief Default constructor: no initialization.
   Impl() noexcept
-    : atoms_(kNumAtoms) {}
+    : atoms_(kNumAtoms)
+    , keyLUT_(Keyset::kMaxKeys) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
@@ -183,6 +176,7 @@ private:
   absl::FixedArray<::xcb_atom_t> atoms_;
   bool closed_{false};
   bool focused_{false};
+  absl::FixedArray<::xcb_keycode_t> keyLUT_;
   Buttonset buttons_{};
   glm::vec2 scroll_{};
   CloseDelegate closeDelegate_{[]() {}};

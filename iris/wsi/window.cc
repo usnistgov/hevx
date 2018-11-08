@@ -42,8 +42,8 @@ iris::wsi::Keyset iris::wsi::Window::KeyboardState() const noexcept {
   return pImpl_->KeyboardState();
 }
 
-iris::wsi::Buttonset iris::wsi::Window::Buttons() const noexcept {
-  return pImpl_->Buttons();
+iris::wsi::Buttonset iris::wsi::Window::ButtonState() const noexcept {
+  return pImpl_->ButtonState();
 }
 
 glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {

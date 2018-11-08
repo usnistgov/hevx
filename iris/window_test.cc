@@ -129,7 +129,7 @@ void InputTest() {
     win->PollEvents();
 
     currKeys = win->KeyboardState();
-    currButtons = win->Buttons();
+    currButtons = win->ButtonState();
 
     if (!currKeys[iris::wsi::Keys::kEscape] &&
         prevKeys[iris::wsi::Keys::kEscape]) {
@@ -144,6 +144,8 @@ void InputTest() {
 
     prevKeys = currKeys;
     prevButtons = currButtons;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(32));
   }
 }
 
@@ -157,11 +159,11 @@ int main(int, char** argv) {
   sLogger = std::make_shared<spdlog::logger>("iris", console_sink);
   sLogger->set_level(spdlog::level::trace);
   spdlog::register_logger(sLogger);
-  spdlog::set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] %^[%l] %v%$");
+  spdlog::set_pattern("[%T.%e] %v%$");
 
   sLogger->info("initialized");
 
-  WindowStyleTest();
+  //WindowStyleTest();
   InputTest();
 
   sLogger->info("exiting");

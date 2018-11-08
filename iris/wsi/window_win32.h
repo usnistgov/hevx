@@ -40,7 +40,7 @@ public:
 
   Keyset KeyboardState() const noexcept;
 
-  Buttonset Buttons() const noexcept { return buttons_; }
+  Buttonset ButtonState() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
@@ -132,7 +132,8 @@ public:
   NativeHandle_t NativeHandle() const noexcept { return handle_; }
 
   //! \brief Default constructor: no initialization.
-  Impl() = default;
+  Impl() noexcept
+    : keyLUT_(Keyset::kMaxKeys) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
@@ -143,6 +144,7 @@ private:
   DWORD dwStyle_{};
   bool closed_{false};
   bool focused_{false};
+  absl::FixedArray<int> keyLUT_;
   Buttonset buttons_{};
   glm::vec2 scroll_{};
   CloseDelegate closeDelegate_{[]() {}};
