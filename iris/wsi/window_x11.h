@@ -28,6 +28,7 @@ class Window::Impl {
 public:
   /*! \brief Create a new Impl.
    * \param[in] title the window title.
+   * \param[in] offset the window offset in screen coordinates.
    * \param[in] extent the window extent in screen coordinates.
    * \param[in] options the Options describing how to create the window.
    * \return a std::expected of either the Impl pointer or a std::exception.
@@ -40,21 +41,15 @@ public:
   Offset2D Offset() const noexcept { return rect_.offset; }
   Extent2D Extent() const noexcept { return rect_.extent; }
 
-  /*! \brief Get the current state of the keyboard.
-   *  \return the current state of the keyboard.
-   */
-  Keyset Keys() const noexcept { return keys_; }
+  Keyset KeyboardState() const noexcept;
 
-  /*! \brief Get the current state of the mouse buttons.
-   *  \return the current state of the mouse buttons.
-   */
   Buttonset Buttons() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
   glm::uvec2 CursorPos() const noexcept {
-    return {0, 0};
+    return glm::vec2(0, 0);
     //::Window root, child;
     //glm::ivec2 rootPos, childPos;
     //unsigned int mask;
@@ -62,6 +57,8 @@ public:
                     //&rootPos[1], &childPos[0], &childPos[1], &mask);
     //return childPos;
   }
+
+  glm::uvec2 ScrollWheel() const noexcept { return scroll_; }
 
   std::string Title() noexcept {
     //::XTextProperty prop;
@@ -166,8 +163,7 @@ public:
 
   //! \brief Default constructor: no initialization.
   Impl() noexcept
-    : atoms_(kNumAtoms)
-    , keyLUT_(Keyset::kMaxKeys) {}
+    : atoms_(kNumAtoms) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
@@ -183,13 +179,12 @@ private:
   }; // enum Atoms
 
   Rect2D rect_{Offset2D{}, Extent2D{}};
-  Keyset keys_{};
-  Buttonset buttons_{};
   NativeHandle_t handle_{};
   absl::FixedArray<::xcb_atom_t> atoms_;
   bool closed_{false};
   bool focused_{false};
-  absl::FixedArray<wsi::Keys> keyLUT_;
+  Buttonset buttons_{};
+  glm::vec2 scroll_{};
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

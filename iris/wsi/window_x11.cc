@@ -39,156 +39,6 @@ inline std::error_category const& GetXCategory() {
 
 } // namespace iris::wsi
 
-#if 0
-static std::uint8_t sErrorCode{0};
-
-static int ErrorHandler(::Display*, ::XErrorEvent* ev) noexcept {
-  sErrorCode = ev->error_code;
-  return 0;
-}
-
-static void GrabErrorHandler(::Display*) noexcept {
-  sErrorCode = Success;
-  ::XSetErrorHandler(ErrorHandler);
-}
-
-static void ReleaseErrorHandler(::Display* disp) noexcept {
-  ::XSync(disp, False);
-  ::XSetErrorHandler(nullptr);
-}
-#endif
-namespace iris::wsi {
-#if 0
-static Keys TranslateKeySym(::KeySym keysym) {
-  using namespace iris::wsi;
-
-  switch (keysym) {
-  case XK_BackSpace: return Keys::kBackspace;
-  case XK_Tab: return Keys::kTab;
-  case XK_Return: return Keys::kEnter;
-  case XK_Pause: return Keys::kPause;
-  case XK_Scroll_Lock: return Keys::kScrollLock;
-  case XK_Escape: return Keys::kEscape;
-  case XK_Delete: return Keys::kDelete;
-
-  case XK_Home: return Keys::kHome;
-  case XK_Left: return Keys::kLeft;
-  case XK_Up: return Keys::kUp;
-  case XK_Down: return Keys::kDown;
-  case XK_Page_Up: return Keys::kPageUp;
-  case XK_Page_Down: return Keys::kPageDown;
-  case XK_End: return Keys::kEnd;
-
-  case XK_Insert: return Keys::kInsert;
-  case XK_Num_Lock: return Keys::kNumLock;
-
-  case XK_KP_Enter: return Keys::kKeypadEnter;
-  case XK_KP_Home: return Keys::kKeypad7;
-  case XK_KP_Left: return Keys::kKeypad4;
-  case XK_KP_Up: return Keys::kKeypad8;
-  case XK_KP_Right: return Keys::kKeypad6;
-  case XK_KP_Down: return Keys::kKeypad2;
-  case XK_KP_Page_Up: return Keys::kKeypad9;
-  case XK_KP_Page_Down: return Keys::kKeypad3;
-  case XK_KP_End: return Keys::kKeypad1;
-  case XK_KP_Insert: return Keys::kKeypad0;
-  case XK_KP_Delete: return Keys::kKeypadDecimal;
-  case XK_KP_Multiply: return Keys::kKeypadMultiply;
-  case XK_KP_Add: return Keys::kKeypadAdd;
-  case XK_KP_Subtract: return Keys::kKeypadSubtract;
-  case XK_KP_Divide: return Keys::kKeypadDivide;
-
-  case XK_F1: return Keys::kF1;
-  case XK_F2: return Keys::kF2;
-  case XK_F3: return Keys::kF3;
-  case XK_F4: return Keys::kF4;
-  case XK_F5: return Keys::kF5;
-  case XK_F6: return Keys::kF6;
-  case XK_F7: return Keys::kF7;
-  case XK_F8: return Keys::kF8;
-  case XK_F9: return Keys::kF9;
-  case XK_F10: return Keys::kF10;
-  case XK_F11: return Keys::kF11;
-  case XK_F12: return Keys::kF12;
-  case XK_F13: return Keys::kF13;
-  case XK_F14: return Keys::kF14;
-  case XK_F15: return Keys::kF15;
-  case XK_F16: return Keys::kF16;
-  case XK_F17: return Keys::kF17;
-  case XK_F18: return Keys::kF18;
-  case XK_F19: return Keys::kF19;
-  case XK_F20: return Keys::kF20;
-  case XK_F21: return Keys::kF21;
-  case XK_F22: return Keys::kF22;
-  case XK_F23: return Keys::kF23;
-  case XK_F24: return Keys::kF24;
-  case XK_F25: return Keys::kF25;
-
-  case XK_Shift_L: return Keys::kLeftShift;
-  case XK_Shift_R: return Keys::kRightShift;
-  case XK_Control_L: return Keys::kLeftControl;
-  case XK_Control_R: return Keys::kRightControl;
-  case XK_Caps_Lock: return Keys::kCapsLock;
-  case XK_Meta_L: return Keys::kLeftAlt;
-  case XK_Meta_R: return Keys::kRightAlt;
-  case XK_Super_L: return Keys::kLeftSuper;
-  case XK_Super_R: return Keys::kRightSuper;
-
-  case XK_space: return Keys::kSpace;
-  case XK_apostrophe: return Keys::kApostrophe;
-  case XK_comma: return Keys::kComma;
-  case XK_minus: return Keys::kMinus;
-  case XK_period: return Keys::kPeriod;
-  case XK_slash: return Keys::kSlash;
-  case XK_0: return Keys::k0;
-  case XK_1: return Keys::k1;
-  case XK_2: return Keys::k2;
-  case XK_3: return Keys::k3;
-  case XK_4: return Keys::k4;
-  case XK_5: return Keys::k5;
-  case XK_6: return Keys::k6;
-  case XK_7: return Keys::k7;
-  case XK_8: return Keys::k8;
-  case XK_9: return Keys::k9;
-  case XK_semicolon: return Keys::kSemicolon;
-  case XK_equal: return Keys::kEqual;
-  case XK_A: return Keys::kA;
-  case XK_B: return Keys::kB;
-  case XK_C: return Keys::kC;
-  case XK_D: return Keys::kD;
-  case XK_E: return Keys::kE;
-  case XK_F: return Keys::kF;
-  case XK_G: return Keys::kG;
-  case XK_H: return Keys::kH;
-  case XK_I: return Keys::kI;
-  case XK_J: return Keys::kJ;
-  case XK_K: return Keys::kK;
-  case XK_L: return Keys::kL;
-  case XK_M: return Keys::kM;
-  case XK_N: return Keys::kN;
-  case XK_O: return Keys::kO;
-  case XK_P: return Keys::kP;
-  case XK_Q: return Keys::kQ;
-  case XK_R: return Keys::kR;
-  case XK_S: return Keys::kS;
-  case XK_T: return Keys::kT;
-  case XK_U: return Keys::kU;
-  case XK_V: return Keys::kV;
-  case XK_W: return Keys::kW;
-  case XK_X: return Keys::kX;
-  case XK_Y: return Keys::kY;
-  case XK_Z: return Keys::kZ;
-  case XK_bracketleft: return Keys::kLeftBracket;
-  case XK_backslash: return Keys::kBackslash;
-  case XK_bracketright: return Keys::kRightBracket;
-  case XK_grave: return Keys::kGraveAccent;
-  }
-
-  return Keys::kUnknown;
-} // TranslateKeySym
-#endif
-} // namespace iris::wsi
-
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
 iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
                                 Extent2D extent, Options const& options[[maybe_unused]],
@@ -199,7 +49,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
 
   try {
     pWin = std::make_unique<Impl>();
-  } catch (std::bad_alloc const& e) {
+  } catch (std::bad_alloc const&) {
     GetLogger()->critical("Cannot allocate memory");
     std::terminate();
   } catch (std::exception const& e) {
@@ -380,7 +230,6 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.extent = std::move(extent);
 
   pWin->Retitle(title);
-  pWin->Show();
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);

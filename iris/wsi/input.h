@@ -107,7 +107,6 @@ enum class Keys : std::uint8_t {
   kF22 = 211,
   kF23 = 212,
   kF24 = 213,
-  kF25 = 214,
 
   kKeypad0 = 220,
   kKeypad1 = 221,
@@ -181,17 +180,13 @@ private:
 
 //! \brief Mouse buttons.
 enum class Buttons : std::uint8_t {
-  kLeft = 0,
-  kMiddle = 1,
-  kRight = 2,
-  kButton4 = 3,
-  kButton5 = 4,
-  kButton6 = 5,
-  kButton7 = 6,
-  kButton8 = 7,
-  kButton9 = 8,
+  kLeft,
+  kRight,
+  kMiddle,
+  kButton4,
+  kButton5,
 
-  kMaxButtons = 9
+  kMaxButtons = 5
 }; // enum class Buttons
 
 //! \brief Tracks the current state of a mouse.

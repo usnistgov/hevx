@@ -25,32 +25,29 @@ class Window::Impl {
 public:
   /*! \brief Create a new Impl.
    * \param[in] title the window title.
+   * \param[in] offset the window offset in screen coordinates.
    * \param[in] extent the window extent in screen coordinates.
    * \param[in] options the Options describing how to create the window.
-   * \return a std::expected of either the Impl pointer or a std::error_code.
+   * \return a std::expected of either the Impl pointer or a std::exception.
    */
-  static tl::expected<std::unique_ptr<Impl>, std::error_code>
-  Create(gsl::czstring<> title, Rect rect, Options const& options, int);
+  static tl::expected<std::unique_ptr<Impl>, std::exception>
+  Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
+         Options const& options, int);
+
+  Rect2D Rect() const noexcept { return rect_; }
+  Offset2D Offset() const noexcept { return rect_.offset; }
+  Extent2D Extent() const noexcept { return rect_.extent; }
+
+  Keyset KeyboardState() const noexcept;
+
+  Buttonset Buttons() const noexcept { return buttons_; }
 
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
-  glm::uvec2 CursorPos() const noexcept {
-    POINT pos;
-    ::GetCursorPos(&pos);
-    ::ScreenToClient(handle_.hWnd, &pos);
-    return {pos.x, pos.y};
-  }
+  glm::uvec2 CursorPos() const noexcept;
 
-  /*! \brief Get the current title of the window.
-  *   \return the current title of the window.
-  */
-  std::string Title() const noexcept {
-    std::array<char, 128> buffer;
-    int length = ::GetWindowText(handle_.hWnd, buffer.data(), buffer.size());
-    buffer[length + 1] = '\0';
-    return std::string(buffer.data(), length);
-  }
+  glm::uvec2 ScrollWheel() const noexcept { return scroll_; }
 
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
@@ -62,17 +59,17 @@ public:
   /*! \brief Move this window.
    * \param[in] offset the new window offset in screen coordinates.
    */
-  void Move(glm::uvec2 const& offset) {
-    ::SetWindowPos(handle_.hWnd, HWND_NOTOPMOST, offset[0], offset[1], 0, 0,
+  void Move(Offset2D const& offset) {
+    ::SetWindowPos(handle_.hWnd, HWND_NOTOPMOST, offset.x, offset.y, 0, 0,
                    SWP_NOSIZE);
   }
 
   /*! \brief Resize this window.
    * \param[in] extent the new window extent in screen coordinate.s
    */
-  void Resize(glm::uvec2 const& extent) {
+  void Resize(Extent2D const& extent) {
     RECT rect;
-    ::SetRect(&rect, 0, 0, extent[0], extent[1]);
+    ::SetRect(&rect, 0, 0, extent.width, extent.height);
     ::AdjustWindowRect(&rect, dwStyle_, FALSE);
     ::SetWindowPos(handle_.hWnd, HWND_NOTOPMOST, 0, 0, (rect.right - rect.left),
                    (rect.bottom - rect.top), SWP_NOMOVE | SWP_NOREPOSITION);
@@ -135,24 +132,19 @@ public:
   NativeHandle_t NativeHandle() const noexcept { return handle_; }
 
   //! \brief Default constructor: no initialization.
-  Impl()
-    : keyLUT_(Keyset::kMaxKeys) {}
-
-  Impl(Impl const&) = delete;
-  Impl(Impl&& other) noexcept;
-  Impl& operator=(Impl const&) = delete;
-  Impl& operator=(Impl&& rhs) noexcept;
+  Impl() = default;
 
   //! \brief Destructor.
   ~Impl() noexcept;
 
 private:
-  Rect rect_{};
+  Rect2D rect_{};
   NativeHandle_t handle_{};
   DWORD dwStyle_{};
   bool closed_{false};
   bool focused_{false};
-  absl::FixedArray<wsi::Keys> keyLUT_;
+  Buttonset buttons_{};
+  glm::vec2 scroll_{};
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

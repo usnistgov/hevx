@@ -2,9 +2,9 @@
 #include "config.h"
 #include "logging.h"
 #include "wsi/error_codes.h"
-#if defined(PLATFORM_LINUX)
+#if PLATFORM_LINUX
 #include "wsi/window_x11.h"
-#elif defined(PLATFORM_WINDOWS)
+#elif PLATFORM_WINDOWS
 #include "wsi/window_win32.h"
 #endif
 /*! \file
@@ -28,30 +28,30 @@ iris::wsi::Window::Create(gsl::czstring<> title, Offset2D offset,
 
 iris::wsi::Rect2D iris::wsi::Window::Rect() const noexcept {
   return pImpl_->Rect();
-} // iris::wsi::Window::Rect
+}
 
 iris::wsi::Offset2D iris::wsi::Window::Offset() const noexcept {
   return pImpl_->Offset();
-} // iris::wsi::Window::Offset
+}
 
 iris::wsi::Extent2D iris::wsi::Window::Extent() const noexcept {
   return pImpl_->Extent();
-} // iris::wsi::Window::Extent
+}
 
-iris::wsi::Keyset iris::wsi::Window::Keys() const noexcept {
-  return pImpl_->Keys();
-} // iris::wsi::Window::Keys
+iris::wsi::Keyset iris::wsi::Window::KeyboardState() const noexcept {
+  return pImpl_->KeyboardState();
+}
 
 iris::wsi::Buttonset iris::wsi::Window::Buttons() const noexcept {
   return pImpl_->Buttons();
-} // iris::wsi::Window::Buttons
+}
 
 glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
 }
 
-std::string iris::wsi::Window::Title() const noexcept {
-  return pImpl_->Title();
+glm::vec2 iris::wsi::Window::ScrollWheel() const noexcept {
+  return pImpl_->ScrollWheel();
 }
 
 void iris::wsi::Window::Retitle(gsl::czstring<> title) noexcept {

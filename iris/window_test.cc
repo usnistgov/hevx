@@ -13,20 +13,10 @@
 #endif
 #include <cstdlib>
 
-int main(int, char** argv) {
-  absl::InitializeSymbolizer(argv[0]);
-  absl::InstallFailureSignalHandler({});
+std::shared_ptr<spdlog::logger> sLogger;
 
-  auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-  console_sink->set_level(spdlog::level::trace);
-
-  auto logger = std::make_shared<spdlog::logger>("iris", console_sink);
-  logger->set_level(spdlog::level::trace);
-  spdlog::register_logger(logger);
-  spdlog::set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] %^[%l] %v%$");
-
-  logger->info("initialized");
-
+void WindowStyleTest() {
+  sLogger->info("Window style test");
 
   auto decorated = iris::wsi::Window::Create(
     "decorated", iris::wsi::Offset2D{0, 0}, iris::wsi::Extent2D{300, 300},
@@ -34,74 +24,146 @@ int main(int, char** argv) {
       iris::wsi::Window::Options::kSizeable,
     0);
   if (!decorated) {
-    logger->error("Cannot create decorated window: {}",
-                  decorated.error().what());
+    sLogger->error("Cannot create decorated window: {}",
+                   decorated.error().what());
     std::exit(EXIT_FAILURE);
   }
 
-  decorated->OnMove([&logger](iris::wsi::Offset2D const& newOffset) {
-    logger->debug("decorated OnMove: ({}, {})", newOffset.x, newOffset.y);
+  decorated->OnMove([](iris::wsi::Offset2D const& newOffset) {
+    sLogger->debug("decorated OnMove: ({}, {})", newOffset.x, newOffset.y);
   });
 
-  decorated->OnResize([&logger](iris::wsi::Extent2D const& newExtent) {
-    logger->debug("decorated OnResize: ({}, {})", newExtent.width,
-                  newExtent.height);
+  decorated->OnResize([](iris::wsi::Extent2D const& newExtent) {
+    sLogger->debug("decorated OnResize: ({}, {})", newExtent.width,
+                   newExtent.height);
   });
 
-  decorated->OnClose([&logger]() { logger->debug("decorated OnClose"); });
+  decorated->OnClose([]() { sLogger->debug("decorated OnClose"); });
 
 
   auto undecorated = iris::wsi::Window::Create(
     "undecorated", iris::wsi::Offset2D{350, 0}, iris::wsi::Extent2D{300, 300},
     iris::wsi::Window::Options::kSizeable, 0);
   if (!undecorated) {
-    logger->error("Cannot create undecorated window: {}",
-                  undecorated.error().what());
+    sLogger->error("Cannot create undecorated window: {}",
+                   undecorated.error().what());
     std::exit(EXIT_FAILURE);
   }
 
-  undecorated->OnMove([&logger](iris::wsi::Offset2D const& newOffset) {
-    logger->debug("undecorated OnMove: ({}, {})", newOffset.x, newOffset.y);
+  undecorated->OnMove([](iris::wsi::Offset2D const& newOffset) {
+    sLogger->debug("undecorated OnMove: ({}, {})", newOffset.x, newOffset.y);
   });
 
-  undecorated->OnResize([&logger](iris::wsi::Extent2D const& newExtent) {
-    logger->debug("undecorated OnResize: ({}, {})", newExtent.width,
-                  newExtent.height);
+  undecorated->OnResize([](iris::wsi::Extent2D const& newExtent) {
+    sLogger->debug("undecorated OnResize: ({}, {})", newExtent.width,
+                   newExtent.height);
   });
 
-  undecorated->OnClose([&logger]() { logger->debug("undecorated OnClose"); });
+  undecorated->OnClose([]() { sLogger->debug("undecorated OnClose"); });
 
 
   auto nonresizeable = iris::wsi::Window::Create(
-    "nonresizeable", iris::wsi::Offset2D{0, 0}, iris::wsi::Extent2D{300, 300},
+    "nonresizeable", iris::wsi::Offset2D{700, 0}, iris::wsi::Extent2D{300, 300},
     iris::wsi::Window::Options::kDecorated, 0);
   if (!nonresizeable) {
-    logger->error("Cannot create nonresizeable window: {}",
-                  nonresizeable.error().what());
+    sLogger->error("Cannot create nonresizeable window: {}",
+                   nonresizeable.error().what());
     std::exit(EXIT_FAILURE);
   }
 
-  nonresizeable->OnMove([&logger](iris::wsi::Offset2D const& newOffset) {
-    logger->debug("nonresizeable OnMove: ({}, {})", newOffset.x, newOffset.y);
+  nonresizeable->OnMove([](iris::wsi::Offset2D const& newOffset) {
+    sLogger->debug("nonresizeable OnMove: ({}, {})", newOffset.x, newOffset.y);
   });
 
-  nonresizeable->OnResize([&logger](iris::wsi::Extent2D const& newExtent) {
-    logger->debug("nonresizeable OnResize: ({}, {})", newExtent.width,
-                  newExtent.height);
+  nonresizeable->OnResize([](iris::wsi::Extent2D const& newExtent) {
+    sLogger->debug("nonresizeable OnResize: ({}, {})", newExtent.width,
+                   newExtent.height);
   });
 
-  nonresizeable->OnClose(
-    [&logger]() { logger->debug("nonresizeable OnClose"); });
+  nonresizeable->OnClose([]() { sLogger->debug("nonresizeable OnClose"); });
 
-  bool closed = decorated->IsClosed() && undecorated->IsClosed() &&
-                nonresizeable->IsClosed();
-  while (!closed) {
+
+  decorated->Show();
+  undecorated->Show();
+  nonresizeable->Show();
+
+  while (!decorated->IsClosed()) {
     decorated->PollEvents();
     undecorated->PollEvents();
-    closed = decorated->IsClosed() && undecorated->IsClosed() &&
-             nonresizeable->IsClosed();
+    nonresizeable->PollEvents();
   }
 
-  logger->info("exiting");
+  undecorated->Close();
+  nonresizeable->Close();
+}
+
+void InputTest() {
+  sLogger->info("Input test");
+
+  auto win = iris::wsi::Window::Create("InputTest", iris::wsi::Offset2D{0, 0},
+                                       iris::wsi::Extent2D{300, 300},
+                                       iris::wsi::Window::Options::kDecorated |
+                                         iris::wsi::Window::Options::kSizeable,
+                                       0);
+  if (!win) {
+    sLogger->error("Cannot create win: {}", win.error().what());
+    std::exit(EXIT_FAILURE);
+  }
+
+  win->OnMove([](iris::wsi::Offset2D const& newOffset) {
+    sLogger->debug("win OnMove: ({}, {})", newOffset.x, newOffset.y);
+  });
+
+  win->OnResize([](iris::wsi::Extent2D const& newExtent) {
+    sLogger->debug("win OnResize: ({}, {})", newExtent.width, newExtent.height);
+  });
+
+  win->OnClose([]() { sLogger->debug("win OnClose"); });
+
+  win->Show();
+
+  iris::wsi::Keyset prevKeys, currKeys;
+  iris::wsi::Buttonset prevButtons, currButtons;
+
+  while (!win->IsClosed()) {
+    win->PollEvents();
+
+    currKeys = win->KeyboardState();
+    currButtons = win->Buttons();
+
+    if (!currKeys[iris::wsi::Keys::kEscape] &&
+        prevKeys[iris::wsi::Keys::kEscape]) {
+      win->Close();
+    }
+
+    if (!currButtons[iris::wsi::Buttons::kRight] &&
+        prevButtons[iris::wsi::Buttons::kRight]) {
+      auto const scroll = win->ScrollWheel();
+      sLogger->info("ScrollWheel: ({}, {})", scroll.x, scroll.y);
+    }
+
+    prevKeys = currKeys;
+    prevButtons = currButtons;
+  }
+}
+
+int main(int, char** argv) {
+  absl::InitializeSymbolizer(argv[0]);
+  absl::InstallFailureSignalHandler({});
+
+  auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+  console_sink->set_level(spdlog::level::trace);
+
+  sLogger = std::make_shared<spdlog::logger>("iris", console_sink);
+  sLogger->set_level(spdlog::level::trace);
+  spdlog::register_logger(sLogger);
+  spdlog::set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] %^[%l] %v%$");
+
+  sLogger->info("initialized");
+
+  WindowStyleTest();
+  InputTest();
+
+  sLogger->info("exiting");
 }
 

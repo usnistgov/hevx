@@ -81,7 +81,9 @@ add_custom_command(
 
 if(WIN32)
   set(PLATFORM_WINDOWS TRUE)
+  set(PLATFORM_LINUX FALSE)
 elseif(UNIX)
+  set(PLATFORM_WINDOWS FALSE)
   set(PLATFORM_LINUX TRUE)
 endif()
 
