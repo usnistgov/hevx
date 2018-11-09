@@ -49,12 +49,8 @@ static VkImage sFontImage{VK_NULL_HANDLE};
 static VmaAllocation sFontImageAllocation{VK_NULL_HANDLE};
 static VkImageView sFontImageView{VK_NULL_HANDLE};
 static VkSampler sFontImageSampler{VK_NULL_HANDLE};
-static VkDeviceSize sVertexBufferSize{0};
-static VkBuffer sVertexBuffer{VK_NULL_HANDLE};
-static VmaAllocation sVertexBufferAllocation{VK_NULL_HANDLE};
-static VkDeviceSize sIndexBufferSize{0};
-static VkBuffer sIndexBuffer{VK_NULL_HANDLE};
-static VmaAllocation sIndexBufferAllocation{VK_NULL_HANDLE};
+static iris::Renderer::Buffer sVertexBuffer{};
+static iris::Renderer::Buffer sIndexBuffer{};
 static VkDescriptorSetLayout sDescriptorSetLayout{VK_NULL_HANDLE};
 static std::vector<VkDescriptorSet> sDescriptorSets;
 static VkPipelineLayout sPipelineLayout{VK_NULL_HANDLE};
@@ -164,22 +160,19 @@ iris::Renderer::ui::Initialize() noexcept {
       make_error_code(result), "Cannot create sampler for UI font texture"));
   }
 
-  sVertexBufferSize = 1024 * sizeof(ImDrawVert);
-
-  if (auto vb =
-        CreateBuffer(sVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                     VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(sVertexBuffer, sVertexBufferAllocation) = *vb;
+  if (auto vb = Buffer::Create(
+        1024 * sizeof(ImDrawVert), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sVertexBuffer")) {
+    sVertexBuffer = std::move(*vb);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vb.error());
   }
 
-  sIndexBufferSize = 1024 * sizeof(ImDrawIdx);
-
-  if (auto ib = CreateBuffer(sIndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                             VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(sIndexBuffer, sIndexBufferAllocation) = *ib;
+  if (auto ib = Buffer::Create(
+        1024 * sizeof(ImDrawIdx), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sIndexBuffer")) {
+    sIndexBuffer = std::move(*ib);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ib.error());
@@ -388,8 +381,6 @@ iris::Renderer::ui::Initialize() noexcept {
   NameObject(VK_OBJECT_TYPE_IMAGE, sFontImage, "ui::sFontImage");
   NameObject(VK_OBJECT_TYPE_SAMPLER, sFontImageSampler,
              "ui::sFontImageSampler");
-  NameObject(VK_OBJECT_TYPE_BUFFER, sVertexBuffer, "ui::sVertexBuffer");
-  NameObject(VK_OBJECT_TYPE_BUFFER, sIndexBuffer, "ui::sIndexBuffer");
   NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sDescriptorSetLayout,
              "ui::sDescriptorSetLayout");
   for (auto&& set : sDescriptorSets) {
@@ -444,42 +435,40 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
   if (drawData->TotalVtxCount == 0) return VkCommandBuffer{VK_NULL_HANDLE};
 
   VkDeviceSize newBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
-  if (newBufferSize > sVertexBufferSize) {
-    if (auto newVB =
-          CreateBuffer(newBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                       VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-      vmaDestroyBuffer(sAllocator, sVertexBuffer, sVertexBufferAllocation);
-      std::tie(sVertexBuffer, sVertexBufferAllocation) = *newVB;
-      sVertexBufferSize = newBufferSize;
-      NameObject(VK_OBJECT_TYPE_BUFFER, sVertexBuffer, "ui::sVertexBuffer");
+  if (newBufferSize > sVertexBuffer.size) {
+    if (auto vb =
+          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sVertexBuffer")) {
+      auto newVB = std::move(*vb);
+      // ensures old sVertexBuffer will get destroyed on scope exit
+      std::swap(sVertexBuffer, newVB);
     } else {
       using namespace std::string_literals;
-      return tl::unexpected(std::system_error(newVB.error().code(),
-                                              "Cannot resize vertex buffer: "s +
-                                                newVB.error().what()));
+      return tl::unexpected(
+        std::system_error(vb.error().code(), "Cannot resize vertex buffer: "s +
+                                               vb.error().what()));
     }
   }
 
   newBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
-  if (newBufferSize > sIndexBufferSize) {
-    if (auto newIB =
-          CreateBuffer(newBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                       VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-      vmaDestroyBuffer(sAllocator, sIndexBuffer, sIndexBufferAllocation);
-      std::tie(sIndexBuffer, sIndexBufferAllocation) = *newIB;
-      sIndexBufferSize = newBufferSize;
-      NameObject(VK_OBJECT_TYPE_BUFFER, sIndexBuffer, "ui::sIndexBuffer");
+  if (newBufferSize > sIndexBuffer.size) {
+    if (auto ib =
+          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sIndexBuffer")) {
+      auto newIB = std::move(*ib);
+      // ensures old sIndexBuffer will get destroyed on scope exit
+      std::swap(sIndexBuffer, newIB);
     } else {
       using namespace std::string_literals;
-      return tl::unexpected(std::system_error(newIB.error().code(),
-                                              "Cannot resize index buffer: "s +
-                                                newIB.error().what()));
+      return tl::unexpected(
+        std::system_error(ib.error().code(),
+                          "Cannot resize index buffer: "s + ib.error().what()));
     }
   }
 
   ImDrawVert* pVerts;
-  if (auto p = MapMemory(sVertexBufferAllocation)) {
-    pVerts = reinterpret_cast<ImDrawVert*>(*p);
+  if (auto p = sVertexBuffer.Map<ImDrawVert*>()) {
+    pVerts = *p;
   } else {
     using namespace std::string_literals;
     return tl::unexpected(std::system_error(
@@ -488,8 +477,8 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
   }
 
   ImDrawIdx* pIndxs;
-  if (auto p = MapMemory(sIndexBufferAllocation)) {
-    pIndxs = reinterpret_cast<ImDrawIdx*>(*p);
+  if (auto p = sIndexBuffer.Map<ImDrawIdx*>()) {
+    pIndxs = *p;
   } else {
     using namespace std::string_literals;
     return tl::unexpected(
@@ -507,11 +496,11 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
     pIndxs += cmdList->IdxBuffer.Size;
   }
 
-  UnmapMemory(sVertexBufferAllocation, 0, VK_WHOLE_SIZE);
-  UnmapMemory(sIndexBufferAllocation, 0, VK_WHOLE_SIZE);
+  sVertexBuffer.Unmap();
+  sIndexBuffer.Unmap();
 
   absl::FixedArray<VkClearValue> clearValues(4);
-  clearValues[sColorTargetAttachmentIndex].color = {0, 0, 0, 0};
+  clearValues[sColorTargetAttachmentIndex].color = {{0, 0, 0, 0}};
   clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
 
   sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
@@ -539,8 +528,8 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
                           0, 1, &sDescriptorSets[0], 0, nullptr);
 
   VkDeviceSize bindingOffset = 0;
-  vkCmdBindVertexBuffers(cb, 0, 1, &sVertexBuffer, &bindingOffset);
-  vkCmdBindIndexBuffer(cb, sIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+  vkCmdBindVertexBuffers(cb, 0, 1, &sVertexBuffer.buffer, &bindingOffset);
+  vkCmdBindIndexBuffer(cb, sIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
   glm::vec2 const displaySize{drawData->DisplaySize.x, drawData->DisplaySize.y};
   glm::vec2 const displayPos{drawData->DisplayPos.x, drawData->DisplayPos.y};
@@ -610,16 +599,6 @@ void iris::Renderer::ui::Shutdown() noexcept {
 
   if (sDescriptorSetLayout != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(sDevice, sDescriptorSetLayout, nullptr);
-  }
-
-  if (sIndexBuffer != VK_NULL_HANDLE &&
-      sIndexBufferAllocation != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(sAllocator, sIndexBuffer, sIndexBufferAllocation);
-  }
-
-  if (sVertexBuffer != VK_NULL_HANDLE &&
-      sVertexBufferAllocation != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(sAllocator, sVertexBuffer, sVertexBufferAllocation);
   }
 
   if (sFontImageSampler != VK_NULL_HANDLE) {

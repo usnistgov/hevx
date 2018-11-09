@@ -116,19 +116,17 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
       std::terminate();
   }
 
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingBufferAllocation;
-
-  if (auto sb = CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                             VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(stagingBuffer, stagingBufferAllocation) = *sb;
+  Buffer stagingBuffer;
+  if (auto sb = Buffer::Create(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    stagingBuffer = std::move(*sb);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(sb.error().code(), "Cannot create staging buffer"));
   }
 
-  if (auto p = MapMemory(stagingBufferAllocation)) {
+  if (auto p = stagingBuffer.Map<unsigned char*>()) {
     std::memcpy(*p, pixels, imageSize);
   } else {
     using namespace std::string_literals;
@@ -136,8 +134,6 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     return tl::unexpected(std::system_error(
       p.error().code(), "Cannot map staging buffer: "s + p.error().what()));
   }
-
-  UnmapMemory(stagingBufferAllocation, 0, VK_WHOLE_SIZE);
 
   VkImageCreateInfo imageCI = {};
   imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -188,7 +184,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   region.imageOffset = {0, 0, 0};
   region.imageExtent = extent;
 
-  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
+  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
@@ -204,8 +200,6 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     IRIS_LOG_LEAVE();
     return tl::unexpected(noret.error());
   }
-
-  vmaDestroyBuffer(sAllocator, stagingBuffer, stagingBufferAllocation);
 
   IRIS_LOG_LEAVE();
   return std::make_pair(image, allocation);
