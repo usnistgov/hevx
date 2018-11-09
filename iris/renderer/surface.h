@@ -5,17 +5,16 @@
 #include "iris/wsi/window.h"
 #include "tl/expected.hpp"
 #include "glm/vec4.hpp"
-#include <exception>
 #include <system_error>
 #include <vector>
 
 namespace iris::Renderer {
 
 struct Surface {
-  static tl::expected<Surface, std::exception>
+  static tl::expected<Surface, std::system_error>
   Create(wsi::Window& window, glm::vec4 const& clearColor) noexcept;
 
-  std::error_code Resize(VkExtent2D newExtent) noexcept;
+  tl::expected<void, std::system_error> Resize(VkExtent2D newExtent) noexcept;
 
   VkSurfaceKHR handle{VK_NULL_HANDLE};
   VkSemaphore imageAvailable{VK_NULL_HANDLE};

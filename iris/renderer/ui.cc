@@ -66,7 +66,8 @@ static TimePoint sPreviousTime;
 
 } // namespace iris::ui::Renderer
 
-std::error_code iris::Renderer::ui::Initialize() noexcept {
+tl::expected<void, std::system_error>
+iris::Renderer::ui::Initialize() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
 
@@ -74,7 +75,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     sCommandBuffers = std::move(*cbs);
   } else {
     IRIS_LOG_LEAVE();
-    return cbs.error();
+    return tl::unexpected(cbs.error());
   }
 
   ImGui::CreateContext();
@@ -108,9 +109,9 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
                                      "/assets/fonts/SourceSansPro-Regular.ttf")
                                       .c_str(),
                                     16.f)) {
-    GetLogger()->error("Cannot load UI font file");
     IRIS_LOG_LEAVE();
-    return Error::kInitializationFailed;
+    return tl::unexpected(std::system_error(Error::kInitializationFailed,
+                                            "Cannot load UI font file"));
   }
 
   unsigned char* pixels;
@@ -126,7 +127,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     std::tie(sFontImage, sFontImageAllocation) = *ti;
   } else {
     IRIS_LOG_LEAVE();
-    return ti.error();
+    return tl::unexpected(ti.error());
   }
 
   if (auto tv = CreateImageView(sFontImage, VK_FORMAT_R8G8B8A8_UNORM,
@@ -135,7 +136,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     sFontImageView = std::move(*tv);
   } else {
     IRIS_LOG_LEAVE();
-    return tv.error();
+    return tl::unexpected(tv.error());
   }
 
   VkSamplerCreateInfo samplerCI = {};
@@ -158,10 +159,9 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
 
   result = vkCreateSampler(sDevice, &samplerCI, nullptr, &sFontImageSampler);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create sampler for UI font texture: {}",
-                       to_string(result));
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create sampler for UI font texture"));
   }
 
   sVertexBufferSize = 1024 * sizeof(ImDrawVert);
@@ -172,7 +172,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     std::tie(sVertexBuffer, sVertexBufferAllocation) = *vb;
   } else {
     IRIS_LOG_LEAVE();
-    return vb.error();
+    return tl::unexpected(vb.error());
   }
 
   sIndexBufferSize = 1024 * sizeof(ImDrawIdx);
@@ -182,7 +182,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     std::tie(sIndexBuffer, sIndexBufferAllocation) = *ib;
   } else {
     IRIS_LOG_LEAVE();
-    return ib.error();
+    return tl::unexpected(ib.error());
   }
 
   VkShaderModule vertexShader;
@@ -191,7 +191,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     vertexShader = *vs;
   } else {
     IRIS_LOG_LEAVE();
-    return vs.error();
+    return tl::unexpected(vs.error());
   }
 
   VkShaderModule fragmentShader;
@@ -200,7 +200,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     fragmentShader = *fs;
   } else {
     IRIS_LOG_LEAVE();
-    return fs.error();
+    return tl::unexpected(fs.error());
   }
 
   absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(1);
@@ -212,7 +212,7 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
     std::tie(sDescriptorSetLayout, sDescriptorSets) = *d;
   } else {
     IRIS_LOG_LEAVE();
-    return d.error();
+    return tl::unexpected(d.error());
   }
 
   VkDescriptorImageInfo descriptorImageI = {};
@@ -352,9 +352,9 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
   result = vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr,
                                            &sPipelineLayout);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create pipeline layout: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create pipeline layout"));
   }
 
   VkGraphicsPipelineCreateInfo graphicsPipelineCI = {};
@@ -377,9 +377,9 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
                                      nullptr, &sPipeline);
   if (result != VK_SUCCESS) {
     vkDestroyPipelineLayout(sDevice, sPipelineLayout, nullptr);
-    GetLogger()->error("Cannot create pipeline: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create pipeline"));
   }
 
   vkDestroyShaderModule(sDevice, fragmentShader, nullptr);
@@ -399,10 +399,11 @@ std::error_code iris::Renderer::ui::Initialize() noexcept {
              "ui::sPipelineLayout");
   NameObject(VK_OBJECT_TYPE_PIPELINE, sPipeline, "ui::sPipeline");
 
-  return Error::kNone;
+  IRIS_LOG_LEAVE();
+  return {};
 } // iris::Renderer::ui::Initialize
 
-std::error_code
+tl::expected<void, std::system_error>
 iris::Renderer::ui::BeginFrame(glm::vec2 const& windowSize,
                                glm::vec2 const& mousePos) noexcept {
   ImGuiIO& io = ImGui::GetIO();
@@ -429,11 +430,10 @@ iris::Renderer::ui::BeginFrame(glm::vec2 const& windowSize,
   io.DisplayFramebufferScale = {0.f, 0.f};
 
   ImGui::NewFrame();
+  return {};
+} // iris::Renderer::ui::BeginFrame
 
-  return Error::kNone;
-} // iris::Renderer::ui::Frame
-
-tl::expected<VkCommandBuffer, std::error_code>
+tl::expected<VkCommandBuffer, std::system_error>
 iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
   VkResult result;
 
@@ -453,9 +453,10 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
       sVertexBufferSize = newBufferSize;
       NameObject(VK_OBJECT_TYPE_BUFFER, sVertexBuffer, "ui::sVertexBuffer");
     } else {
-      GetLogger()->error("Cannot resize vertex buffer: {}",
-                         newVB.error().message());
-      return tl::unexpected(newVB.error());
+      using namespace std::string_literals;
+      return tl::unexpected(std::system_error(newVB.error().code(),
+                                              "Cannot resize vertex buffer: "s +
+                                                newVB.error().what()));
     }
   }
 
@@ -469,9 +470,10 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
       sIndexBufferSize = newBufferSize;
       NameObject(VK_OBJECT_TYPE_BUFFER, sIndexBuffer, "ui::sIndexBuffer");
     } else {
-      GetLogger()->error("Cannot resize index buffer: {}",
-                         newIB.error().message());
-      return tl::unexpected(newIB.error());
+      using namespace std::string_literals;
+      return tl::unexpected(std::system_error(newIB.error().code(),
+                                              "Cannot resize index buffer: "s +
+                                                newIB.error().what()));
     }
   }
 
@@ -479,16 +481,20 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
   if (auto p = MapMemory(sVertexBufferAllocation)) {
     pVerts = reinterpret_cast<ImDrawVert*>(*p);
   } else {
-    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
-    return tl::unexpected(p.error());
+    using namespace std::string_literals;
+    return tl::unexpected(std::system_error(
+      p.error().code(),
+      "Cannot map vertex staging buffer: "s + p.error().what()));
   }
 
   ImDrawIdx* pIndxs;
   if (auto p = MapMemory(sIndexBufferAllocation)) {
     pIndxs = reinterpret_cast<ImDrawIdx*>(*p);
   } else {
-    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
-    return tl::unexpected(p.error());
+    using namespace std::string_literals;
+    return tl::unexpected(
+      std::system_error(p.error().code(), "Cannot map index staging buffer: "s +
+                                            p.error().what()));
   }
 
   for (int i = 0; i < drawData->CmdListsCount; ++i) {
@@ -524,8 +530,8 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
 
   result = vkBeginCommandBuffer(cb, &beginInfo);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot begin UI command buffer: {}", to_string(result));
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot begin UI command buffer"));
   }
 
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sPipeline);
@@ -584,8 +590,8 @@ iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
 
   result = vkEndCommandBuffer(cb);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot end UI command buffer: {}", to_string(result));
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot end UI command buffer"));
   }
 
   return cb;

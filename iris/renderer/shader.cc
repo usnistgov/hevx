@@ -61,7 +61,7 @@ shaderc_include_result* ShaderIncluder::GetInclude(
     if (auto s = io::ReadFile(path)) {
       includes_.push_back(Include(path, std::string(s->data(), s->size())));
     } else {
-      includes_.push_back(Include(path, s.error().message()));
+      includes_.push_back(Include(path, s.error().what()));
     }
   } else {
     includes_.push_back(Include(path, "file not found"));
@@ -128,7 +128,7 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
 
 } // namespace iris::Renderer
 
-tl::expected<VkShaderModule, std::error_code>
+tl::expected<VkShaderModule, std::system_error>
 iris::Renderer::CreateShaderFromSource(std::string_view source,
                                        VkShaderStageFlagBits shaderStage,
                                        std::string const& entry) noexcept {
@@ -145,17 +145,17 @@ iris::Renderer::CreateShaderFromSource(std::string_view source,
     VkShaderModule module;
     result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
     if (result != VK_SUCCESS) {
-      GetLogger()->error("Cannot create shader module: {}", to_string(result));
       IRIS_LOG_LEAVE();
-      return tl::unexpected(make_error_code(result));
+      return tl::unexpected(std::system_error(make_error_code(result),
+                                              "Cannot create shader module"));
     }
 
     IRIS_LOG_LEAVE();
     return module;
   } else {
-    GetLogger()->error("Cannot compile shader: {}", code.error());
     IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kShaderCompileFailed);
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, code.error()));
   }
 } // iris::Renderer::CreateShaderFromSource
 #if 0

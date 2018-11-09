@@ -32,11 +32,12 @@ enum class Options {
  * There is only a single renderer per application instance.
  * \param[in] appName the name of the application.
  * \param[in] appVersion the version of the application.
- * \return \ref Error
  */
-std::error_code Initialize(gsl::czstring<> appName, Options const& options,
-                           std::uint32_t appVersion = 0,
-                           spdlog::sinks_init_list logSinks = {}) noexcept;
+tl::expected<void, std::system_error>
+Initialize(gsl::czstring<> appName, Options const& options,
+           std::uint32_t appVersion = 0,
+           spdlog::sinks_init_list logSinks = {}) noexcept;
+
 void Shutdown() noexcept;
 
 void Terminate() noexcept;

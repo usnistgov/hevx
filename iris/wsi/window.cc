@@ -1,7 +1,6 @@
 #include "wsi/window.h"
 #include "config.h"
 #include "logging.h"
-#include "wsi/error_codes.h"
 #if PLATFORM_LINUX
 #include "wsi/window_x11.h"
 #elif PLATFORM_WINDOWS

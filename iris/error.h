@@ -16,8 +16,9 @@ enum class Error {
   kAlreadyInitialized,    //!< The renderer has already been initialized.
   kNoPhysicalDevice,      //!< No physical device available.
   kFileNotSupported,      //!< File is not supported.
+  kFileParseFailed,       //!< Parsing a file failed.
   kControlMessageInvalid, //!< Control message invalid.
-  kShaderCompileFailed,   //!< Shader compile failed.
+  kShaderCompileFailed,   //!< Shader compilation failed.
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -39,6 +40,7 @@ public:
     case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device"s;
     case Error::kFileNotSupported: return "file not supported"s;
+    case Error::kFileParseFailed: return "file parse failed"s;
     case Error::kControlMessageInvalid: return "control message invalid"s;
     case Error::kShaderCompileFailed: return "shader compile failed"s;
     }

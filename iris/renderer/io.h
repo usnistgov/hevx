@@ -34,7 +34,7 @@ void LoadFile(filesystem::path path) noexcept;
 
 /*! \brief Blocking function to directly read a file.
  */
-tl::expected<std::vector<char>, std::error_code>
+tl::expected<std::vector<char>, std::system_error>
 ReadFile(filesystem::path path) noexcept;
 
 } // namespace iris::Renderer::io

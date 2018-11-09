@@ -1,9 +1,8 @@
 #include "renderer/buffer.h"
 #include "renderer/impl.h"
-#include "error.h"
 #include "logging.h"
 
-tl::expected<std::pair<VkBuffer, VmaAllocation>, std::error_code>
+tl::expected<std::pair<VkBuffer, VmaAllocation>, std::system_error>
 iris::Renderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
              VmaMemoryUsage memoryUsage) noexcept {
   IRIS_LOG_ENTER();
@@ -22,8 +21,9 @@ iris::Renderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
   result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &buffer,
                            &allocation, nullptr);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Error creating buffer: {}", to_string(result));
-    return tl::unexpected(make_error_code(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Error creating buffer"));
   }
 
   IRIS_LOG_LEAVE();

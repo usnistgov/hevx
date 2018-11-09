@@ -64,12 +64,13 @@ int main(int argc, char** argv) {
 
   logger.info("initialized");
 
-  if (auto error = iris::Renderer::Initialize(
+  if (auto noret = iris::Renderer::Initialize(
         "iris-viewer",
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers,
-        0, {console_sink, file_sink})) {
-    logger.critical("cannot initialize renderer: {}", error.message());
+        0, {console_sink, file_sink});
+      !noret) {
+    logger.critical("cannot initialize renderer: {}", noret.error().what());
     std::exit(EXIT_FAILURE);
   }
 

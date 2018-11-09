@@ -8,13 +8,13 @@
 
 namespace iris::Renderer::ui {
 
-std::error_code Initialize() noexcept;
+tl::expected<void, std::system_error> Initialize() noexcept;
 
-std::error_code BeginFrame(glm::vec2 const& displaySize,
-                           glm::vec2 const& mousePos = {-FLT_MAX,
-                                                        -FLT_MAX}) noexcept;
+tl::expected<void, std::system_error>
+BeginFrame(glm::vec2 const& displaySize,
+           glm::vec2 const& mousePos = {-FLT_MAX, -FLT_MAX}) noexcept;
 
-tl::expected<VkCommandBuffer, std::error_code>
+tl::expected<VkCommandBuffer, std::system_error>
 EndFrame(VkFramebuffer framebuffer) noexcept;
 
 void Shutdown() noexcept;

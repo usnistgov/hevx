@@ -39,7 +39,7 @@ static std::deque<filesystem::path> sRequests{};
 static std::mutex sResultsMutex{};
 static std::vector<std::function<void(void)>> sResults{};
 
-tl::expected<std::function<void(void)>, std::error_code>
+tl::expected<std::function<void(void)>, std::system_error>
 LoadJSON(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   std::string json;
@@ -55,19 +55,20 @@ LoadJSON(filesystem::path const& path) noexcept {
     IRIS_LOG_LEAVE();
     return [cMsg](){ Control(cMsg); };
   } else {
-    GetLogger()->error("Cannot parse {}: {}", path.string(),
-                       status.ToString());
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::make_error_code(std::errc::io_error));
+    return tl::unexpected(std::system_error(
+      Error::kFileParseFailed,
+      fmt::format("{}\n{}", path.string(), status.ToString())));
   }
 } // LoadJSON
 
-tl::expected<std::function<void(void)>, std::error_code>
+tl::expected<std::function<void(void)>, std::system_error>
 LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
   IRIS_LOG_LEAVE();
-  return tl::unexpected(make_error_code(Error::kFileNotSupported));
+  return tl::unexpected(
+    std::system_error(Error::kFileNotSupported, path.string()));
 } // LoadGLTF
 
 static void HandleRequests() {
@@ -175,12 +176,11 @@ void iris::Renderer::io::LoadFile(filesystem::path path) noexcept {
   IRIS_LOG_LEAVE();
 } // iris::Renderer::LoadFile::io
 
-tl::expected<std::vector<char>, std::error_code>
+tl::expected<std::vector<char>, std::system_error>
 iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
   IRIS_LOG_ENTER();
 
   GetLogger()->debug("Reading {}", path.string());
-
   std::FILE* fh = std::fopen(path.string().c_str(), "rb");
 
   if (!fh) {
@@ -190,9 +190,9 @@ iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
   }
 
   if (!fh) {
-    GetLogger()->debug("Reading {} failed", path.string());
-    return tl::unexpected(
-      std::make_error_code(std::errc::no_such_file_or_directory));
+    return tl::unexpected(std::system_error(
+      std::make_error_code(std::errc::no_such_file_or_directory),
+      path.string()));
   }
 
   std::fseek(fh, 0L, SEEK_END);
@@ -203,7 +203,8 @@ iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
 
   if (std::ferror(fh) && !std::feof(fh)) {
     std::fclose(fh);
-    return tl::unexpected(std::make_error_code(std::errc::io_error));
+    return tl::unexpected(std::system_error(
+      std::make_error_code(std::errc::io_error), path.string()));
   }
 
   std::fclose(fh);

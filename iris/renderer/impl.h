@@ -8,6 +8,8 @@
 #include "renderer/renderer.h"
 #include "renderer/vulkan.h"
 #include <cstdint>
+#include <system_error>
+#include <vector>
 
 namespace iris::Renderer {
 
@@ -31,17 +33,18 @@ extern std::uint32_t sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 extern VkRenderPass sRenderPass;
 
-tl::expected<std::vector<VkCommandBuffer>, std::error_code>
+tl::expected<std::vector<VkCommandBuffer>, std::system_error>
 AllocateCommandBuffers(
   std::uint32_t count,
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) noexcept;
 void FreeCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers) noexcept;
 
-tl::expected<VkCommandBuffer, std::error_code> BeginOneTimeSubmit() noexcept;
-std::error_code EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
+tl::expected<VkCommandBuffer, std::system_error> BeginOneTimeSubmit() noexcept;
+tl::expected<void, std::system_error>
+EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
 
 tl::expected<std::pair<VkDescriptorSetLayout, std::vector<VkDescriptorSet>>,
-             std::error_code>
+             std::system_error>
 CreateDescriptors(gsl::span<VkDescriptorSetLayoutBinding> bindings) noexcept;
 
 inline void UpdateDescriptorSets(
@@ -55,12 +58,13 @@ inline void UpdateDescriptorSets(
 } // UpdateDescriptorSets
 
 
-inline tl::expected<void*, std::error_code>
+inline tl::expected<void*, std::system_error>
 MapMemory(VmaAllocation allocation) noexcept {
   void* ptr;
   if (auto result = vmaMapMemory(sAllocator, allocation, &ptr);
       result != VK_SUCCESS) {
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot map memory"));
   }
   return ptr;
 } // MapMemory

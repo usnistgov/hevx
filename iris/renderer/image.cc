@@ -1,10 +1,9 @@
 #include "renderer/image.h"
 #include "renderer/buffer.h"
 #include "renderer/impl.h"
-#include "error.h"
 #include "logging.h"
 
-tl::expected<VkImageView, std::error_code>
+tl::expected<VkImageView, std::system_error>
 iris::Renderer::CreateImageView(VkImage image, VkFormat format,
                                 VkImageViewType viewType,
                                 VkImageSubresourceRange imageSubresourceRange,
@@ -23,16 +22,16 @@ iris::Renderer::CreateImageView(VkImage image, VkFormat format,
   VkImageView imageView;
   result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create image view: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image view"));
   }
 
   IRIS_LOG_LEAVE();
   return imageView;
 } // iris::Renderer::CreateImageAndView
 
-tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::error_code>
+tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::system_error>
 iris::Renderer::CreateImageAndView(
   VkImageType imageType, VkFormat format, VkExtent3D extent,
   std::uint32_t mipLevels, std::uint32_t arrayLayers,
@@ -64,26 +63,22 @@ iris::Renderer::CreateImageAndView(
 
   result = vmaCreateImage(sAllocator, &ici, &aci, &image, &allocation, nullptr);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Error creating or allocating image: {}",
-                        to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create or allocate image"));
   }
 
-  VkImageView view;
-  if (auto v = CreateImageView(image, format, viewType, imageSubresourceRange,
-                               componentMapping)) {
-    view = *v;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(v.error());
-  }
-
+  auto view = CreateImageView(image, format, viewType, imageSubresourceRange,
+                              componentMapping);
   IRIS_LOG_LEAVE();
-  return std::make_tuple(image, allocation, view);
+  if (view) {
+    return std::make_tuple(image, allocation, *view);
+  } else {
+    return tl::unexpected(view.error());
+  }
 } // iris::Renderer::CreateImageAndView
 
-tl::expected<std::pair<VkImage, VmaAllocation>, std::error_code>
+tl::expected<std::pair<VkImage, VmaAllocation>, std::system_error>
 iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
                                       VkExtent3D extent,
                                       VkImageUsageFlags usage,
@@ -100,7 +95,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     if (bytes_per_pixel != sizeof(char) * 4) {
       GetLogger()->error("Invalid bytes_per_pixel: {}, expecting {}",
                          bytes_per_pixel, sizeof(char) * 4);
-      return tl::unexpected(std::make_error_code(std::errc::invalid_argument));
+      std::terminate();
     }
 
     imageSize = extent.width * extent.height * extent.depth * sizeof(char) * 4;
@@ -110,7 +105,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     if (bytes_per_pixel != sizeof(float)) {
       GetLogger()->error("Invalid bytes_per_pixel: {}, expecting {}",
                          bytes_per_pixel, sizeof(float));
-      return tl::unexpected(std::make_error_code(std::errc::invalid_argument));
+      std::terminate();
     }
 
     imageSize = extent.width * extent.height * extent.depth * sizeof(float);
@@ -118,7 +113,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
 
   default:
       GetLogger()->error("Unsupported texture format");
-      return tl::unexpected(std::make_error_code(std::errc::invalid_argument));
+      std::terminate();
   }
 
   VkBuffer stagingBuffer;
@@ -128,16 +123,18 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
                              VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(stagingBuffer, stagingBufferAllocation) = *sb;
   } else {
-    GetLogger()->error("Cannot allocate staging buffer: {}",
-                       sb.error().message());
-    return tl::unexpected(sb.error());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(sb.error().code(), "Cannot create staging buffer"));
   }
 
   if (auto p = MapMemory(stagingBufferAllocation)) {
     std::memcpy(*p, pixels, imageSize);
   } else {
-    GetLogger()->error("Cannot map staging buffer: {}", p.error().message());
-    return tl::unexpected(p.error());
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      p.error().code(), "Cannot map staging buffer: "s + p.error().what()));
   }
 
   UnmapMemory(stagingBufferAllocation, 0, VK_WHOLE_SIZE);
@@ -163,19 +160,23 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image,
                           &allocation, nullptr);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create image: {}", to_string(result));
-    return tl::unexpected(make_error_code(result));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image"));
   }
 
-  if (auto error = TransitionImage(image, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) {
-    return tl::unexpected(error);
+  if (auto noret = TransitionImage(image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+      !noret) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
   VkCommandBuffer commandBuffer;
   if (auto cb = BeginOneTimeSubmit()) {
     commandBuffer = *cb;
   } else {
+    IRIS_LOG_LEAVE();
     return tl::unexpected(cb.error());
   }
 
@@ -190,17 +191,18 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer)) {
-    GetLogger()->error("Cannot copy staging buffer to image: {}",
-                       error.message());
-    return tl::unexpected(error);
+  if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
-  if (auto error = TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+  if (auto noret = TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                    (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
                                       ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                      : VK_IMAGE_LAYOUT_GENERAL))) {
-    return tl::unexpected(error);
+                                      : VK_IMAGE_LAYOUT_GENERAL));
+      !noret) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
   vmaDestroyBuffer(sAllocator, stagingBuffer, stagingBufferAllocation);
@@ -209,7 +211,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   return std::make_pair(image, allocation);
 } // iris::Renderer::CreateImageFromMemory
 
-std::error_code iris::Renderer::TransitionImage(
+tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
   VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
   std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
@@ -271,17 +273,19 @@ std::error_code iris::Renderer::TransitionImage(
   if (auto cb = BeginOneTimeSubmit()) {
     commandBuffer = *cb;
   } else {
-    return cb.error();
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
   }
 
   vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer)) {
-    return error;
+  if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
   IRIS_LOG_LEAVE();
-  return VulkanResult::kSuccess;
+  return {};
 } // iris::Renderer::TransitionImage
 

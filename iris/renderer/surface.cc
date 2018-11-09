@@ -13,7 +13,7 @@
 
 namespace iris::Renderer {
 
-tl::expected<VkSurfaceKHR, std::exception>
+tl::expected<VkSurfaceKHR, std::system_error>
 static CreateSurface(wsi::Window& window) noexcept {
   IRIS_LOG_ENTER();
   VkSurfaceKHR surface;
@@ -53,7 +53,7 @@ static CreateSurface(wsi::Window& window) noexcept {
   return surface;
 } // CreateSurface
 
-tl::expected<bool, std::exception>
+tl::expected<bool, std::system_error>
 static CheckSurfaceSupport(VkSurfaceKHR surface) noexcept {
   IRIS_LOG_ENTER();
   VkBool32 support;
@@ -70,7 +70,7 @@ static CheckSurfaceSupport(VkSurfaceKHR surface) noexcept {
   return (support == VK_TRUE);
 } // CheckSurfaceSupport
 
-tl::expected<bool, std::exception> static CheckSurfaceFormat(
+tl::expected<bool, std::system_error> static CheckSurfaceFormat(
   VkSurfaceKHR surface, VkSurfaceFormatKHR desired) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
@@ -113,7 +113,7 @@ tl::expected<bool, std::exception> static CheckSurfaceFormat(
 
 } // namespace iris::Renderer
 
-tl::expected<iris::Renderer::Surface, std::exception>
+tl::expected<iris::Renderer::Surface, std::system_error>
 iris::Renderer::Surface::Create(wsi::Window& window,
                                 glm::vec4 const& clearColor) noexcept {
   IRIS_LOG_ENTER();
@@ -135,7 +135,8 @@ iris::Renderer::Surface::Create(wsi::Window& window,
     if (!*chk) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(
-        std::runtime_error("Surface is not supported by the physical device."));
+        std::system_error(std::make_error_code(std::errc::invalid_argument),
+                          "Surface is not supported by the physical device."));
     }
   } else {
     IRIS_LOG_LEAVE();
@@ -145,7 +146,8 @@ iris::Renderer::Surface::Create(wsi::Window& window,
   if (auto chk = CheckSurfaceFormat(surface.handle, sSurfaceColorFormat)) {
     if (!*chk) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::runtime_error(
+      return tl::unexpected(std::system_error(
+        std::make_error_code(std::errc::invalid_argument),
         "Surface format is not supported by the physical device."));
     }
   } else {
@@ -164,10 +166,9 @@ iris::Renderer::Surface::Create(wsi::Window& window,
   }
 
   auto extent = window.Extent();
-  if (auto errorCode = surface.Resize({extent.width, extent.height})) {
+  if (auto noret = surface.Resize({extent.width, extent.height}); !noret) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(errorCode, "Cannot resize surface"));
+    return tl::unexpected(noret.error());
   }
 
   IRIS_LOG_LEAVE();
@@ -176,7 +177,7 @@ iris::Renderer::Surface::Create(wsi::Window& window,
 
 namespace iris::Renderer {
 
-static tl::expected<VkSwapchainKHR, std::error_code>
+static tl::expected<VkSwapchainKHR, std::system_error>
 CreateSwapchain(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR caps,
                 VkExtent2D extent, VkSwapchainKHR oldSwapchain) {
   IRIS_LOG_ENTER();
@@ -203,16 +204,16 @@ CreateSwapchain(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR caps,
   VkSwapchainKHR newSwapchain;
   result = vkCreateSwapchainKHR(sDevice, &sci, nullptr, &newSwapchain);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create swapchain: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create swapchain"));
   }
 
   IRIS_LOG_LEAVE();
   return newSwapchain;
 } // CreateSwapchain
 
-static tl::expected<VkFramebuffer, std::error_code>
+static tl::expected<VkFramebuffer, std::system_error>
 CreateFramebuffer(gsl::span<VkImageView> attachments,
                   VkExtent2D extent) noexcept {
   IRIS_LOG_ENTER();
@@ -230,9 +231,9 @@ CreateFramebuffer(gsl::span<VkImageView> attachments,
   VkFramebuffer framebuffer;
   result = vkCreateFramebuffer(sDevice, &ci, nullptr, &framebuffer);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot create framebuffer: {}", to_string(result));
     IRIS_LOG_LEAVE();
-    return tl::unexpected(make_error_code(result));
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create framebuffer"));
   }
 
   IRIS_LOG_LEAVE();
@@ -241,7 +242,7 @@ CreateFramebuffer(gsl::span<VkImageView> attachments,
 
 } // namespace iris::Renderer
 
-std::error_code
+tl::expected<void, std::system_error>
 iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
@@ -259,10 +260,9 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   result = vkGetPhysicalDeviceSurfaceCapabilities2KHR(
     sPhysicalDevice, &surfaceInfo, &surfaceCapabilities);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot query for surface capabilities: {}",
-                       to_string(result));
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot query for surface capabilities"));
   }
 
   VkSurfaceCapabilitiesKHR caps = surfaceCapabilities.surfaceCapabilities;
@@ -294,27 +294,27 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
     newSwapchain = *swpc;
   } else {
     IRIS_LOG_LEAVE();
-    return swpc.error();
+    return tl::unexpected(swpc.error());
   }
 
   uint32_t numSwapchainImages;
   result = vkGetSwapchainImagesKHR(sDevice, newSwapchain, &numSwapchainImages,
                                    nullptr);
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot get swapchain images: {}", to_string(result));
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot get swapchain images"));
   }
 
   std::vector<VkImage> newColorImages(numSwapchainImages);
   result = vkGetSwapchainImagesKHR(sDevice, newSwapchain, &numSwapchainImages,
                                    newColorImages.data());
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Cannot get swapchain images: {}", to_string(result));
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return make_error_code(result);
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot get swapchain images"));
   }
 
   std::vector<VkImageView> newColorImageViews(numSwapchainImages);
@@ -324,9 +324,8 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
       newColorImageViews[i] = *view;
     } else {
-      vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
       IRIS_LOG_LEAVE();
-      return view.error();
+      return tl::unexpected(view.error());
     }
   }
 
@@ -345,7 +344,7 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
   std::vector<VkFramebuffer> newFramebuffers(numSwapchainImages);
 
-  std::error_code error;
+  std::system_error error(Error::kNone);
 
   if (auto dsi = CreateImageAndView(
         VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
@@ -374,9 +373,10 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   }
 
   GetLogger()->debug("Transitioning new color target");
-  if (auto err = TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)) {
-    error = err;
+  if (auto noret = TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+      !noret) {
+    error = noret.error();
     goto fail;
   }
 
@@ -393,10 +393,11 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   }
 
   GetLogger()->debug("Transitioning new depth target");
-  if (auto err =
+  if (auto noret =
         TransitionImage(newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)) {
-    error = err;
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+      !noret) {
+    error = noret.error();
     goto fail;
   }
 
@@ -439,7 +440,7 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   framebuffers = std::move(newFramebuffers);
 
   IRIS_LOG_LEAVE();
-  return VulkanResult::kSuccess;
+  return {};
 
 fail:
   GetLogger()->debug("Surface::Resize cleaning up on on failure");
@@ -471,7 +472,7 @@ fail:
   vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
 
   IRIS_LOG_LEAVE();
-  return error;
+  return tl::unexpected(error);
 } // iris::Renderer::Surface::Resize
 
 iris::Renderer::Surface::Surface(Surface&& other) noexcept
