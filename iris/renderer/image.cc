@@ -176,6 +176,8 @@ iris::Renderer::Image::CreateFromMemory(
       p.error().code(), "Cannot map staging buffer: "s + p.error().what()));
   }
 
+  stagingBuffer.Unmap();
+
   VkImageCreateInfo imageCI = {};
   imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   imageCI.imageType = type;

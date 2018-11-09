@@ -190,6 +190,7 @@ enum Buttons : std::uint8_t {
 
 //! \brief Tracks the current state of a mouse.
 class Buttonset {
+public:
   //! \brief The maximum number of buttons that are tracked.
   static constexpr std::size_t kMaxButtons = Buttons::kMaxButtons;
 
