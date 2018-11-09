@@ -14,7 +14,6 @@
 #include "renderer/impl.h"
 #include "renderer/io.h"
 #include "renderer/shader.h"
-#include "renderer/ui.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -1432,11 +1431,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(noret.error());
   }
 
-  if (auto noret = ui::Initialize(); !noret) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
-  }
-
   sInitialized = true;
   sRunning = true;
 
@@ -1450,7 +1444,6 @@ void iris::Renderer::Shutdown() noexcept {
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
 
-  ui::Shutdown();
   Windows().clear();
 
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
@@ -1518,16 +1511,10 @@ bool iris::Renderer::BeginFrame() noexcept {
 
   for (auto&& iter : windows) {
     auto&& window = iter.second;
-    window.BeginFrame();
 
-    glm::vec2 const windowSize{window.surface.viewport.width,
-                               window.surface.viewport.height};
-
-    glm::vec2 mousePos{-FLT_MAX, -FLT_MAX};
-    if (window.window.IsFocused()) mousePos = window.window.CursorPos();
-
-    if (auto noret = ui::BeginFrame(windowSize, mousePos); !noret) {
-      GetLogger()->error("Error beginning UI: {}", noret.error().what());
+    if (auto noret = window.BeginFrame(); !noret) {
+      GetLogger()->error("Error beginning window frame: {}",
+                         noret.error().what());
       return false;
     }
   }
@@ -1557,31 +1544,16 @@ bool iris::Renderer::BeginFrame() noexcept {
 
 void iris::Renderer::EndFrame() noexcept {
   VkResult result;
-  auto&& windows = Windows();
-
-  const std::size_t numWindows = windows.size();
-  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
-  absl::FixedArray<VkExtent2D> extents(numWindows);
-  absl::FixedArray<VkViewport> viewports(numWindows);
-  absl::FixedArray<VkRect2D> scissors(numWindows);
-  absl::FixedArray<VkClearColorValue> clearColors(numWindows);
-  absl::FixedArray<VkFramebuffer> framebuffers(numWindows);
-  absl::FixedArray<VkImage> images(numWindows);
-  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
-  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
 
   //
   // Acquire images/semaphores from all iris::Window objects
   //
 
-  std::size_t i = 0;
-  for (auto&& iter : windows) {
-    auto&& window = iter.second;
-    window.EndFrame();
-
-    result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
-                                   UINT64_MAX, window.surface.imageAvailable,
-                                   VK_NULL_HANDLE, &imageIndices[i]);
+  for (auto&& [title, window] : Windows()) {
+    result =
+      vkAcquireNextImageKHR(sDevice, window.surface.swapchain, UINT64_MAX,
+                            window.surface.imageAvailable, VK_NULL_HANDLE,
+                            &window.surface.currentImageIndex);
 
     if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
       GetLogger()->warn("Swapchains out of date; resizing and re-acquiring");
@@ -1589,28 +1561,18 @@ void iris::Renderer::EndFrame() noexcept {
       window.surface.Resize({extent.width, extent.height});
       window.resized = false;
 
-      result = vkAcquireNextImageKHR(sDevice, window.surface.swapchain,
-                                     UINT64_MAX, window.surface.imageAvailable,
-                                     VK_NULL_HANDLE, &imageIndices[i]);
+      result =
+        vkAcquireNextImageKHR(sDevice, window.surface.swapchain, UINT64_MAX,
+                              window.surface.imageAvailable, VK_NULL_HANDLE,
+                              &window.surface.currentImageIndex);
     }
 
     if (result != VK_SUCCESS) {
       GetLogger()->error(
-        "Renderer::Frame: acquiring next image for {} failed: {}", iter.first,
+        "Renderer::Frame: acquiring next image for {} failed: {}", title,
         to_string(result));
       return;
     }
-
-    extents[i] = window.surface.extent;
-    viewports[i] = window.surface.viewport;
-    scissors[i] = window.surface.scissor;
-    clearColors[i] = window.surface.clearColor;
-    framebuffers[i] = window.surface.framebuffers[imageIndices[i]];
-    images[i] = window.surface.colorImages[imageIndices[i]];
-    waitSemaphores[i] = window.surface.imageAvailable;
-    swapchains[i] = window.surface.swapchain;
-
-    i += 1;
   }
 
   //
@@ -1643,14 +1605,27 @@ void iris::Renderer::EndFrame() noexcept {
   // 1. Go wide and build secondary command buffers
   //
 
-  for (std::size_t j = 0; j < numWindows; ++j) {
-    clearValues[sColorTargetAttachmentIndex].color = clearColors[j];
-    rbi.renderArea.extent = extents[j];
-    rbi.framebuffer = framebuffers[j];
+  std::size_t const numWindows = Windows().size();
+  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
+  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
+  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
+
+  std::size_t i = 0;
+  for (auto&& iter : Windows()) {
+    auto&& window = iter.second;
+    auto&& surface = window.surface;
+
+    waitSemaphores[i] = surface.imageAvailable;
+    swapchains[i] = surface.swapchain;
+    imageIndices[i] = surface.currentImageIndex;
+
+    clearValues[sColorTargetAttachmentIndex].color = surface.clearColor;
+    rbi.renderArea.extent = surface.extent;
+    rbi.framebuffer = surface.currentFramebuffer();
     rbi.pClearValues = clearValues.data();
 
-    vkCmdSetViewport(cb, 0, 1, &viewports[j]);
-    vkCmdSetScissor(cb, 0, 1, &scissors[j]);
+    vkCmdSetViewport(cb, 0, 1, &surface.viewport);
+    vkCmdSetScissor(cb, 0, 1, &surface.scissor);
 
     vkCmdBeginRenderPass(cb, &rbi,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
@@ -1659,11 +1634,11 @@ void iris::Renderer::EndFrame() noexcept {
     // 2. Execute secondary command buffers
     //
 
-    if (auto ucb = ui::EndFrame(rbi.framebuffer)) {
-      VkCommandBuffer uiCB = *ucb;
-      if (uiCB != VK_NULL_HANDLE) vkCmdExecuteCommands(cb, 1, &uiCB);
+    if (auto wcb = window.EndFrame(rbi.framebuffer)) {
+      VkCommandBuffer winCB = *wcb;
+      if (winCB != VK_NULL_HANDLE) vkCmdExecuteCommands(cb, 1, &winCB);
     } else {
-      GetLogger()->error("Error rendering UI: {}", ucb.error().what());
+      GetLogger()->error("Error ending window frame: {}", wcb.error().what());
     }
 
     //
@@ -1671,6 +1646,7 @@ void iris::Renderer::EndFrame() noexcept {
     //
 
     vkCmdEndRenderPass(cb);
+    i++;
   }
 
   result = vkEndCommandBuffer(cb);

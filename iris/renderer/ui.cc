@@ -11,7 +11,7 @@
 #include "imgui.h"
 #include <chrono>
 
-namespace iris::Renderer::ui {
+namespace iris::Renderer {
 
 static std::string const sUIVertexShaderSource = R"(
 #version 450 core
@@ -43,38 +43,23 @@ void main() {
   fColor = Color * texture(sTexture, UV.st);
 })";
 
-static std::vector<VkCommandBuffer> sCommandBuffers{2};
-static std::uint32_t sCommandBufferIndex{0};
-static VkImage sFontImage{VK_NULL_HANDLE};
-static VmaAllocation sFontImageAllocation{VK_NULL_HANDLE};
-static VkImageView sFontImageView{VK_NULL_HANDLE};
-static VkSampler sFontImageSampler{VK_NULL_HANDLE};
-static iris::Renderer::Buffer sVertexBuffer{};
-static iris::Renderer::Buffer sIndexBuffer{};
-static VkDescriptorSetLayout sDescriptorSetLayout{VK_NULL_HANDLE};
-static std::vector<VkDescriptorSet> sDescriptorSets;
-static VkPipelineLayout sPipelineLayout{VK_NULL_HANDLE};
-static VkPipeline sPipeline{VK_NULL_HANDLE};
+} // namespace iris::Renderer
 
-using Duration = std::chrono::duration<float, std::ratio<1, 1>>;
-using TimePoint = std::chrono::time_point<std::chrono::steady_clock, Duration>;
-static TimePoint sPreviousTime;
-
-} // namespace iris::ui::Renderer
-
-tl::expected<void, std::system_error>
-iris::Renderer::ui::Initialize() noexcept {
+tl::expected<iris::Renderer::UI, std::system_error>
+iris::Renderer::UI::Create() noexcept {
   IRIS_LOG_ENTER();
   VkResult result;
+  UI ui;
 
   if (auto cbs = AllocateCommandBuffers(2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
-    sCommandBuffers = std::move(*cbs);
+    ui.commandBuffers = std::move(*cbs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(cbs.error());
   }
 
-  ImGui::CreateContext();
+  ui.context.reset(ImGui::CreateContext());
+  ImGui::SetCurrentContext(ui.context.get());
   ImGui::StyleColorsDark();
 
   ImGuiIO& io = ImGui::GetIO();
@@ -120,16 +105,16 @@ iris::Renderer::ui::Initialize() noexcept {
          1},
         VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY, pixels,
         bytes_per_pixel)) {
-    std::tie(sFontImage, sFontImageAllocation) = *ti;
+    std::tie(ui.fontImage, ui.fontImageAllocation) = *ti;
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ti.error());
   }
 
-  if (auto tv = CreateImageView(sFontImage, VK_FORMAT_R8G8B8A8_UNORM,
+  if (auto tv = CreateImageView(ui.fontImage, VK_FORMAT_R8G8B8A8_UNORM,
                                 VK_IMAGE_VIEW_TYPE_2D,
                                 {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    sFontImageView = std::move(*tv);
+    ui.fontImageView = std::move(*tv);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(tv.error());
@@ -153,7 +138,7 @@ iris::Renderer::ui::Initialize() noexcept {
   samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   samplerCI.unnormalizedCoordinates = VK_FALSE;
 
-  result = vkCreateSampler(sDevice, &samplerCI, nullptr, &sFontImageSampler);
+  result = vkCreateSampler(sDevice, &samplerCI, nullptr, &ui.fontImageSampler);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
@@ -162,8 +147,8 @@ iris::Renderer::ui::Initialize() noexcept {
 
   if (auto vb = Buffer::Create(
         1024 * sizeof(ImDrawVert), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sVertexBuffer")) {
-    sVertexBuffer = std::move(*vb);
+        VMA_MEMORY_USAGE_CPU_TO_GPU, "UI::vertexBuffer")) {
+    ui.vertexBuffer = std::move(*vb);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vb.error());
@@ -171,8 +156,8 @@ iris::Renderer::ui::Initialize() noexcept {
 
   if (auto ib = Buffer::Create(
         1024 * sizeof(ImDrawIdx), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sIndexBuffer")) {
-    sIndexBuffer = std::move(*ib);
+        VMA_MEMORY_USAGE_CPU_TO_GPU, "UI::indexBuffer")) {
+    ui.indexBuffer = std::move(*ib);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ib.error());
@@ -199,10 +184,10 @@ iris::Renderer::ui::Initialize() noexcept {
   absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(1);
   descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                    1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   &sFontImageSampler};
+                                   &ui.fontImageSampler};
 
   if (auto d = CreateDescriptors(descriptorSetLayoutBinding)) {
-    std::tie(sDescriptorSetLayout, sDescriptorSets) = *d;
+    std::tie(ui.descriptorSetLayout, ui.descriptorSets) = *d;
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(d.error());
@@ -210,18 +195,18 @@ iris::Renderer::ui::Initialize() noexcept {
 
   VkDescriptorImageInfo descriptorImageI = {};
   descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  descriptorImageI.imageView = sFontImageView;
-  descriptorImageI.sampler = sFontImageSampler;
+  descriptorImageI.imageView = ui.fontImageView;
+  descriptorImageI.sampler = ui.fontImageSampler;
 
   absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(
-    sDescriptorSets.size());
+    ui.descriptorSets.size());
 
   for (std::size_t i = 0; i < writeDescriptorSets.size(); ++i) {
     VkWriteDescriptorSet& writeDS = writeDescriptorSets[i];
 
     writeDS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writeDS.pNext = nullptr;
-    writeDS.dstSet = sDescriptorSets[i];
+    writeDS.dstSet = ui.descriptorSets[i];
     writeDS.dstBinding = 0;
     writeDS.dstArrayElement = 0;
     writeDS.descriptorCount = 1;
@@ -338,12 +323,12 @@ iris::Renderer::ui::Initialize() noexcept {
   VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
   pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineLayoutCI.setLayoutCount = 1;
-  pipelineLayoutCI.pSetLayouts = &sDescriptorSetLayout;
+  pipelineLayoutCI.pSetLayouts = &ui.descriptorSetLayout;
   pipelineLayoutCI.pushConstantRangeCount = 1;
   pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
 
   result = vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr,
-                                           &sPipelineLayout);
+                                           &ui.pipelineLayout);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
@@ -362,14 +347,14 @@ iris::Renderer::ui::Initialize() noexcept {
   graphicsPipelineCI.pDepthStencilState = &depthStencilStateCI;
   graphicsPipelineCI.pColorBlendState = &colorBlendStateCI;
   graphicsPipelineCI.pDynamicState = &dynamicStateCI;
-  graphicsPipelineCI.layout = sPipelineLayout;
+  graphicsPipelineCI.layout = ui.pipelineLayout;
   graphicsPipelineCI.renderPass = sRenderPass;
   graphicsPipelineCI.subpass = 0;
 
   result = vkCreateGraphicsPipelines(sDevice, nullptr, 1, &graphicsPipelineCI,
-                                     nullptr, &sPipeline);
+                                     nullptr, &ui.pipeline);
   if (result != VK_SUCCESS) {
-    vkDestroyPipelineLayout(sDevice, sPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(sDevice, ui.pipelineLayout, nullptr);
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create pipeline"));
@@ -378,239 +363,85 @@ iris::Renderer::ui::Initialize() noexcept {
   vkDestroyShaderModule(sDevice, fragmentShader, nullptr);
   vkDestroyShaderModule(sDevice, vertexShader, nullptr);
 
-  NameObject(VK_OBJECT_TYPE_IMAGE, sFontImage, "ui::sFontImage");
-  NameObject(VK_OBJECT_TYPE_SAMPLER, sFontImageSampler,
-             "ui::sFontImageSampler");
-  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sDescriptorSetLayout,
-             "ui::sDescriptorSetLayout");
-  for (auto&& set : sDescriptorSets) {
-    NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, set, "ui::sDescriptorSets");
-  }
-  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sPipelineLayout,
-             "ui::sPipelineLayout");
-  NameObject(VK_OBJECT_TYPE_PIPELINE, sPipeline, "ui::sPipeline");
+  //NameObject(VK_OBJECT_TYPE_IMAGE, ui.fontImage, "ui::fontImage");
+  //NameObject(VK_OBJECT_TYPE_SAMPLER, ui.fontImageSampler,
+             //"ui::fontImageSampler");
+  //NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sDescriptorSetLayout,
+             //"ui::sDescriptorSetLayout");
+  //for (auto&& set : sDescriptorSets) {
+    //NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, set, "ui::sDescriptorSets");
+  //}
+  //NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sPipelineLayout,
+             //"ui::sPipelineLayout");
+  //NameObject(VK_OBJECT_TYPE_PIPELINE, sPipeline, "ui::sPipeline");
 
   IRIS_LOG_LEAVE();
-  return {};
+  return std::move(ui);
 } // iris::Renderer::ui::Initialize
 
-tl::expected<void, std::system_error>
-iris::Renderer::ui::BeginFrame(glm::vec2 const& windowSize,
-                               glm::vec2 const& mousePos) noexcept {
-  ImGuiIO& io = ImGui::GetIO();
+iris::Renderer::UI::UI(UI&& other) noexcept
+  : commandBuffers(std::move(other.commandBuffers))
+  , commandBufferIndex(other.commandBufferIndex)
+  , fontImage(other.fontImage)
+  , fontImageAllocation(other.fontImageAllocation)
+  , fontImageView(other.fontImageView)
+  , fontImageSampler(other.fontImageSampler)
+  , vertexBuffer(std::move(other.vertexBuffer))
+  , indexBuffer(std::move(other.indexBuffer))
+  , descriptorSetLayout(other.descriptorSetLayout)
+  , descriptorSets(std::move(other.descriptorSets))
+  , pipelineLayout(other.pipelineLayout)
+  , pipeline(other.pipeline)
+  , context(std::move(other.context)) {
+  other.fontImage = VK_NULL_HANDLE;
+  other.fontImageAllocation = VK_NULL_HANDLE;
+  other.fontImageView = VK_NULL_HANDLE;
+  other.fontImageSampler = VK_NULL_HANDLE;
+  other.descriptorSetLayout = VK_NULL_HANDLE;
+  other.pipelineLayout = VK_NULL_HANDLE;
+  other.pipeline = VK_NULL_HANDLE;
+} // iris::Renderer::UI::UI
 
-#if 0
-  io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
-               io.KeysDown[wsi::Keys::kRightControl];
-  io.KeyShift =
-    io.KeysDown[wsi::Keys::kLeftShift] || io.KeysDown[wsi::Keys::kRightShift];
-  io.KeyAlt =
-    io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
-#endif
-  if (mousePos.x > -FLT_MAX && mousePos.y > -FLT_MAX) {
-    io.MousePos = {mousePos.x, mousePos.y};
-  }
+iris::Renderer::UI& iris::Renderer::UI::operator=(UI&& rhs) noexcept {
+  if (this == &rhs) return *this;
 
-  TimePoint currentTime = std::chrono::steady_clock::now();
-  io.DeltaTime = sPreviousTime.time_since_epoch().count() > 0
-                   ? (currentTime - sPreviousTime).count()
-                   : 1.f / 60.f;
-  sPreviousTime = currentTime;
+  commandBuffers = std::move(rhs.commandBuffers);
+  commandBufferIndex = rhs.commandBufferIndex;
+  fontImage = rhs.fontImage;
+  fontImageAllocation = rhs.fontImageAllocation;
+  fontImageView = rhs.fontImageView;
+  fontImageSampler = rhs.fontImageSampler;
+  vertexBuffer = std::move(rhs.vertexBuffer);
+  indexBuffer = std::move(rhs.indexBuffer);
+  descriptorSetLayout = rhs.descriptorSetLayout;
+  descriptorSets = std::move(rhs.descriptorSets);
+  pipelineLayout = rhs.pipelineLayout;
+  pipeline = rhs.pipeline;
+  context = std::move(rhs.context);
 
-  io.DisplaySize = {windowSize.x, windowSize.y};
-  io.DisplayFramebufferScale = {0.f, 0.f};
+  rhs.fontImage = VK_NULL_HANDLE;
+  rhs.fontImageAllocation = VK_NULL_HANDLE;
+  rhs.fontImageView = VK_NULL_HANDLE;
+  rhs.fontImageSampler = VK_NULL_HANDLE;
+  rhs.descriptorSetLayout = VK_NULL_HANDLE;
+  rhs.pipelineLayout = VK_NULL_HANDLE;
+  rhs.pipeline = VK_NULL_HANDLE;
 
-  ImGui::NewFrame();
-  return {};
-} // iris::Renderer::ui::BeginFrame
+  return *this;
+} // iris::Renderer::UI::operator=
 
-tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::ui::EndFrame(VkFramebuffer framebuffer) noexcept {
-  VkResult result;
+iris::Renderer::UI::~UI() noexcept {
+  if (!context) return;
+  IRIS_LOG_ENTER();
 
-  ImGui::EndFrame();
-  ImGui::Render();
+  context.reset();
+  vkDestroyPipeline(sDevice, pipeline, nullptr);
+  vkDestroyPipelineLayout(sDevice, pipelineLayout, nullptr);
+  vkDestroyDescriptorSetLayout(sDevice, descriptorSetLayout, nullptr);
+  vkDestroySampler(sDevice, fontImageSampler, nullptr);
+  vkDestroyImageView(sDevice, fontImageView, nullptr);
+  vmaDestroyImage(sAllocator, fontImage, fontImageAllocation);
 
-  ImDrawData* drawData = ImGui::GetDrawData();
-  if (drawData->TotalVtxCount == 0) return VkCommandBuffer{VK_NULL_HANDLE};
-
-  VkDeviceSize newBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
-  if (newBufferSize > sVertexBuffer.size) {
-    if (auto vb =
-          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sVertexBuffer")) {
-      auto newVB = std::move(*vb);
-      // ensures old sVertexBuffer will get destroyed on scope exit
-      std::swap(sVertexBuffer, newVB);
-    } else {
-      using namespace std::string_literals;
-      return tl::unexpected(
-        std::system_error(vb.error().code(), "Cannot resize vertex buffer: "s +
-                                               vb.error().what()));
-    }
-  }
-
-  newBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
-  if (newBufferSize > sIndexBuffer.size) {
-    if (auto ib =
-          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sIndexBuffer")) {
-      auto newIB = std::move(*ib);
-      // ensures old sIndexBuffer will get destroyed on scope exit
-      std::swap(sIndexBuffer, newIB);
-    } else {
-      using namespace std::string_literals;
-      return tl::unexpected(
-        std::system_error(ib.error().code(),
-                          "Cannot resize index buffer: "s + ib.error().what()));
-    }
-  }
-
-  ImDrawVert* pVerts;
-  if (auto p = sVertexBuffer.Map<ImDrawVert*>()) {
-    pVerts = *p;
-  } else {
-    using namespace std::string_literals;
-    return tl::unexpected(std::system_error(
-      p.error().code(),
-      "Cannot map vertex staging buffer: "s + p.error().what()));
-  }
-
-  ImDrawIdx* pIndxs;
-  if (auto p = sIndexBuffer.Map<ImDrawIdx*>()) {
-    pIndxs = *p;
-  } else {
-    using namespace std::string_literals;
-    return tl::unexpected(
-      std::system_error(p.error().code(), "Cannot map index staging buffer: "s +
-                                            p.error().what()));
-  }
-
-  for (int i = 0; i < drawData->CmdListsCount; ++i) {
-    ImDrawList const* cmdList = drawData->CmdLists[i];
-    std::memcpy(pVerts, cmdList->VtxBuffer.Data,
-                cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
-    std::memcpy(pIndxs, cmdList->IdxBuffer.Data,
-                cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
-    pVerts += cmdList->VtxBuffer.Size;
-    pIndxs += cmdList->IdxBuffer.Size;
-  }
-
-  sVertexBuffer.Unmap();
-  sIndexBuffer.Unmap();
-
-  absl::FixedArray<VkClearValue> clearValues(4);
-  clearValues[sColorTargetAttachmentIndex].color = {{0, 0, 0, 0}};
-  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
-
-  sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
-  auto&& cb = sCommandBuffers[sCommandBufferIndex];
-
-  VkCommandBufferInheritanceInfo inheritanceInfo = {};
-  inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  inheritanceInfo.renderPass = sRenderPass;
-  inheritanceInfo.framebuffer = framebuffer;
-
-  VkCommandBufferBeginInfo beginInfo = {};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                    VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-  beginInfo.pInheritanceInfo = &inheritanceInfo;
-
-  result = vkBeginCommandBuffer(cb, &beginInfo);
-  if (result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot begin UI command buffer"));
-  }
-
-  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sPipeline);
-  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, sPipelineLayout,
-                          0, 1, &sDescriptorSets[0], 0, nullptr);
-
-  VkDeviceSize bindingOffset = 0;
-  vkCmdBindVertexBuffers(cb, 0, 1, &sVertexBuffer.buffer, &bindingOffset);
-  vkCmdBindIndexBuffer(cb, sIndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-
-  glm::vec2 const displaySize{drawData->DisplaySize.x, drawData->DisplaySize.y};
-  glm::vec2 const displayPos{drawData->DisplayPos.x, drawData->DisplayPos.y};
-
-  VkViewport viewport = {0, 0, displaySize.x, displaySize.y, 0.f, 1.f};
-  vkCmdSetViewport(cb, 0, 1, &viewport);
-
-  glm::vec2 const scale = glm::vec2{2.f, 2.f} / displaySize;
-  glm::vec2 const translate = glm::vec2{-1.f, -1.f} - displayPos * scale;
-
-  vkCmdPushConstants(cb, sPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                     sizeof(glm::vec2), glm::value_ptr(scale));
-  vkCmdPushConstants(cb, sPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
-                     sizeof(glm::vec2), sizeof(glm::vec2),
-                     glm::value_ptr(translate));
-
-  for (int i = 0, idxOff = 0, vtxOff = 0; i < drawData->CmdListsCount; ++i) {
-    ImDrawList* cmdList = drawData->CmdLists[i];
-
-    for (int j = 0; j < cmdList->CmdBuffer.size(); ++j) {
-      ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[j];
-
-      if (drawCmd->UserCallback) {
-        drawCmd->UserCallback(cmdList, drawCmd);
-      } else {
-        VkRect2D scissor;
-        scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
-                             ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
-                             : 0;
-        scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
-                             ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
-                             : 0;
-        scissor.extent.width =
-          (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
-        scissor.extent.height = (uint32_t)(
-          drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1); // FIXME: Why +1 here?
-
-        vkCmdSetScissor(cb, 0, 1, &scissor);
-        vkCmdDrawIndexed(cb, drawCmd->ElemCount, 1, idxOff, vtxOff, 0);
-      }
-
-      idxOff += drawCmd->ElemCount;
-    }
-
-    vtxOff += cmdList->VtxBuffer.Size;
-  }
-
-  result = vkEndCommandBuffer(cb);
-  if (result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot end UI command buffer"));
-  }
-
-  return cb;
-} // iris::Renderer::ui::EndFrame
-
-void iris::Renderer::ui::Shutdown() noexcept {
-  ImGui::DestroyContext();
-
-  if (sPipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(sDevice, sPipeline, nullptr);
-  }
-
-  if (sPipelineLayout != VK_NULL_HANDLE) {
-    vkDestroyPipelineLayout(sDevice, sPipelineLayout, nullptr);
-  }
-
-  if (sDescriptorSetLayout != VK_NULL_HANDLE) {
-    vkDestroyDescriptorSetLayout(sDevice, sDescriptorSetLayout, nullptr);
-  }
-
-  if (sFontImageSampler != VK_NULL_HANDLE) {
-    vkDestroySampler(sDevice, sFontImageSampler, nullptr);
-  }
-
-  if (sFontImageView != VK_NULL_HANDLE) {
-    vkDestroyImageView(sDevice, sFontImageView, nullptr);
-  }
-
-  if (sFontImage != VK_NULL_HANDLE && sFontImageAllocation != VK_NULL_HANDLE) {
-    vmaDestroyImage(sAllocator, sFontImage, sFontImageAllocation);
-  }
-} // iris::Renderer::ui::Shutdown
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::UI::~UI
 

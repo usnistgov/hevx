@@ -44,7 +44,8 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
 } // iris::Renderer::Buffer::Create
 
 iris::Renderer::Buffer::Buffer(Buffer&& other) noexcept
-  : buffer(other.buffer)
+  : size(other.size)
+  , buffer(other.buffer)
   , allocation(other.allocation)
   , name(std::move(other.name)) {
   other.buffer = VK_NULL_HANDLE;
@@ -54,6 +55,7 @@ iris::Renderer::Buffer::Buffer(Buffer&& other) noexcept
 iris::Renderer::Buffer& iris::Renderer::Buffer::operator=(Buffer&& rhs) noexcept {
   if (this == &rhs) return *this;
 
+  size = rhs.size;
   buffer = rhs.buffer;
   allocation = rhs.allocation;
   name = std::move(rhs.name);
@@ -65,8 +67,8 @@ iris::Renderer::Buffer& iris::Renderer::Buffer::operator=(Buffer&& rhs) noexcept
 } // iris::Renderer::Buffer::operator=
 
 iris::Renderer::Buffer::~Buffer() noexcept {
-  IRIS_LOG_ENTER();
   if (buffer == VK_NULL_HANDLE || allocation == VK_NULL_HANDLE) return;
+  IRIS_LOG_ENTER();
 
   vmaDestroyBuffer(sAllocator, buffer, allocation);
 

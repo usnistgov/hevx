@@ -2,6 +2,7 @@
 #define HEV_IRIS_RENDERER_WINDOW_H_
 
 #include "iris/renderer/surface.h"
+#include "iris/renderer/ui.h"
 #include "tl/expected.hpp"
 #include "glm/vec4.hpp"
 #include <exception>
@@ -30,12 +31,15 @@ struct Window {
   bool resized{false};
   wsi::Window window{};
   Surface surface{};
+  UI ui{};
 
   void Resize(wsi::Extent2D const& newExtent) noexcept;
   void Close() noexcept;
 
-  std::error_code BeginFrame() noexcept;
-  void EndFrame() noexcept;
+  tl::expected<void, std::system_error> BeginFrame() noexcept;
+
+  tl::expected<VkCommandBuffer, std::system_error>
+  EndFrame(VkFramebuffer framebuffer) noexcept;
 
   Window() = default;
   Window(Window const&) = delete;

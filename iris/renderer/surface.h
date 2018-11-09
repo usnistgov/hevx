@@ -43,6 +43,12 @@ struct Surface {
 
   std::vector<VkFramebuffer> framebuffers{};
 
+  std::uint32_t currentImageIndex{UINT32_MAX};
+
+  inline VkFramebuffer currentFramebuffer() const noexcept {
+    return framebuffers[currentImageIndex];
+  }
+
   Surface() = default;
   Surface(Surface const&) = delete;
   Surface(Surface&&) noexcept;

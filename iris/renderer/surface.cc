@@ -496,7 +496,8 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   , depthStencilTarget{other.depthStencilTarget}
   , depthStencilTargetAllocation{other.depthStencilTargetAllocation}
   , depthStencilTargetView{other.depthStencilTargetView}
-  , framebuffers{std::move(other.framebuffers)} {
+  , framebuffers{std::move(other.framebuffers)}
+  , currentImageIndex(other.currentImageIndex) {
   IRIS_LOG_ENTER();
 
   other.handle = VK_NULL_HANDLE;
@@ -516,42 +517,44 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface
 
-iris::Renderer::Surface& iris::Renderer::Surface::operator=(Surface&& other) noexcept {
-  if (this == &other) return *this;
+iris::Renderer::Surface& iris::Renderer::Surface::
+operator=(Surface&& rhs) noexcept {
+  if (this == &rhs) return *this;
   IRIS_LOG_ENTER();
 
-  handle = other.handle;
-  imageAvailable = other.imageAvailable;
-  extent = other.extent;
-  viewport = other.viewport;
-  scissor = other.scissor;
-  clearColor = other.clearColor;
-  swapchain = other.swapchain;
-  colorImages = std::move(other.colorImages);
-  colorImageViews = std::move(other.colorImageViews);
-  depthStencilImage = other.depthStencilImage;
-  depthStencilImageAllocation = other.depthStencilImageAllocation;
-  depthStencilImageView = other.depthStencilImageView;
-  colorTarget = other.colorTarget;
-  colorTargetAllocation = other.colorTargetAllocation;
-  colorTargetView = other.colorTargetView;
-  depthStencilTarget = other.depthStencilTarget;
-  depthStencilTargetAllocation = other.depthStencilTargetAllocation;
-  depthStencilTargetView = other.depthStencilTargetView;
-  framebuffers = std::move(other.framebuffers);
+  handle = rhs.handle;
+  imageAvailable = rhs.imageAvailable;
+  extent = rhs.extent;
+  viewport = rhs.viewport;
+  scissor = rhs.scissor;
+  clearColor = rhs.clearColor;
+  swapchain = rhs.swapchain;
+  colorImages = std::move(rhs.colorImages);
+  colorImageViews = std::move(rhs.colorImageViews);
+  depthStencilImage = rhs.depthStencilImage;
+  depthStencilImageAllocation = rhs.depthStencilImageAllocation;
+  depthStencilImageView = rhs.depthStencilImageView;
+  colorTarget = rhs.colorTarget;
+  colorTargetAllocation = rhs.colorTargetAllocation;
+  colorTargetView = rhs.colorTargetView;
+  depthStencilTarget = rhs.depthStencilTarget;
+  depthStencilTargetAllocation = rhs.depthStencilTargetAllocation;
+  depthStencilTargetView = rhs.depthStencilTargetView;
+  framebuffers = std::move(rhs.framebuffers);
+  currentImageIndex = (rhs.currentImageIndex);
 
-  other.handle = VK_NULL_HANDLE;
-  other.imageAvailable = VK_NULL_HANDLE;
-  other.swapchain = VK_NULL_HANDLE;
-  other.depthStencilImage = VK_NULL_HANDLE;
-  other.depthStencilImageAllocation = VK_NULL_HANDLE;
-  other.depthStencilImageView = VK_NULL_HANDLE;
-  other.colorTarget = VK_NULL_HANDLE;
-  other.colorTargetAllocation = VK_NULL_HANDLE;
-  other.colorTargetView = VK_NULL_HANDLE;
-  other.depthStencilTarget = VK_NULL_HANDLE;
-  other.depthStencilTargetAllocation = VK_NULL_HANDLE;
-  other.depthStencilTargetView = VK_NULL_HANDLE;
+  rhs.handle = VK_NULL_HANDLE;
+  rhs.imageAvailable = VK_NULL_HANDLE;
+  rhs.swapchain = VK_NULL_HANDLE;
+  rhs.depthStencilImage = VK_NULL_HANDLE;
+  rhs.depthStencilImageAllocation = VK_NULL_HANDLE;
+  rhs.depthStencilImageView = VK_NULL_HANDLE;
+  rhs.colorTarget = VK_NULL_HANDLE;
+  rhs.colorTargetAllocation = VK_NULL_HANDLE;
+  rhs.colorTargetView = VK_NULL_HANDLE;
+  rhs.depthStencilTarget = VK_NULL_HANDLE;
+  rhs.depthStencilTargetAllocation = VK_NULL_HANDLE;
+  rhs.depthStencilTargetView = VK_NULL_HANDLE;
 
   IRIS_LOG_LEAVE();
   return *this;
