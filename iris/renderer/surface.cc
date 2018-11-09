@@ -115,6 +115,66 @@ tl::expected<bool, std::system_error> static CheckSurfaceFormat(
 
 } // namespace iris::Renderer
 
+tl::expected<iris::Renderer::Framebuffer, std::system_error>
+iris::Renderer::Framebuffer::Create(gsl::span<VkImageView> attachments,
+                                    VkExtent2D extent,
+                                    std::string name) noexcept {
+  IRIS_LOG_ENTER();
+  Framebuffer framebuffer;
+
+  VkFramebufferCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  ci.renderPass = sRenderPass;
+  ci.attachmentCount = gsl::narrow_cast<std::uint32_t>(attachments.size());
+  ci.pAttachments = attachments.data();
+  ci.width = extent.width;
+  ci.height = extent.height;
+  ci.layers = 1;
+
+  if (auto result =
+        vkCreateFramebuffer(sDevice, &ci, nullptr, &framebuffer.handle);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create framebuffer"));
+  }
+
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_FRAMEBUFFER, framebuffer.handle, name.c_str());
+  }
+
+  framebuffer.name = std::move(name);
+
+  IRIS_LOG_LEAVE();
+  return std::move(framebuffer);
+} // CreateFramebuffer
+
+iris::Renderer::Framebuffer::Framebuffer(Framebuffer&& other) noexcept
+  : handle(other.handle)
+  , name(std::move(other.name)) {
+  other.handle = VK_NULL_HANDLE;
+} // iris::Renderer::Framebuffer::Framebuffer
+
+iris::Renderer::Framebuffer& iris::Renderer::Framebuffer::operator=(Framebuffer&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  handle = rhs.handle;
+  name = std::move(rhs.name);
+
+  rhs.handle = VK_NULL_HANDLE;
+
+  return *this;
+} // iris::Renderer::Framebuffer::operator=
+
+iris::Renderer::Framebuffer::~Framebuffer() noexcept {
+  if (handle == VK_NULL_HANDLE) return;
+  IRIS_LOG_ENTER();
+
+  vkDestroyFramebuffer(sDevice, handle, nullptr);
+
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::Framebuffer::~Framebuffer
+
 tl::expected<iris::Renderer::Surface, std::system_error>
 iris::Renderer::Surface::Create(wsi::Window& window,
                                 glm::vec4 const& clearColor) noexcept {
@@ -215,33 +275,6 @@ CreateSwapchain(VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR caps,
   return newSwapchain;
 } // CreateSwapchain
 
-static tl::expected<VkFramebuffer, std::system_error>
-CreateFramebuffer(gsl::span<VkImageView> attachments,
-                  VkExtent2D extent) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkFramebufferCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  ci.renderPass = sRenderPass;
-  ci.attachmentCount = gsl::narrow_cast<std::uint32_t>(attachments.size());
-  ci.pAttachments = attachments.data();
-  ci.width = extent.width;
-  ci.height = extent.height;
-  ci.layers = 1;
-
-  VkFramebuffer framebuffer;
-  result = vkCreateFramebuffer(sDevice, &ci, nullptr, &framebuffer);
-  if (result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create framebuffer"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return framebuffer;
-} // CreateFramebuffer
-
 } // namespace iris::Renderer
 
 tl::expected<void, std::system_error>
@@ -319,12 +352,12 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
                                             "Cannot get swapchain images"));
   }
 
-  std::vector<VkImageView> newColorImageViews(numSwapchainImages);
+  std::vector<ImageView> newColorImageViews(numSwapchainImages);
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
-    if (auto view = CreateImageView(
+    if (auto view = ImageView::Create(
           newColorImages[i], sSurfaceColorFormat.format, VK_IMAGE_VIEW_TYPE_2D,
           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-      newColorImageViews[i] = *view;
+      newColorImageViews[i] = std::move(*view);
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(view.error());
@@ -332,37 +365,28 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   }
 
   Image newDepthStencilImage;
-  ImageView newDepthStencilImageView{};
-
-  Image newColorTarget;
-  ImageView newColorTargetView{};
-
-  Image newDepthStencilTarget;
-  ImageView newDepthStencilTargetView{};
-
-  absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
-  std::vector<VkFramebuffer> newFramebuffers(numSwapchainImages);
-
-  std::system_error error(Error::kNone);
-
   if (auto ds = Image::Create(VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat,
                               imageExtent, 1, 1, VK_SAMPLE_COUNT_1_BIT,
                               VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                               VMA_MEMORY_USAGE_GPU_ONLY, "depthStencilImage")) {
     newDepthStencilImage = std::move(*ds);
   } else {
-    error = ds.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ds.error());
   }
 
+  ImageView newDepthStencilImageView{};
   if (auto view = newDepthStencilImage.CreateImageView(
         VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     newDepthStencilImageView = std::move(*view);
   } else {
-    error = view.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(view.error());
   }
 
+  Image newColorTarget;
   if (auto ct =
         Image::Create(VK_IMAGE_TYPE_2D, sSurfaceColorFormat.format,
                            imageExtent, 1, 1, sSurfaceSampleCount,
@@ -371,42 +395,50 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
                            VMA_MEMORY_USAGE_GPU_ONLY, "colorTarget")) {
     newColorTarget = std::move(*ct);
   } else {
-    error = ct.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ct.error());
   }
 
+  ImageView newColorTargetView{};
   if (auto view = newColorTarget.CreateImageView(
         VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     newColorTargetView = std::move(*view);
   } else {
-    error = view.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(view.error());
   }
 
   GetLogger()->debug("Transitioning new color target");
   if (auto noret = newColorTarget.Transition(
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
       !noret) {
-    error = noret.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
+  Image newDepthStencilTarget;
   if (auto ds = Image::Create(
         VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
         sSurfaceSampleCount, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VMA_MEMORY_USAGE_GPU_ONLY, "depthStencilTarget")) {
     newDepthStencilTarget = std::move(*ds);
   } else {
-    error = ds.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ds.error());
   }
 
+  ImageView newDepthStencilTargetView{};
   if (auto view = newDepthStencilTarget.CreateImageView(
         VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     newDepthStencilTargetView = std::move(*view);
   } else {
-    error = view.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(view.error());
   }
 
   GetLogger()->debug("Transitioning new depth target");
@@ -414,25 +446,31 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
       !noret) {
-    error = noret.error();
-    goto fail;
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(noret.error());
   }
 
+  absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
   attachments[sColorTargetAttachmentIndex] = newColorTargetView;
   attachments[sDepthStencilTargetAttachmentIndex] = newDepthStencilTargetView;
   attachments[sDepthStencilResolveAttachmentIndex] = newDepthStencilImageView;
 
+  std::vector<Framebuffer> newFramebuffers(numSwapchainImages);
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
     attachments[sColorResolveAttachmentIndex] = newColorImageViews[i];
-    if (auto fb = CreateFramebuffer(attachments, newExtent)) {
-      newFramebuffers[i] = *fb;
+    if (auto fb = Framebuffer::Create(attachments, newExtent)) {
+      newFramebuffers[i] = std::move(*fb);
     } else {
-      error = fb.error();
-      goto fail;
+      vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(fb.error());
     }
   }
 
-  if (swapchain != VK_NULL_HANDLE) Release();
+  if (swapchain != VK_NULL_HANDLE) {
+    vkDestroySwapchainKHR(sDevice, swapchain, nullptr);
+  }
 
   extent = newExtent;
   viewport = newViewport;
@@ -440,35 +478,19 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   swapchain = newSwapchain;
 
   colorImages = std::move(newColorImages);
-  colorImageViews = std::move(newColorImageViews);
 
-  // swap to ensure old objects are properly released
+  // swap to ensure old objects are correctly destructed
+  std::swap(colorImageViews, newColorImageViews);
   std::swap(depthStencilImage, newDepthStencilImage);
   std::swap(depthStencilImageView, newDepthStencilImageView);
   std::swap(colorTarget, newColorTarget);
   std::swap(colorTargetView, newColorTargetView);
   std::swap(depthStencilTarget, newDepthStencilTarget);
   std::swap(depthStencilTargetView, newDepthStencilTargetView);
-
-  framebuffers = std::move(newFramebuffers);
+  std::swap(framebuffers, newFramebuffers);
 
   IRIS_LOG_LEAVE();
   return {};
-
-fail:
-  GetLogger()->debug("Surface::Resize cleaning up on on failure");
-  for (auto&& framebuffer : newFramebuffers) {
-    vkDestroyFramebuffer(sDevice, framebuffer, nullptr);
-  }
-
-  for (auto&& imageView : newColorImageViews) {
-    vkDestroyImageView(sDevice, imageView, nullptr);
-  }
-
-  vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
-
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(error);
 } // iris::Renderer::Surface::Resize
 
 iris::Renderer::Surface::Surface(Surface&& other) noexcept
@@ -533,24 +555,9 @@ iris::Renderer::Surface::~Surface() noexcept {
   if (handle == VK_NULL_HANDLE) return;
 
   IRIS_LOG_ENTER();
-  Release();
+  vkDestroySwapchainKHR(sDevice, swapchain, nullptr);
   vkDestroySemaphore(sDevice, imageAvailable, nullptr);
   vkDestroySurfaceKHR(sInstance, handle, nullptr);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface::~Surface
-
-void iris::Renderer::Surface::Release() noexcept {
-  IRIS_LOG_ENTER();
-  for (auto&& framebuffer : framebuffers) {
-    vkDestroyFramebuffer(sDevice, framebuffer, nullptr);
-  }
-
-  for (auto&& imageView : colorImageViews) {
-    vkDestroyImageView(sDevice, imageView, nullptr);
-  }
-
-  //GetLogger()->debug("Swapchain: {}", static_cast<void*>(swapchain));
-  vkDestroySwapchainKHR(sDevice, swapchain, nullptr);
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::Surface::Release
 

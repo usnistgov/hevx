@@ -11,6 +11,26 @@
 
 namespace iris::Renderer {
 
+struct Framebuffer {
+  static tl::expected<Framebuffer, std::system_error>
+  Create(gsl::span<VkImageView> attachments, VkExtent2D extent,
+         std::string name = {}) noexcept;
+
+  VkFramebuffer handle{VK_NULL_HANDLE};
+
+  operator VkFramebuffer() const noexcept { return handle; }
+
+  Framebuffer() = default;
+  Framebuffer(Framebuffer const&) = delete;
+  Framebuffer(Framebuffer&& other) noexcept;
+  Framebuffer& operator=(Framebuffer const&) = delete;
+  Framebuffer& operator=(Framebuffer&& other) noexcept;
+  ~Framebuffer() noexcept;
+
+private:
+  std::string name;
+}; // struct Framebuffer
+
 struct Surface {
   static tl::expected<Surface, std::system_error>
   Create(wsi::Window& window, glm::vec4 const& clearColor) noexcept;
@@ -28,7 +48,7 @@ struct Surface {
   VkSwapchainKHR swapchain{VK_NULL_HANDLE};
 
   std::vector<VkImage> colorImages{};
-  std::vector<VkImageView> colorImageViews{};
+  std::vector<ImageView> colorImageViews{};
 
   Image depthStencilImage{};
   ImageView depthStencilImageView{};
@@ -39,7 +59,7 @@ struct Surface {
   Image depthStencilTarget{};
   ImageView depthStencilTargetView{};
 
-  std::vector<VkFramebuffer> framebuffers{};
+  std::vector<Framebuffer> framebuffers{};
 
   std::uint32_t currentImageIndex{UINT32_MAX};
 
@@ -53,9 +73,6 @@ struct Surface {
   Surface& operator=(Surface const&) = delete;
   Surface& operator=(Surface&&) noexcept;
   ~Surface() noexcept;
-
-private:
-  void Release() noexcept;
 }; // struct Surface
 
 } // namespace iris::Renderer
