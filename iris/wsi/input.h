@@ -10,7 +10,7 @@
 namespace iris::wsi {
 
 //! \brief Keyboard keys.
-enum class Keys : std::uint8_t {
+enum Keys {
   kUnknown = 0,
 
   kSpace = 32,
@@ -143,8 +143,7 @@ enum class Keys : std::uint8_t {
 class Keyset {
 public:
   //! \brief The maximum number of keys that are tracked.
-  static constexpr std::size_t kMaxKeys =
-    static_cast<std::size_t>(Keys::kMaxKeys);
+  static constexpr std::size_t kMaxKeys = Keys::kMaxKeys;
 
 private:
   using bitset = std::bitset<kMaxKeys>;
@@ -179,10 +178,10 @@ private:
 }; // class Keyset
 
 //! \brief Mouse buttons.
-enum class Buttons : std::uint8_t {
-  kLeft,
-  kRight,
-  kMiddle,
+enum Buttons : std::uint8_t {
+  kButtonLeft,
+  kButtonRight,
+  kButtonMiddle,
   kButton4,
   kButton5,
 
@@ -192,8 +191,7 @@ enum class Buttons : std::uint8_t {
 //! \brief Tracks the current state of a mouse.
 class Buttonset {
   //! \brief The maximum number of buttons that are tracked.
-  static constexpr std::size_t kMaxButtons =
-    static_cast<std::size_t>(Buttons::kMaxButtons);
+  static constexpr std::size_t kMaxButtons = Buttons::kMaxButtons;
 
 private:
   using bitset = std::bitset<kMaxButtons>;

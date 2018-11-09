@@ -261,9 +261,9 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   case WM_KEYDOWN: break;
   case WM_KEYUP: break;
 
-  case WM_LBUTTONDOWN: buttons_[Buttons::kLeft] = true; break;
-  case WM_RBUTTONDOWN: buttons_[Buttons::kRight] = true; break;
-  case WM_MBUTTONDOWN: buttons_[Buttons::kMiddle] = true; break;
+  case WM_LBUTTONDOWN: buttons_[Buttons::kButtonLeft] = true; break;
+  case WM_RBUTTONDOWN: buttons_[Buttons::kButtonRight] = true; break;
+  case WM_MBUTTONDOWN: buttons_[Buttons::kButtonMiddle] = true; break;
   case WM_XBUTTONDOWN:
     switch(GET_XBUTTON_WPARAM(wParam)) {
     case XBUTTON1: buttons_[Buttons::kButton4] = true; break;
@@ -271,9 +271,9 @@ iris::wsi::Window::Impl::~Impl() noexcept {
     }
     break;
 
-  case WM_LBUTTONUP: buttons_[Buttons::kLeft] = false; break;
-  case WM_RBUTTONUP: buttons_[Buttons::kRight] = false; break;
-  case WM_MBUTTONUP: buttons_[Buttons::kMiddle] = false; break;
+  case WM_LBUTTONUP: buttons_[Buttons::kButtonLeft] = false; break;
+  case WM_RBUTTONUP: buttons_[Buttons::kButtonRight] = false; break;
+  case WM_MBUTTONUP: buttons_[Buttons::kButtonMiddle] = false; break;
   case WM_XBUTTONUP:
     switch(GET_XBUTTON_WPARAM(wParam)) {
     case XBUTTON1: buttons_[Buttons::kButton4] = false; break;

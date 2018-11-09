@@ -77,7 +77,11 @@ iris::Renderer::Window::BeginFrame() noexcept {
   ImGui::SetCurrentContext(ui.context.get());
   ImGuiIO& io = ImGui::GetIO();
 
-#if 0
+  wsi::Keyset const keyState = window.KeyboardState();
+  for (int i = 0; i < IM_ARRAYSIZE(io.KeysDown); ++i) {
+    io.KeysDown[i] = keyState[static_cast<wsi::Keys>(i)];
+  }
+
   io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
                io.KeysDown[wsi::Keys::kRightControl];
   io.KeyShift =
@@ -85,8 +89,14 @@ iris::Renderer::Window::BeginFrame() noexcept {
   io.KeyAlt =
     io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
 
-  io.MousePos = {mousePos.x, mousePos.y};
-#endif
+  wsi::Buttonset const buttonState = window.ButtonState();
+  for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); ++i) {
+    io.MouseDown[i] = buttonState[static_cast<wsi::Buttons>(i)];
+  }
+
+  auto const mousePos = window.CursorPos();
+  io.MousePos.x = static_cast<float>(mousePos.x);
+  io.MousePos.y = static_cast<float>(mousePos.y);
 
   UI::TimePoint currentTime = std::chrono::steady_clock::now();
   io.DeltaTime = ui.previousTime.time_since_epoch().count() > 0

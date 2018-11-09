@@ -136,8 +136,8 @@ void InputTest() {
       win->Close();
     }
 
-    if (!currButtons[iris::wsi::Buttons::kRight] &&
-        prevButtons[iris::wsi::Buttons::kRight]) {
+    if (!currButtons[iris::wsi::Buttons::kButtonRight] &&
+        prevButtons[iris::wsi::Buttons::kButtonRight]) {
       auto const scroll = win->ScrollWheel();
       sLogger->info("ScrollWheel: ({}, {})", scroll.x, scroll.y);
     }

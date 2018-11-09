@@ -404,7 +404,7 @@ iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
   Keyset keyboardState;
 
   auto cookie = ::xcb_query_keymap(handle_.connection);
-  xcb_generic_error_t* error;
+  ::xcb_generic_error_t* error;
   auto keymap = ::xcb_query_keymap_reply(handle_.connection, cookie, &error);
 
   if (error) {
@@ -427,13 +427,19 @@ iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
 } // iris::wsi::Window::Impl::KeyboardState
 
 glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
-  return glm::vec2(0, 0);
-  //::Window root, child;
-  //glm::ivec2 rootPos, childPos;
-  //unsigned int mask;
-  //::XQueryPointer(handle_.display, handle_.window, &root, &child, &rootPos[0],
-                  //&rootPos[1], &childPos[0], &childPos[1], &mask);
-  //return childPos;
+  auto cookie = ::xcb_query_pointer(handle_.connection, handle_.window);
+  ::xcb_generic_error_t* error;
+  auto pointer = ::xcb_query_pointer_reply(handle_.connection, cookie, &error);
+
+  if (error) {
+    GetLogger()->error("Cannot get cursor pos: {}", error->error_code);
+    std::free(error);
+    return glm::vec2(0, 0);
+  }
+
+  glm::vec2 pos(pointer->win_x, pointer->win_y);
+  std::free(pointer);
+  return pos;
 } // iris::wsi::Window::Impl::CursorPos
 
 iris::wsi::Window::Impl::~Impl() noexcept {
@@ -452,9 +458,9 @@ void iris::wsi::Window::Impl::Dispatch(
     auto ev = reinterpret_cast<::xcb_button_press_event_t*>(event.get());
     if (ev->event != handle_.window) break;
     switch(ev->detail) {
-      case 1: buttons_[Buttons::kLeft] = true; break;
-      case 2: buttons_[Buttons::kMiddle] = true; break;
-      case 3: buttons_[Buttons::kRight] = true; break;
+      case 1: buttons_[Buttons::kButtonLeft] = true; break;
+      case 2: buttons_[Buttons::kButtonMiddle] = true; break;
+      case 3: buttons_[Buttons::kButtonRight] = true; break;
     }
   } break;
 
@@ -462,9 +468,9 @@ void iris::wsi::Window::Impl::Dispatch(
     auto ev = reinterpret_cast<::xcb_button_release_event_t*>(event.get());
     if (ev->event != handle_.window) break;
     switch(ev->detail) {
-      case 1: buttons_[Buttons::kLeft] = false; break;
-      case 2: buttons_[Buttons::kMiddle] = false; break;
-      case 3: buttons_[Buttons::kRight] = false; break;
+      case 1: buttons_[Buttons::kButtonLeft] = false; break;
+      case 2: buttons_[Buttons::kButtonMiddle] = false; break;
+      case 3: buttons_[Buttons::kButtonRight] = false; break;
       case 4: scroll_.y += 1.f; break;
       case 5: scroll_.y -= 1.f; break;
     }
