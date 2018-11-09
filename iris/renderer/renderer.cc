@@ -1334,8 +1334,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
     VK_KHR_SURFACE_EXTENSION_NAME, // surfaces are necessary for graphics
     VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
-#if defined(VK_USE_PLATFORM_XLIB_KHR) // plus the platform-specific surface
-    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#if defined(VK_USE_PLATFORM_XCB_KHR) // plus the platform-specific surface
+    VK_KHR_XCB_SURFACE_EXTENSION_NAME,
 #elif defined(VK_USE_PLATFORM_WIN32_KHR) // plus the platform-specific surface
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #endif

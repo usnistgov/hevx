@@ -5,7 +5,7 @@ extension KHR_get_physical_device_properties2 required
 extension KHR_get_surface_capabilities2 required
 extension KHR_surface required
 
-extension KHR_xcb_surface optional
+extension KHR_xcb_surface required
 extension EXT_debug_report optional
 extension EXT_debug_utils optional
 

@@ -26,6 +26,8 @@ static CreateSurface(wsi::Window& window) noexcept {
   sci.connection = native.connection;
   sci.window = native.window;
 
+  GetLogger()->debug("fp: {}", reinterpret_cast<void*>(vkCreateXcbSurfaceKHR));
+
   VkResult result = vkCreateXcbSurfaceKHR(sInstance, &sci, nullptr, &surface);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
