@@ -209,8 +209,8 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
                           nullptr);
 
   VkDeviceSize bindingOffset = 0;
-  vkCmdBindVertexBuffers(cb, 0, 1, &ui.vertexBuffer.buffer, &bindingOffset);
-  vkCmdBindIndexBuffer(cb, ui.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+  vkCmdBindVertexBuffers(cb, 0, 1, ui.vertexBuffer.get(), &bindingOffset);
+  vkCmdBindIndexBuffer(cb, ui.indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
   glm::vec2 const displaySize{drawData->DisplaySize.x, drawData->DisplaySize.y};
   glm::vec2 const displayPos{drawData->DisplayPos.x, drawData->DisplayPos.y};

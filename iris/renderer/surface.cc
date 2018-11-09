@@ -331,73 +331,88 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
     }
   }
 
-  VkImage newDepthStencilImage{VK_NULL_HANDLE};
-  VmaAllocation newDepthStencilImageAllocation{VK_NULL_HANDLE};
-  VkImageView newDepthStencilImageView{VK_NULL_HANDLE};
+  Image newDepthStencilImage;
+  ImageView newDepthStencilImageView{};
 
-  VkImage newColorTarget{VK_NULL_HANDLE};
-  VmaAllocation newColorTargetAllocation{VK_NULL_HANDLE};
-  VkImageView newColorTargetView{VK_NULL_HANDLE};
+  Image newColorTarget;
+  ImageView newColorTargetView{};
 
-  VkImage newDepthStencilTarget{VK_NULL_HANDLE};
-  VmaAllocation newDepthStencilTargetAllocation{VK_NULL_HANDLE};
-  VkImageView newDepthStencilTargetView{VK_NULL_HANDLE};
+  Image newDepthStencilTarget;
+  ImageView newDepthStencilTargetView{};
 
   absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
   std::vector<VkFramebuffer> newFramebuffers(numSwapchainImages);
 
   std::system_error error(Error::kNone);
 
-  if (auto dsi = CreateImageAndView(
-        VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
-        VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
-        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
-    std::tie(newDepthStencilImage, newDepthStencilImageAllocation,
-             newDepthStencilImageView) = *dsi;
+  if (auto ds = Image::Create(VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat,
+                              imageExtent, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                              VMA_MEMORY_USAGE_GPU_ONLY, "depthStencilImage")) {
+    newDepthStencilImage = std::move(*ds);
   } else {
-    error = dsi.error();
+    error = ds.error();
     goto fail;
   }
 
-  if (auto ctv =
-        CreateImageAndView(VK_IMAGE_TYPE_2D, sSurfaceColorFormat.format,
+  if (auto view = newDepthStencilImage.CreateImageView(
+        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    newDepthStencilImageView = std::move(*view);
+  } else {
+    error = view.error();
+    goto fail;
+  }
+
+  if (auto ct =
+        Image::Create(VK_IMAGE_TYPE_2D, sSurfaceColorFormat.format,
                            imageExtent, 1, 1, sSurfaceSampleCount,
                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                              VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-                           VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
-                           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    std::tie(newColorTarget, newColorTargetAllocation, newColorTargetView) =
-      *ctv;
+                           VMA_MEMORY_USAGE_GPU_ONLY, "colorTarget")) {
+    newColorTarget = std::move(*ct);
   } else {
-    error = ctv.error();
+    error = ct.error();
+    goto fail;
+  }
+
+  if (auto view = newColorTarget.CreateImageView(
+        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    newColorTargetView = std::move(*view);
+  } else {
+    error = view.error();
     goto fail;
   }
 
   GetLogger()->debug("Transitioning new color target");
-  if (auto noret = TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+  if (auto noret = newColorTarget.Transition(
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
       !noret) {
     error = noret.error();
     goto fail;
   }
 
-  if (auto dstv = CreateImageAndView(
+  if (auto ds = Image::Create(
         VK_IMAGE_TYPE_2D, sSurfaceDepthStencilFormat, imageExtent, 1, 1,
         sSurfaceSampleCount, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY, VK_IMAGE_VIEW_TYPE_2D,
-        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
-    std::tie(newDepthStencilTarget, newDepthStencilTargetAllocation,
-             newDepthStencilTargetView) = *dstv;
+        VMA_MEMORY_USAGE_GPU_ONLY, "depthStencilTarget")) {
+    newDepthStencilTarget = std::move(*ds);
   } else {
-    error = dstv.error();
+    error = ds.error();
+    goto fail;
+  }
+
+  if (auto view = newDepthStencilTarget.CreateImageView(
+        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    newDepthStencilTargetView = std::move(*view);
+  } else {
+    error = view.error();
     goto fail;
   }
 
   GetLogger()->debug("Transitioning new depth target");
-  if (auto noret =
-        TransitionImage(newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+  if (auto noret = newDepthStencilTarget.Transition(
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
       !noret) {
     error = noret.error();
     goto fail;
@@ -427,17 +442,13 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   colorImages = std::move(newColorImages);
   colorImageViews = std::move(newColorImageViews);
 
-  depthStencilImage = newDepthStencilImage;
-  depthStencilImageAllocation = newDepthStencilImageAllocation;
-  depthStencilImageView = newDepthStencilImageView;
-
-  colorTarget = newColorTarget;
-  colorTargetAllocation = newColorTargetAllocation;
-  colorTargetView = newColorTargetView;
-
-  depthStencilTarget = newDepthStencilTarget;
-  depthStencilTargetAllocation = newDepthStencilTargetAllocation;
-  depthStencilTargetView = newDepthStencilTargetView;
+  // swap to ensure old objects are properly released
+  std::swap(depthStencilImage, newDepthStencilImage);
+  std::swap(depthStencilImageView, newDepthStencilImageView);
+  std::swap(colorTarget, newColorTarget);
+  std::swap(colorTargetView, newColorTargetView);
+  std::swap(depthStencilTarget, newDepthStencilTarget);
+  std::swap(depthStencilTargetView, newDepthStencilTargetView);
 
   framebuffers = std::move(newFramebuffers);
 
@@ -448,23 +459,6 @@ fail:
   GetLogger()->debug("Surface::Resize cleaning up on on failure");
   for (auto&& framebuffer : newFramebuffers) {
     vkDestroyFramebuffer(sDevice, framebuffer, nullptr);
-  }
-
-  if (newColorTargetView != VK_NULL_HANDLE) {
-   vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-   vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
-  }
-
-  if (newDepthStencilTarget != VK_NULL_HANDLE) {
-    vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilTarget,
-                    newDepthStencilTargetAllocation);
-  }
-
-  if (newDepthStencilImage != VK_NULL_HANDLE) {
-    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilImage,
-                    newDepthStencilImageAllocation);
   }
 
   for (auto&& imageView : newColorImageViews) {
@@ -478,41 +472,28 @@ fail:
 } // iris::Renderer::Surface::Resize
 
 iris::Renderer::Surface::Surface(Surface&& other) noexcept
-  : handle{other.handle}
-  , imageAvailable{other.imageAvailable}
-  , extent{other.extent}
-  , viewport{other.viewport}
-  , scissor{other.scissor}
-  , clearColor{other.clearColor}
-  , swapchain{other.swapchain}
-  , colorImages{std::move(other.colorImages)}
-  , colorImageViews{std::move(other.colorImageViews)}
-  , depthStencilImage{other.depthStencilImage}
-  , depthStencilImageAllocation{other.depthStencilImageAllocation}
-  , depthStencilImageView{other.depthStencilImageView}
-  , colorTarget{other.colorTarget}
-  , colorTargetAllocation{other.colorTargetAllocation}
-  , colorTargetView{other.colorTargetView}
-  , depthStencilTarget{other.depthStencilTarget}
-  , depthStencilTargetAllocation{other.depthStencilTargetAllocation}
-  , depthStencilTargetView{other.depthStencilTargetView}
-  , framebuffers{std::move(other.framebuffers)}
+  : handle(other.handle)
+  , imageAvailable(other.imageAvailable)
+  , extent(other.extent)
+  , viewport(other.viewport)
+  , scissor(other.scissor)
+  , clearColor(other.clearColor)
+  , swapchain(other.swapchain)
+  , colorImages(std::move(other.colorImages))
+  , colorImageViews(std::move(other.colorImageViews))
+  , depthStencilImage(std::move(other.depthStencilImage))
+  , depthStencilImageView(std::move(other.depthStencilImageView))
+  , colorTarget(std::move(other.colorTarget))
+  , colorTargetView(std::move(other.colorTargetView))
+  , depthStencilTarget(std::move(other.depthStencilTarget))
+  , depthStencilTargetView(std::move(other.depthStencilTargetView))
+  , framebuffers(std::move(other.framebuffers))
   , currentImageIndex(other.currentImageIndex) {
   IRIS_LOG_ENTER();
 
   other.handle = VK_NULL_HANDLE;
-  other.handle = VK_NULL_HANDLE;
   other.imageAvailable = VK_NULL_HANDLE;
   other.swapchain = VK_NULL_HANDLE;
-  other.depthStencilImage = VK_NULL_HANDLE;
-  other.depthStencilImageAllocation = VK_NULL_HANDLE;
-  other.depthStencilImageView = VK_NULL_HANDLE;
-  other.colorTarget = VK_NULL_HANDLE;
-  other.colorTargetAllocation = VK_NULL_HANDLE;
-  other.colorTargetView = VK_NULL_HANDLE;
-  other.depthStencilTarget = VK_NULL_HANDLE;
-  other.depthStencilTargetAllocation = VK_NULL_HANDLE;
-  other.depthStencilTargetView = VK_NULL_HANDLE;
 
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface
@@ -531,30 +512,18 @@ operator=(Surface&& rhs) noexcept {
   swapchain = rhs.swapchain;
   colorImages = std::move(rhs.colorImages);
   colorImageViews = std::move(rhs.colorImageViews);
-  depthStencilImage = rhs.depthStencilImage;
-  depthStencilImageAllocation = rhs.depthStencilImageAllocation;
-  depthStencilImageView = rhs.depthStencilImageView;
-  colorTarget = rhs.colorTarget;
-  colorTargetAllocation = rhs.colorTargetAllocation;
-  colorTargetView = rhs.colorTargetView;
-  depthStencilTarget = rhs.depthStencilTarget;
-  depthStencilTargetAllocation = rhs.depthStencilTargetAllocation;
-  depthStencilTargetView = rhs.depthStencilTargetView;
+  depthStencilImage = std::move(rhs.depthStencilImage);
+  depthStencilImageView = std::move(rhs.depthStencilImageView);
+  colorTarget = std::move(rhs.colorTarget);
+  colorTargetView = std::move(rhs.colorTargetView);
+  depthStencilTarget = std::move(rhs.depthStencilTarget);
+  depthStencilTargetView = std::move(rhs.depthStencilTargetView);
   framebuffers = std::move(rhs.framebuffers);
   currentImageIndex = (rhs.currentImageIndex);
 
   rhs.handle = VK_NULL_HANDLE;
   rhs.imageAvailable = VK_NULL_HANDLE;
   rhs.swapchain = VK_NULL_HANDLE;
-  rhs.depthStencilImage = VK_NULL_HANDLE;
-  rhs.depthStencilImageAllocation = VK_NULL_HANDLE;
-  rhs.depthStencilImageView = VK_NULL_HANDLE;
-  rhs.colorTarget = VK_NULL_HANDLE;
-  rhs.colorTargetAllocation = VK_NULL_HANDLE;
-  rhs.colorTargetView = VK_NULL_HANDLE;
-  rhs.depthStencilTarget = VK_NULL_HANDLE;
-  rhs.depthStencilTargetAllocation = VK_NULL_HANDLE;
-  rhs.depthStencilTargetView = VK_NULL_HANDLE;
 
   IRIS_LOG_LEAVE();
   return *this;
@@ -575,15 +544,6 @@ void iris::Renderer::Surface::Release() noexcept {
   for (auto&& framebuffer : framebuffers) {
     vkDestroyFramebuffer(sDevice, framebuffer, nullptr);
   }
-
-  vkDestroyImageView(sDevice, depthStencilTargetView, nullptr);
-  vmaDestroyImage(sAllocator, depthStencilTarget, depthStencilTargetAllocation);
-
-  vkDestroyImageView(sDevice, colorTargetView, nullptr);
-  vmaDestroyImage(sAllocator, colorTarget, colorTargetAllocation);
-
-  vkDestroyImageView(sDevice, depthStencilImageView, nullptr);
-  vmaDestroyImage(sAllocator, depthStencilImage, depthStencilImageAllocation);
 
   for (auto&& imageView : colorImageViews) {
     vkDestroyImageView(sDevice, imageView, nullptr);

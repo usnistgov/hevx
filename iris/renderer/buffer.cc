@@ -24,7 +24,7 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
     allocationCI.pUserData = name.data();
   }
 
-  result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &buffer.buffer,
+  result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &buffer.handle,
                            &buffer.allocation, nullptr);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
@@ -33,7 +33,7 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
   }
 
   if (!name.empty()) {
-    NameObject(VK_OBJECT_TYPE_BUFFER, buffer.buffer, name.c_str());
+    NameObject(VK_OBJECT_TYPE_BUFFER, buffer.handle, name.c_str());
   }
 
   buffer.size = size;
@@ -45,10 +45,10 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
 
 iris::Renderer::Buffer::Buffer(Buffer&& other) noexcept
   : size(other.size)
-  , buffer(other.buffer)
+  , handle(other.handle)
   , allocation(other.allocation)
   , name(std::move(other.name)) {
-  other.buffer = VK_NULL_HANDLE;
+  other.handle = VK_NULL_HANDLE;
   other.allocation = VK_NULL_HANDLE;
 } // iris::Renderer::Buffer::Buffer
 
@@ -56,21 +56,21 @@ iris::Renderer::Buffer& iris::Renderer::Buffer::operator=(Buffer&& rhs) noexcept
   if (this == &rhs) return *this;
 
   size = rhs.size;
-  buffer = rhs.buffer;
+  handle = rhs.handle;
   allocation = rhs.allocation;
   name = std::move(rhs.name);
 
-  rhs.buffer = VK_NULL_HANDLE;
+  rhs.handle = VK_NULL_HANDLE;
   rhs.allocation = VK_NULL_HANDLE;
 
   return *this;
 } // iris::Renderer::Buffer::operator=
 
 iris::Renderer::Buffer::~Buffer() noexcept {
-  if (buffer == VK_NULL_HANDLE || allocation == VK_NULL_HANDLE) return;
+  if (handle == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
 
-  vmaDestroyBuffer(sAllocator, buffer, allocation);
+  vmaDestroyBuffer(sAllocator, handle, allocation);
 
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Buffer::~Buffer

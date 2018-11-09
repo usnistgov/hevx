@@ -99,21 +99,20 @@ iris::Renderer::UI::Create() noexcept {
   int width, height, bytes_per_pixel;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytes_per_pixel);
 
-  if (auto ti = CreateImageFromMemory(
+  if (auto ti = Image::CreateFromMemory(
         VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
         {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height),
          1},
         VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY, pixels,
         bytes_per_pixel)) {
-    std::tie(ui.fontImage, ui.fontImageAllocation) = *ti;
+    ui.fontImage = std::move(*ti);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ti.error());
   }
 
-  if (auto tv = CreateImageView(ui.fontImage, VK_FORMAT_R8G8B8A8_UNORM,
-                                VK_IMAGE_VIEW_TYPE_2D,
-                                {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+  if (auto tv = ui.fontImage.CreateImageView(
+        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     ui.fontImageView = std::move(*tv);
   } else {
     IRIS_LOG_LEAVE();
@@ -363,7 +362,6 @@ iris::Renderer::UI::Create() noexcept {
   vkDestroyShaderModule(sDevice, fragmentShader, nullptr);
   vkDestroyShaderModule(sDevice, vertexShader, nullptr);
 
-  //NameObject(VK_OBJECT_TYPE_IMAGE, ui.fontImage, "ui::fontImage");
   //NameObject(VK_OBJECT_TYPE_SAMPLER, ui.fontImageSampler,
              //"ui::fontImageSampler");
   //NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sDescriptorSetLayout,
@@ -382,9 +380,8 @@ iris::Renderer::UI::Create() noexcept {
 iris::Renderer::UI::UI(UI&& other) noexcept
   : commandBuffers(std::move(other.commandBuffers))
   , commandBufferIndex(other.commandBufferIndex)
-  , fontImage(other.fontImage)
-  , fontImageAllocation(other.fontImageAllocation)
-  , fontImageView(other.fontImageView)
+  , fontImage(std::move(other.fontImage))
+  , fontImageView(std::move(other.fontImageView))
   , fontImageSampler(other.fontImageSampler)
   , vertexBuffer(std::move(other.vertexBuffer))
   , indexBuffer(std::move(other.indexBuffer))
@@ -393,9 +390,6 @@ iris::Renderer::UI::UI(UI&& other) noexcept
   , pipelineLayout(other.pipelineLayout)
   , pipeline(other.pipeline)
   , context(std::move(other.context)) {
-  other.fontImage = VK_NULL_HANDLE;
-  other.fontImageAllocation = VK_NULL_HANDLE;
-  other.fontImageView = VK_NULL_HANDLE;
   other.fontImageSampler = VK_NULL_HANDLE;
   other.descriptorSetLayout = VK_NULL_HANDLE;
   other.pipelineLayout = VK_NULL_HANDLE;
@@ -407,9 +401,8 @@ iris::Renderer::UI& iris::Renderer::UI::operator=(UI&& rhs) noexcept {
 
   commandBuffers = std::move(rhs.commandBuffers);
   commandBufferIndex = rhs.commandBufferIndex;
-  fontImage = rhs.fontImage;
-  fontImageAllocation = rhs.fontImageAllocation;
-  fontImageView = rhs.fontImageView;
+  fontImage = std::move(rhs.fontImage);
+  fontImageView = std::move(rhs.fontImageView);
   fontImageSampler = rhs.fontImageSampler;
   vertexBuffer = std::move(rhs.vertexBuffer);
   indexBuffer = std::move(rhs.indexBuffer);
@@ -419,9 +412,6 @@ iris::Renderer::UI& iris::Renderer::UI::operator=(UI&& rhs) noexcept {
   pipeline = rhs.pipeline;
   context = std::move(rhs.context);
 
-  rhs.fontImage = VK_NULL_HANDLE;
-  rhs.fontImageAllocation = VK_NULL_HANDLE;
-  rhs.fontImageView = VK_NULL_HANDLE;
   rhs.fontImageSampler = VK_NULL_HANDLE;
   rhs.descriptorSetLayout = VK_NULL_HANDLE;
   rhs.pipelineLayout = VK_NULL_HANDLE;
@@ -439,8 +429,6 @@ iris::Renderer::UI::~UI() noexcept {
   vkDestroyPipelineLayout(sDevice, pipelineLayout, nullptr);
   vkDestroyDescriptorSetLayout(sDevice, descriptorSetLayout, nullptr);
   vkDestroySampler(sDevice, fontImageSampler, nullptr);
-  vkDestroyImageView(sDevice, fontImageView, nullptr);
-  vmaDestroyImage(sAllocator, fontImage, fontImageAllocation);
 
   IRIS_LOG_LEAVE();
 } // iris::Renderer::UI::~UI

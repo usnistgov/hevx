@@ -3,6 +3,7 @@
 
 #include "glm/glm.hpp"
 #include "renderer/buffer.h"
+#include "renderer/image.h"
 #include "renderer/impl.h"
 #include "imgui.h"
 #include "tl/expected.hpp"
@@ -22,9 +23,8 @@ struct UI {
 
   std::vector<VkCommandBuffer> commandBuffers{};
   std::uint32_t commandBufferIndex{0};
-  VkImage fontImage{VK_NULL_HANDLE};
-  VmaAllocation fontImageAllocation{VK_NULL_HANDLE};
-  VkImageView fontImageView{VK_NULL_HANDLE};
+  Image fontImage{};
+  ImageView fontImageView{};
   VkSampler fontImageSampler{VK_NULL_HANDLE};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};

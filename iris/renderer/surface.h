@@ -1,10 +1,11 @@
 #ifndef HEV_IRIS_RENDERER_SURFACE_H_
 #define HEV_IRIS_RENDERER_SURFACE_H_
 
+#include "glm/vec4.hpp"
+#include "iris/renderer/image.h"
 #include "iris/renderer/vulkan.h"
 #include "iris/wsi/window.h"
 #include "tl/expected.hpp"
-#include "glm/vec4.hpp"
 #include <system_error>
 #include <vector>
 
@@ -29,17 +30,14 @@ struct Surface {
   std::vector<VkImage> colorImages{};
   std::vector<VkImageView> colorImageViews{};
 
-  VkImage depthStencilImage{VK_NULL_HANDLE};
-  VmaAllocation depthStencilImageAllocation{VK_NULL_HANDLE};
-  VkImageView depthStencilImageView{VK_NULL_HANDLE};
+  Image depthStencilImage{};
+  ImageView depthStencilImageView{};
 
-  VkImage colorTarget{VK_NULL_HANDLE};
-  VmaAllocation colorTargetAllocation{VK_NULL_HANDLE};
-  VkImageView colorTargetView{VK_NULL_HANDLE};
+  Image colorTarget{};
+  ImageView colorTargetView{};
 
-  VkImage depthStencilTarget{VK_NULL_HANDLE};
-  VmaAllocation depthStencilTargetAllocation{VK_NULL_HANDLE};
-  VkImageView depthStencilTargetView{VK_NULL_HANDLE};
+  Image depthStencilTarget{};
+  ImageView depthStencilTargetView{};
 
   std::vector<VkFramebuffer> framebuffers{};
 

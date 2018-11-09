@@ -1,50 +1,87 @@
 #include "renderer/image.h"
+#include "logging.h"
 #include "renderer/buffer.h"
 #include "renderer/impl.h"
-#include "logging.h"
 
-tl::expected<VkImageView, std::system_error>
-iris::Renderer::CreateImageView(VkImage image, VkFormat format,
-                                VkImageViewType viewType,
-                                VkImageSubresourceRange imageSubresourceRange,
-                                VkComponentMapping componentMapping) noexcept {
+tl::expected<iris::Renderer::ImageView, std::system_error>
+iris::Renderer::ImageView::Create(
+  VkImage image, VkFormat format, VkImageViewType type,
+  VkImageSubresourceRange imageSubresourceRange, std::string name,
+  VkComponentMapping componentMapping) noexcept {
   IRIS_LOG_ENTER();
+  ImageView view;
   VkResult result;
 
   VkImageViewCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   ci.image = image;
-  ci.viewType = viewType;
+  ci.viewType = type;
   ci.format = format;
   ci.components = componentMapping;
   ci.subresourceRange = imageSubresourceRange;
 
-  VkImageView imageView;
-  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
+  result = vkCreateImageView(sDevice, &ci, nullptr, &view.handle);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image view"));
   }
 
-  IRIS_LOG_LEAVE();
-  return imageView;
-} // iris::Renderer::CreateImageAndView
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, view.handle, name.c_str());
+  }
 
-tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::system_error>
-iris::Renderer::CreateImageAndView(
-  VkImageType imageType, VkFormat format, VkExtent3D extent,
-  std::uint32_t mipLevels, std::uint32_t arrayLayers,
-  VkSampleCountFlagBits samples, VkImageUsageFlags usage,
-  VmaMemoryUsage memoryUsage, VkImageViewType viewType,
-  VkImageSubresourceRange imageSubresourceRange,
-  VkComponentMapping componentMapping) noexcept {
+  view.name = std::move(name);
+
+  IRIS_LOG_LEAVE();
+  return std::move(view);
+} // iris::Renderer::ImageView::Create
+
+iris::Renderer::ImageView::ImageView(ImageView&& other) noexcept
+  : type(other.type)
+  , format(other.format)
+  , handle(other.handle)
+  , name(std::move(other.name)) {
+  other.handle = VK_NULL_HANDLE;
+} // iris::Renderer::ImageView::ImageView
+
+iris::Renderer::ImageView& iris::Renderer::ImageView::operator=(ImageView&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  type = rhs.type;
+  format = rhs.format;
+  handle = rhs.handle;
+  name = std::move(rhs.name);
+
+  rhs.handle = VK_NULL_HANDLE;
+
+  return *this;
+} // iris::Renderer::ImageView::operator=
+
+iris::Renderer::ImageView::~ImageView() noexcept {
+  if (handle == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
+
+  vkDestroyImageView(sDevice, handle, nullptr);
+
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::ImageView::~ImageView
+
+tl::expected<iris::Renderer::Image, std::system_error>
+iris::Renderer::Image::Create(VkImageType type, VkFormat format,
+                              VkExtent3D extent, std::uint32_t mipLevels,
+                              std::uint32_t arrayLayers,
+                              VkSampleCountFlagBits samples,
+                              VkImageUsageFlags usage,
+                              VmaMemoryUsage memoryUsage,
+                              std::string name) noexcept {
+  IRIS_LOG_ENTER();
+  Image image;
   VkResult result;
 
   VkImageCreateInfo ici = {};
   ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  ici.imageType = imageType;
+  ici.imageType = type;
   ici.format = format;
   ici.extent = extent;
   ici.mipLevels = mipLevels;
@@ -55,39 +92,43 @@ iris::Renderer::CreateImageAndView(
   ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-  VmaAllocationCreateInfo aci = {};
-  aci.usage = memoryUsage;
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = memoryUsage;
 
-  VkImage image;
-  VmaAllocation allocation;
+  if (!name.empty()) {
+    allocationCI.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
+    allocationCI.pUserData = name.data();
+  }
 
-  result = vmaCreateImage(sAllocator, &ici, &aci, &image, &allocation, nullptr);
+  result = vmaCreateImage(sAllocator, &ici, &allocationCI, &image.handle,
+                          &image.allocation, nullptr);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot create or allocate image"));
   }
 
-  auto view = CreateImageView(image, format, viewType, imageSubresourceRange,
-                              componentMapping);
-  IRIS_LOG_LEAVE();
-  if (view) {
-    return std::make_tuple(image, allocation, *view);
-  } else {
-    return tl::unexpected(view.error());
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_IMAGE, image.handle, name.c_str());
   }
-} // iris::Renderer::CreateImageAndView
 
-tl::expected<std::pair<VkImage, VmaAllocation>, std::system_error>
-iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
-                                      VkExtent3D extent,
-                                      VkImageUsageFlags usage,
-                                      VmaMemoryUsage memoryUsage,
-                                      unsigned char* pixels,
-                                      std::uint32_t bytes_per_pixel) noexcept {
+  image.type = type;
+  image.format = format;
+  image.name = std::move(name);
+
+  IRIS_LOG_LEAVE();
+  return std::move(image);
+} // iris::Renderer::Image::Create
+
+tl::expected<iris::Renderer::Image, std::system_error>
+iris::Renderer::Image::CreateFromMemory(
+  VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
+  VmaMemoryUsage memoryUsage, unsigned char* pixels,
+  std::uint32_t bytes_per_pixel, std::string name) noexcept {
   IRIS_LOG_ENTER();
-
   VkResult result;
+
+  Image image;
   VkDeviceSize imageSize;
 
   switch(format) {
@@ -137,7 +178,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
 
   VkImageCreateInfo imageCI = {};
   imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  imageCI.imageType = imageType;
+  imageCI.imageType = type;
   imageCI.format = format;
   imageCI.extent = extent;
   imageCI.mipLevels = 1;
@@ -151,18 +192,21 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   VmaAllocationCreateInfo allocationCI = {};
   allocationCI.usage = memoryUsage;
 
-  VkImage image;
-  VmaAllocation allocation;
-  result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image,
-                          &allocation, nullptr);
+  if (!name.empty()) {
+    allocationCI.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
+    allocationCI.pUserData = name.data();
+  }
+
+  result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image.handle,
+                          &image.allocation, nullptr);
   if (result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
-  if (auto noret = TransitionImage(image, VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  if (auto noret = image.Transition(VK_IMAGE_LAYOUT_UNDEFINED,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
       !noret) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(noret.error());
@@ -184,7 +228,7 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
   region.imageOffset = {0, 0, 0};
   region.imageExtent = extent;
 
-  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.buffer, image,
+  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image.handle,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
@@ -192,22 +236,31 @@ iris::Renderer::CreateImageFromMemory(VkImageType imageType, VkFormat format,
     return tl::unexpected(noret.error());
   }
 
-  if (auto noret = TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
-                                      ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                      : VK_IMAGE_LAYOUT_GENERAL));
+  if (auto noret =
+        image.Transition(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
+                            ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                            : VK_IMAGE_LAYOUT_GENERAL));
       !noret) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(noret.error());
   }
 
-  IRIS_LOG_LEAVE();
-  return std::make_pair(image, allocation);
-} // iris::Renderer::CreateImageFromMemory
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_IMAGE, image.handle, name.c_str());
+  }
 
-tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
-  VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
-  std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept {
+  image.type = type;
+  image.format = format;
+  image.name = std::move(name);
+
+  IRIS_LOG_LEAVE();
+  return std::move(image);
+} // iris::Renderer::Image::CreateFromMemory
+
+tl::expected<void, std::system_error> iris::Renderer::Image::Transition(
+  VkImageLayout oldLayout, VkImageLayout newLayout, std::uint32_t mipLevels,
+  std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
 
   VkImageMemoryBarrier barrier = {};
@@ -216,7 +269,7 @@ tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
   barrier.newLayout = newLayout;
   barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = image;
+  barrier.image = handle;
   barrier.subresourceRange.baseMipLevel = 0;
   barrier.subresourceRange.levelCount = mipLevels;
   barrier.subresourceRange.baseArrayLayer = 0;
@@ -281,5 +334,67 @@ tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
 
   IRIS_LOG_LEAVE();
   return {};
-} // iris::Renderer::TransitionImage
+} // iris::Renderer::Image::Transition
+
+iris::Renderer::Image::Image(Image&& other) noexcept
+  : type(other.type)
+  , format(other.format)
+  , handle(other.handle)
+  , allocation(other.allocation)
+  , name(std::move(other.name)) {
+  other.handle = VK_NULL_HANDLE;
+  other.allocation = VK_NULL_HANDLE;
+} // iris::Renderer::Image::Image
+
+iris::Renderer::Image& iris::Renderer::Image::operator=(Image&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  type = rhs.type;
+  format = rhs.format;
+  handle = rhs.handle;
+  allocation = rhs.allocation;
+  name = std::move(rhs.name);
+
+  rhs.handle = VK_NULL_HANDLE;
+  rhs.allocation = VK_NULL_HANDLE;
+
+  return *this;
+} // iris::Renderer::Image::operator=
+
+iris::Renderer::Image::~Image() noexcept {
+  if (handle == VK_NULL_HANDLE) return;
+  IRIS_LOG_ENTER();
+
+  vmaDestroyImage(sAllocator, handle, allocation);
+
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::Image::~Image
+
+tl::expected<VkImageView, std::system_error>
+iris::Renderer::CreateImageView(VkImage image, VkFormat format,
+                                VkImageViewType type,
+                                VkImageSubresourceRange imageSubresourceRange,
+                                VkComponentMapping componentMapping) noexcept {
+  IRIS_LOG_ENTER();
+  VkResult result;
+
+  VkImageViewCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  ci.image = image;
+  ci.viewType = type;
+  ci.format = format;
+  ci.components = componentMapping;
+  ci.subresourceRange = imageSubresourceRange;
+
+  VkImageView imageView;
+  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
+  if (result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image view"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return imageView;
+} // iris::Renderer::CreateImageView
 

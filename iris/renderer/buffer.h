@@ -13,8 +13,11 @@ struct Buffer {
          VmaMemoryUsage memoryUsage, std::string name = {}) noexcept;
 
   VkDeviceSize size{0};
-  VkBuffer buffer{VK_NULL_HANDLE};
+  VkBuffer handle{VK_NULL_HANDLE};
   VmaAllocation allocation{VK_NULL_HANDLE};
+
+  operator VkBuffer() const noexcept { return handle; }
+  VkBuffer* get() noexcept { return &handle; }
 
   template <class T>
   tl::expected<T, std::system_error> Map() noexcept {
