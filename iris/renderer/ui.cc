@@ -189,7 +189,7 @@ iris::Renderer::UI::Create() noexcept {
                                    1, VK_SHADER_STAGE_FRAGMENT_BIT,
                                    ui.fontImageSampler.get()};
 
-  if (auto d = DescriptorSet::Create(descriptorSetLayoutBinding,
+  if (auto d = DescriptorSets::Create(descriptorSetLayoutBinding,
                                      "ui::descriptorSet")) {
     ui.descriptorSet = std::move(*d);
   } else {

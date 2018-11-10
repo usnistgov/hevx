@@ -1,13 +1,13 @@
-#include "renderer/descriptor_set.h"
+#include "renderer/descriptor_sets.h"
 #include "logging.h"
 
-tl::expected<iris::Renderer::DescriptorSet, std::system_error>
-iris::Renderer::DescriptorSet::Create(
+tl::expected<iris::Renderer::DescriptorSets, std::system_error>
+iris::Renderer::DescriptorSets::Create(
   gsl::span<VkDescriptorSetLayoutBinding> bindings, std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
-  DescriptorSet descriptorSet(bindings.size());
+  DescriptorSets descriptorSet(bindings.size());
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
   descriptorSetLayoutCI.sType =
@@ -51,9 +51,9 @@ iris::Renderer::DescriptorSet::Create(
   Ensures(descriptorSet.layout != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(descriptorSet);
-} // iris::Renderer::DescriptorSet::Create
+} // iris::Renderer::DescriptorSets::Create
 
-iris::Renderer::DescriptorSet::DescriptorSet(DescriptorSet&& other) noexcept
+iris::Renderer::DescriptorSets::DescriptorSets(DescriptorSets&& other) noexcept
   : layout(other.layout)
   , sets(other.sets.size())
   , name(std::move(other.name)) {
@@ -62,10 +62,10 @@ iris::Renderer::DescriptorSet::DescriptorSet(DescriptorSet&& other) noexcept
   }
 
   other.layout = VK_NULL_HANDLE;
-} // iris::Renderer::DescriptorSet::DescriptorSet
+} // iris::Renderer::DescriptorSets::DescriptorSets
 
-iris::Renderer::DescriptorSet& iris::Renderer::DescriptorSet::
-operator=(DescriptorSet&& rhs) noexcept {
+iris::Renderer::DescriptorSets& iris::Renderer::DescriptorSets::
+operator=(DescriptorSets&& rhs) noexcept {
   if (this == &rhs) return *this;
   Expects(sets.size() == rhs.sets.size());
 
@@ -76,9 +76,9 @@ operator=(DescriptorSet&& rhs) noexcept {
   rhs.layout = VK_NULL_HANDLE;
 
   return *this;
-} // iris::Renderer::DescriptorSet::operator=
+} // iris::Renderer::DescriptorSets::operator=
 
-iris::Renderer::DescriptorSet::~DescriptorSet() noexcept {
+iris::Renderer::DescriptorSets::~DescriptorSets() noexcept {
   if (layout == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
 

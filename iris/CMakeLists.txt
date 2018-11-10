@@ -97,7 +97,7 @@ set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   renderer/buffer.cc
   renderer/command_buffers.cc
-  renderer/descriptor_set.cc
+  renderer/descriptor_sets.cc
   renderer/image.cc
   renderer/io.cc
   renderer/pipeline.cc

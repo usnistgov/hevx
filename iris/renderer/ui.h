@@ -1,12 +1,11 @@
 #ifndef HEV_IRIS_RENDERER_UI_H_
 #define HEV_IRIS_RENDERER_UI_H_
 
-#include "absl/container/inlined_vector.h"
 #include "glm/glm.hpp"
 #include "imgui.h"
 #include "iris/renderer/buffer.h"
 #include "iris/renderer/command_buffers.h"
-#include "iris/renderer/descriptor_set.h"
+#include "iris/renderer/descriptor_sets.h"
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
 #include "iris/renderer/pipeline.h"
@@ -34,7 +33,7 @@ struct UI {
   Sampler fontImageSampler{};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
-  DescriptorSet descriptorSet;
+  DescriptorSets descriptorSet;
   Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
   TimePoint previousTime{};

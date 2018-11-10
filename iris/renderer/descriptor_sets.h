@@ -7,24 +7,24 @@
 
 namespace iris::Renderer {
 
-struct DescriptorSet {
-  static tl::expected<DescriptorSet, std::system_error>
+struct DescriptorSets {
+  static tl::expected<DescriptorSets, std::system_error>
   Create(gsl::span<VkDescriptorSetLayoutBinding> bindings,
          std::string name = {}) noexcept;
 
   VkDescriptorSetLayout layout{VK_NULL_HANDLE};
   absl::FixedArray<VkDescriptorSet> sets;
 
-  DescriptorSet(std::size_t count) noexcept : sets(count) {}
-  DescriptorSet(DescriptorSet const&) = delete;
-  DescriptorSet(DescriptorSet&& other) noexcept;
-  DescriptorSet& operator=(DescriptorSet const&) = delete;
-  DescriptorSet& operator=(DescriptorSet&& rhs) noexcept;
-  ~DescriptorSet() noexcept;
+  DescriptorSets(std::size_t count) noexcept : sets(count) {}
+  DescriptorSets(DescriptorSets const&) = delete;
+  DescriptorSets(DescriptorSets&& other) noexcept;
+  DescriptorSets& operator=(DescriptorSets const&) = delete;
+  DescriptorSets& operator=(DescriptorSets&& rhs) noexcept;
+  ~DescriptorSets() noexcept;
 
 private:
   std::string name;
-}; // struct DescriptorSet
+}; // struct DescriptorSets
 
 inline void UpdateDescriptorSets(
   gsl::span<VkWriteDescriptorSet> writeDescriptorSets,
