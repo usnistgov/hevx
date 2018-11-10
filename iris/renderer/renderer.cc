@@ -4,7 +4,6 @@
 #include "renderer/renderer.h"
 #include "absl/base/macros.h"
 #include "absl/container/fixed_array.h"
-#include "absl/container/inlined_vector.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -1623,17 +1622,24 @@ void iris::Renderer::EndFrame() noexcept {
   // 1. Go wide and build secondary command buffers
   //
 
-  absl::InlinedVector<VkSemaphore, 4> waitSemaphores;
-  absl::InlinedVector<VkSwapchainKHR, 4> swapchains;
-  absl::InlinedVector<std::uint32_t, 4> imageIndices;
+  //
+  // 2. For every window, begin rendering
+  //
 
+  std::size_t const numWindows = Windows().size();
+  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
+  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
+  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
+
+  std::size_t i = 0;
   for (auto&& iter : Windows()) {
     auto&& window = iter.second;
     auto&& surface = window.surface;
 
-    waitSemaphores.push_back(surface.imageAvailable);
-    swapchains.push_back(surface.swapchain);
-    imageIndices.push_back(surface.currentImageIndex);
+    waitSemaphores[i] = surface.imageAvailable;
+    swapchains[i] = surface.swapchain;
+    imageIndices[i] = surface.currentImageIndex;
+    i++;
 
     clearValues[sColorTargetAttachmentIndex].color = surface.clearColor;
     rbi.renderArea.extent = surface.extent;
@@ -1647,7 +1653,7 @@ void iris::Renderer::EndFrame() noexcept {
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
     //
-    // 2. Execute secondary command buffers
+    // 3. Execute secondary command buffers
     //
 
     if (auto wcb = window.EndFrame(rbi.framebuffer)) {
@@ -1658,7 +1664,7 @@ void iris::Renderer::EndFrame() noexcept {
     }
 
     //
-    // 3. Done rendering
+    // 4. Done rendering
     //
 
     vkCmdEndRenderPass(cb);
@@ -1674,10 +1680,8 @@ void iris::Renderer::EndFrame() noexcept {
   // semaphores and signaling a single frameFinished semaphore
   //
 
-  std::size_t const numWindows = Windows().size();
-  absl::FixedArray<VkPipelineStageFlags> waitDstStages(numWindows);
-  std::fill_n(waitDstStages.begin(), numWindows,
-              VK_PIPELINE_STAGE_TRANSFER_BIT);
+  absl::FixedArray<VkPipelineStageFlags> waitDstStages(
+    numWindows, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
   VkSubmitInfo si = {};
   si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

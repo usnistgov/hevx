@@ -24,19 +24,26 @@ struct UI {
   tl::expected<iris::Renderer::UI, std::system_error>
   static Create() noexcept;
 
-  CommandBuffers commandBuffers{};
+  static constexpr std::size_t const kNumCommandBuffers = 2;
+  static constexpr std::size_t const kNumDescriptorSets = 1;
+
+  CommandBuffers commandBuffers;
   std::uint32_t commandBufferIndex{0};
   Image fontImage{};
   ImageView fontImageView{};
   Sampler fontImageSampler{};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
-  DescriptorSet descriptorSet{};
+  DescriptorSet descriptorSet;
   Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
   TimePoint previousTime{};
 
-  UI() noexcept : context(nullptr, &ImGui::DestroyContext) {}
+  UI()
+  noexcept
+    : commandBuffers(kNumCommandBuffers)
+    , descriptorSet(kNumDescriptorSets)
+    , context(nullptr, &ImGui::DestroyContext) {}
 }; // struct UI
 
 } // namespace iris::Renderer

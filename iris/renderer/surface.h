@@ -47,8 +47,10 @@ struct Surface {
 
   VkSwapchainKHR swapchain{VK_NULL_HANDLE};
 
-  absl::InlinedVector<VkImage, 4> colorImages{};
-  absl::InlinedVector<ImageView, 4> colorImageViews{};
+  static constexpr size_t const kExpectedNumImages = 4;
+
+  absl::InlinedVector<VkImage, kExpectedNumImages> colorImages{};
+  absl::InlinedVector<ImageView, kExpectedNumImages> colorImageViews{};
 
   Image depthStencilImage{};
   ImageView depthStencilImageView{};
@@ -59,7 +61,7 @@ struct Surface {
   Image depthStencilTarget{};
   ImageView depthStencilTargetView{};
 
-  absl::InlinedVector<Framebuffer, 4> framebuffers{};
+  absl::InlinedVector<Framebuffer, kExpectedNumImages> framebuffers{};
 
   std::uint32_t currentImageIndex{UINT32_MAX};
 

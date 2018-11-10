@@ -12,10 +12,10 @@ struct DescriptorSet {
   Create(gsl::span<VkDescriptorSetLayoutBinding> bindings,
          std::string name = {}) noexcept;
 
-  VkDescriptorSetLayout layout;
-  absl::InlinedVector<VkDescriptorSet, 32> sets;
+  VkDescriptorSetLayout layout{VK_NULL_HANDLE};
+  absl::FixedArray<VkDescriptorSet> sets;
 
-  DescriptorSet() = default;
+  DescriptorSet(std::size_t count) noexcept : sets(count) {}
   DescriptorSet(DescriptorSet const&) = delete;
   DescriptorSet(DescriptorSet&& other) noexcept;
   DescriptorSet& operator=(DescriptorSet const&) = delete;

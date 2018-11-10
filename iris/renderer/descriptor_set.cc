@@ -7,8 +7,7 @@ iris::Renderer::DescriptorSet::Create(
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
-  DescriptorSet descriptorSet;
-  descriptorSet.sets.resize(bindings.size());
+  DescriptorSet descriptorSet(bindings.size());
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
   descriptorSetLayoutCI.sType =
@@ -56,17 +55,22 @@ iris::Renderer::DescriptorSet::Create(
 
 iris::Renderer::DescriptorSet::DescriptorSet(DescriptorSet&& other) noexcept
   : layout(other.layout)
-  , sets(std::move(other.sets))
+  , sets(other.sets.size())
   , name(std::move(other.name)) {
+  for (std::size_t i = 0; i < sets.size(); ++i) {
+    sets[i] = other.sets[i];
+  }
+
   other.layout = VK_NULL_HANDLE;
 } // iris::Renderer::DescriptorSet::DescriptorSet
 
 iris::Renderer::DescriptorSet& iris::Renderer::DescriptorSet::
 operator=(DescriptorSet&& rhs) noexcept {
   if (this == &rhs) return *this;
+  Expects(sets.size() == rhs.sets.size());
 
   layout = rhs.layout;
-  sets = std::move(rhs.sets);
+  for (std::size_t i = 0; i < sets.size(); ++i) sets[i] = rhs.sets[i];
   name = std::move(rhs.name);
 
   rhs.layout = VK_NULL_HANDLE;

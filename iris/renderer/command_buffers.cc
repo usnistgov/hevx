@@ -9,9 +9,8 @@ iris::Renderer::CommandBuffers::Allocate(VkCommandPool pool,
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(pool != VK_NULL_HANDLE);
 
-  CommandBuffers buffers;
+  CommandBuffers buffers(count);
   buffers.pool = pool;
-  buffers.buffers.resize(count);
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -34,31 +33,36 @@ iris::Renderer::CommandBuffers::Allocate(VkCommandPool pool,
 
 iris::Renderer::CommandBuffers::CommandBuffers(CommandBuffers&& other) noexcept
   : pool(other.pool)
-  , buffers(std::move(other.buffers)) {
-  other.buffers.clear();
+  , buffers(other.buffers.size())
+  , name(std::move(other.name)) {
+  for (std::size_t i = 0; i < buffers.size(); ++i) {
+    buffers[i] = other.buffers[i];
+  }
+
+  other.pool = VK_NULL_HANDLE;
 } // iris::Renderer::CommandBuffers::CommandBuffers
 
 iris::Renderer::CommandBuffers& iris::Renderer::CommandBuffers::
 operator=(CommandBuffers&& rhs) noexcept {
   if (this == &rhs) return *this;
+  Expects(buffers.size() == rhs.buffers.size());
 
   pool = rhs.pool;
-  buffers = std::move(rhs.buffers);
+  for (std::size_t i = 0; i < buffers.size(); ++i) buffers[i] = rhs.buffers[i];
+  name = std::move(rhs.name);
 
-  rhs.buffers.clear();
+  rhs.pool = VK_NULL_HANDLE;
 
   return *this;
 } // iris::Renderer::CommandBuffers::operator=
 
 iris::Renderer::CommandBuffers::~CommandBuffers() noexcept {
-  if (buffers.empty()) return;
+  if (pool == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
   vkFreeCommandBuffers(sDevice, pool,
                        gsl::narrow_cast<std::uint32_t>(buffers.size()),
                        buffers.data());
-  buffers.clear();
-
   IRIS_LOG_LEAVE();
 } // iris::Renderer::CommandBuffers::~CommandBuffers

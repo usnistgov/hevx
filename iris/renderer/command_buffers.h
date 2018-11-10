@@ -1,7 +1,7 @@
 #ifndef HEV_IRIS_RENDERER_COMMAND_BUFFERS_H_
 #define HEV_IRIS_RENDERER_COMMAND_BUFFERS_H_
 
-#include "absl/container/inlined_vector.h"
+#include "absl/container/fixed_array.h"
 #include "iris/renderer/impl.h"
 #include <system_error>
 
@@ -12,8 +12,8 @@ struct CommandBuffers {
     VkCommandPool pool, std::uint32_t count,
     VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) noexcept;
 
-  VkCommandPool pool;
-  absl::InlinedVector<VkCommandBuffer, 32> buffers;
+  VkCommandPool pool{VK_NULL_HANDLE};
+  absl::FixedArray<VkCommandBuffer> buffers;
 
   VkCommandBuffer operator[](std::size_t index) const noexcept {
     return buffers[index];
@@ -21,7 +21,7 @@ struct CommandBuffers {
 
   std::size_t size() const noexcept { return buffers.size(); }
 
-  CommandBuffers() = default;
+  CommandBuffers(std::size_t count) noexcept : buffers(count) {}
   CommandBuffers(CommandBuffers const&) = delete;
   CommandBuffers(CommandBuffers&& other) noexcept;
   CommandBuffers& operator=(CommandBuffers const&) = delete;
