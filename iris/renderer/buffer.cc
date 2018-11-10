@@ -7,7 +7,8 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
                                VmaMemoryUsage memoryUsage,
                                std::string name) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+
   Buffer buffer;
 
   VkBufferCreateInfo bufferCI = {};
@@ -23,9 +24,10 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
     allocationCI.pUserData = name.data();
   }
 
-  result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &buffer.handle,
-                           &buffer.allocation, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &buffer.handle,
+                        &buffer.allocation, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Error creating buffer"));
@@ -38,6 +40,7 @@ iris::Renderer::Buffer::Create(VkDeviceSize size,
   buffer.size = size;
   buffer.name = std::move(name);
 
+  Ensures(buffer.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(buffer);
 } // iris::Renderer::Buffer::Create

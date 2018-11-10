@@ -5,6 +5,8 @@ tl::expected<iris::Renderer::DescriptorSet, std::system_error>
 iris::Renderer::DescriptorSet::Create(
   gsl::span<VkDescriptorSetLayoutBinding> bindings, std::string name) noexcept {
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
   DescriptorSet descriptorSet;
   descriptorSet.sets.resize(bindings.size());
 
@@ -47,6 +49,7 @@ iris::Renderer::DescriptorSet::Create(
 
   descriptorSet.name = std::move(name);
 
+  Ensures(descriptorSet.layout != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(descriptorSet);
 } // iris::Renderer::DescriptorSet::Create

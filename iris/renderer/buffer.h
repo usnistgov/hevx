@@ -1,8 +1,7 @@
 #ifndef HEV_IRIS_RENDERER_BUFFER_H_
 #define HEV_IRIS_RENDERER_BUFFER_H_
 
-#include "renderer/impl.h"
-#include "tl/expected.hpp"
+#include "iris/renderer/impl.h"
 #include <system_error>
 
 namespace iris::Renderer {

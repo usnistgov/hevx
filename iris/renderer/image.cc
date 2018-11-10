@@ -1,7 +1,6 @@
 #include "renderer/image.h"
 #include "logging.h"
 #include "renderer/buffer.h"
-#include "renderer/impl.h"
 
 tl::expected<iris::Renderer::ImageView, std::system_error>
 iris::Renderer::ImageView::Create(
@@ -9,8 +8,10 @@ iris::Renderer::ImageView::Create(
   VkImageSubresourceRange imageSubresourceRange, std::string name,
   VkComponentMapping componentMapping) noexcept {
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(image != VK_NULL_HANDLE);
+
   ImageView view;
-  VkResult result;
 
   VkImageViewCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -20,8 +21,8 @@ iris::Renderer::ImageView::Create(
   ci.components = componentMapping;
   ci.subresourceRange = imageSubresourceRange;
 
-  result = vkCreateImageView(sDevice, &ci, nullptr, &view.handle);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateImageView(sDevice, &ci, nullptr, &view.handle);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image view"));
@@ -33,6 +34,7 @@ iris::Renderer::ImageView::Create(
 
   view.name = std::move(name);
 
+  Ensures(view.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(view);
 } // iris::Renderer::ImageView::Create
@@ -76,8 +78,9 @@ iris::Renderer::Image::Create(VkImageType type, VkFormat format,
                               VmaMemoryUsage memoryUsage,
                               std::string name) noexcept {
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
   Image image;
-  VkResult result;
 
   VkImageCreateInfo ici = {};
   ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -100,9 +103,9 @@ iris::Renderer::Image::Create(VkImageType type, VkFormat format,
     allocationCI.pUserData = name.data();
   }
 
-  result = vmaCreateImage(sAllocator, &ici, &allocationCI, &image.handle,
-                          &image.allocation, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vmaCreateImage(sAllocator, &ici, &allocationCI,
+                                   &image.handle, &image.allocation, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot create or allocate image"));
@@ -116,6 +119,7 @@ iris::Renderer::Image::Create(VkImageType type, VkFormat format,
   image.format = format;
   image.name = std::move(name);
 
+  Ensures(image.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(image);
 } // iris::Renderer::Image::Create
@@ -123,10 +127,10 @@ iris::Renderer::Image::Create(VkImageType type, VkFormat format,
 tl::expected<iris::Renderer::Image, std::system_error>
 iris::Renderer::Image::CreateFromMemory(
   VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
-  VmaMemoryUsage memoryUsage, unsigned char* pixels,
+  VmaMemoryUsage memoryUsage, gsl::not_null<unsigned char*> pixels,
   std::uint32_t bytes_per_pixel, std::string name) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
 
   Image image;
   VkDeviceSize imageSize;
@@ -199,9 +203,9 @@ iris::Renderer::Image::CreateFromMemory(
     allocationCI.pUserData = name.data();
   }
 
-  result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image.handle,
-                          &image.allocation, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vmaCreateImage(sAllocator, &imageCI, &allocationCI,
+                                   &image.handle, &image.allocation, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
@@ -256,6 +260,7 @@ iris::Renderer::Image::CreateFromMemory(
   image.format = format;
   image.name = std::move(name);
 
+  Ensures(image.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(image);
 } // iris::Renderer::Image::CreateFromMemory
@@ -264,6 +269,8 @@ tl::expected<void, std::system_error> iris::Renderer::Image::Transition(
   VkImageLayout oldLayout, VkImageLayout newLayout, std::uint32_t mipLevels,
   std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(handle != VK_NULL_HANDLE);
 
   VkImageMemoryBarrier barrier = {};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;

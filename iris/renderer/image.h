@@ -1,8 +1,7 @@
 #ifndef HEV_IRIS_RENDERER_IMAGE_H_
 #define HEV_IRIS_RENDERER_IMAGE_H_
 
-#include "renderer/vulkan.h"
-#include "tl/expected.hpp"
+#include "iris/renderer/impl.h"
 #include <cstdint>
 #include <string>
 #include <system_error>
@@ -44,7 +43,8 @@ struct Image {
   static tl::expected<Image, std::system_error>
   CreateFromMemory(VkImageType imageType, VkFormat format, VkExtent3D extent,
                    VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
-                   unsigned char* pixels, std::uint32_t bytes_per_pixel,
+                   gsl::not_null<unsigned char*> pixels,
+                   std::uint32_t bytes_per_pixel,
                    std::string name = {}) noexcept;
 
   tl::expected<ImageView, std::system_error> CreateImageView(
