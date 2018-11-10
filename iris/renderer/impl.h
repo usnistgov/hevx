@@ -34,14 +34,8 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
 
+extern VkCommandPool sGraphicsCommandPool;
 extern VkDescriptorPool sDescriptorPool;
-
-tl::expected<std::vector<VkCommandBuffer>, std::system_error>
-AllocateCommandBuffers(
-  std::uint32_t count,
-  VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) noexcept;
-
-void FreeCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers) noexcept;
 
 tl::expected<VkCommandBuffer, std::system_error> BeginOneTimeSubmit() noexcept;
 

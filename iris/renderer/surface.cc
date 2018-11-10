@@ -358,7 +358,7 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
     return {make_error_code(result), "Cannot get swapchain images"};
   }
 
-  std::vector<VkImage> newColorImages(numSwapchainImages);
+  decltype(colorImages) newColorImages(numSwapchainImages);
   if (auto result = vkGetSwapchainImagesKHR(
         sDevice, newSwapchain, &numSwapchainImages, newColorImages.data());
       result != VK_SUCCESS) {
@@ -367,7 +367,7 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
     return {make_error_code(result), "Cannot get swapchain images"};
   }
 
-  std::vector<ImageView> newColorImageViews(numSwapchainImages);
+  decltype(colorImageViews) newColorImageViews(numSwapchainImages);
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
     if (auto view = ImageView::Create(
           newColorImages[i], sSurfaceColorFormat.format, VK_IMAGE_VIEW_TYPE_2D,
@@ -471,7 +471,7 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
   attachments[sDepthStencilTargetAttachmentIndex] = newDepthStencilTargetView;
   attachments[sDepthStencilResolveAttachmentIndex] = newDepthStencilImageView;
 
-  std::vector<Framebuffer> newFramebuffers(numSwapchainImages);
+  decltype(framebuffers) newFramebuffers(numSwapchainImages);
   for (std::uint32_t i = 0; i < numSwapchainImages; ++i) {
     attachments[sColorResolveAttachmentIndex] = newColorImageViews[i];
     if (auto fb = Framebuffer::Create(attachments, newExtent)) {
@@ -527,19 +527,14 @@ iris::Renderer::Surface::Surface(Surface&& other) noexcept
   , depthStencilTargetView(std::move(other.depthStencilTargetView))
   , framebuffers(std::move(other.framebuffers))
   , currentImageIndex(other.currentImageIndex) {
-  IRIS_LOG_ENTER();
-
   other.handle = VK_NULL_HANDLE;
   other.imageAvailable = VK_NULL_HANDLE;
   other.swapchain = VK_NULL_HANDLE;
-
-  IRIS_LOG_LEAVE();
 } // iris::Renderer::Surface
 
 iris::Renderer::Surface& iris::Renderer::Surface::
 operator=(Surface&& rhs) noexcept {
   if (this == &rhs) return *this;
-  IRIS_LOG_ENTER();
 
   handle = rhs.handle;
   imageAvailable = rhs.imageAvailable;
@@ -563,7 +558,6 @@ operator=(Surface&& rhs) noexcept {
   rhs.imageAvailable = VK_NULL_HANDLE;
   rhs.swapchain = VK_NULL_HANDLE;
 
-  IRIS_LOG_LEAVE();
   return *this;
 } // iris::Renderer::Surface::operator=
 

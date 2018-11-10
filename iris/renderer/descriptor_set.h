@@ -1,10 +1,9 @@
 #ifndef HEV_IRIS_RENDERER_DESCRIPTOR_SET_H_
 #define HEV_IRIS_RENDERER_DESCRIPTOR_SET_H_
 
+#include "absl/container/inlined_vector.h"
 #include "renderer/impl.h"
-#include "tl/expected.hpp"
 #include <system_error>
-#include <vector>
 
 namespace iris::Renderer {
 
@@ -14,7 +13,7 @@ struct DescriptorSet {
          std::string name = {}) noexcept;
 
   VkDescriptorSetLayout layout;
-  std::vector<VkDescriptorSet> sets;
+  absl::InlinedVector<VkDescriptorSet, 32> sets;
 
   DescriptorSet() = default;
   DescriptorSet(DescriptorSet const&) = delete;

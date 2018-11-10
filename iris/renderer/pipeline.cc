@@ -137,7 +137,7 @@ operator=(Pipeline&& rhs) noexcept {
 }
 
 iris::Renderer::Pipeline::~Pipeline() noexcept {
-  if (layout != VK_NULL_HANDLE && handle != VK_NULL_HANDLE) return;
+  if (layout == VK_NULL_HANDLE && handle == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 

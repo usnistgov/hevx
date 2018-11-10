@@ -111,6 +111,7 @@ iris::wsi::Window::Window(Window&&) noexcept = default;
 iris::wsi::Window& iris::wsi::Window::operator=(Window&&) noexcept = default;
 
 iris::wsi::Window::~Window() noexcept {
+  if (!pImpl_) return;
   IRIS_LOG_ENTER();
   IRIS_LOG_LEAVE();
 }

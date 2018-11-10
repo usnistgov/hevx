@@ -62,15 +62,14 @@ void iris::Renderer::Window::Close() noexcept {
   Renderer::Terminate();
 } // iris::Renderer::Window::Close
 
-tl::expected<void, std::system_error>
-iris::Renderer::Window::BeginFrame() noexcept {
+std::system_error iris::Renderer::Window::BeginFrame() noexcept {
   window.PollEvents();
 
   if (resized) {
     auto const extent = window.Extent();
     if (auto error = surface.Resize({extent.width, extent.height});
         error.code()) {
-      return tl::unexpected(error);
+      return error;
     }
     resized = false;
   }
@@ -110,7 +109,7 @@ iris::Renderer::Window::BeginFrame() noexcept {
   io.DisplayFramebufferScale = {0.f, 0.f};
 
   ImGui::NewFrame();
-  return {};
+  return {Error::kNone};
 } // iris::Renderer::Window::BeginFrame
 
 tl::expected<VkCommandBuffer, std::system_error>
@@ -193,6 +192,7 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   clearValues[sColorTargetAttachmentIndex].color = {{0, 0, 0, 0}};
   clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
 
+  GetLogger()->flush();
   ui.commandBufferIndex =
     (ui.commandBufferIndex + 1) % ui.commandBuffers.size();
   auto&& cb = ui.commandBuffers[ui.commandBufferIndex];

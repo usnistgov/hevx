@@ -1,9 +1,11 @@
 #ifndef HEV_IRIS_RENDERER_UI_H_
 #define HEV_IRIS_RENDERER_UI_H_
 
+#include "absl/container/inlined_vector.h"
 #include "glm/glm.hpp"
 #include "imgui.h"
 #include "iris/renderer/buffer.h"
+#include "iris/renderer/command_buffers.h"
 #include "iris/renderer/descriptor_set.h"
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
@@ -22,7 +24,7 @@ struct UI {
   tl::expected<iris::Renderer::UI, std::system_error>
   static Create() noexcept;
 
-  std::vector<VkCommandBuffer> commandBuffers{};
+  CommandBuffers commandBuffers{};
   std::uint32_t commandBufferIndex{0};
   Image fontImage{};
   ImageView fontImageView{};
@@ -35,11 +37,6 @@ struct UI {
   TimePoint previousTime{};
 
   UI() noexcept : context(nullptr, &ImGui::DestroyContext) {}
-  UI(UI const&) = delete;
-  UI(UI&& other) noexcept = default;
-  UI& operator=(UI const&) = delete;
-  UI& operator=(UI&& other) noexcept = default;
-  ~UI() noexcept;
 }; // struct UI
 
 } // namespace iris::Renderer

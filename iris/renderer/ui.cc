@@ -53,7 +53,8 @@ iris::Renderer::UI::Create() noexcept {
 
   UI ui;
 
-  if (auto cbs = AllocateCommandBuffers(2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
+  if (auto cbs = CommandBuffers::Allocate(sGraphicsCommandPool, 2,
+                                          VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
     ui.commandBuffers = std::move(*cbs);
   } else {
     IRIS_LOG_LEAVE();
@@ -298,10 +299,3 @@ iris::Renderer::UI::Create() noexcept {
   IRIS_LOG_LEAVE();
   return std::move(ui);
 } // iris::Renderer::ui::Initialize
-
-iris::Renderer::UI::~UI() noexcept {
-  IRIS_LOG_ENTER();
-  if (!commandBuffers.empty()) FreeCommandBuffers(commandBuffers);
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::UI::~UI
-

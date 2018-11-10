@@ -36,7 +36,7 @@ struct Window {
   void Resize(wsi::Extent2D const& newExtent) noexcept;
   void Close() noexcept;
 
-  tl::expected<void, std::system_error> BeginFrame() noexcept;
+  [[nodiscard]] std::system_error BeginFrame() noexcept;
 
   tl::expected<VkCommandBuffer, std::system_error>
   EndFrame(VkFramebuffer framebuffer) noexcept;

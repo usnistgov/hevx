@@ -1,13 +1,13 @@
 #ifndef HEV_IRIS_RENDERER_SURFACE_H_
 #define HEV_IRIS_RENDERER_SURFACE_H_
 
+#include "absl/container/inlined_vector.h"
 #include "glm/vec4.hpp"
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
 #include "iris/wsi/window.h"
 #include <string>
 #include <system_error>
-#include <vector>
 
 namespace iris::Renderer {
 
@@ -47,8 +47,8 @@ struct Surface {
 
   VkSwapchainKHR swapchain{VK_NULL_HANDLE};
 
-  std::vector<VkImage> colorImages{};
-  std::vector<ImageView> colorImageViews{};
+  absl::InlinedVector<VkImage, 4> colorImages{};
+  absl::InlinedVector<ImageView, 4> colorImageViews{};
 
   Image depthStencilImage{};
   ImageView depthStencilImageView{};
@@ -59,7 +59,7 @@ struct Surface {
   Image depthStencilTarget{};
   ImageView depthStencilTargetView{};
 
-  std::vector<Framebuffer> framebuffers{};
+  absl::InlinedVector<Framebuffer, 4> framebuffers{};
 
   std::uint32_t currentImageIndex{UINT32_MAX};
 

@@ -4,6 +4,7 @@
 #include "renderer/renderer.h"
 #include "absl/base/macros.h"
 #include "absl/container/fixed_array.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -124,6 +125,7 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
+VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
 VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 
 /////
@@ -136,7 +138,6 @@ static bool sInitialized{false};
 static std::atomic_bool sRunning{false};
 
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
-static VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
 
 static std::uint32_t const sNumCommandBuffers{2};
 static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
@@ -1239,7 +1240,7 @@ static [[nodiscard]] std::system_error CreateRenderPass() noexcept {
     nullptr                          // pPreserveAttachments
   };
 
-  std::vector<VkSubpassDependency> dependencies{
+  absl::FixedArray<VkSubpassDependency> dependencies{
     {{
        VK_SUBPASS_EXTERNAL,                           // srcSubpass
        0,                                             // dstSubpass
@@ -1532,9 +1533,8 @@ bool iris::Renderer::BeginFrame() noexcept {
   for (auto&& iter : windows) {
     auto&& window = iter.second;
 
-    if (auto noret = window.BeginFrame(); !noret) {
-      GetLogger()->error("Error beginning window frame: {}",
-                         noret.error().what());
+    if (auto error = window.BeginFrame(); error.code()) {
+      GetLogger()->error("Error beginning window frame: {}", error.what());
       return false;
     }
   }
@@ -1623,19 +1623,17 @@ void iris::Renderer::EndFrame() noexcept {
   // 1. Go wide and build secondary command buffers
   //
 
-  std::size_t const numWindows = Windows().size();
-  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
-  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
-  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
+  absl::InlinedVector<VkSemaphore, 4> waitSemaphores;
+  absl::InlinedVector<VkSwapchainKHR, 4> swapchains;
+  absl::InlinedVector<std::uint32_t, 4> imageIndices;
 
-  std::size_t i = 0;
   for (auto&& iter : Windows()) {
     auto&& window = iter.second;
     auto&& surface = window.surface;
 
-    waitSemaphores[i] = surface.imageAvailable;
-    swapchains[i] = surface.swapchain;
-    imageIndices[i] = surface.currentImageIndex;
+    waitSemaphores.push_back(surface.imageAvailable);
+    swapchains.push_back(surface.swapchain);
+    imageIndices.push_back(surface.currentImageIndex);
 
     clearValues[sColorTargetAttachmentIndex].color = surface.clearColor;
     rbi.renderArea.extent = surface.extent;
@@ -1664,7 +1662,6 @@ void iris::Renderer::EndFrame() noexcept {
     //
 
     vkCmdEndRenderPass(cb);
-    i++;
   }
 
   if (auto result = vkEndCommandBuffer(cb); result != VK_SUCCESS) {
@@ -1677,6 +1674,7 @@ void iris::Renderer::EndFrame() noexcept {
   // semaphores and signaling a single frameFinished semaphore
   //
 
+  std::size_t const numWindows = Windows().size();
   absl::FixedArray<VkPipelineStageFlags> waitDstStages(numWindows);
   std::fill_n(waitDstStages.begin(), numWindows,
               VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1788,59 +1786,35 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   return Error::kNone;
 } // iris::Renderer::Control
 
-tl::expected<std::vector<VkCommandBuffer>, std::system_error>
-iris::Renderer::AllocateCommandBuffers(std::uint32_t count,
-                                       VkCommandBufferLevel level) noexcept {
+tl::expected<VkCommandBuffer, std::system_error>
+iris::Renderer::BeginOneTimeSubmit() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sGraphicsCommandPool != VK_NULL_HANDLE);
+
+  VkCommandBuffer commandBuffer;
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sGraphicsCommandPool;
-  commandBufferAI.level = level;
-  commandBufferAI.commandBufferCount = count;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
 
-  std::vector<VkCommandBuffer> commandBuffers(count);
-  result =
-    vkAllocateCommandBuffers(sDevice, &commandBufferAI, commandBuffers.data());
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate command buffers"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return commandBuffers;
-} // iris::Renderer::AllocateCommandBuffers
-
-void iris::Renderer::FreeCommandBuffers(
-  std::vector<VkCommandBuffer>& commandBuffers) noexcept {
-  IRIS_LOG_ENTER();
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
-                       gsl::narrow_cast<std::uint32_t>(commandBuffers.size()),
-                       commandBuffers.data());
-  commandBuffers.clear();
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::FreeCommandBuffers
-
-tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::BeginOneTimeSubmit() noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-  VkCommandBuffer commandBuffer;
-
-  if (auto cbs = AllocateCommandBuffers(1)) {
-    commandBuffer = (*cbs)[0];
-  } else {
-    return tl::unexpected(cbs.error());
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot allocate one-time submit command buffer"));
   }
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-  result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot begin one time submit command buffer"));
