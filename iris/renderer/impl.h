@@ -45,7 +45,7 @@ void FreeCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers) noexcept;
 
 tl::expected<VkCommandBuffer, std::system_error> BeginOneTimeSubmit() noexcept;
 
-tl::expected<void, std::system_error>
+[[nodiscard]] std::system_error
 EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
 
 template <class T>

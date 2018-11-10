@@ -1850,49 +1850,49 @@ iris::Renderer::BeginOneTimeSubmit() noexcept {
   return commandBuffer;
 } // iris::Renderer::BeginOneTimeSubmit
 
-tl::expected<void, std::system_error>
+std::system_error
 iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
-  std::string what;
+  Expects(commandBuffer != VK_NULL_HANDLE);
 
   VkSubmitInfo submit = {};
   submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit.commandBufferCount = 1;
   submit.pCommandBuffers = &commandBuffer;
 
-  result = vkEndCommandBuffer(commandBuffer);
-  if (result != VK_SUCCESS) {
-    what = "Cannot end one time submit command buffer";
-    goto fail;
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result),
+            "Cannot end one time submit command buffer"};
   }
 
-  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmit);
-  if (result != VK_SUCCESS) {
-    what = "Cannot submit one time submit command buffer";
-    goto fail;
+  if (auto result =
+        vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmit);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result),
+            "Cannot submit one time submit command buffer"};
   }
 
-  result = vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
-  if (result != VK_SUCCESS) {
-    what = "Cannot wait on one time submit fence";
-    goto fail;
+  if (auto result =
+        vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot wait on one time submit fence"};
   }
 
-  result = vkResetFences(sDevice, 1, &sOneTimeSubmit);
-  if (result != VK_SUCCESS) {
-    what = "Cannot reset one time submit fence";
-    goto fail;
+  if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmit);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot reset one time submit fence"};
   }
 
-  result = VK_SUCCESS;
-fail:
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
   IRIS_LOG_LEAVE();
-  if (result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result), what));
-  } else {
-    return {};
-  }
+  return {Error::kNone};
 } // iris::Renderer::EndOneTimeSubmit
 

@@ -201,11 +201,11 @@ iris::Renderer::Image::CreateFromMemory(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
-  if (auto noret = image.Transition(VK_IMAGE_LAYOUT_UNDEFINED,
+  if (auto error = image.Transition(VK_IMAGE_LAYOUT_UNDEFINED,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-      !noret) {
+      error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
   VkCommandBuffer commandBuffer;
@@ -227,19 +227,19 @@ iris::Renderer::Image::CreateFromMemory(
   vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image.handle,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-  if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
+  if (auto error = EndOneTimeSubmit(commandBuffer); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret =
+  if (auto error =
         image.Transition(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
                             ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                             : VK_IMAGE_LAYOUT_GENERAL));
-      !noret) {
+      error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
   if (!name.empty()) {
@@ -255,7 +255,7 @@ iris::Renderer::Image::CreateFromMemory(
   return std::move(image);
 } // iris::Renderer::Image::CreateFromMemory
 
-tl::expected<void, std::system_error> iris::Renderer::Image::Transition(
+std::system_error iris::Renderer::Image::Transition(
   VkImageLayout oldLayout, VkImageLayout newLayout, std::uint32_t mipLevels,
   std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
@@ -320,19 +320,19 @@ tl::expected<void, std::system_error> iris::Renderer::Image::Transition(
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return cb.error();
   }
 
   vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 
-  if (auto noret = EndOneTimeSubmit(commandBuffer); !noret) {
+  if (auto error = EndOneTimeSubmit(commandBuffer); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return error;
   }
 
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // iris::Renderer::Image::Transition
 
 iris::Renderer::Image::Image(Image&& other) noexcept

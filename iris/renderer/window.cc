@@ -68,8 +68,9 @@ iris::Renderer::Window::BeginFrame() noexcept {
 
   if (resized) {
     auto const extent = window.Extent();
-    if (auto noret = surface.Resize({extent.width, extent.height}); !noret) {
-      return tl::unexpected(noret.error());
+    if (auto error = surface.Resize({extent.width, extent.height});
+        error.code()) {
+      return tl::unexpected(error);
     }
     resized = false;
   }

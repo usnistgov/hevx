@@ -34,7 +34,7 @@ struct Surface {
   static tl::expected<Surface, std::system_error>
   Create(wsi::Window& window, glm::vec4 const& clearColor) noexcept;
 
-  tl::expected<void, std::system_error> Resize(VkExtent2D newExtent) noexcept;
+  std::system_error Resize(VkExtent2D newExtent) noexcept;
 
   VkSurfaceKHR handle{VK_NULL_HANDLE};
   VkSemaphore imageAvailable{VK_NULL_HANDLE};

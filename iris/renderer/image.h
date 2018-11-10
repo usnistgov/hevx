@@ -57,7 +57,7 @@ struct Image {
                              name_, componentMapping);
   }
 
-  tl::expected<void, std::system_error>
+  [[nodiscard]] std::system_error
   Transition(VkImageLayout oldLayout, VkImageLayout newLayout,
              std::uint32_t mipLevels = 1,
              std::uint32_t arrayLayers = 1) noexcept;
