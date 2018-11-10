@@ -33,7 +33,7 @@ enum class Options {
  * \param[in] appName the name of the application.
  * \param[in] appVersion the version of the application.
  */
-[[nodiscard]] tl::expected<void, std::system_error>
+[[nodiscard]] std::system_error
 Initialize(gsl::czstring<> appName, Options const& options,
            std::uint32_t appVersion = 0,
            spdlog::sinks_init_list logSinks = {}) noexcept;

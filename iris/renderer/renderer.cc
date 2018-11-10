@@ -1315,7 +1315,7 @@ static [[nodiscard]] std::system_error AllocateCommandBuffers() noexcept {
 
 } // namespace iris::Renderer
 
-tl::expected<void, std::system_error>
+std::system_error
 iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                            std::uint32_t appVersion,
                            spdlog::sinks_init_list logSinks) noexcept {
@@ -1326,12 +1326,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (sInitialized) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kAlreadyInitialized));
+    return {Error::kAlreadyInitialized};
   }
 
   if (auto error = io::Initialize()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kAlreadyInitialized));
+    return {Error::kAlreadyInitialized};
   }
 
   ////
@@ -1395,7 +1395,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                        Options::kReportDebugMessages);
       error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if ((options & Options::kReportDebugMessages) ==
@@ -1411,51 +1411,51 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                                         physicalDeviceExtensionNames);
       error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateDeviceAndQueues(physicalDeviceFeatures,
                                          physicalDeviceExtensionNames);
       error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateCommandPool(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateDescriptorPool(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateFencesAndSemaphores(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateAllocator(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = CreateRenderPass(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   if (auto error = AllocateCommandBuffers(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(error);
+    return {error};
   }
 
   sInitialized = true;
   sRunning = true;
 
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // iris::Renderer::Initialize
 
 void iris::Renderer::Shutdown() noexcept {
