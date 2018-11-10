@@ -137,22 +137,12 @@ iris::Renderer::Image::CreateFromMemory(
 
   switch(format) {
   case VK_FORMAT_R8G8B8A8_UNORM:
-    if (bytes_per_pixel != sizeof(char) * 4) {
-      GetLogger()->error("Invalid bytes_per_pixel: {}, expecting {}",
-                         bytes_per_pixel, sizeof(char) * 4);
-      std::terminate();
-    }
-
+    Expects(bytes_per_pixel == sizeof(char) * 4);
     imageSize = extent.width * extent.height * extent.depth * sizeof(char) * 4;
     break;
 
   case VK_FORMAT_R32_SFLOAT:
-    if (bytes_per_pixel != sizeof(float)) {
-      GetLogger()->error("Invalid bytes_per_pixel: {}, expecting {}",
-                         bytes_per_pixel, sizeof(float));
-      std::terminate();
-    }
-
+    Expects(bytes_per_pixel == sizeof(float));
     imageSize = extent.width * extent.height * extent.depth * sizeof(float);
     break;
 
