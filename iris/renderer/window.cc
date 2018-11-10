@@ -78,7 +78,7 @@ iris::Renderer::Window::BeginFrame() noexcept {
   ImGuiIO& io = ImGui::GetIO();
 
   wsi::Keyset const keyState = window.KeyboardState();
-  for (int i = 0; i <  wsi::Keyset::kMaxKeys; ++i) {
+  for (std::size_t i = 0; i <  wsi::Keyset::kMaxKeys; ++i) {
     io.KeysDown[i] = keyState[static_cast<wsi::Keys>(i)];
   }
 
@@ -90,7 +90,7 @@ iris::Renderer::Window::BeginFrame() noexcept {
     io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
 
   wsi::Buttonset const buttonState = window.ButtonState();
-  for (int i = 0; i < wsi::Buttonset::kMaxButtons; ++i) {
+  for (std::size_t i = 0; i < wsi::Buttonset::kMaxButtons; ++i) {
     io.MouseDown[i] = buttonState[static_cast<wsi::Buttons>(i)];
   }
 
