@@ -9,7 +9,6 @@
 #include "absl/strings/str_cat.h"
 #include "config.h"
 #include "error.h"
-#include "imgui.h"
 #include "protos.h"
 #include "renderer/impl.h"
 #include "renderer/io.h"
@@ -125,6 +124,8 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
+VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+
 /////
 //
 // Additional static private variables
@@ -136,9 +137,10 @@ static std::atomic_bool sRunning{false};
 
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 static VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
-static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 
-static absl::FixedArray<VkCommandBuffer> sCommandBuffers{2};
+static std::uint32_t const sNumCommandBuffers{2};
+static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
+                                                         VK_NULL_HANDLE);
 static std::uint32_t sCommandBufferIndex{0};
 
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
@@ -224,12 +226,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
  * \see
  * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
  */
-static tl::expected<void, std::system_error>
-InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
-             gsl::span<gsl::czstring<>> extensionNames,
-             gsl::span<gsl::czstring<>> layerNames, bool reportDebug) noexcept {
+static std::system_error InitInstance(gsl::czstring<> appName,
+                                      std::uint32_t appVersion,
+                                      gsl::span<gsl::czstring<>> extensionNames,
+                                      gsl::span<gsl::czstring<>> layerNames,
+                                      bool reportDebug) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sInstance == VK_NULL_HANDLE);
 
   flextVkInit();
 
@@ -246,25 +249,23 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
 
   // Get the number of instance extension properties.
   std::uint32_t numExtensionProperties;
-  result = vkEnumerateInstanceExtensionProperties(
-    nullptr, &numExtensionProperties, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
+    return {make_error_code(result),
+            "Cannot enumerate instance extension properties"};
   }
 
   // Get the instance extension properties.
   absl::FixedArray<VkExtensionProperties> extensionProperties(
     numExtensionProperties);
-  result = vkEnumerateInstanceExtensionProperties(
-    nullptr, &numExtensionProperties, extensionProperties.data());
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, extensionProperties.data());
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
+    return {make_error_code(result),
+            "Cannot enumerate instance extension properties"};
   }
 
   GetLogger()->debug("Instance Extensions:");
@@ -302,23 +303,23 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
 
   if (reportDebug) ci.pNext = &dumci;
 
-  result = vkCreateInstance(&ci, nullptr, &sInstance);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateInstance(&ci, nullptr, &sInstance);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create instance"));
+    return {make_error_code(result), "Cannot create instance"};
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
 
+  Ensures(sInstance != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // InitInstance
 
-static tl::expected<void, std::system_error>
-CreateDebugUtilsMessenger() noexcept {
+static std::system_error CreateDebugUtilsMessenger() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sInstance != VK_NULL_HANDLE);
+  Expects(sDebugUtilsMessenger == VK_NULL_HANDLE);
 
   VkDebugUtilsMessengerCreateInfoEXT dumci = {};
   dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -331,22 +332,21 @@ CreateDebugUtilsMessenger() noexcept {
                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
   dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
 
-  result = vkCreateDebugUtilsMessengerEXT(sInstance, &dumci, nullptr,
-                                          &sDebugUtilsMessenger);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateDebugUtilsMessengerEXT(sInstance, &dumci, nullptr,
+                                                   &sDebugUtilsMessenger);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create debug utils messenger"));
+    return {make_error_code(result), "Cannot create debug utils messenger"};
   }
 
+  Ensures(sDebugUtilsMessenger != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateDebugUtilsMessenger
 
 static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
                                int indentAmount = 0) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
 
   //
   // Get the properties.
@@ -402,9 +402,9 @@ static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
 
   // Get the number of physical device extension properties.
   std::uint32_t numExtensionProperties;
-  result = vkEnumerateDeviceExtensionProperties(
-    device, nullptr, &numExtensionProperties, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        device, nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
     GetLogger()->warn("Cannot enumerate device extension properties: {}",
                       to_string(result));
   }
@@ -412,9 +412,9 @@ static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
   // Get the physical device extension properties.
   absl::FixedArray<VkExtensionProperties> extensionProperties(
     numExtensionProperties);
-  result = vkEnumerateDeviceExtensionProperties(
-    device, nullptr, &numExtensionProperties, extensionProperties.data());
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        device, nullptr, &numExtensionProperties, extensionProperties.data());
+      result != VK_SUCCESS) {
     GetLogger()->warn("Cannot enumerate device extension properties: {}",
                       to_string(result));
   }
@@ -706,7 +706,6 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
                      VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
 
   //
   // Get the properties.
@@ -762,9 +761,9 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 
   // Get the number of physical device extension properties.
   std::uint32_t numExtensionProperties;
-  result = vkEnumerateDeviceExtensionProperties(
-    device, nullptr, &numExtensionProperties, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        device, nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot enumerate device extension properties"));
@@ -773,9 +772,9 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   // Get the physical device extension properties.
   absl::FixedArray<VkExtensionProperties> extensionProperties(
     numExtensionProperties);
-  result = vkEnumerateDeviceExtensionProperties(
-    device, nullptr, &numExtensionProperties, extensionProperties.data());
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        device, nullptr, &numExtensionProperties, extensionProperties.data());
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot enumerate device extension properties"));
@@ -838,12 +837,12 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
 
 static void FindDeviceGroup() {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sInstance != VK_NULL_HANDLE);
 
   std::uint32_t numPhysicalDeviceGroups;
-  result = vkEnumeratePhysicalDeviceGroups(sInstance, &numPhysicalDeviceGroups,
-                                           nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumeratePhysicalDeviceGroups(
+        sInstance, &numPhysicalDeviceGroups, nullptr);
+      result != VK_SUCCESS) {
     GetLogger()->error("Cannot enumerate physical device groups: {}",
                        to_string(result));
     return;
@@ -857,9 +856,10 @@ static void FindDeviceGroup() {
     physicalDeviceGroupProperties[i].pNext = nullptr;
   }
 
-  result = vkEnumeratePhysicalDeviceGroups(
-    sInstance, &numPhysicalDeviceGroups, physicalDeviceGroupProperties.data());
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkEnumeratePhysicalDeviceGroups(sInstance, &numPhysicalDeviceGroups,
+                                        physicalDeviceGroupProperties.data());
+      result != VK_SUCCESS) {
     GetLogger()->error("Cannot enumerate physical device groups: {}",
                        to_string(result));
     return;
@@ -886,29 +886,29 @@ static void FindDeviceGroup() {
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
  */
-static tl::expected<void, std::system_error>
+static std::system_error
 ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sInstance != VK_NULL_HANDLE);
+  Expects(sPhysicalDevice == VK_NULL_HANDLE);
 
   // Get the number of physical devices present on the system
   std::uint32_t numPhysicalDevices;
-  result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices, nullptr);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices, nullptr);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return {make_error_code(result), "Cannot enumerate physical devices"};
   }
 
   // Get the physical devices present on the system
   absl::FixedArray<VkPhysicalDevice> physicalDevices(numPhysicalDevices);
-  result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices,
-                                      physicalDevices.data());
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEnumeratePhysicalDevices(sInstance, &numPhysicalDevices,
+                                               physicalDevices.data());
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return {make_error_code(result), "Cannot enumerate physical devices"};
   }
 
   // Iterate and dump every physical device
@@ -929,12 +929,12 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
 
   if (sPhysicalDevice == VK_NULL_HANDLE) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kNoPhysicalDevice, "No suitable physical device found"));
+    return {Error::kNoPhysicalDevice, "No suitable physical device found"};
   }
 
+  Ensures(sPhysicalDevice != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // ChoosePhysicalDevice
 
 /*! \brief Create the Vulkan logical device - \b MUST only be called from
@@ -945,11 +945,13 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
  */
-static tl::expected<void, std::system_error>
+static std::system_error
 CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                       gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sPhysicalDevice != VK_NULL_HANDLE);
+  Expects(sDevice == VK_NULL_HANDLE);
+  Expects(sGraphicsCommandQueue == VK_NULL_HANDLE);
 
   // Get all of the queue families again, so that we can get the number of
   // queues to create.
@@ -989,45 +991,49 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
     gsl::narrow_cast<std::uint32_t>(extensionNames.size());
   ci.ppEnabledExtensionNames = extensionNames.data();
 
-  result = vkCreateDevice(sPhysicalDevice, &ci, nullptr, &sDevice);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateDevice(sPhysicalDevice, &ci, nullptr, &sDevice);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create device"));
+    return {make_error_code(result), "Cannot create device"};
   }
 
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
                    &sGraphicsCommandQueue);
 
+  Ensures(sDevice != VK_NULL_HANDLE);
+  Ensures(sGraphicsCommandQueue != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateDevice
 
-static tl::expected<void, std::system_error> CreateCommandPool() noexcept {
+static std::system_error CreateCommandPool() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sGraphicsCommandPool == VK_NULL_HANDLE);
 
   VkCommandPoolCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   ci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
 
-  result = vkCreateCommandPool(sDevice, &ci, nullptr, &sGraphicsCommandPool);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkCreateCommandPool(sDevice, &ci, nullptr, &sGraphicsCommandPool);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create command pool"));
+    return {make_error_code(result), "Cannot create command pool"};
   }
 
   NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sGraphicsCommandPool,
              "sGraphicsCommandPool");
 
+  Ensures(sGraphicsCommandPool != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateCommandPool
 
-static tl::expected<void, std::system_error> CreateDescriptorPool() noexcept {
+static std::system_error CreateDescriptorPool() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sDescriptorPool == VK_NULL_HANDLE);
 
   absl::FixedArray<VkDescriptorPoolSize> descriptorPoolSizes(11);
   descriptorPoolSizes[0] = { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 };
@@ -1049,85 +1055,94 @@ static tl::expected<void, std::system_error> CreateDescriptorPool() noexcept {
   ci.poolSizeCount = static_cast<uint32_t>(descriptorPoolSizes.size());
   ci.pPoolSizes = descriptorPoolSizes.data();
 
-  result = vkCreateDescriptorPool(sDevice, &ci, nullptr, &sDescriptorPool);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkCreateDescriptorPool(sDevice, &ci, nullptr, &sDescriptorPool);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create descriptor pool"));
+    return {make_error_code(result), "Cannot create descriptor pool"};
   }
 
   NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sDescriptorPool, "sDescriptorPool");
 
+  Ensures(sDescriptorPool != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateDescriptorPool
 
-static tl::expected<void, std::system_error>
-CreateFencesAndSemaphores() noexcept {
+static std::system_error CreateFencesAndSemaphores() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sOneTimeSubmit == VK_NULL_HANDLE);
+  Expects(sFrameComplete == VK_NULL_HANDLE);
+  Expects(sImagesReadyForPresent == VK_NULL_HANDLE);
 
   VkFenceCreateInfo fci = {};
   fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
-  result = vkCreateFence(sDevice, &fci, nullptr, &sOneTimeSubmit);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateFence(sDevice, &fci, nullptr, &sOneTimeSubmit);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create fence"));
+    return {make_error_code(result), "Cannot create fence"};
   }
+
+  NameObject(VK_OBJECT_TYPE_FENCE, sOneTimeSubmit, "sOneTimeSubmit");
 
   fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  result = vkCreateFence(sDevice, &fci, nullptr, &sFrameComplete);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateFence(sDevice, &fci, nullptr, &sFrameComplete);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create fence"));
+    return {make_error_code(result), "Cannot create fence"};
   }
+
+  NameObject(VK_OBJECT_TYPE_FENCE, sFrameComplete, "sFrameComplete");
 
   VkSemaphoreCreateInfo sci = {};
   sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-  result = vkCreateSemaphore(sDevice, &sci, nullptr, &sImagesReadyForPresent);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkCreateSemaphore(sDevice, &sci, nullptr, &sImagesReadyForPresent);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create semaphore"));
+    return {make_error_code(result), "Cannot create semaphore"};
   }
 
-  NameObject(VK_OBJECT_TYPE_FENCE, sOneTimeSubmit, "sOneTimeSubmit");
-  NameObject(VK_OBJECT_TYPE_FENCE, sFrameComplete, "sFrameComplete");
   NameObject(VK_OBJECT_TYPE_SEMAPHORE, sImagesReadyForPresent,
              "sImagesReadyForPresent");
 
+  Ensures(sOneTimeSubmit != VK_NULL_HANDLE);
+  Ensures(sFrameComplete != VK_NULL_HANDLE);
+  Ensures(sImagesReadyForPresent != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateFencesAndSemaphores
 
-static tl::expected<void, std::system_error> CreateAllocator() noexcept {
+static std::system_error CreateAllocator() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sPhysicalDevice != VK_NULL_HANDLE);
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sAllocator == VK_NULL_HANDLE);
 
   VmaAllocatorCreateInfo allocatorInfo = {};
   allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
   allocatorInfo.physicalDevice = sPhysicalDevice;
   allocatorInfo.device = sDevice;
 
-  result = vmaCreateAllocator(&allocatorInfo, &sAllocator);
-  if (result != VK_SUCCESS) {
+  if (auto result = vmaCreateAllocator(&allocatorInfo, &sAllocator);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create allocator"));
+    return {make_error_code(result), "Cannot create allocator"};
   }
 
+  Ensures(sAllocator != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateAllocator
 
-static tl::expected<void, std::system_error> CreateRenderPass() noexcept {
+static std::system_error CreateRenderPass() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sRenderPass == VK_NULL_HANDLE);
 
   // Our render pass has four attachments:
   // 0: color
@@ -1256,43 +1271,47 @@ static tl::expected<void, std::system_error> CreateRenderPass() noexcept {
   rpci.dependencyCount = gsl::narrow_cast<std::uint32_t>(dependencies.size());
   rpci.pDependencies = dependencies.data();
 
-  result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkCreateRenderPass(sDevice, &rpci, nullptr, &sRenderPass);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create render pass"));
+    return {make_error_code(result), "Cannot create render pass"};
   }
 
   NameObject(VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
 
+  Ensures(sRenderPass != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // CreateRenderPass
 
-static tl::expected<void, std::system_error> AllocateCommandBuffers() noexcept {
+static std::system_error AllocateCommandBuffers() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sNumCommandBuffers == sCommandBuffers.size());
+  for (auto&& commandBuffer : sCommandBuffers) {
+    Expects(commandBuffer == VK_NULL_HANDLE);
+  }
 
   VkCommandBufferAllocateInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   ai.commandPool = sGraphicsCommandPool;
   ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  ai.commandBufferCount =
-    gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size());
+  ai.commandBufferCount = sNumCommandBuffers;
 
-  result = vkAllocateCommandBuffers(sDevice, &ai, sCommandBuffers.data());
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &ai, sCommandBuffers.data());
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate command buffers"));
+    return {make_error_code(result), "Cannot allocate command buffers"};
   }
 
   for (auto&& commandBuffer : sCommandBuffers) {
     NameObject(VK_OBJECT_TYPE_COMMAND_BUFFER, commandBuffer, "sCommandBuffers");
+    Ensures(commandBuffer != VK_NULL_HANDLE);
   }
 
   IRIS_LOG_LEAVE();
-  return {};
+  return {Error::kNone};
 } // AllocateCommandBuffers
 
 } // namespace iris::Renderer
@@ -1371,64 +1390,66 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     0);
 #endif
 
-  if (auto noret =
+  if (auto error =
         InitInstance(appName, appVersion, instanceExtensionNames, layerNames,
                      (options & Options::kReportDebugMessages) ==
                        Options::kReportDebugMessages);
-      !noret) {
+      error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
-    CreateDebugUtilsMessenger(); // ignore any returned error
+    if (auto error = CreateDebugUtilsMessenger(); error.code()) {
+      GetLogger()->warn("Cannot create DebugUtilsMessenger: {}", error.what());
+    }
   }
 
   FindDeviceGroup();
 
-  if (auto noret = ChoosePhysicalDevice(physicalDeviceFeatures,
+  if (auto error = ChoosePhysicalDevice(physicalDeviceFeatures,
                                         physicalDeviceExtensionNames);
-      !noret) {
+      error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateDeviceAndQueues(physicalDeviceFeatures,
+  if (auto error = CreateDeviceAndQueues(physicalDeviceFeatures,
                                          physicalDeviceExtensionNames);
-      !noret) {
+      error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateCommandPool(); !noret) {
+  if (auto error = CreateCommandPool(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateDescriptorPool(); !noret) {
+  if (auto error = CreateDescriptorPool(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateFencesAndSemaphores(); !noret) {
+  if (auto error = CreateFencesAndSemaphores(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateAllocator(); !noret) {
+  if (auto error = CreateAllocator(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = CreateRenderPass(); !noret) {
+  if (auto error = CreateRenderPass(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
-  if (auto noret = AllocateCommandBuffers(); !noret) {
+  if (auto error = AllocateCommandBuffers(); error.code()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(noret.error());
+    return tl::unexpected(error);
   }
 
   sInitialized = true;
@@ -1500,7 +1521,7 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 bool iris::Renderer::BeginFrame() noexcept {
-  if (!sRunning) return false;
+  if (!sInitialized || !sRunning) return false;
 
   // Handle all IO results (completed requests)
   std::vector<std::function<void(void)>> results = io::GetResults();
@@ -1519,22 +1540,21 @@ bool iris::Renderer::BeginFrame() noexcept {
     }
   }
 
-  VkResult result;
-
-  result = vkWaitForFences(sDevice, 1, &sFrameComplete, VK_TRUE, UINT64_MAX);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkWaitForFences(sDevice, 1, &sFrameComplete, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
     GetLogger()->error("Error waiting on fence: {}", to_string(result));
     return false;
   }
 
-  result = vkResetFences(sDevice, 1, &sFrameComplete);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkResetFences(sDevice, 1, &sFrameComplete);
+      result != VK_SUCCESS) {
     GetLogger()->error("Error resetting fence: {}", to_string(result));
     return false;
   }
 
-  result = vkResetCommandPool(sDevice, sGraphicsCommandPool, 0);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkResetCommandPool(sDevice, sGraphicsCommandPool, 0);
+      result != VK_SUCCESS) {
     GetLogger()->error("Error resetting command pool: {}", to_string(result));
     return false;
   }
@@ -1543,14 +1563,14 @@ bool iris::Renderer::BeginFrame() noexcept {
 } // iris::Renderer::BeginFrame()
 
 void iris::Renderer::EndFrame() noexcept {
-  VkResult result;
+  if (!sInitialized || !sRunning) return;
 
   //
   // Acquire images/semaphores from all iris::Window objects
   //
 
   for (auto&& [title, window] : Windows()) {
-    result =
+    VkResult result =
       vkAcquireNextImageKHR(sDevice, window.surface.swapchain, UINT64_MAX,
                             window.surface.imageAvailable, VK_NULL_HANDLE,
                             &window.surface.currentImageIndex);
@@ -1586,8 +1606,7 @@ void iris::Renderer::EndFrame() noexcept {
   cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   cbi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-  result = vkBeginCommandBuffer(cb, &cbi);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkBeginCommandBuffer(cb, &cbi); result != VK_SUCCESS) {
     GetLogger()->error("Error beginning command buffer: {}", to_string(result));
     return;
   }
@@ -1649,8 +1668,7 @@ void iris::Renderer::EndFrame() noexcept {
     i++;
   }
 
-  result = vkEndCommandBuffer(cb);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEndCommandBuffer(cb); result != VK_SUCCESS) {
     GetLogger()->error("Error ending command buffer: {}", to_string(result));
     return;
   }
@@ -1674,8 +1692,9 @@ void iris::Renderer::EndFrame() noexcept {
   si.signalSemaphoreCount = 1;
   si.pSignalSemaphores = &sImagesReadyForPresent;
 
-  result = vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sFrameComplete);
-  if (result != VK_SUCCESS) {
+  if (auto result =
+        vkQueueSubmit(sGraphicsCommandQueue, 1, &si, sFrameComplete);
+      result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
     return;
@@ -1696,8 +1715,8 @@ void iris::Renderer::EndFrame() noexcept {
   pi.pImageIndices = imageIndices.data();
   pi.pResults = presentResults.data();
 
-  result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
+      result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
     return;
   }
@@ -1877,50 +1896,4 @@ fail:
     return {};
   }
 } // iris::Renderer::EndOneTimeSubmit
-
-tl::expected<std::pair<VkDescriptorSetLayout, std::vector<VkDescriptorSet>>,
-             std::system_error>
-iris::Renderer::CreateDescriptors(
-  gsl::span<VkDescriptorSetLayoutBinding> bindings) noexcept {
-  IRIS_LOG_ENTER();
-  VkResult result;
-
-  VkDescriptorSetLayout layout;
-  std::vector<VkDescriptorSet> descriptorSets(bindings.size());
-
-  VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
-  descriptorSetLayoutCI.sType =
-    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(bindings.size());
-  descriptorSetLayoutCI.pBindings = bindings.data();
-
-  result = vkCreateDescriptorSetLayout(sDevice, &descriptorSetLayoutCI, nullptr,
-                                       &layout);
-  if (result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create descriptor set layout"));
-  }
-
-  absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts(bindings.size(),
-                                                               layout);
-
-  VkDescriptorSetAllocateInfo descriptorSetAI = {};
-  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descriptorSetAI.descriptorPool = sDescriptorPool;
-  descriptorSetAI.descriptorSetCount =
-    static_cast<uint32_t>(descriptorSetLayouts.size());
-  descriptorSetAI.pSetLayouts = descriptorSetLayouts.data();
-
-  result =
-    vkAllocateDescriptorSets(sDevice, &descriptorSetAI, descriptorSets.data());
-  if (result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create descriptor set"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return std::make_pair(layout, descriptorSets);
-} // iris::Renderer::CreateDescriptors
 

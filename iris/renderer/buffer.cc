@@ -1,5 +1,4 @@
 #include "renderer/buffer.h"
-#include "renderer/impl.h"
 #include "logging.h"
 
 tl::expected<iris::Renderer::Buffer, std::system_error>

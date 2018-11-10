@@ -185,8 +185,9 @@ iris::Renderer::UI::Create() noexcept {
                                    1, VK_SHADER_STAGE_FRAGMENT_BIT,
                                    &ui.fontImageSampler};
 
-  if (auto d = CreateDescriptors(descriptorSetLayoutBinding)) {
-    std::tie(ui.descriptorSetLayout, ui.descriptorSets) = *d;
+  if (auto d = DescriptorSet::Create(descriptorSetLayoutBinding,
+                                     "ui::descriptorSet")) {
+    ui.descriptorSet = std::move(*d);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(d.error());
@@ -198,14 +199,14 @@ iris::Renderer::UI::Create() noexcept {
   descriptorImageI.sampler = ui.fontImageSampler;
 
   absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(
-    ui.descriptorSets.size());
+    ui.descriptorSet.sets.size());
 
   for (std::size_t i = 0; i < writeDescriptorSets.size(); ++i) {
     VkWriteDescriptorSet& writeDS = writeDescriptorSets[i];
 
     writeDS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writeDS.pNext = nullptr;
-    writeDS.dstSet = ui.descriptorSets[i];
+    writeDS.dstSet = ui.descriptorSet.sets[i];
     writeDS.dstBinding = 0;
     writeDS.dstArrayElement = 0;
     writeDS.descriptorCount = 1;
@@ -322,7 +323,7 @@ iris::Renderer::UI::Create() noexcept {
   VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
   pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineLayoutCI.setLayoutCount = 1;
-  pipelineLayoutCI.pSetLayouts = &ui.descriptorSetLayout;
+  pipelineLayoutCI.pSetLayouts = &ui.descriptorSet.layout;
   pipelineLayoutCI.pushConstantRangeCount = 1;
   pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
 
@@ -385,13 +386,11 @@ iris::Renderer::UI::UI(UI&& other) noexcept
   , fontImageSampler(other.fontImageSampler)
   , vertexBuffer(std::move(other.vertexBuffer))
   , indexBuffer(std::move(other.indexBuffer))
-  , descriptorSetLayout(other.descriptorSetLayout)
-  , descriptorSets(std::move(other.descriptorSets))
+  , descriptorSet(std::move(other.descriptorSet))
   , pipelineLayout(other.pipelineLayout)
   , pipeline(other.pipeline)
   , context(std::move(other.context)) {
   other.fontImageSampler = VK_NULL_HANDLE;
-  other.descriptorSetLayout = VK_NULL_HANDLE;
   other.pipelineLayout = VK_NULL_HANDLE;
   other.pipeline = VK_NULL_HANDLE;
 } // iris::Renderer::UI::UI
@@ -406,14 +405,12 @@ iris::Renderer::UI& iris::Renderer::UI::operator=(UI&& rhs) noexcept {
   fontImageSampler = rhs.fontImageSampler;
   vertexBuffer = std::move(rhs.vertexBuffer);
   indexBuffer = std::move(rhs.indexBuffer);
-  descriptorSetLayout = rhs.descriptorSetLayout;
-  descriptorSets = std::move(rhs.descriptorSets);
+  descriptorSet = std::move(rhs.descriptorSet);
   pipelineLayout = rhs.pipelineLayout;
   pipeline = rhs.pipeline;
   context = std::move(rhs.context);
 
   rhs.fontImageSampler = VK_NULL_HANDLE;
-  rhs.descriptorSetLayout = VK_NULL_HANDLE;
   rhs.pipelineLayout = VK_NULL_HANDLE;
   rhs.pipeline = VK_NULL_HANDLE;
 
@@ -427,7 +424,6 @@ iris::Renderer::UI::~UI() noexcept {
   context.reset();
   vkDestroyPipeline(sDevice, pipeline, nullptr);
   vkDestroyPipelineLayout(sDevice, pipelineLayout, nullptr);
-  vkDestroyDescriptorSetLayout(sDevice, descriptorSetLayout, nullptr);
   vkDestroySampler(sDevice, fontImageSampler, nullptr);
 
   IRIS_LOG_LEAVE();

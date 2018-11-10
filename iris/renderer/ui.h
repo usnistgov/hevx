@@ -3,6 +3,7 @@
 
 #include "glm/glm.hpp"
 #include "renderer/buffer.h"
+#include "renderer/descriptor_set.h"
 #include "renderer/image.h"
 #include "renderer/impl.h"
 #include "imgui.h"
@@ -28,8 +29,7 @@ struct UI {
   VkSampler fontImageSampler{VK_NULL_HANDLE};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
-  VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
-  std::vector<VkDescriptorSet> descriptorSets;
+  DescriptorSet descriptorSet{};
   VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
   VkPipeline pipeline{VK_NULL_HANDLE};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;

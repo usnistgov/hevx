@@ -215,7 +215,7 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
 
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline);
   vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          ui.pipelineLayout, 0, 1, &ui.descriptorSets[0], 0,
+                          ui.pipelineLayout, 0, 1, &ui.descriptorSet.sets[0], 0,
                           nullptr);
 
   VkDeviceSize bindingOffset = 0;

@@ -42,7 +42,7 @@ struct Buffer {
   Buffer(Buffer const&) = delete;
   Buffer(Buffer&& other) noexcept;
   Buffer& operator=(Buffer const&) = delete;
-  Buffer& operator=(Buffer&& other) noexcept;
+  Buffer& operator=(Buffer&& rhs) noexcept;
   ~Buffer() noexcept;
 
 private:

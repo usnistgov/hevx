@@ -96,6 +96,7 @@ set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   renderer/buffer.cc
+  renderer/descriptor_set.cc
   renderer/image.cc
   renderer/io.cc
   renderer/renderer.cc
@@ -155,7 +156,7 @@ target_compile_options(iris
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4127 /wd4201 /wd4996 /permissive->
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324> # absl::container_internal mess
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324 /wd4309> # absl::container_internal mess
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od /Gm>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
