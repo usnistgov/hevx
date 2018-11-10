@@ -115,7 +115,7 @@ iris::Renderer::Window::BeginFrame() noexcept {
 
 tl::expected<VkCommandBuffer, std::system_error>
 iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
-  VkResult result;
+  Expects(framebuffer != VK_NULL_HANDLE);
 
   ImGui::SetCurrentContext(ui.context.get());
   ImGui::EndFrame();
@@ -208,16 +208,16 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
                     VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
   beginInfo.pInheritanceInfo = &inheritanceInfo;
 
-  result = vkBeginCommandBuffer(cb, &beginInfo);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkBeginCommandBuffer(cb, &beginInfo);
+      result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot begin UI command buffer"));
   }
 
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline);
   vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          ui.pipelineLayout, 0, 1, &ui.descriptorSet.sets[0], 0,
-                          nullptr);
+                          ui.pipeline.layout, 0, 1, &ui.descriptorSet.sets[0],
+                          0, nullptr);
 
   VkDeviceSize bindingOffset = 0;
   vkCmdBindVertexBuffers(cb, 0, 1, ui.vertexBuffer.get(), &bindingOffset);
@@ -232,9 +232,9 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   glm::vec2 const scale = glm::vec2{2.f, 2.f} / displaySize;
   glm::vec2 const translate = glm::vec2{-1.f, -1.f} - displayPos * scale;
 
-  vkCmdPushConstants(cb, ui.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+  vkCmdPushConstants(cb, ui.pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                      sizeof(glm::vec2), glm::value_ptr(scale));
-  vkCmdPushConstants(cb, ui.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+  vkCmdPushConstants(cb, ui.pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
                      sizeof(glm::vec2), sizeof(glm::vec2),
                      glm::value_ptr(translate));
 
@@ -269,8 +269,7 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
     vtxOff += cmdList->VtxBuffer.Size;
   }
 
-  result = vkEndCommandBuffer(cb);
-  if (result != VK_SUCCESS) {
+  if (auto result = vkEndCommandBuffer(cb); result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot end UI command buffer"));
   }

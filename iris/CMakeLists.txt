@@ -99,6 +99,7 @@ set(SOURCES
   renderer/descriptor_set.cc
   renderer/image.cc
   renderer/io.cc
+  renderer/pipeline.cc
   renderer/renderer.cc
   renderer/surface.cc
   renderer/shader.cc

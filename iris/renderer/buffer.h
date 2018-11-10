@@ -2,6 +2,7 @@
 #define HEV_IRIS_RENDERER_BUFFER_H_
 
 #include "iris/renderer/impl.h"
+#include <string>
 #include <system_error>
 
 namespace iris::Renderer {

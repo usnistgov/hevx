@@ -7,6 +7,7 @@
 #include "iris/renderer/descriptor_set.h"
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
+#include "iris/renderer/pipeline.h"
 #include <chrono>
 #include <memory>
 #include <system_error>
@@ -25,20 +26,19 @@ struct UI {
   std::uint32_t commandBufferIndex{0};
   Image fontImage{};
   ImageView fontImageView{};
-  VkSampler fontImageSampler{VK_NULL_HANDLE};
+  Sampler fontImageSampler{};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
   DescriptorSet descriptorSet{};
-  VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-  VkPipeline pipeline{VK_NULL_HANDLE};
+  Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
   TimePoint previousTime{};
 
   UI() noexcept : context(nullptr, &ImGui::DestroyContext) {}
   UI(UI const&) = delete;
-  UI(UI&& other) noexcept;
+  UI(UI&& other) noexcept = default;
   UI& operator=(UI const&) = delete;
-  UI& operator=(UI&& other) noexcept;
+  UI& operator=(UI&& other) noexcept = default;
   ~UI() noexcept;
 }; // struct UI
 

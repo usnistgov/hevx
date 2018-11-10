@@ -5,6 +5,7 @@
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
 #include "iris/wsi/window.h"
+#include <string>
 #include <system_error>
 #include <vector>
 

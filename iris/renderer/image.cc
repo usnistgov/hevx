@@ -63,6 +63,7 @@ iris::Renderer::ImageView& iris::Renderer::ImageView::operator=(ImageView&& rhs)
 iris::Renderer::ImageView::~ImageView() noexcept {
   if (handle == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
 
   vkDestroyImageView(sDevice, handle, nullptr);
 
@@ -363,37 +364,63 @@ iris::Renderer::Image& iris::Renderer::Image::operator=(Image&& rhs) noexcept {
 iris::Renderer::Image::~Image() noexcept {
   if (handle == VK_NULL_HANDLE) return;
   IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
 
   vmaDestroyImage(sAllocator, handle, allocation);
 
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Image::~Image
 
-tl::expected<VkImageView, std::system_error>
-iris::Renderer::CreateImageView(VkImage image, VkFormat format,
-                                VkImageViewType type,
-                                VkImageSubresourceRange imageSubresourceRange,
-                                VkComponentMapping componentMapping) noexcept {
+tl::expected<iris::Renderer::Sampler, std::system_error>
+iris::Renderer::Sampler::Create(VkSamplerCreateInfo const& samplerCI,
+                                std::string name) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
 
-  VkImageViewCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  ci.image = image;
-  ci.viewType = type;
-  ci.format = format;
-  ci.components = componentMapping;
-  ci.subresourceRange = imageSubresourceRange;
-
-  VkImageView imageView;
-  result = vkCreateImageView(sDevice, &ci, nullptr, &imageView);
-  if (result != VK_SUCCESS) {
+  Sampler sampler;
+  if (auto result =
+        vkCreateSampler(sDevice, &samplerCI, nullptr, &sampler.handle);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create image view"));
+      std::system_error(make_error_code(result), "Cannot create sampler"));
   }
 
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_SAMPLER, sampler.handle, name.c_str());
+  }
+
+  sampler.name = std::move(name);
+
+  Ensures(sampler.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return imageView;
-} // iris::Renderer::CreateImageView
+  return std::move(sampler);
+} // iris::Renderer::Sampler::Create
+
+iris::Renderer::Sampler::Sampler(Sampler&& other) noexcept
+  : handle(other.handle)
+  , name(std::move(other.name)) {
+  other.handle = VK_NULL_HANDLE;
+} // iris::Renderer::Sampler::Sampler
+
+iris::Renderer::Sampler& iris::Renderer::Sampler::operator=(Sampler&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  handle = rhs.handle;
+  name = std::move(rhs.name);
+
+  rhs.handle = VK_NULL_HANDLE;
+
+  return *this;
+}
+
+iris::Renderer::Sampler::~Sampler() noexcept {
+  if (handle == VK_NULL_HANDLE) return;
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  vkDestroySampler(sDevice, handle, nullptr);
+
+  IRIS_LOG_LEAVE();
+}
 

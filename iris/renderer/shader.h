@@ -14,15 +14,27 @@ namespace filesystem = std::filesystem;
 
 namespace iris::Renderer {
 
-tl::expected<VkShaderModule, std::system_error>
-CreateShaderFromSource(std::string_view source,
-                       VkShaderStageFlagBits shaderStage,
-                       std::string const& entry = "main") noexcept;
+struct Shader {
+  static tl::expected<Shader, std::system_error>
+  CreateFromSource(std::string_view source, VkShaderStageFlagBits stage,
+                   std::string entry = "main", std::string name = {}) noexcept;
 
-tl::expected<VkShaderModule, std::system_error>
-CreateShaderFromFile(filesystem::path const& path,
-                     VkShaderStageFlagBits shaderStage,
-                     std::string const& entry = "main") noexcept;
+  VkShaderStageFlagBits stage;
+  VkShaderModule handle;
+  std::string entry;
+
+  operator VkShaderModule() const noexcept { return handle; }
+
+  Shader() = default;
+  Shader(Shader const&) = delete;
+  Shader(Shader&& other) noexcept;
+  Shader& operator=(Shader const&) = delete;
+  Shader& operator=(Shader&& rhs) noexcept;
+  ~Shader() noexcept;
+
+private:
+  std::string name;
+}; // struct Shader
 
 } // namespace iris::Renderer
 

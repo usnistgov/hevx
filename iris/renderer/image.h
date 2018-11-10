@@ -26,7 +26,7 @@ struct ImageView {
   ImageView(ImageView const&) = delete;
   ImageView(ImageView&& other) noexcept;
   ImageView& operator=(ImageView const&) = delete;
-  ImageView& operator=(ImageView&& other) noexcept;
+  ImageView& operator=(ImageView&& rhs) noexcept;
   ~ImageView() noexcept;
 
 private:
@@ -74,19 +74,32 @@ struct Image {
   Image(Image const&) = delete;
   Image(Image&& other) noexcept;
   Image& operator=(Image const&) = delete;
-  Image& operator=(Image&& other) noexcept;
+  Image& operator=(Image&& rhs) noexcept;
   ~Image() noexcept;
 
 private:
   std::string name;
 }; // struct Image
 
-tl::expected<VkImageView, std::system_error> CreateImageView(
-  VkImage image, VkFormat format, VkImageViewType type,
-  VkImageSubresourceRange imageSubresourceRange,
-  VkComponentMapping componentMapping = {
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY}) noexcept;
+struct Sampler {
+  static tl::expected<Sampler, std::system_error>
+  Create(VkSamplerCreateInfo const& samplerCI, std::string name = {}) noexcept;
+
+  VkSampler handle{VK_NULL_HANDLE};
+  VkSampler* get() noexcept { return &handle; }
+
+  operator VkSampler() const noexcept { return handle; }
+
+  Sampler() = default;
+  Sampler(Sampler const&) = delete;
+  Sampler(Sampler&& other) noexcept;
+  Sampler& operator=(Sampler const&) = delete;
+  Sampler& operator=(Sampler&& rhs) noexcept;
+  ~Sampler() noexcept;
+
+private:
+  std::string name;
+}; // struct Sampler
 
 } // namespace iris::Renderer
 

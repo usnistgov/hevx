@@ -4,6 +4,7 @@
 #include "renderer/buffer.h"
 #include "renderer/image.h"
 #include "renderer/impl.h"
+#include "renderer/pipeline.h"
 #include "renderer/shader.h"
 #include "error.h"
 #include "logging.h"
@@ -48,7 +49,8 @@ void main() {
 tl::expected<iris::Renderer::UI, std::system_error>
 iris::Renderer::UI::Create() noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+
   UI ui;
 
   if (auto cbs = AllocateCommandBuffers(2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
@@ -104,7 +106,7 @@ iris::Renderer::UI::Create() noexcept {
         {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height),
          1},
         VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-        gsl::not_null(pixels), bytes_per_pixel)) {
+        gsl::not_null(pixels), bytes_per_pixel, "UI::fontImage")) {
     ui.fontImage = std::move(*ti);
   } else {
     IRIS_LOG_LEAVE();
@@ -112,7 +114,8 @@ iris::Renderer::UI::Create() noexcept {
   }
 
   if (auto tv = ui.fontImage.CreateImageView(
-        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+        VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+        "UI::fontImageView")) {
     ui.fontImageView = std::move(*tv);
   } else {
     IRIS_LOG_LEAVE();
@@ -137,11 +140,11 @@ iris::Renderer::UI::Create() noexcept {
   samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   samplerCI.unnormalizedCoordinates = VK_FALSE;
 
-  result = vkCreateSampler(sDevice, &samplerCI, nullptr, &ui.fontImageSampler);
-  if (result != VK_SUCCESS) {
+  if (auto s = Sampler::Create(samplerCI, "UI::fontImageSampler")) {
+    ui.fontImageSampler = std::move(*s);
+  } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create sampler for UI font texture"));
+    return tl::unexpected(s.error());
   }
 
   if (auto vb = Buffer::Create(
@@ -162,19 +165,19 @@ iris::Renderer::UI::Create() noexcept {
     return tl::unexpected(ib.error());
   }
 
-  VkShaderModule vertexShader;
-  if (auto vs = CreateShaderFromSource(sUIVertexShaderSource,
-                                       VK_SHADER_STAGE_VERTEX_BIT)) {
-    vertexShader = *vs;
+  absl::FixedArray<Shader> shaders(2);
+
+  if (auto vs = Shader::CreateFromSource(sUIVertexShaderSource,
+                                         VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders[0] = std::move(*vs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vs.error());
   }
 
-  VkShaderModule fragmentShader;
-  if (auto fs = CreateShaderFromSource(sUIFragmentShaderSource,
-                                       VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    fragmentShader = *fs;
+  if (auto fs = Shader::CreateFromSource(sUIFragmentShaderSource,
+                                         VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    shaders[1] = std::move(*fs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(fs.error());
@@ -183,7 +186,7 @@ iris::Renderer::UI::Create() noexcept {
   absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(1);
   descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                    1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   &ui.fontImageSampler};
+                                   ui.fontImageSampler.get()};
 
   if (auto d = DescriptorSet::Create(descriptorSetLayoutBinding,
                                      "ui::descriptorSet")) {
@@ -218,33 +221,16 @@ iris::Renderer::UI::Create() noexcept {
 
   UpdateDescriptorSets(writeDescriptorSets);
 
-  VkPushConstantRange pushConstantRange = {};
-  pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  pushConstantRange.offset = 0;
-  pushConstantRange.size = sizeof(glm::vec2) * 2;
+  absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
+  pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT, 0,
+                           sizeof(glm::vec2) * 2};
 
-  absl::FixedArray<VkPipelineShaderStageCreateInfo> shaderStageCIs(2);
-  shaderStageCIs[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                       nullptr,
-                       0,
-                       VK_SHADER_STAGE_VERTEX_BIT,
-                       vertexShader,
-                       "main",
-                       nullptr};
-  shaderStageCIs[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                       nullptr,
-                       0,
-                       VK_SHADER_STAGE_FRAGMENT_BIT,
-                       fragmentShader,
-                       "main",
-                       nullptr};
+  absl::FixedArray<VkVertexInputBindingDescription>
+    vertexInputBindingDescriptions(1);
+  vertexInputBindingDescriptions[0] = {0, sizeof(ImDrawVert),
+                                       VK_VERTEX_INPUT_RATE_VERTEX};
 
-  VkVertexInputBindingDescription vertexInputBindingDescription;
-  vertexInputBindingDescription.binding = 0;
-  vertexInputBindingDescription.stride = sizeof(ImDrawVert);
-  vertexInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-  std::vector<VkVertexInputAttributeDescription>
+  absl::FixedArray<VkVertexInputAttributeDescription>
     vertexInputAttributeDescriptions(3);
   vertexInputAttributeDescriptions[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT,
                                          offsetof(ImDrawVert, pos)};
@@ -252,16 +238,6 @@ iris::Renderer::UI::Create() noexcept {
                                          offsetof(ImDrawVert, uv)};
   vertexInputAttributeDescriptions[2] = {2, 0, VK_FORMAT_R8G8B8A8_UNORM,
                                          offsetof(ImDrawVert, col)};
-
-  VkPipelineVertexInputStateCreateInfo vertexInputStateCI = {};
-  vertexInputStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInputStateCI.vertexBindingDescriptionCount = 1;
-  vertexInputStateCI.pVertexBindingDescriptions = &vertexInputBindingDescription;
-  vertexInputStateCI.vertexAttributeDescriptionCount =
-    static_cast<uint32_t>(vertexInputAttributeDescriptions.size());
-  vertexInputStateCI.pVertexAttributeDescriptions =
-    vertexInputAttributeDescriptions.data();
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
@@ -291,141 +267,41 @@ iris::Renderer::UI::Create() noexcept {
   depthStencilStateCI.sType =
     VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
-  VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {};
-  colorBlendAttachmentState.blendEnable = VK_TRUE;
-  colorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  colorBlendAttachmentState.dstColorBlendFactor =
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  colorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-  colorBlendAttachmentState.srcAlphaBlendFactor =
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  colorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  colorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-  colorBlendAttachmentState.colorWriteMask =
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_TRUE,                             // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
 
-  VkPipelineColorBlendStateCreateInfo colorBlendStateCI = {};
-  colorBlendStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlendStateCI.attachmentCount = 1;
-  colorBlendStateCI.pAttachments = &colorBlendAttachmentState;
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
 
-  std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
-                                               VK_DYNAMIC_STATE_SCISSOR};
-
-  VkPipelineDynamicStateCreateInfo dynamicStateCI = {};
-  dynamicStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicStateCI.dynamicStateCount =
-    static_cast<uint32_t>(dynamicStates.size());
-  dynamicStateCI.pDynamicStates = dynamicStates.data();
-
-  VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
-  pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutCI.setLayoutCount = 1;
-  pipelineLayoutCI.pSetLayouts = &ui.descriptorSet.layout;
-  pipelineLayoutCI.pushConstantRangeCount = 1;
-  pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
-
-  result = vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr,
-                                           &ui.pipelineLayout);
-  if (result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create pipeline layout"));
+  if (auto p = Pipeline::CreateGraphics(
+        gsl::make_span(&ui.descriptorSet.layout, 1), pushConstantRanges,
+        shaders, vertexInputBindingDescriptions,
+        vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0, "ui::Pipeline")) {
+    ui.pipeline = std::move(*p);
+  } else {
+    return tl::unexpected(p.error());
   }
-
-  VkGraphicsPipelineCreateInfo graphicsPipelineCI = {};
-  graphicsPipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  graphicsPipelineCI.stageCount = static_cast<uint32_t>(shaderStageCIs.size());
-  graphicsPipelineCI.pStages = shaderStageCIs.data();
-  graphicsPipelineCI.pVertexInputState = &vertexInputStateCI;
-  graphicsPipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
-  graphicsPipelineCI.pViewportState = &viewportStateCI;
-  graphicsPipelineCI.pRasterizationState = &rasterizationStateCI;
-  graphicsPipelineCI.pMultisampleState = &multisampleStateCI;
-  graphicsPipelineCI.pDepthStencilState = &depthStencilStateCI;
-  graphicsPipelineCI.pColorBlendState = &colorBlendStateCI;
-  graphicsPipelineCI.pDynamicState = &dynamicStateCI;
-  graphicsPipelineCI.layout = ui.pipelineLayout;
-  graphicsPipelineCI.renderPass = sRenderPass;
-  graphicsPipelineCI.subpass = 0;
-
-  result = vkCreateGraphicsPipelines(sDevice, nullptr, 1, &graphicsPipelineCI,
-                                     nullptr, &ui.pipeline);
-  if (result != VK_SUCCESS) {
-    vkDestroyPipelineLayout(sDevice, ui.pipelineLayout, nullptr);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create pipeline"));
-  }
-
-  vkDestroyShaderModule(sDevice, fragmentShader, nullptr);
-  vkDestroyShaderModule(sDevice, vertexShader, nullptr);
-
-  //NameObject(VK_OBJECT_TYPE_SAMPLER, ui.fontImageSampler,
-             //"ui::fontImageSampler");
-  //NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sDescriptorSetLayout,
-             //"ui::sDescriptorSetLayout");
-  //for (auto&& set : sDescriptorSets) {
-    //NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, set, "ui::sDescriptorSets");
-  //}
-  //NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sPipelineLayout,
-             //"ui::sPipelineLayout");
-  //NameObject(VK_OBJECT_TYPE_PIPELINE, sPipeline, "ui::sPipeline");
 
   IRIS_LOG_LEAVE();
   return std::move(ui);
 } // iris::Renderer::ui::Initialize
 
-iris::Renderer::UI::UI(UI&& other) noexcept
-  : commandBuffers(std::move(other.commandBuffers))
-  , commandBufferIndex(other.commandBufferIndex)
-  , fontImage(std::move(other.fontImage))
-  , fontImageView(std::move(other.fontImageView))
-  , fontImageSampler(other.fontImageSampler)
-  , vertexBuffer(std::move(other.vertexBuffer))
-  , indexBuffer(std::move(other.indexBuffer))
-  , descriptorSet(std::move(other.descriptorSet))
-  , pipelineLayout(other.pipelineLayout)
-  , pipeline(other.pipeline)
-  , context(std::move(other.context)) {
-  other.fontImageSampler = VK_NULL_HANDLE;
-  other.pipelineLayout = VK_NULL_HANDLE;
-  other.pipeline = VK_NULL_HANDLE;
-} // iris::Renderer::UI::UI
-
-iris::Renderer::UI& iris::Renderer::UI::operator=(UI&& rhs) noexcept {
-  if (this == &rhs) return *this;
-
-  commandBuffers = std::move(rhs.commandBuffers);
-  commandBufferIndex = rhs.commandBufferIndex;
-  fontImage = std::move(rhs.fontImage);
-  fontImageView = std::move(rhs.fontImageView);
-  fontImageSampler = rhs.fontImageSampler;
-  vertexBuffer = std::move(rhs.vertexBuffer);
-  indexBuffer = std::move(rhs.indexBuffer);
-  descriptorSet = std::move(rhs.descriptorSet);
-  pipelineLayout = rhs.pipelineLayout;
-  pipeline = rhs.pipeline;
-  context = std::move(rhs.context);
-
-  rhs.fontImageSampler = VK_NULL_HANDLE;
-  rhs.pipelineLayout = VK_NULL_HANDLE;
-  rhs.pipeline = VK_NULL_HANDLE;
-
-  return *this;
-} // iris::Renderer::UI::operator=
-
 iris::Renderer::UI::~UI() noexcept {
-  if (!context) return;
   IRIS_LOG_ENTER();
-
-  context.reset();
-  vkDestroyPipeline(sDevice, pipeline, nullptr);
-  vkDestroyPipelineLayout(sDevice, pipelineLayout, nullptr);
-  vkDestroySampler(sDevice, fontImageSampler, nullptr);
-
+  if (!commandBuffers.empty()) FreeCommandBuffers(commandBuffers);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::UI::~UI
 
