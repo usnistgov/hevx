@@ -1,26 +1,10 @@
 #include "renderer/io.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
 #include "config.h"
 #include "error.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4100)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-#include "google/protobuf/util/json_util.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic pop
-#endif
 #include "logging.h"
-#include "protos.h"
-#include "renderer/impl.h"
-#include "renderer/renderer.h"
+#include "renderer/io/gltf.h"
+#include "renderer/io/json.h"
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -38,38 +22,6 @@ static std::condition_variable sRequestsReady{};
 static std::deque<filesystem::path> sRequests{};
 static std::mutex sResultsMutex{};
 static std::vector<std::function<void(void)>> sResults{};
-
-tl::expected<std::function<void(void)>, std::system_error>
-LoadJSON(filesystem::path const& path) noexcept {
-  IRIS_LOG_ENTER();
-  std::string json;
-  if (auto const& bytes = ReadFile(path)) {
-    json = std::string(bytes->data(), bytes->size());
-  } else {
-    return tl::unexpected(bytes.error());
-  }
-
-  iris::Control::Control cMsg;
-  if (auto status = google::protobuf::util::JsonStringToMessage(json, &cMsg);
-      status.ok()) {
-    IRIS_LOG_LEAVE();
-    return [cMsg](){ Control(cMsg); };
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed,
-      fmt::format("{}\n{}", path.string(), status.ToString())));
-  }
-} // LoadJSON
-
-tl::expected<std::function<void(void)>, std::system_error>
-LoadGLTF(filesystem::path const& path) noexcept {
-  IRIS_LOG_ENTER();
-  GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(
-    std::system_error(Error::kFileNotSupported, path.string()));
-} // LoadGLTF
 
 static void HandleRequests() {
   IRIS_LOG_ENTER();

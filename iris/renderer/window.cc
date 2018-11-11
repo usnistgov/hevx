@@ -215,9 +215,10 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   }
 
   vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline);
-  vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          ui.pipeline.layout, 0, 1, &ui.descriptorSet.sets[0],
-                          0, nullptr);
+  vkCmdBindDescriptorSets(
+    cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline.layout, 0,
+    gsl::narrow_cast<std::uint32_t>(ui.descriptorSets.sets.size()),
+    ui.descriptorSets.sets.data(), 0, nullptr);
 
   VkDeviceSize bindingOffset = 0;
   vkCmdBindVertexBuffers(cb, 0, 1, ui.vertexBuffer.get(), &bindingOffset);

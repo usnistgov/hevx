@@ -33,7 +33,7 @@ struct UI {
   Sampler fontImageSampler{};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
-  DescriptorSets descriptorSet;
+  DescriptorSets descriptorSets;
   Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
   TimePoint previousTime{};
@@ -41,7 +41,7 @@ struct UI {
   UI()
   noexcept
     : commandBuffers(kNumCommandBuffers)
-    , descriptorSet(kNumDescriptorSets)
+    , descriptorSets(kNumDescriptorSets)
     , context(nullptr, &ImGui::DestroyContext) {}
 }; // struct UI
 

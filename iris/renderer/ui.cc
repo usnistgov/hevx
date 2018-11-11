@@ -36,12 +36,13 @@ void main() {
 
 static std::string const sUIFragmentShaderSource = R"(
 #version 450 core
-layout(set = 0, binding = 0) uniform sampler2D sTexture;
+layout(set = 0, binding = 0) uniform sampler sSampler;
+layout(set = 0, binding = 1) uniform texture2D sTexture;
 layout(location = 0) in vec4 Color;
 layout(location = 1) in vec2 UV;
 layout(location = 0) out vec4 fColor;
 void main() {
-  fColor = Color * texture(sTexture, UV.st);
+  fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
 })";
 
 } // namespace iris::Renderer
@@ -184,41 +185,49 @@ iris::Renderer::UI::Create() noexcept {
     return tl::unexpected(fs.error());
   }
 
-  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(1);
-  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                   1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   ui.fontImageSampler.get()};
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
-  if (auto d = DescriptorSets::Create(descriptorSetLayoutBinding,
-                                     "ui::descriptorSet")) {
-    ui.descriptorSet = std::move(*d);
+  if (auto d = DescriptorSets::Create(
+        descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
+    ui.descriptorSets = std::move(*d);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(d.error());
   }
 
+  VkDescriptorImageInfo descriptorSamplerI = {};
+  descriptorSamplerI.sampler = ui.fontImageSampler;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            ui.descriptorSets.sets[0],
+                            0,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLER,
+                            &descriptorSamplerI,
+                            nullptr,
+                            nullptr};
+
   VkDescriptorImageInfo descriptorImageI = {};
-  descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   descriptorImageI.imageView = ui.fontImageView;
-  descriptorImageI.sampler = ui.fontImageSampler;
+  descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(
-    ui.descriptorSet.sets.size());
-
-  for (std::size_t i = 0; i < writeDescriptorSets.size(); ++i) {
-    VkWriteDescriptorSet& writeDS = writeDescriptorSets[i];
-
-    writeDS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDS.pNext = nullptr;
-    writeDS.dstSet = ui.descriptorSet.sets[i];
-    writeDS.dstBinding = 0;
-    writeDS.dstArrayElement = 0;
-    writeDS.descriptorCount = 1;
-    writeDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    writeDS.pImageInfo = &descriptorImageI;
-    writeDS.pBufferInfo = nullptr;
-    writeDS.pTexelBufferView = nullptr;
-  }
+  writeDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            ui.descriptorSets.sets[0],
+                            1,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                            &descriptorImageI,
+                            nullptr,
+                            nullptr};
 
   UpdateDescriptorSets(writeDescriptorSets);
 
@@ -286,7 +295,7 @@ iris::Renderer::UI::Create() noexcept {
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
   if (auto p = Pipeline::CreateGraphics(
-        gsl::make_span(&ui.descriptorSet.layout, 1), pushConstantRanges,
+        gsl::make_span(&ui.descriptorSets.layout, 1), pushConstantRanges,
         shaders, vertexInputBindingDescriptions,
         vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,

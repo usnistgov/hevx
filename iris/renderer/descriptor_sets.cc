@@ -3,11 +3,12 @@
 
 tl::expected<iris::Renderer::DescriptorSets, std::system_error>
 iris::Renderer::DescriptorSets::Create(
-  gsl::span<VkDescriptorSetLayoutBinding> bindings, std::string name) noexcept {
+  gsl::span<VkDescriptorSetLayoutBinding> bindings, std::uint32_t numSets,
+  std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
-  DescriptorSets descriptorSet(bindings.size());
+  DescriptorSets descriptorSet(numSets);
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
   descriptorSetLayoutCI.sType =
@@ -29,7 +30,7 @@ iris::Renderer::DescriptorSets::Create(
   }
 
   absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts(
-    bindings.size(), descriptorSet.layout);
+    numSets, descriptorSet.layout);
 
   VkDescriptorSetAllocateInfo descriptorSetAI = {};
   descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;

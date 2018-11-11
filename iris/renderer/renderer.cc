@@ -1602,7 +1602,6 @@ void iris::Renderer::EndFrame() noexcept {
 
   VkCommandBufferBeginInfo cbi = {};
   cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  cbi.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
   if (auto result = vkBeginCommandBuffer(cb, &cbi); result != VK_SUCCESS) {
     GetLogger()->error("Error beginning command buffer: {}", to_string(result));
@@ -1619,7 +1618,7 @@ void iris::Renderer::EndFrame() noexcept {
     gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
 
   //
-  // 1. Go wide and build secondary command buffers
+  // 1. Build secondary command buffers
   //
 
   //
