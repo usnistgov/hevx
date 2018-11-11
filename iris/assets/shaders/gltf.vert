@@ -22,17 +22,19 @@
 
 #version 460 core
 
-layout(binding = 0) uniform MatricesBuffer {
-  mat4 ModelMatrix;
-  mat4 NormalMatrix;
+layout(set = 0, binding = 0) uniform MatricesBuffer {
   mat4 ViewMatrix;
   mat4 ViewMatrixInverse;
   mat4 ModelViewMatrix;
-  mat4 ModelViewMatrixInverse;
   mat4 ProjectionMatrix;
   mat4 ProjectionMatrixInverse;
-  mat4 ModelViewProjectionMatrix;
-  mat4 ModelViewProjectionMatrixInverse;
+  mat4 ViewProjectionMatrix;
+  mat4 ViewProjectionMatrixInverse;
+};
+
+layout(set = 1, binding = 0) uniform ModelBuffer {
+  mat4 ModelMatrix;
+  mat4 NormalMatrix;
 };
 
 layout(location = 0) in vec4 Vertex;
@@ -46,44 +48,31 @@ layout(location = 2) in vec4 Tangent;
 layout(location = 3) in vec2 Texcoord;
 #endif
 
-layout(location = 0) out vec4 Po; // surface position in object-space
+layout(location = 0) out vec2 UV;
 layout(location = 1) out vec4 Pe; // surface position in eye-space
-
-layout(location = 2) out vec4 Eo; // eye position in object-space
-layout(location = 3) out vec4 Ee; // eye position in eye-space
-
-layout(location = 4) out vec3 Vo; // view vector in object-space
-layout(location = 5) out vec3 Ve; // view vector in eye-space
+layout(location = 2) out vec4 Ee; // eye position in eye-space
+layout(location = 3) out vec3 Ve; // view vector in eye-space
 
 #ifdef HAS_NORMALS
-layout(location = 6) out vec3 No; // normal vector in object-space
 
 #ifndef HAS_TANGENTS
-layout(location = 7) out vec3 Ne; // normal vector in eye-space
+layout(location = 4) out vec3 Ne; // normal vector in eye-space
 #else // HAS_TANGENTS defined
-layout(location = 7) out mat3 TBN;
+layout(location = 4) out mat3 TBN;
 #endif
 
 #endif // HAS_NORMALS
-
-layout(location = 10) out vec2 UV;
 
 out gl_PerVertex {
   vec4 gl_Position;
 };
 
 void main() {
-  Po = Vertex;
-  Pe = ModelViewMatrix * Po;
-
+  Pe = ModelViewMatrix * Vertex;
   Ee = -ProjectionMatrixInverse[2];
-  Eo = ModelViewMatrixInverse * Ee;
-
-  Vo = normalize(Eo.xyz*Po.w-Po.xyz*Eo.w);
   Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
 
 #ifdef HAS_NORMALS
-  No = normalize(Normal);
 
 #ifndef HAS_TANGENTS
   Ne = normalize(vec3(ModelMatrix * vec4(Normal.xyz, 0.0)));

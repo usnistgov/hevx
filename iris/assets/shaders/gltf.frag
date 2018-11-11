@@ -42,56 +42,15 @@ struct Light {
   bool on;
 };
 
-layout(binding = 0) uniform LightsBuffer {
+layout(set = 0, binding = 1) uniform LightsBuffer {
   Light Lights[MAX_LIGHTS];
   int NumLights;
 };
 
-layout(location = 0) in vec4 Po; // surface position in object-space
-layout(location = 1) in vec4 Pe; // surface position in eye-space
-
-layout(location = 2) in vec4 Eo; // eye position in object-space
-layout(location = 3) in vec4 Ee; // eye position in eye-space
-
-layout(location = 4) in vec3 Vo; // view vector in object-space
-layout(location = 5) in vec3 Ve; // view vector in eye-space
-
-#ifdef HAS_NORMALS
-layout(location = 6) in vec3 No; // normal vector in object-space
-
-#ifndef HAS_TANGENTS
-layout(location = 7) in vec3 Ne; // normal vector in eye-space
-#else // HAS_TANGENTS defined
-layout(location = 7) in mat3 TBN;
-#endif
-
-#endif // HAS_NORMALS
-
-layout(location = 10) in vec2 UV;
-
-#ifdef HAS_BASECOLOR_MAP
-layout(set = 0, binding = 0) uniform sampler2D BaseColorSampler;
-#endif
-
-#ifdef HAS_NORMAL_MAP
-layout(set = 0, binding = 1) uniform sampler2D NormalSampler;
-#endif
-
-#ifdef HAS_EMISSIVE_MAP
-layout(set = 0, binding = 2) uniform sampler2D EmissiveSampler;
-#endif
-
-#ifdef HAS_METALLICROUGHNESS_MAP
-layout(set = 0, binding = 3) uniform sampler2D MetallicRoughnessSampler;
-#endif
-
-#ifdef HAS_OCCLUSION_MAP
-layout(set = 0, binding = 4) uniform sampler2D OcclusionSampler;
-#endif
-
-layout(push_constant) uniform PushConstants {
+layout(set = 1, binding = 1) uniform MaterialBuffer {
   vec2 MetallicRoughnessValues;
   vec4 BaseColorFactor;
+
 #ifdef HAS_NORMAL_MAP
   float NormalScale;
 #endif
@@ -102,6 +61,46 @@ layout(push_constant) uniform PushConstants {
   float OcclusionStrength;
 #endif
 };
+
+#ifdef HAS_BASECOLOR_MAP
+layout(set = 1, binding = 2) uniform sampler BaseColorSampler;
+layout(set = 1, binding = 3) uniform texture2D BaseColorTexture;
+#endif
+
+#ifdef HAS_NORMAL_MAP
+layout(set = 1, binding = 4) uniform sampler NormalSampler;
+layout(set = 1, binding = 5) uniform texture2D NormalTexture;
+#endif
+
+#ifdef HAS_EMISSIVE_MAP
+layout(set = 1, binding = 6) uniform sampler EmissiveSampler;
+layout(set = 1, binding = 7) uniform texture2D EmissiveTexture;
+#endif
+
+#ifdef HAS_METALLICROUGHNESS_MAP
+layout(set = 1, binding = 8) uniform sampler MetallicRoughnessSampler;
+layout(set = 1, binding = 9) uniform texture2D MetallicRoughnessTexture;
+#endif
+
+#ifdef HAS_OCCLUSION_MAP
+layout(set = 1, binding = 10) uniform sampler OcclusionSampler;
+layout(set = 1, binding = 11) uniform texture2D OcclusionTexture;
+#endif
+
+layout(location = 0) in vec2 UV;
+layout(location = 1) in vec4 Pe; // surface position in eye-space
+layout(location = 2) in vec4 Ee; // eye position in eye-space
+layout(location = 3) in vec3 Ve; // view vector in eye-space
+
+#ifdef HAS_NORMALS
+
+#ifndef HAS_TANGENTS
+layout(location = 4) in vec3 Ne; // normal vector in eye-space
+#else // HAS_TANGENTS defined
+layout(location = 4) in mat3 TBN;
+#endif
+
+#endif // HAS_NORMALS
 
 layout(location = 0) out vec4 Color;
 
@@ -157,7 +156,7 @@ vec3 GetNormal() {
 #endif
 
 #ifdef HAS_NORMAL_MAP
-    vec3 n = texture(NormalSampler, UV.st).rgb;
+    vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV.st).rgb;
     n = normalize(tbn * ((2.0 * n - 1.0) * vec3(NormalScale, NormalScale, 1.0)));
 #else
   // The tbn matrix is linearly interpolated, so we need to re-normalize
@@ -174,7 +173,7 @@ void main() {
 #ifdef HAS_METALLICROUGHNESS_MAP
   // Roughness is stored in the 'g' channel, metallic is stored in the 'b' channel.
   // This layout intentionally reserves the 'r' channel for (optional) occlusion map data
-  vec4 mrSample = texture(MetallicRoughnessSampler, UV.st);
+  vec4 mrSample = texture(sampler2D(MetallicRoughnessTexture, MetallicRoughnessSampler), UV.st);
   perceptualRoughness = mrSample.g * perceptualRoughness;
   metallic = mrSample.b * metallic;
 #endif
@@ -186,7 +185,7 @@ void main() {
   float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
 #ifdef HAS_BASECOLOR_MAP
-  vec4 baseColor = SRGBtoLINEAR(texture(BaseColorSampler, UV.st)) * BaseColorFactor;
+  vec4 baseColor = SRGBtoLINEAR(texture(sampler2D(BaseColorTexture, BaseColorSampler), UV.st)) * BaseColorFactor;
 #else
   vec4 baseColor = BaseColorFactor;
 #endif
@@ -253,12 +252,12 @@ void main() {
 
   // Apply optional PBR terms for additional (optional) shading
 #ifdef HAS_OCCLUSION_MAP
-  float ao = texture(OcclusionSampler, UV.st).r;
+  float ao = texture(sampler2D(OcclusionTexture, OcclusionSampler), UV.st).r;
   color = mix(color, color * ao, OcclusionStrength);
 #endif
 
 #ifdef HAS_EMISSIVE_MAP
-  vec3 emissive = SRGBtoLINEAR(texture(EmissiveSampler, UV.st)).rgb * EmissiveFactor;
+  vec3 emissive = SRGBtoLINEAR(texture(sampler2D(EmissiveTexture, EmissiveSampler), UV.st)).rgb * EmissiveFactor;
   color += emissive;
 #endif
 
