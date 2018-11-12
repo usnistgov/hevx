@@ -99,7 +99,7 @@ set(SOURCES
   renderer/command_buffers.cc
   renderer/descriptor_sets.cc
   renderer/image.cc
-  renderer/io.cc
+  renderer/io/io.cc
   renderer/io/gltf.cc
   renderer/io/json.cc
   renderer/pipeline.cc

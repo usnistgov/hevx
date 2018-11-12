@@ -1,7 +1,7 @@
 #ifndef HEV_IRIS_RENDERER_IO_GLTF_H_
 #define HEV_IRIS_RENDERER_IO_GLTF_H_
 
-#include "iris/renderer/io.h"
+#include "iris/renderer/io/io.h"
 
 namespace iris::Renderer::io {
 

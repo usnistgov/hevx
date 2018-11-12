@@ -11,7 +11,7 @@
 #include "error.h"
 #include "protos.h"
 #include "renderer/impl.h"
-#include "renderer/io.h"
+#include "renderer/io/io.h"
 #include "renderer/shader.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC

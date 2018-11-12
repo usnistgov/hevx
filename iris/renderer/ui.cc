@@ -108,7 +108,8 @@ iris::Renderer::UI::Create() noexcept {
         {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height),
          1},
         VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-        gsl::not_null(pixels), bytes_per_pixel, "UI::fontImage")) {
+        gsl::not_null(reinterpret_cast<std::byte*>(pixels)), bytes_per_pixel,
+        "UI::fontImage")) {
     ui.fontImage = std::move(*ti);
   } else {
     IRIS_LOG_LEAVE();

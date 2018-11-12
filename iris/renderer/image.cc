@@ -128,7 +128,7 @@ iris::Renderer::Image::Create(VkImageType type, VkFormat format,
 tl::expected<iris::Renderer::Image, std::system_error>
 iris::Renderer::Image::CreateFromMemory(
   VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
-  VmaMemoryUsage memoryUsage, gsl::not_null<unsigned char*> pixels,
+  VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
   std::uint32_t bytes_per_pixel, std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);

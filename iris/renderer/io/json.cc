@@ -22,8 +22,9 @@ tl::expected<std::function<void(void)>, std::system_error>
 iris::Renderer::io::LoadJSON(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   std::string json;
-  if (auto const& bytes = ReadFile(path)) {
-    json = std::string(bytes->data(), bytes->size());
+  if (auto&& bytes = ReadFile(path)) {
+    json =
+      std::string(reinterpret_cast<char const*>(bytes->data()), bytes->size());
   } else {
     return tl::unexpected(bytes.error());
   }
@@ -35,9 +36,8 @@ iris::Renderer::io::LoadJSON(filesystem::path const& path) noexcept {
     return [cMsg](){ Control(cMsg); };
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed,
-      fmt::format("{}\n{}", path.string(), status.ToString())));
+    return tl::unexpected(
+      std::system_error(Error::kFileParseFailed, status.ToString()));
   }
 } // iris::Renderer::io::LoadJSON
 

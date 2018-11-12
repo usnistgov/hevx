@@ -12,6 +12,11 @@ struct Buffer {
   Create(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
          VmaMemoryUsage memoryUsage, std::string name = {}) noexcept;
 
+  static tl::expected<Buffer, std::system_error>
+  CreateFromMemory(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
+                   VmaMemoryUsage memoryUsage, gsl::not_null<void*> data,
+                   std::string name = {}) noexcept;
+
   VkDeviceSize size{0};
   VkBuffer handle{VK_NULL_HANDLE};
   VmaAllocation allocation{VK_NULL_HANDLE};

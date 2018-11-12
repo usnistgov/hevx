@@ -1,7 +1,7 @@
 #include "renderer/shader.h"
 #include "logging.h"
 #include "renderer/impl.h"
-#include "renderer/io.h"
+#include "renderer/io/io.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #elif PLATFORM_COMPILER_GCC
@@ -59,7 +59,8 @@ shaderc_include_result* ShaderIncluder::GetInclude(
 
   if (!path.empty()) {
     if (auto s = io::ReadFile(path)) {
-      includes_.push_back(Include(path, std::string(s->data(), s->size())));
+      includes_.push_back(Include(
+        path, std::string(reinterpret_cast<char*>(s->data()), s->size())));
     } else {
       includes_.push_back(Include(path, s.error().what()));
     }

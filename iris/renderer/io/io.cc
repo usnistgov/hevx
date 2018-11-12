@@ -1,4 +1,4 @@
-#include "renderer/io.h"
+#include "renderer/io/io.h"
 #include "config.h"
 #include "error.h"
 #include "logging.h"
@@ -49,9 +49,19 @@ static void HandleRequests() {
     std::function<void(void)> result;
 
     if (ext.compare(".json") == 0) {
-      if (auto r = LoadJSON(path)) result = std::move(*r);
+      if (auto r = LoadJSON(path)) {
+        result = std::move(*r);
+      } else {
+        GetLogger()->error("Error loading {}: {}", path.string(),
+                           r.error().what());
+      }
     } else if (ext.compare(".gltf") == 0) {
-      if (auto r = LoadGLTF(path)) result = std::move(*r);
+      if (auto r = LoadGLTF(path)) {
+        result = std::move(*r);
+      } else {
+        GetLogger()->error("Error loading {}: {}", path.string(),
+                           r.error().what());
+      }
     } else {
       GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
                          path.string());
@@ -128,7 +138,7 @@ void iris::Renderer::io::LoadFile(filesystem::path path) noexcept {
   IRIS_LOG_LEAVE();
 } // iris::Renderer::LoadFile::io
 
-tl::expected<std::vector<char>, std::system_error>
+tl::expected<std::vector<std::byte>, std::system_error>
 iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
   IRIS_LOG_ENTER();
 
@@ -148,10 +158,10 @@ iris::Renderer::io::ReadFile(filesystem::path path) noexcept {
   }
 
   std::fseek(fh, 0L, SEEK_END);
-  std::vector<char> bytes(std::ftell(fh));
+  std::vector<std::byte> bytes(std::ftell(fh));
   GetLogger()->debug("Reading {} bytes from {}", bytes.size(), path.string());
   std::fseek(fh, 0L, SEEK_SET);
-  std::fread(bytes.data(), sizeof(char), bytes.size(), fh);
+  std::fread(bytes.data(), sizeof(std::byte), bytes.size(), fh);
 
   if (std::ferror(fh) && !std::feof(fh)) {
     std::fclose(fh);

@@ -3,7 +3,7 @@
 #include "fmt/format.h"
 #include "imgui.h"
 #include "iris/config.h"
-#include "iris/renderer/io.h"
+#include "iris/renderer/io/io.h"
 #include "iris/renderer/renderer.h"
 #include "iris/wsi/window.h"
 #if PLATFORM_COMPILER_MSVC

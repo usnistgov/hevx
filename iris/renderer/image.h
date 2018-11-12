@@ -43,7 +43,7 @@ struct Image {
   static tl::expected<Image, std::system_error>
   CreateFromMemory(VkImageType imageType, VkFormat format, VkExtent3D extent,
                    VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
-                   gsl::not_null<unsigned char*> pixels,
+                   gsl::not_null<std::byte*> pixels,
                    std::uint32_t bytes_per_pixel,
                    std::string name = {}) noexcept;
 
