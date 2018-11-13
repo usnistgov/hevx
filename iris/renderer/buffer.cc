@@ -80,7 +80,7 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
   VkBufferCreateInfo bufferCI = {};
   bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferCI.size = size;
-  bufferCI.usage = bufferUsage;
+  bufferCI.usage = bufferUsage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
   VmaAllocationCreateInfo allocationCI = {};
   allocationCI.usage = memoryUsage;

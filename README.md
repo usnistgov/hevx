@@ -35,7 +35,7 @@ The following packages are fetched and managed with CMake:
 - [nanomsg/nng](https://github.com/nanomsg/nng)
 - [ocornut/imgui](https://github.com/ocornut/imgui)
 - [protocolbuffers/protobuf](https://github.com/protocolbuffers/protobuf)
-- [taocpp/json](https://github.com/taocpp/json)
+- [nlohmann/json](https://github.com/nlohmann/json)
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
 - [sailormoon/flags](https://github.com/sailormoon/flags)
 

@@ -1,527 +1,553 @@
 #include "renderer/io/gltf.h"
-#include "renderer/buffer.h"
 #include "error.h"
+#include "glm/glm.hpp"
+#include "glm/gtc/type_ptr.hpp"
+#include "glm/gtc/quaternion.hpp"
 #include "gsl/gsl"
 #include "logging.h"
-#include "tao/json.hpp"
-#include "tao/json/contrib/traits.hpp"
+#include "nlohmann/json.hpp"
+#include "renderer/buffer.h"
+#include <optional>
+#include <string>
+#include <vector>
+#include <map>
 
-namespace iris::Renderer::io {
+namespace nlohmann {
+
+template <>
+struct adl_serializer<glm::vec3> {
+  static void to_json(json& j, glm::vec3 const& vec) {
+    j = std::vector<float>{vec.x, vec.y, vec.z};
+  }
+
+  static void from_json(json const& j, glm::vec3& vec) {
+    auto arr = j.get<std::vector<float>>();
+    if (arr.size() != 3) throw std::runtime_error("wrong number of elements");
+    vec.x = arr[0];
+    vec.y = arr[1];
+    vec.z = arr[2];
+  }
+}; // struct adl_serializer<glm::vec3>
+
+template <>
+struct adl_serializer<glm::vec4> {
+  static void to_json(json& j, glm::vec4 const& vec) {
+    j = std::vector<float>{vec.x, vec.y, vec.z, vec.w};
+  }
+
+  static void from_json(json const& j, glm::vec4& vec) {
+    auto arr = j.get<std::vector<float>>();
+    if (arr.size() != 4) throw std::runtime_error("wrong number of elements");
+    vec.x = arr[0];
+    vec.y = arr[1];
+    vec.z = arr[2];
+    vec.w = arr[3];
+  }
+}; // struct adl_serializer<glm::vec4>
+
+template <>
+struct adl_serializer<glm::quat> {
+  static void to_json(json& j, glm::quat const& q) {
+    j = std::vector<float>{q.x, q.y, q.z, q.w};
+  }
+
+  static void from_json(json const& j, glm::quat& q) {
+    auto arr = j.get<std::vector<float>>();
+    if (arr.size() != 4) throw std::runtime_error("wrong number of elements");
+    q.x = arr[0];
+    q.y = arr[1];
+    q.z = arr[2];
+    q.w = arr[3];
+  }
+}; // struct adl_serializer<glm::vec4>
+
+template <>
+struct adl_serializer<glm::mat4x4> {
+  static void to_json(json& j, glm::mat4x4 const& mat) {
+    j = std::vector<float>(glm::value_ptr(mat), glm::value_ptr(mat) + 16);
+  }
+
+  static void from_json(json const& j, glm::mat4x4& mat) {
+    auto arr = j.get<std::vector<float>>();
+    if (arr.size() != 16) throw std::runtime_error("wrong number of elements");
+    std::copy_n(arr.begin(), 16, glm::value_ptr(mat));
+  }
+}; // struct adl_serializer<glm::vec4>
+
+} // namespace nlohmann
+
+using json = nlohmann::json;
 
 namespace gltf {
 
-struct Buffer {
-  int byteLength;
-  std::optional<std::string> uri;
-  std::optional<std::string> name;
-  std::vector<std::byte> data;
-}; // struct Buffer
+struct Asset {
+  std::optional<std::string> copyright;
+  std::optional<std::string> generator;
+  std::string version;
+  std::optional<std::string> minVersion;
+}; // struct Asset
 
-struct BufferTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("byteLength", &Buffer::byteLength),
-      TAO_JSON_BIND_OPTIONAL("uri", &Buffer::uri),
-      TAO_JSON_BIND_OPTIONAL("name", &Buffer::name)> {
+void to_json(json& j, Asset const& asset) {
+  j = json{{"version", asset.version}};
+  if (asset.copyright) j["copyright"] = *asset.copyright;
+  if (asset.generator) j["generator"] = *asset.generator;
+  if (asset.minVersion) j["minVersion"] = *asset.minVersion;
+} // to_json
 
-  template <template <typename...> class Traits>
-  static Buffer as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    Buffer buffer;
-
-    buffer.byteLength = value.at("byteLength").template as<int>();
-    buffer.uri = value.at("uri").template as<std::string>();
-    buffer.name = value.at("name").template as<std::string>();
-
-    return buffer;
-  }
-}; // struct BufferTraits
-
-struct BufferView {
-  int buffer;
-  int byteLength;
-  std::optional<int> byteOffset;
-  std::optional<int> byteStride;
-  std::optional<int> target;
-  std::optional<std::string> name;
-}; // struct BufferView
-
-struct BufferViewTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("buffer", &BufferView::buffer),
-      TAO_JSON_BIND_REQUIRED("byteLength", &BufferView::byteLength),
-      TAO_JSON_BIND_OPTIONAL("byteOffset", &BufferView::byteOffset),
-      TAO_JSON_BIND_OPTIONAL("byteStride", &BufferView::byteStride),
-      TAO_JSON_BIND_OPTIONAL("target", &BufferView::target),
-      TAO_JSON_BIND_OPTIONAL("name", &BufferView::name)> {
-
-  template <template <typename...> class Traits>
-  static BufferView as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    BufferView view;
-
-    view.buffer = value.at("buffer").template as<int>();
-    view.byteLength = value.at("byteLength").template as<int>();
-    view.byteOffset = value.at("byteOffset").template as<int>();
-    view.byteStride = value.at("byteStride").template as<int>();
-    view.target = value.at("target").template as<int>();
-    view.name = value.at("name").template as<std::string>();
-
-    if (!view.byteOffset) view.byteOffset = 0;
-
-    return view;
-  }
-}; // struct BufferViewTraits
+void from_json(json const& j, Asset& asset) {
+  j.at("version").get_to(asset.version);
+  if (j.find("copyright") != j.end()) asset.copyright = j["copyright"];
+  if (j.find("generator") != j.end()) asset.generator = j["generator"];
+  if (j.find("minVersion") != j.end()) asset.minVersion = j["minVersion"];
+}
 
 struct Accessor {
+  std::optional<int> bufferView; // index into gltf.bufferViews
+  std::optional<int> byteOffset;
   int componentType;
+  std::optional<bool> normalized;
   int count;
   std::string type;
-  std::optional<int> bufferView;
-  std::optional<int> byteOffset;
-  std::optional<bool> normalized;
   std::optional<std::vector<double>> min;
   std::optional<std::vector<double>> max;
   std::optional<std::string> name;
 }; // struct Accessor
 
-struct AccessorTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("componentType", &Accessor::componentType),
-      TAO_JSON_BIND_REQUIRED("count", &Accessor::count),
-      TAO_JSON_BIND_REQUIRED("type", &Accessor::type),
-      TAO_JSON_BIND_OPTIONAL("bufferView", &Accessor::bufferView),
-      TAO_JSON_BIND_OPTIONAL("byteOffset", &Accessor::byteOffset),
-      TAO_JSON_BIND_OPTIONAL("normalized", &Accessor::normalized),
-      TAO_JSON_BIND_OPTIONAL("min", &Accessor::min),
-      TAO_JSON_BIND_OPTIONAL("max", &Accessor::max),
-      TAO_JSON_BIND_OPTIONAL("name", &Accessor::name)> {
+void to_json(json& j, Accessor const& accessor) {
+  j = json{{"componentType", accessor.componentType},
+           {"count", accessor.count},
+           {"type", accessor.type}};
 
-  template <template <typename...> class Traits>
-  static Accessor as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    Accessor accessor;
+  if (accessor.bufferView) j["bufferView"] = *accessor.bufferView;
+  if (accessor.byteOffset) j["byteOffset"] = *accessor.byteOffset;
+  if (accessor.normalized) j["normalized"] = *accessor.normalized;
+  if (accessor.min) j["min"] = *accessor.min;
+  if (accessor.max) j["max"] = *accessor.max;
+  if (accessor.name) j["name"] = *accessor.name;
+}
 
-    accessor.componentType = value.at("componentType").template as<int>();
-    accessor.count = value.at("count").template as<int>();
-    accessor.type = value.at("type").template as<std::string>();
-    accessor.bufferView = value.at("bufferView").template as<int>();
-    accessor.byteOffset = value.at("byteOffset").template as<int>();
-    accessor.normalized = value.at("normalized").template as<bool>();
-    accessor.min = value.at("min").template as<std::vector<double>>();
-    accessor.max = value.at("max").template as<std::vector<double>>();
-    accessor.name = value.at("name").template as<std::string>();
+void from_json(json const& j, Accessor& accessor) {
+  j.at("componentType").get_to(accessor.componentType);
+  j.at("count").get_to(accessor.count);
 
-    if (!accessor.byteOffset) accessor.byteOffset = 0;
-    if (!accessor.normalized) accessor.normalized = false;
-
-    return accessor;
+  if (j.find("bufferView") != j.end()) accessor.bufferView = j["bufferView"];
+  if (j.find("byteOffset") != j.end()) accessor.byteOffset = j["byteOffset"];
+  if (j.find("normalized") != j.end()) accessor.normalized = j["normalized"];
+  if (j.find("min") != j.end()) {
+    accessor.min = j["min"].get<decltype(Accessor::min)::value_type>();
   }
-}; // struct AccessorTraits
+  if (j.find("max") != j.end()) {
+    accessor.max = j["max"].get<decltype(Accessor::max)::value_type>();
+  }
+  if (j.find("name") != j.end()) accessor.name = j["name"];
+}
+
+struct Buffer {
+  int byteLength;
+  std::optional<std::string> uri;
+  std::optional<std::string> name;
+}; // struct Buffer
+
+void to_json(json& j, Buffer const& buffer) {
+  j = json{{"byteLength", buffer.byteLength}};
+  if (buffer.uri) j["uri"] = *buffer.uri;
+  if (buffer.name) j["name"] = *buffer.name;
+}
+
+void from_json(json const& j, Buffer& buffer) {
+  buffer.byteLength = j.at("byteLength");
+  if (j.find("uri") != j.end()) buffer.uri = j["uri"];
+  if (j.find("name") != j.end()) buffer.name = j["name"];
+}
+
+struct BufferView {
+  int buffer; // index into gltf.buffers
+  std::optional<int> byteOffset;
+  int byteLength;
+  std::optional<int> byteStride;
+  std::optional<int> target;
+  std::optional<std::string> name;
+}; // struct BufferView
+
+void to_json(json& j, BufferView const& view) {
+  j = json{{"buffer", view.buffer},
+           {"byteLength", view.byteLength}};
+
+  if (view.byteOffset) j["byteOffset"] = *view.byteOffset;
+  if (view.byteStride) j["byteStride"] = *view.byteStride;
+  if (view.target) j["target"] = *view.target;
+  if (view.name) j["name"] = *view.name;
+}
+
+void from_json(json const& j, BufferView& view) {
+  view.buffer = j.at("buffer");
+  view.byteLength = j.at("byteLength");
+
+  if (j.find("byteOffset") != j.end()) view.byteOffset = j["byteOffset"];
+  if (j.find("byteStride") != j.end()) view.byteStride = j["byteStride"];
+  if (j.find("target") != j.end()) view.target = j["target"];
+  if (j.find("name") != j.end()) view.name = j["name"];
+}
+
+struct Image {
+  std::optional<std::string> uri;
+  std::optional<std::string> mimeType;
+  std::optional<int> bufferView; // index into gltf.bufferViews
+  std::optional<std::string> name;
+}; // struct Image
+
+void to_json(json& j, Image const& image) {
+  j = json{};
+  if (image.uri) j["uri"] = *image.uri;
+  if (image.mimeType) j["mimeType"] = *image.mimeType;
+  if (image.bufferView) j["bufferView"] = *image.bufferView;
+  if (image.name) j["name"] = *image.name;
+}
+
+void from_json(json const& j, Image& image) {
+  if (j.find("uri") != j.end()) image.uri = j["uri"];
+  if (j.find("mimeType") != j.end()) image.mimeType = j["mimeType"];
+  if (j.find("bufferView") != j.end()) image.bufferView = j["bufferView"];
+  if (j.find("name") != j.end()) image.name = j["name"];
+}
 
 struct TextureInfo {
-  int index;
+  int index; // index into gltf.textures
   std::optional<int> texCoord;
 }; // struct TextureInfo
 
-struct TextureInfoTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("index", &TextureInfo::index),
-      TAO_JSON_BIND_OPTIONAL("texCoord", &TextureInfo::texCoord)> {
+void to_json(json& j, TextureInfo const& info) {
+  j = json{{"index", info.index}};
+  if (info.texCoord) j["texCoord"] = *info.texCoord;
+}
 
-  template <template <typename...> class Traits>
-  static TextureInfo as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    TextureInfo info;
-
-    info.index = value.at("index").template as<int>();
-    info.texCoord = value.at("texCoord").template as<int>();
-
-    if (!info.texCoord) info.texCoord = 0;
-
-    return info;
-  }
-}; // struct TextureInfoTraits
+void from_json(json const& j, TextureInfo& info) {
+  info.index = j.at("index");
+  if (j.find("texCoord") != j.end()) info.texCoord = j["texCoord"];
+}
 
 struct PBRMetallicRoughness {
-  std::optional<std::vector<double>> baseColorFactor;
+  std::optional<glm::vec4> baseColorFactor;
   std::optional<TextureInfo> baseColorTexture;
   std::optional<double> metallicFactor;
   std::optional<double> roughnessFactor;
   std::optional<TextureInfo> metallicRoughnessTexture;
 }; // struct PBRMetallicRoughness
 
-struct PBRMetallicRoughnessTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_OPTIONAL("baseColorFactor",
-                             &PBRMetallicRoughness::baseColorFactor),
-      TAO_JSON_BIND_OPTIONAL("baseColorTexture",
-                             &PBRMetallicRoughness::baseColorTexture),
-      TAO_JSON_BIND_OPTIONAL("metallicFactor",
-                             &PBRMetallicRoughness::metallicFactor),
-      TAO_JSON_BIND_OPTIONAL("roughnessFactor",
-                             &PBRMetallicRoughness::roughnessFactor),
-      TAO_JSON_BIND_OPTIONAL("metallicRoughnessTexture",
-                             &PBRMetallicRoughness::metallicRoughnessTexture)> {
+void to_json(json& j, PBRMetallicRoughness pbr) {
+  j = json{};
 
-  template <template <typename...> class Traits>
-  static PBRMetallicRoughness as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    PBRMetallicRoughness pbrMR;
-
-    pbrMR.baseColorFactor =
-      value.at("baseColorFactor").template as<std::vector<double>>();
-    pbrMR.baseColorTexture =
-      TextureInfoTraits::as(value.at("baseColorTexture"));
-    pbrMR.metallicFactor = value.at("metallicFactor").template as<double>();
-    pbrMR.roughnessFactor = value.at("roughnessFactor").template as<double>();
-    pbrMR.metallicRoughnessTexture =
-      TextureInfoTraits::as(value.at("metallicRoughnessTexture"));
-
-    if (!pbrMR.baseColorFactor) {
-      pbrMR.baseColorFactor = std::vector<double>{1, 1, 1, 1};
-    }
-
-    if (!pbrMR.metallicFactor) pbrMR.metallicFactor = 1;
-    if (!pbrMR.roughnessFactor) pbrMR.roughnessFactor = 1;
-
-    return pbrMR;
+  if (pbr.baseColorFactor) j["baseColorFactor"] = *pbr.baseColorFactor;
+  if (pbr.baseColorTexture) j["baseColorTexture"] = *pbr.baseColorTexture;
+  if (pbr.metallicFactor) j["metallicFactor"] = *pbr.metallicFactor;
+  if (pbr.roughnessFactor) j["roughnessFactor"] = *pbr.roughnessFactor;
+  if (pbr.metallicRoughnessTexture) {
+    j["metallicRoughnessTexture"] = *pbr.metallicRoughnessTexture;
   }
-}; // struct PBRMetallicRoughnessTraits
+}
+
+void from_json(json const& j, PBRMetallicRoughness& pbr) {
+  if (j.find("baseColorFactor") != j.end()) {
+    pbr.baseColorFactor = j["baseColorFactor"];
+  }
+  if (j.find("baseColorTexture") != j.end()) {
+    pbr.baseColorTexture = j["baseColorTexture"];
+  }
+  if (j.find("metallicFactor") != j.end()) {
+    pbr.metallicFactor = j["metallicFactor"];
+  }
+  if (j.find("roughnessFactor") != j.end()) {
+    pbr.roughnessFactor = j["roughnessFactor"];
+  }
+  if (j.find("metallicRoughnessTexture") != j.end()) {
+    pbr.metallicRoughnessTexture = j["metallicRoughnessTexture"];
+  }
+}
 
 struct NormalTextureInfo {
-  int index;
+  int index; // index into gltf.textures
   std::optional<int> texCoord;
   std::optional<double> scale;
 }; // struct NormalTextureInfo
 
-struct NormalTextureInfoTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("index", &NormalTextureInfo::index),
-      TAO_JSON_BIND_OPTIONAL("texCoord", &NormalTextureInfo::texCoord),
-      TAO_JSON_BIND_OPTIONAL("scale", &NormalTextureInfo::scale)> {
+void to_json(json& j, NormalTextureInfo const& info) {
+  j = json{{"index", info.index}};
+  if (info.texCoord) j["texCoord"] = *info.texCoord;
+  if (info.scale) j["scale"] = *info.scale;
+}
 
-  template <template <typename...> class Traits>
-  static NormalTextureInfo as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    NormalTextureInfo info;
-
-    info.index = value.at("index").template as<int>();
-    info.texCoord = value.at("texCoord").template as<int>();
-    info.scale = value.at("scale").template as<double>();
-
-    if (!info.texCoord) info.texCoord = 0;
-    if (!info.scale) info.scale = 1;
-
-    return info;
-  }
-}; // struct NormalTextureInfoTraits
+void from_json(json const& j, NormalTextureInfo& info) {
+  info.index = j.at("index");
+  if (j.find("texCoord") != j.end()) info.texCoord = j["texCoord"];
+  if (j.find("scale") != j.end()) info.scale = j["scale"];
+}
 
 struct OcclusionTextureInfo {
-  int index;
+  int index; // index into gltf.textures
   std::optional<int> texCoord;
   std::optional<double> strength;
 }; // struct OcclusionTextureInfo
 
-struct OcclusionTextureInfoTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("index", &OcclusionTextureInfo::index),
-      TAO_JSON_BIND_OPTIONAL("texCoord", &OcclusionTextureInfo::texCoord),
-      TAO_JSON_BIND_OPTIONAL("strength", &OcclusionTextureInfo::strength)> {
+void to_json(json& j, OcclusionTextureInfo const& info) {
+  j = json{{"index", info.index}};
+  if (info.texCoord) j["texCoord"] = *info.texCoord;
+  if (info.strength) j["strength"] = *info.strength;
+}
 
-  template <template <typename...> class Traits>
-  static OcclusionTextureInfo as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    OcclusionTextureInfo info;
-
-    info.index = value.at("index").template as<int>();
-    info.texCoord = value.at("texCoord").template as<int>();
-    info.strength = value.at("strength").template as<double>();
-
-    if (!info.texCoord) info.texCoord = 0;
-    if (!info.strength) info.strength = 1;
-
-    return info;
-  }
-}; // struct OcclusionTextureInfoTraits
+void from_json(json const& j, OcclusionTextureInfo& info) {
+  info.index = j.at("index");
+  if (j.find("texCoord") != j.end()) info.texCoord = j["texCoord"];
+  if (j.find("strength") != j.end()) info.strength= j["strength"];
+}
 
 struct Material {
+  std::optional<std::string> name;
   std::optional<PBRMetallicRoughness> pbrMetallicRoughness;
   std::optional<NormalTextureInfo> normalTexture;
   std::optional<OcclusionTextureInfo> occlusionTexture;
   std::optional<TextureInfo> emissiveTexture;
-  std::optional<std::vector<double>> emissiveFactor;
+  std::optional<glm::vec3> emissiveFactor;
   std::optional<std::string> alphaMode;
   std::optional<double> alphaCutoff;
   std::optional<bool> doubleSided;
-  std::optional<std::string> name;
 }; // struct Material
 
-struct MaterialTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_OPTIONAL("pbrMetallicRoughness",
-                             &Material::pbrMetallicRoughness),
-      TAO_JSON_BIND_OPTIONAL("normalTexture", &Material::normalTexture),
-      TAO_JSON_BIND_OPTIONAL("occlusionTexture", &Material::occlusionTexture),
-      TAO_JSON_BIND_OPTIONAL("emissiveTexture", &Material::emissiveTexture),
-      TAO_JSON_BIND_OPTIONAL("emissiveFactor", &Material::emissiveFactor),
-      TAO_JSON_BIND_OPTIONAL("alphaMode", &Material::alphaMode),
-      TAO_JSON_BIND_OPTIONAL("alphaCutoff", &Material::alphaCutoff),
-      TAO_JSON_BIND_OPTIONAL("doubleSided", &Material::doubleSided),
-      TAO_JSON_BIND_OPTIONAL("name", &Material::name)> {
-
-  template <template <typename...> class Traits>
-  static Material as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    Material material;
-
-    material.pbrMetallicRoughness =
-      PBRMetallicRoughnessTraits::as(value.at("pbrMetallicRoughness"));
-    material.normalTexture =
-      NormalTextureInfoTraits::as(value.at("normalTexture"));
-    material.occlusionTexture =
-      OcclusionTextureInfoTraits::as(value.at("occlusionTexture"));
-    material.emissiveTexture =
-      TextureInfoTraits::as(value.at("emissiveTexture"));
-
-    material.emissiveFactor =
-      value.at("emissiveFactor").template as<std::vector<double>>();
-    material.alphaMode = value.at("alphaMode").template as<std::string>();
-    material.alphaCutoff = value.at("alphaCutoff").template as<double>();
-    material.doubleSided = value.at("doubleSided").template as<bool>();
-    material.name = value.at("name").template as<std::string>();
-
-    if (!material.emissiveFactor) {
-      material.emissiveFactor = std::vector<double>{0, 0, 0};
-    }
-    if (!material.alphaMode) material.alphaMode = "OPAQUE";
-    if (!material.alphaCutoff) material.alphaCutoff = 0.5;
-    if (!material.doubleSided) material.doubleSided =false;
-
-    return material;
+void to_json(json& j, Material const& m) {
+  j = json{};
+  if (m.name) j["name"] = *m.name;
+  if (m.pbrMetallicRoughness) {
+    j["pbrMetallicRoughness"] = *m.pbrMetallicRoughness;
   }
-}; // struct MaterialTraits
+  if (m.normalTexture) j["normalTexture"] = *m.normalTexture;
+  if (m.occlusionTexture) j["occlusionTexture"] = *m.occlusionTexture;
+  if (m.emissiveTexture) j["emissiveTexture"] = *m.emissiveTexture;
+  if (m.emissiveFactor) j["emissiveFactor"] = *m.emissiveFactor;
+  if (m.alphaMode) j["alphaMode"] = *m.alphaMode;
+  if (m.alphaCutoff) j["alphaCutoff"] = *m.alphaCutoff;
+  if (m.doubleSided) j["doubleSided"] = *m.doubleSided;
+}
+
+void from_json(json const& j, Material& m) {
+  if (j.find("name") != j.end()) m.name = j["name"];
+  if (j.find("pbrMetallicRoughness") != j.end()) {
+    m.pbrMetallicRoughness = j["pbrMetallicRoughness"];
+  }
+  if (j.find("normalTexture") != j.end()) m.normalTexture = j["normalTexture"];
+  if (j.find("occlusionTexture") != j.end()) {
+    m.occlusionTexture = j["occlusionTexture"];
+  }
+  if (j.find("emissiveTexture") != j.end()) {
+    m.emissiveTexture = j["emissiveTexture"];
+  }
+  if (j.find("emissiveFactor") != j.end()) {
+    m.emissiveFactor = j["emissiveFactor"];
+  }
+  if (j.find("alphaMode") != j.end()) m.alphaMode = j["alphaMode"];
+  if (j.find("alphaCutoff") != j.end()) m.alphaCutoff = j["alphaCutoff"];
+  if (j.find("doubleSided") != j.end()) m.doubleSided = j["doubleSided"];
+}
 
 struct Primitive {
   std::map<std::string, int> attributes;
-  std::optional<int> indices;
-  std::optional<int> material;
+  std::optional<int> indices;  // index into gltf.accessors
+  std::optional<int> material; // index into gltf.materials
   std::optional<int> mode;
   std::optional<std::vector<int>> targets;
 }; // struct Primitive
 
-struct PrimitiveTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("attributes", &Primitive::attributes),
-      TAO_JSON_BIND_OPTIONAL("indices", &Primitive::indices),
-      TAO_JSON_BIND_OPTIONAL("material", &Primitive::material),
-      TAO_JSON_BIND_OPTIONAL("mode", &Primitive::mode),
-      TAO_JSON_BIND_OPTIONAL("targets", &Primitive::targets)> {
+void to_json(json& j, Primitive const& prim) {
+  j = json{{"attributes", prim.attributes}};
+  if (prim.indices) j["indices"] = *prim.indices;
+  if (prim.material) j["material"] = *prim.material;
+  if (prim.mode) j["mode"] = *prim.mode;
+  if (prim.targets) j["targets"] = *prim.targets;
+}
 
-  template <template <typename...> class Traits>
-  static Primitive as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    Primitive primitive;
-
-    primitive.attributes =
-      value.at("attributes").template as<std::map<std::string, int>>();
-
-    primitive.indices = value.at("indices").template as<int>();
-    primitive.material = value.at("material").template as<int>();
-    primitive.mode = value.at("mode").template as<int>();
-    primitive.targets = value.at("targets").template as<std::vector<int>>();
-
-    if (!primitive.mode) primitive.mode = 4;
-
-    return primitive;
+void from_json(json const& j, Primitive& prim) {
+  prim.attributes = j.at("attributes").get<decltype(Primitive::attributes)>();
+  if (j.find("indices") != j.end()) prim.indices = j["indices"];
+  if (j.find("material") != j.end()) prim.material = j["material"];
+  if (j.find("mode") != j.end()) prim.mode = j["mode"];
+  if (j.find("targets") != j.end()) {
+    prim.targets = j["targets"].get<decltype(Primitive::targets)::value_type>();
   }
-}; // struct PrimitiveTraits
+}
 
 struct Mesh {
   std::vector<Primitive> primitives;
-  std::optional<std::vector<double>> weights;
   std::optional<std::string> name;
 }; // struct Mesh
 
-struct MeshTraits
-  : public tao::json::binding::object<
-      TAO_JSON_BIND_REQUIRED("primitives", &Mesh::primitives),
-      TAO_JSON_BIND_OPTIONAL("weights", &Mesh::weights),
-      TAO_JSON_BIND_OPTIONAL("name", &Mesh::name)> {
+void to_json(json& j, Mesh const& mesh) {
+  j = json{{"primitives", mesh.primitives}};
+  if (mesh.name) j["name"] = *mesh.name;
+}
 
-  template <template <typename...> class Traits>
-  static Mesh as(tao::json::basic_value<Traits> const& value) {
-    auto const& object[[maybe_unused]] = value.get_object();
-    Mesh mesh;
+void from_json(json const& j, Mesh& mesh) {
+  mesh.primitives = j.at("primitives").get<decltype(Mesh::primitives)>();
+  if (j.find("name") != j.end()) mesh.name = j["name"];
+}
 
-    for (auto&& primitiveValue : value.at("primitives").get_array()) { // get_array makes a copy...
-      mesh.primitives.push_back(PrimitiveTraits::as(primitiveValue));
-    }
-    mesh.weights = value.at("weights").template as<std::vector<double>>();
-    mesh.name = value.at("name").template as<std::string>();
+struct Node {
+  std::optional<std::vector<int>> children; // indices into gltf.nodes
+  std::optional<glm::mat4x4> matrix;
+  std::optional<int> mesh; // index into gltf.meshes
+  std::optional<glm::quat> rotation;
+  std::optional<glm::vec3> scale;
+  std::optional<glm::vec3> translation;
+  std::optional<std::string> name;
+}; // struct Node
 
-    return mesh;
+void to_json(json& j, Node const& node) {
+  j = json{};
+  if (node.children) j["children"] = *node.children;
+  if (node.matrix) j["matrix"] = *node.matrix;
+  if (node.mesh) j["mesh"] = *node.mesh;
+  if (node.rotation) j["rotation"] = *node.rotation;
+  if (node.scale) j["scale"] = *node.scale;
+  if (node.translation) j["translation"] = *node.translation;
+  if (node.name) j["name"] = *node.name;
+}
+
+void from_json(json const& j, Node& node) {
+  if (j.find("children") != j.end()) {
+    node.children = j["children"].get<decltype(Node::children)::value_type>();
   }
-}; // struct MeshTraits
+  if (j.find("matrix") != j.end()) node.matrix = j["matrix"];
+  if (j.find("mesh") != j.end()) node.mesh = j["mesh"];
+  if (j.find("rotation") != j.end()) node.rotation = j["rotation"];
+  if (j.find("scale") != j.end()) node.scale = j["scale"];
+  if (j.find("translation") != j.end()) node.translation = j["translation"];
+  if (j.find("name") != j.end()) node.name = j["name"];
+}
+
+struct Sampler {
+  std::optional<int> magFilter;
+  std::optional<int> minFilter;
+  std::optional<int> wrapS;
+  std::optional<int> wrapT;
+  std::optional<std::string> name;
+}; // struct Sampler
+
+void to_json(json& j, Sampler const& sampler) {
+  j = json{};
+  if (sampler.magFilter) j["magFilter"] = *sampler.magFilter;
+  if (sampler.minFilter) j["minFilter"] = *sampler.minFilter;
+  if (sampler.wrapS) j["wrapS"] = *sampler.wrapS;
+  if (sampler.wrapT) j["wrapT"] = *sampler.wrapT;
+  if (sampler.name) j["name"] = *sampler.name;
+}
+
+void from_json(json const& j, Sampler& sampler) {
+  if (j.find("magFilter") != j.end()) sampler.magFilter = j["magFilter"];
+  if (j.find("minFilter") != j.end()) sampler.minFilter = j["minFilter"];
+  if (j.find("wrapS") != j.end()) sampler.wrapS = j["wrapS"];
+  if (j.find("wrapT") != j.end()) sampler.wrapT = j["wrapT"];
+  if (j.find("name") != j.end()) sampler.name = j["name"];
+}
+
+struct Scene {
+  std::optional<std::vector<int>> nodes; // indices into gltf.nodes
+  std::optional<std::string> name;
+}; // struct Scene
+
+void to_json(json& j, Scene const& scene) {
+  j = json{};
+  if (scene.nodes) j["nodes"] = *scene.nodes;
+  if (scene.name) j["name"] = *scene.name;
+}
+
+void from_json(json const& j, Scene& scene) {
+  if (j.find("nodes") != j.end()) {
+    scene.nodes = j["nodes"].get<decltype(Scene::nodes)::value_type>();
+  }
+  if (j.find("name") != j.end()) scene.name = j["name"];
+}
+
+struct Texture {
+  std::optional<int> sampler; // index into gltf.samplers
+  std::optional<int> source;  // index into gltf.images
+  std::optional<std::string> name;
+}; // struct Texture
+
+void to_json(json& j, Texture const& tex) {
+  j = json{};
+  if (tex.sampler) j["sampler"] = *tex.sampler;
+  if (tex.source) j["source"] = *tex.source;
+  if (tex.name) j["name"] = *tex.name;
+}
+
+void from_json(json const& j, Texture& tex) {
+  if (j.find("sampler") != j.end()) tex.sampler = j["sampler"];
+  if (j.find("source") != j.end()) tex.source = j["source"];
+  if (j.find("name") != j.end()) tex.name = j["name"];
+}
+
+struct GLTF {
+  std::optional<std::vector<Accessor>> accessors;
+  Asset asset;
+  std::optional<std::vector<Buffer>> buffers;
+  std::optional<std::vector<BufferView>> bufferViews;
+  std::optional<std::vector<Image>> images;
+  std::optional<std::vector<Material>> materials;
+  std::optional<std::vector<Mesh>> meshes;
+  std::optional<std::vector<Node>> nodes;
+  std::optional<std::vector<Sampler>> samplers;
+  std::optional<int> scene;
+  std::optional<std::vector<Scene>> scenes;
+  std::optional<std::vector<Texture>> textures;
+}; // struct GLTF
+
+void to_json(json& j, GLTF const& g) {
+  j = json{{"asset", g.asset}};
+  if (g.accessors) j["accessors"] = *g.accessors;
+  if (g.buffers) j["buffers"] = *g.buffers;
+  if (g.images) j["image"] = *g.images;
+  if (g.materials) j["materials"] = *g.materials;
+  if (g.meshes) j["meshes"] = *g.meshes;
+  if (g.nodes) j["nodes"] = *g.nodes;
+  if (g.samplers) j["samplers"] = *g.samplers;
+  if (g.scene) j["scene"] = *g.scene;
+  if (g.scenes) j["scenes"] = *g.scenes;
+  if (g.textures) j["textures"] = *g.textures;
+}
+
+void from_json(json const& j, GLTF& g) {
+  g.asset = j.at("asset");
+  if (j.find("accessors") != j.end()) {
+    g.accessors = j["accessors"].get<decltype(GLTF::accessors)::value_type>();
+  }
+  if (j.find("buffers") != j.end()) {
+    g.buffers = j["buffers"].get<decltype(GLTF::buffers)::value_type>();
+  }
+  if (j.find("bufferViews") != j.end()) {
+    g.bufferViews = j["bufferViews"].get<decltype(GLTF::bufferViews)::value_type>();
+  }
+  if (j.find("images") != j.end()) {
+    g.images = j["images"].get<decltype(GLTF::images)::value_type>();
+  }
+  if (j.find("materials") != j.end()) {
+    g.materials = j["materials"].get<decltype(GLTF::materials)::value_type>();
+  }
+  if (j.find("meshes") != j.end()) {
+    g.meshes = j["meshes"].get<decltype(GLTF::meshes)::value_type>();
+  }
+  if (j.find("nodes") != j.end()) {
+    g.nodes = j["nodes"].get<decltype(GLTF::nodes)::value_type>();
+  }
+  if (j.find("samplers") != j.end()) {
+    g.samplers = j["samplers"].get<decltype(GLTF::samplers)::value_type>();
+  }
+  if (j.find("scene") != j.end()) g.scene = j["scene"];
+  if (j.find("scenes") != j.end()) {
+    g.scenes = j["scenes"].get<decltype(GLTF::scenes)::value_type>();
+  }
+  if (j.find("textures") != j.end()) {
+    g.textures = j["textures"].get<decltype(GLTF::textures)::value_type>();
+  }
+}
 
 } // namespace gltf
-
-tl::expected<bool, std::system_error> static CheckVersion(
-  tao::json::value const* asset) noexcept {
-  if (!asset) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "No asset tag"));
-  }
-
-  if (auto version = asset->find("version")) {
-    if (version->is_string_type()) {
-      if (version->as<std::string>() == "2.0") {
-        return true;
-      } else {
-        if (auto minVersion = asset->find("minVersion")) {
-          if (minVersion->is_string_type()) {
-            return (minVersion->as<std::string>() == "2.0");
-          } else {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "Bad minVersion field in asset tag"));
-          }
-        } else {
-          return false;
-        }
-      }
-    } else {
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "Bad version field in asset tag"));
-    }
-  } else {
-    return tl::unexpected(std::system_error(Error::kFileParseFailed,
-                                            "No version field in asset tag"));
-  }
-} // CheckVersion
-
-tl::expected<std::vector<gltf::Buffer>, std::exception>
-LoadBuffers(tao::json::value const* buffersValue,
-            filesystem::path const& baseDir) noexcept {
-  if (!buffersValue) return {};
-
-  if (!buffersValue->is_array()) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "buffers is not an array"));
-  }
-
-  std::vector<gltf::Buffer> buffers;
-
-  for (auto&& value : buffersValue->get_array()) { // get_array makes a copy...
-    try {
-      auto&& buffer = gltf::BufferTraits::as(value);
-      //auto&& buffer = value.as<gltf::Buffer>();
-
-    if (buffer.uri) {
-        filesystem::path uriPath(*buffer.uri);
-        if (uriPath.is_relative()) uriPath = baseDir / uriPath;
-
-        if (auto data = io::ReadFile(uriPath)) {
-          buffer.data = std::move(*data);
-        } else {
-          return tl::unexpected(data.error());
-        }
-      }
-
-      buffers.push_back(buffer);
-    } catch (std::exception const& e) { return tl::unexpected(e); }
-  }
-
-  return buffers;
-} // LoadBuffers
-
-tl::expected<std::vector<gltf::BufferView>, std::exception>
-LoadBufferViews(tao::json::value const* bufferViewsValue) noexcept {
-  if (!bufferViewsValue) return {};
-
-  if (!bufferViewsValue->is_array()) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "bufferViews is not an array"));
-  }
-
-  std::vector<gltf::BufferView> bufferViews;
-
-  for (auto&& value : bufferViewsValue->get_array()) { // get_array makes a copy...
-    try {
-      bufferViews.push_back(gltf::BufferViewTraits::as(value));
-    } catch (std::exception const& e) {
-      return tl::unexpected(e);
-    }
-  }
-
-  return bufferViews;
-} // LoadBuffers
-
-tl::expected<std::vector<gltf::Accessor>, std::exception>
-LoadAccessors(tao::json::value const* accessorsValue) noexcept {
-  if (!accessorsValue) return {};
-
-  if (!accessorsValue->is_array()) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "accessors is not an array"));
-  }
-
-  std::vector<gltf::Accessor> accessors;
-
-  for (auto&& value : accessorsValue->get_array()) { // get_array makes a copy...
-    try {
-      accessors.push_back(gltf::AccessorTraits::as(value));
-    } catch (std::exception const& e) {
-      return tl::unexpected(e);
-    }
-  }
-
-  return accessors;
-} // LoadAccessors
-
-tl::expected<std::vector<gltf::Material>, std::exception>
-LoadMaterials(tao::json::value const* materialsValue) noexcept {
-  if (!materialsValue) return {};
-
-  if (!materialsValue->is_array()) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "materials is not an array"));
-  }
-
-  std::vector<gltf::Material> materials;
-
-  for (auto&& value : materialsValue->get_array()) { // get_array makes a copy...
-    try {
-      materials.push_back(gltf::MaterialTraits::as(value));
-    } catch (std::exception const& e) {
-      return tl::unexpected(e);
-    }
-  }
-
-  return materials;
-} // LoadMaterials
-
-tl::expected<std::vector<gltf::Mesh>, std::exception>
-LoadMeshes(tao::json::value const* meshesValue) noexcept {
-  if (!meshesValue) return {};
-
-  if (!meshesValue->is_array()) {
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "meshes is not an array"));
-  }
-
-  std::vector<gltf::Mesh> meshes;
-
-  for (auto&& value : meshesValue->get_array()) { // get_array makes a copy...
-    try {
-      meshes.push_back(gltf::MeshTraits::as(value));
-    } catch (std::exception const& e) {
-      return tl::unexpected(e);
-    }
-  }
-
-  return meshes;
-} // LoadMeshes
-
-} // namespace iris::Renderer::io
 
 tl::expected<std::function<void(void)>, std::system_error>
 iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
@@ -529,91 +555,85 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   filesystem::path const baseDir = path.parent_path();
 
-  std::string json;
+  json json;
   if (auto&& bytes = ReadFile(path)) {
-    json =
-      std::string(reinterpret_cast<char const*>(bytes->data()), bytes->size());
+    try {
+      json = json::parse(*bytes);
+    } catch (std::exception const& e) {
+      return tl::unexpected(std::system_error(Error::kFileParseFailed,
+                                              "Parsing failed: "s + e.what()));
+    }
   } else {
     return tl::unexpected(bytes.error());
   }
 
-  tao::json::value const gltf = tao::json::from_string(json);
-  if (!gltf) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "No GLTF?"));
+  gltf::GLTF gltf;
+  try {
+    gltf = json.get<gltf::GLTF>();
+  } catch (std::exception const& e) {
+    return tl::unexpected(std::system_error(Error::kFileParseFailed,
+                                            "Parsing failed: "s + e.what()));
   }
 
-  if (auto vg = CheckVersion(gltf.find("asset")); !vg) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, "Unsupported version"));
-  }
-
-  std::vector<gltf::Buffer> gltfBuffers;
-  if (auto b = LoadBuffers(gltf.find("buffers"), baseDir)) {
-    gltfBuffers = std::move(*b);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "Reading buffers: "s + b.error().what()));
-  }
-
-  std::vector<gltf::BufferView> bufferViews;
-  if (auto v = LoadBufferViews(gltf.find("bufferViews"))) {
-    bufferViews = std::move(*v);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "Reading bufferViews: "s + v.error().what()));
-  }
-
-  std::vector<gltf::Accessor> accessors;
-  if (auto a = LoadAccessors(gltf.find("accessors"))) {
-    accessors = std::move(*a);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "Reading accessors: "s + a.error().what()));
-  }
-
-  std::vector<gltf::Material> materials;
-  if (auto m = LoadMaterials(gltf.find("materials"))) {
-    materials = std::move(*m);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "Reading materials: "s + m.error().what()));
-  }
-
-  std::vector<gltf::Mesh> meshes;
-  if (auto m = LoadMeshes(gltf.find("meshes"))) {
-    meshes = std::move(*m);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "Reading meshes: "s + m.error().what()));
-  }
-
-  std::vector<Buffer> gpuBuffers;
-  for (auto view : bufferViews) {
-    VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (view.target && *view.target == 34963) {
-      bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+  if (gltf.asset.version != "2.0") {
+    if (gltf.asset.minVersion) {
+      if (gltf.asset.minVersion != "2.0") {
+        return tl::unexpected(
+          std::system_error(Error::kFileParseFailed,
+                            "Unsupported version: " + gltf.asset.version +
+                              " / " + *gltf.asset.minVersion));
+      }
     } else {
-      GetLogger()->warn("no bufferView target; assuming vertex buffer");
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed,
+        "Unsupported version: " + gltf.asset.version + " and no minVersion"));
     }
+  }
 
-    if (auto b = Buffer::CreateFromMemory(
-          view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-          gsl::not_null(gltfBuffers[view.buffer].data.data() +
-                        *view.byteOffset),
-          view.name ? *view.name : "")) {
-      gpuBuffers.push_back(std::move(*b));
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(b.error());
+  std::vector<std::vector<std::byte>> buffersBytes;
+  if (gltf.buffers) {
+    for (auto&& buffer : *gltf.buffers) {
+      if (buffer.uri) {
+        filesystem::path uriPath(*buffer.uri);
+        if (auto bytes =
+              ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
+          buffersBytes.push_back(std::move(*bytes));
+        } else {
+          return tl::unexpected(bytes.error());
+        }
+      } else {
+        GetLogger()->warn("buffer with no URI; this probably won't work");
+      }
     }
+  }
+
+  if (gltf.bufferViews) {
+    return [gltf, buffersBytes, path]() {
+      std::vector<Buffer> gpuBuffers;
+      for (auto&& view : *gltf.bufferViews) {
+        VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        if (view.target) {
+          if (*view.target == 34963) {
+            bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+          } else if (*view.target != 34962) {
+            GetLogger()->warn(
+              "unknown bufferView target; assuming vertex buffer");
+          }
+        } else {
+          GetLogger()->warn("no bufferView target; assuming vertex buffer");
+        }
+
+        if (auto b = Buffer::CreateFromMemory(
+              view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
+              gsl::not_null(const_cast<std::byte*>(
+                buffersBytes[view.buffer].data() + *view.byteOffset)),
+              view.name ? *view.name : path.string())) {
+          gpuBuffers.push_back(std::move(*b));
+        } else {
+          GetLogger()->error("Cannot create buffer: {}", b.error().what());
+        }
+      }
+    };
   }
 
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());

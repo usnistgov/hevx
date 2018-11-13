@@ -122,7 +122,7 @@ add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
 target_link_libraries(iris
   PUBLIC
     flags imgui vma
-    gsl glm expected CXX::Filesystem fmt spdlog json
+    gsl glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::container absl::hash
     shaderc Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
