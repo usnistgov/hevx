@@ -6,7 +6,8 @@
 #include "gsl/gsl"
 #include "logging.h"
 #include "nlohmann/json.hpp"
-#include "renderer/buffer.h"
+#include "renderer/model.h"
+#include "stb_image.h"
 #include <optional>
 #include <string>
 #include <vector>
@@ -591,49 +592,166 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   }
 
   std::vector<std::vector<std::byte>> buffersBytes;
-  if (gltf.buffers) {
-    for (auto&& buffer : *gltf.buffers) {
-      if (buffer.uri) {
-        filesystem::path uriPath(*buffer.uri);
-        if (auto bytes =
-              ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
-          buffersBytes.push_back(std::move(*bytes));
-        } else {
-          return tl::unexpected(bytes.error());
-        }
+
+  for (auto&& buffer : gltf.buffers.value_or<std::vector<gltf::Buffer>>({})) {
+    if (buffer.uri) {
+      filesystem::path uriPath(*buffer.uri);
+      if (auto bytes =
+            ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
+        buffersBytes.push_back(std::move(*bytes));
       } else {
-        GetLogger()->warn("buffer with no URI; this probably won't work");
+        return tl::unexpected(bytes.error());
       }
+    } else {
+      GetLogger()->warn("buffer with no uri; this probably won't work");
     }
   }
 
-  if (gltf.bufferViews) {
-    return [gltf, buffersBytes, path]() {
-      std::vector<Buffer> gpuBuffers;
-      for (auto&& view : *gltf.bufferViews) {
-        VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if (view.target) {
-          if (*view.target == 34963) {
-            bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-          } else if (*view.target != 34962) {
-            GetLogger()->warn(
-              "unknown bufferView target; assuming vertex buffer");
-          }
-        } else {
-          GetLogger()->warn("no bufferView target; assuming vertex buffer");
-        }
+  std::vector<BufferDescription> bufferDescriptions;
 
-        if (auto b = Buffer::CreateFromMemory(
-              view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-              gsl::not_null(const_cast<std::byte*>(
-                buffersBytes[view.buffer].data() + *view.byteOffset)),
-              view.name ? *view.name : path.string())) {
-          gpuBuffers.push_back(std::move(*b));
-        } else {
-          GetLogger()->error("Cannot create buffer: {}", b.error().what());
-        }
+  for (auto&& view :
+       gltf.bufferViews.value_or<std::vector<gltf::BufferView>>({})) {
+    VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+    if (view.target) {
+      if (*view.target == 34963) {
+        bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+      } else if (*view.target != 34962) {
+        GetLogger()->warn("unknown bufferView target; assuming vertex buffer");
       }
-    };
+    } else {
+      GetLogger()->warn("no bufferView target; assuming vertex buffer");
+    }
+
+    int byteOffset = 0;
+    if (view.byteOffset) byteOffset = *view.byteOffset;
+
+    bufferDescriptions.emplace_back(
+      bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
+      gsl::span(buffersBytes[view.buffer].data() + byteOffset,
+                view.byteLength));
+  }
+
+  std::vector<VkExtent3D> imagesExtents;
+  std::vector<std::vector<std::byte>> imagesBytes;
+
+  for (auto&& image : gltf.images.value_or<std::vector<gltf::Image>>({})) {
+    if (image.uri) {
+      filesystem::path uriPath(*image.uri);
+      if (uriPath.is_relative()) uriPath = baseDir / uriPath;
+
+      int x, y, n;
+      if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4); !pixels) {
+        return tl::unexpected(
+          std::system_error(Error::kFileNotSupported, stbi_failure_reason()));
+      } else {
+        imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
+                                 reinterpret_cast<std::byte*>(pixels) +
+                                   x * y * 4);
+        imagesExtents.push_back(
+          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), 1});
+      }
+    } else if (image.bufferView) {
+      imagesBytes.push_back(buffersBytes[*image.bufferView]);
+    } else {
+      return tl::unexpected(std::system_error(
+        Error::kFileNotSupported, "image with no uri or bufferView"));
+    }
+  }
+
+  std::vector<TextureDescription> textureDescriptions;
+
+  std::size_t const numTextures =
+    gltf.textures.value_or<std::vector<gltf::Texture>>({}).size();
+
+  for (std::size_t i = 0; i < numTextures; ++i) {
+    auto&& texture = (*gltf.textures)[i];
+    auto&& bytes = imagesBytes[*texture.source];
+
+    VkFilter magFilter = VK_FILTER_LINEAR; // auto ??
+    VkFilter minFilter = VK_FILTER_LINEAR; // auto ??
+    VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    float minLod = -1000.0;
+    float maxLod = 1000.0;
+    VkSamplerAddressMode addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    VkSamplerAddressMode addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    VkSamplerAddressMode addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+    if (texture.sampler) {
+      auto&& sampler = (*gltf.samplers)[*texture.sampler];
+
+      switch (sampler.magFilter.value_or(9720)) {
+      case 9728: magFilter = VK_FILTER_NEAREST; break;
+      case 9729: magFilter = VK_FILTER_LINEAR; break;
+      }
+
+      switch (sampler.minFilter.value_or(9720)) {
+      case 9728:
+        minFilter = VK_FILTER_NEAREST;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        minLod = 0.0;
+        maxLod = 0.25;
+        break;
+      case 9729:
+        minFilter = VK_FILTER_LINEAR;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        minLod = 0.0;
+        maxLod = 0.25;
+        break;
+      case 9984:
+        minFilter = VK_FILTER_NEAREST;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        break;
+      case 9985:
+        minFilter = VK_FILTER_LINEAR;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        break;
+      case 9986:
+        minFilter = VK_FILTER_NEAREST;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        break;
+      case 9987:
+        minFilter = VK_FILTER_LINEAR;
+        mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        break;
+      }
+
+      switch(sampler.wrapS.value_or(10497)) {
+      case 10497: addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+      case 33071: addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+      case 33648: addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+      }
+
+      switch(sampler.wrapT.value_or(10497)) {
+      case 10497: addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+      case 33071: addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+      case 33648: addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+      }
+    }
+
+    textureDescriptions.emplace_back(
+      VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8_UNORM, imagesExtents[i],
+      VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY, magFilter,
+      minFilter, mipmapMode, minLod, maxLod, addressModeU, addressModeV,
+      addressModeW, gsl::span(bytes.data(), bytes.size()));
+  }
+
+  std::vector<ShaderDescription> shaderDescriptions;
+
+  if (auto vs = CompileShaderFromFile("assets/shaders/gltf.vert",
+                                      VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaderDescriptions.emplace_back(VK_SHADER_STAGE_VERTEX_BIT, "main", *vs);
+  } else {
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, vs.error()));
+  }
+
+  if (auto fs = CompileShaderFromFile("assets/shaders/gltf.frag",
+                                      VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaderDescriptions.emplace_back(VK_SHADER_STAGE_VERTEX_BIT, "main", *fs);
+  } else {
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, fs.error()));
   }
 
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());

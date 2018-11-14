@@ -11,6 +11,7 @@ namespace filesystem = std::filesystem;
 #endif
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace iris::Renderer {
 
@@ -35,6 +36,15 @@ struct Shader {
 private:
   std::string name;
 }; // struct Shader
+
+tl::expected<std::vector<std::uint32_t>, std::string> CompileShaderFromSource(
+  std::string_view source, VkShaderStageFlagBits shaderStage,
+  filesystem::path const& path, std::string const& entryPoint = "main");
+
+tl::expected<std::vector<std::uint32_t>, std::string>
+CompileShaderFromFile(filesystem::path const& path,
+                      VkShaderStageFlagBits shaderStage,
+                      std::string const& entryPoint = "main");
 
 } // namespace iris::Renderer
 
