@@ -5,6 +5,7 @@
  */
 
 #include "tl/expected.hpp"
+#include <cstddef>
 #if STD_FS_IS_EXPERIMENTAL
 #include <experimental/filesystem>
 namespace filesystem = std::experimental::filesystem;

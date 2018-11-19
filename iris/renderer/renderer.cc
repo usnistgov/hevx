@@ -226,7 +226,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
  * \see
  * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
  */
-static[[nodiscard]] std::system_error
+[[nodiscard]] static std::system_error
 InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
              gsl::span<gsl::czstring<>> extensionNames,
              gsl::span<gsl::czstring<>> layerNames, bool reportDebug) noexcept {
@@ -315,7 +315,7 @@ InitInstance(gsl::czstring<> appName, std::uint32_t appVersion,
   return {Error::kNone};
 } // InitInstance
 
-static [[nodiscard]] std::system_error CreateDebugUtilsMessenger() noexcept {
+[[nodiscard]] static std::system_error CreateDebugUtilsMessenger() noexcept {
   IRIS_LOG_ENTER();
   Expects(sInstance != VK_NULL_HANDLE);
   Expects(sDebugUtilsMessenger == VK_NULL_HANDLE);
@@ -604,7 +604,7 @@ static void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
  */
-static[[nodiscard]] bool
+[[nodiscard]] static bool
 ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
                               VkPhysicalDeviceFeatures2 b) noexcept {
   bool result = false;
@@ -700,7 +700,7 @@ ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
  */
-static [[nodiscard]] tl::expected<std::uint32_t, std::system_error>
+[[nodiscard]] static tl::expected<std::uint32_t, std::system_error>
 IsPhysicalDeviceGood(VkPhysicalDevice device,
                      VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
@@ -885,7 +885,7 @@ static void FindDeviceGroup() {
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
  */
-static [[nodiscard]] std::system_error
+[[nodiscard]] static std::system_error
 ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER();
@@ -944,7 +944,7 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
  */
-static [[nodiscard]] std::system_error
+[[nodiscard]] static std::system_error
 CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                       gsl::span<gsl::czstring<>> extensionNames) noexcept {
   IRIS_LOG_ENTER();
@@ -1005,7 +1005,7 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   return {Error::kNone};
 } // CreateDevice
 
-static [[nodiscard]] std::system_error CreateCommandPool() noexcept {
+[[nodiscard]] static std::system_error CreateCommandPool() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sGraphicsCommandPool == VK_NULL_HANDLE);
@@ -1029,7 +1029,7 @@ static [[nodiscard]] std::system_error CreateCommandPool() noexcept {
   return {Error::kNone};
 } // CreateCommandPool
 
-static [[nodiscard]] std::system_error CreateDescriptorPool() noexcept {
+[[nodiscard]] static std::system_error CreateDescriptorPool() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sDescriptorPool == VK_NULL_HANDLE);
@@ -1068,7 +1068,7 @@ static [[nodiscard]] std::system_error CreateDescriptorPool() noexcept {
   return {Error::kNone};
 } // CreateDescriptorPool
 
-static [[nodiscard]] std::system_error CreateFencesAndSemaphores() noexcept {
+[[nodiscard]] static std::system_error CreateFencesAndSemaphores() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sOneTimeSubmit == VK_NULL_HANDLE);
@@ -1116,7 +1116,7 @@ static [[nodiscard]] std::system_error CreateFencesAndSemaphores() noexcept {
   return {Error::kNone};
 } // CreateFencesAndSemaphores
 
-static [[nodiscard]] std::system_error CreateAllocator() noexcept {
+[[nodiscard]] static std::system_error CreateAllocator() noexcept {
   IRIS_LOG_ENTER();
   Expects(sPhysicalDevice != VK_NULL_HANDLE);
   Expects(sDevice != VK_NULL_HANDLE);
@@ -1138,7 +1138,7 @@ static [[nodiscard]] std::system_error CreateAllocator() noexcept {
   return {Error::kNone};
 } // CreateAllocator
 
-static [[nodiscard]] std::system_error CreateRenderPass() noexcept {
+[[nodiscard]] static std::system_error CreateRenderPass() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sRenderPass == VK_NULL_HANDLE);
@@ -1283,7 +1283,7 @@ static [[nodiscard]] std::system_error CreateRenderPass() noexcept {
   return {Error::kNone};
 } // CreateRenderPass
 
-static [[nodiscard]] std::system_error AllocateCommandBuffers() noexcept {
+[[nodiscard]] static std::system_error AllocateCommandBuffers() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sNumCommandBuffers == sCommandBuffers.size());

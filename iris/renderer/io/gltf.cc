@@ -556,10 +556,10 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   filesystem::path const baseDir = path.parent_path();
 
-  json json;
+  json j;
   if (auto&& bytes = ReadFile(path)) {
     try {
-      json = json::parse(*bytes);
+      j = json::parse(*bytes);
     } catch (std::exception const& e) {
       return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                               "Parsing failed: "s + e.what()));
@@ -570,7 +570,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
   gltf::GLTF gltf;
   try {
-    gltf = json.get<gltf::GLTF>();
+    gltf = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                             "Parsing failed: "s + e.what()));
