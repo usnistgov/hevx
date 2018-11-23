@@ -50,9 +50,11 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
                                          VkBufferUsageFlags bufferUsage,
                                          VmaMemoryUsage memoryUsage,
                                          gsl::not_null<void*> data,
-                                         std::string name) noexcept {
+                                         std::string name,
+                                         VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
 
   Buffer buffer;
 
@@ -100,7 +102,7 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
   }
 
   VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit()) {
+  if (auto cb = BeginOneTimeSubmit(commandPool)) {
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
@@ -114,7 +116,7 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
 
   vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &region);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }

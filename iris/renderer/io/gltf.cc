@@ -1,18 +1,20 @@
 #include "renderer/io/gltf.h"
-#include "renderer/io/impl.h"
 #include "error.h"
 #include "glm/glm.hpp"
-#include "glm/gtc/type_ptr.hpp"
 #include "glm/gtc/quaternion.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "gsl/gsl"
 #include "logging.h"
 #include "nlohmann/json.hpp"
-#include "renderer/model.h"
+#include "renderer/buffer.h"
+#include "renderer/image.h"
+#include "renderer/io/impl.h"
+#include "renderer/shader.h"
 #include "stb_image.h"
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
-#include <map>
 
 namespace nlohmann {
 
@@ -562,10 +564,12 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     try {
       j = json::parse(*bytes);
     } catch (std::exception const& e) {
+      IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                               "Parsing failed: "s + e.what()));
     }
   } else {
+    IRIS_LOG_LEAVE();
     return tl::unexpected(bytes.error());
   }
 
@@ -573,6 +577,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   try {
     gltf = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
+    IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                             "Parsing failed: "s + e.what()));
   }
@@ -580,12 +585,14 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   if (gltf.asset.version != "2.0") {
     if (gltf.asset.minVersion) {
       if (gltf.asset.minVersion != "2.0") {
+        IRIS_LOG_LEAVE();
         return tl::unexpected(
           std::system_error(Error::kFileParseFailed,
                             "Unsupported version: " + gltf.asset.version +
                               " / " + *gltf.asset.minVersion));
       }
     } else {
+      IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         Error::kFileParseFailed,
         "Unsupported version: " + gltf.asset.version + " and no minVersion"));
@@ -601,6 +608,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
             ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
         buffersBytes.push_back(std::move(*bytes));
       } else {
+        IRIS_LOG_LEAVE();
         return tl::unexpected(bytes.error());
       }
     } else {
@@ -618,6 +626,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
       int x, y, n;
       if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4); !pixels) {
+        IRIS_LOG_LEAVE();
         return tl::unexpected(
           std::system_error(Error::kFileNotSupported, stbi_failure_reason()));
       } else {
@@ -630,14 +639,13 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     } else if (image.bufferView) {
       imagesBytes.push_back(buffersBytes[*image.bufferView]);
     } else {
+      IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         Error::kFileNotSupported, "image with no uri or bufferView"));
     }
   }
 
-
-
-  std::vector<BufferDescription> bufferDescriptions;
+  std::vector<Buffer> buffers;
 
   for (auto&& view :
        gltf.bufferViews.value_or<std::vector<gltf::BufferView>>({})) {
@@ -656,107 +664,146 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     int byteOffset = 0;
     if (view.byteOffset) byteOffset = *view.byteOffset;
 
-    bufferDescriptions.emplace_back(
-      bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-      gsl::span(buffersBytes[view.buffer].data() + byteOffset,
-                view.byteLength));
+    if (auto buffer = Buffer::CreateFromMemory(
+          view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
+          gsl::not_null(buffersBytes[view.buffer].data() + byteOffset), {},
+          sCommandPool)) {
+      buffers.push_back(std::move(*buffer));
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(buffer.error());
+    }
   }
 
-  std::vector<TextureDescription> textureDescriptions;
+  std::vector<Image> images;
+  std::vector<Sampler> samplers;
 
   std::size_t const numTextures =
     gltf.textures.value_or<std::vector<gltf::Texture>>({}).size();
-
   for (std::size_t i = 0; i < numTextures; ++i) {
     auto&& texture = (*gltf.textures)[i];
     auto&& bytes = imagesBytes[*texture.source];
 
-    VkFilter magFilter = VK_FILTER_LINEAR; // auto ??
-    VkFilter minFilter = VK_FILTER_LINEAR; // auto ??
-    VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    float minLod = -1000.0;
-    float maxLod = 1000.0;
-    VkSamplerAddressMode addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    VkSamplerAddressMode addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    VkSamplerAddressMode addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    if (auto image = Image::CreateFromMemory(
+          VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, imagesExtents[i],
+          VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+          gsl::not_null(bytes.data()), 4, {}, sCommandPool)) {
+      images.push_back(std::move(*image));
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(image.error());
+    }
+
+    VkSamplerCreateInfo samplerCI = {};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR; // auto ??
+    samplerCI.minFilter = VK_FILTER_LINEAR; // auto ??
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.maxAnisotropy = 1;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = -1000.f;
+    samplerCI.maxLod = 1000.f;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
 
     if (texture.sampler) {
       auto&& sampler = (*gltf.samplers)[*texture.sampler];
 
       switch (sampler.magFilter.value_or(9720)) {
-      case 9728: magFilter = VK_FILTER_NEAREST; break;
-      case 9729: magFilter = VK_FILTER_LINEAR; break;
+      case 9728: samplerCI.magFilter = VK_FILTER_NEAREST; break;
+      case 9729: samplerCI.magFilter = VK_FILTER_LINEAR; break;
       }
 
       switch (sampler.minFilter.value_or(9720)) {
       case 9728:
-        minFilter = VK_FILTER_NEAREST;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        minLod = 0.0;
-        maxLod = 0.25;
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minLod = 0.0;
+        samplerCI.maxLod = 0.25;
         break;
       case 9729:
-        minFilter = VK_FILTER_LINEAR;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        minLod = 0.0;
-        maxLod = 0.25;
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minLod = 0.0;
+        samplerCI.maxLod = 0.25;
         break;
       case 9984:
-        minFilter = VK_FILTER_NEAREST;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
       case 9985:
-        minFilter = VK_FILTER_LINEAR;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         break;
       case 9986:
-        minFilter = VK_FILTER_NEAREST;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         break;
       case 9987:
-        minFilter = VK_FILTER_LINEAR;
-        mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         break;
       }
 
-      switch(sampler.wrapS.value_or(10497)) {
-      case 10497: addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
-      case 33071: addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
-      case 33648: addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+      switch (sampler.wrapS.value_or(10497)) {
+      case 10497:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        break;
+      case 33071:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
+      case 33648:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        break;
       }
 
-      switch(sampler.wrapT.value_or(10497)) {
-      case 10497: addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
-      case 33071: addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
-      case 33648: addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+      switch (sampler.wrapT.value_or(10497)) {
+      case 10497:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        break;
+      case 33071:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
+      case 33648:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        break;
       }
     }
 
-    textureDescriptions.emplace_back(
-      VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8_UNORM, imagesExtents[i],
-      VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY, magFilter,
-      minFilter, mipmapMode, minLod, maxLod, addressModeU, addressModeV,
-      addressModeW, gsl::span(bytes.data(), bytes.size()));
+    if (auto s = Sampler::Create(samplerCI)) {
+      samplers.push_back(std::move(*s));
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(s.error());
+    }
   }
 
-  std::vector<ShaderDescription> shaderDescriptions;
 
-  if (auto vs = CompileShaderFromFile("assets/shaders/gltf.vert",
-                                      VK_SHADER_STAGE_VERTEX_BIT)) {
-    shaderDescriptions.emplace_back(VK_SHADER_STAGE_VERTEX_BIT, "main", *vs);
+#if 0
+  std::vector<Shader> shaders;
+
+  if (auto vs = Shader::CreateFromFile("assets/shaders/gltf.vert",
+                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders.push_back(std::move(*vs));
   } else {
-    return tl::unexpected(
-      std::system_error(Error::kShaderCompileFailed, vs.error()));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
   }
 
-  if (auto fs = CompileShaderFromFile("assets/shaders/gltf.frag",
-                                      VK_SHADER_STAGE_VERTEX_BIT)) {
-    shaderDescriptions.emplace_back(VK_SHADER_STAGE_VERTEX_BIT, "main", *fs);
+  if (auto fs = Shader::CreateFromFile("assets/shaders/gltf.frag",
+                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders.push_back(std::move(*fs));
   } else {
-    return tl::unexpected(
-      std::system_error(Error::kShaderCompileFailed, fs.error()));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
   }
-
+#endif
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
   IRIS_LOG_LEAVE();
   return tl::unexpected(

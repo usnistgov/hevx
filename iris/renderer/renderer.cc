@@ -1363,9 +1363,21 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
   physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   physicalDeviceFeatures.features.fullDrawIndexUint32 = VK_TRUE;
+  physicalDeviceFeatures.features.geometryShader = VK_TRUE;
+  physicalDeviceFeatures.features.tessellationShader = VK_TRUE;
+  physicalDeviceFeatures.features.depthClamp = VK_TRUE;
   physicalDeviceFeatures.features.fillModeNonSolid = VK_TRUE;
   physicalDeviceFeatures.features.multiViewport = VK_TRUE;
   physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
+  physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize = VK_TRUE;
+  physicalDeviceFeatures.features.shaderUniformBufferArrayDynamicIndexing = VK_TRUE;
+  physicalDeviceFeatures.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;
+  physicalDeviceFeatures.features.shaderClipDistance = VK_TRUE;
+  physicalDeviceFeatures.features.shaderCullDistance = VK_TRUE;
+  physicalDeviceFeatures.features.shaderFloat64 = VK_TRUE;
+  physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
 
   // These are the extensions that we require from the physical device.
   char const* physicalDeviceExtensionNames[] = {
@@ -1791,16 +1803,18 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
 } // iris::Renderer::Control
 
 tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::BeginOneTimeSubmit() noexcept {
+iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
-  Expects(sGraphicsCommandPool != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE ||
+          sGraphicsCommandPool != VK_NULL_HANDLE);
 
+  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPool;
   VkCommandBuffer commandBuffer;
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPool;
+  commandBufferAI.commandPool = commandPool;
   commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAI.commandBufferCount = 1;
 
@@ -1819,7 +1833,7 @@ iris::Renderer::BeginOneTimeSubmit() noexcept {
 
   if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot begin one time submit command buffer"));
   }
@@ -1829,9 +1843,14 @@ iris::Renderer::BeginOneTimeSubmit() noexcept {
 } // iris::Renderer::BeginOneTimeSubmit
 
 std::system_error
-iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
+                                 VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(commandBuffer != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE ||
+          sGraphicsCommandPool != VK_NULL_HANDLE);
+
+  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPool;
 
   VkSubmitInfo submit = {};
   submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1839,7 +1858,7 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   submit.pCommandBuffers = &commandBuffer;
 
   if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return {make_error_code(result),
             "Cannot end one time submit command buffer"};
@@ -1848,7 +1867,7 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   if (auto result =
         vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmit);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return {make_error_code(result),
             "Cannot submit one time submit command buffer"};
@@ -1857,19 +1876,19 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   if (auto result =
         vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return {make_error_code(result), "Cannot wait on one time submit fence"};
   }
 
   if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmit);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return {make_error_code(result), "Cannot reset one time submit fence"};
   }
 
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool, 1, &commandBuffer);
+  vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
   IRIS_LOG_LEAVE();
   return {Error::kNone};
 } // iris::Renderer::EndOneTimeSubmit

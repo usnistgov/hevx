@@ -20,8 +20,12 @@ struct Shader {
   CreateFromSource(std::string_view source, VkShaderStageFlagBits stage,
                    std::string entry = "main", std::string name = {}) noexcept;
 
+  static tl::expected<Shader, std::system_error>
+  CreateFromFile(filesystem::path const& path, VkShaderStageFlagBits stage,
+                 std::string entry = "main", std::string name = {}) noexcept;
+
   VkShaderStageFlagBits stage;
-  VkShaderModule handle;
+  VkShaderModule handle{VK_NULL_HANDLE};
   std::string entry;
 
   operator VkShaderModule() const noexcept { return handle; }
@@ -36,15 +40,6 @@ struct Shader {
 private:
   std::string name;
 }; // struct Shader
-
-tl::expected<std::vector<std::uint32_t>, std::string> CompileShaderFromSource(
-  std::string_view source, VkShaderStageFlagBits shaderStage,
-  filesystem::path const& path, std::string const& entryPoint = "main");
-
-tl::expected<std::vector<std::uint32_t>, std::string>
-CompileShaderFromFile(filesystem::path const& path,
-                      VkShaderStageFlagBits shaderStage,
-                      std::string const& entryPoint = "main");
 
 } // namespace iris::Renderer
 

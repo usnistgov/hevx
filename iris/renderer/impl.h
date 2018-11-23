@@ -34,10 +34,12 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
 
-tl::expected<VkCommandBuffer, std::system_error> BeginOneTimeSubmit() noexcept;
+tl::expected<VkCommandBuffer, std::system_error>
+BeginOneTimeSubmit(VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
 [[nodiscard]] std::system_error
-EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
+EndOneTimeSubmit(VkCommandBuffer commandBuffer,
+                 VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
 template <class T>
 void NameObject(VkObjectType objectType, T objectHandle,

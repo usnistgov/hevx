@@ -44,8 +44,8 @@ struct Image {
   CreateFromMemory(VkImageType imageType, VkFormat format, VkExtent3D extent,
                    VkImageUsageFlags usage, VmaMemoryUsage memoryUsage,
                    gsl::not_null<std::byte*> pixels,
-                   std::uint32_t bytes_per_pixel,
-                   std::string name = {}) noexcept;
+                   std::uint32_t bytesPerPixel, std::string name = {},
+                   VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
   tl::expected<ImageView, std::system_error> CreateImageView(
     VkImageViewType type_, VkImageSubresourceRange imageSubresourceRange,
@@ -59,8 +59,8 @@ struct Image {
 
   [[nodiscard]] std::system_error
   Transition(VkImageLayout oldLayout, VkImageLayout newLayout,
-             std::uint32_t mipLevels = 1,
-             std::uint32_t arrayLayers = 1) noexcept;
+             std::uint32_t mipLevels = 1, std::uint32_t arrayLayers = 1,
+             VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
   VkImageType type;
   VkFormat format{VK_FORMAT_UNDEFINED};

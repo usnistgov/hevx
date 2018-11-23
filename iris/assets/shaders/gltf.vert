@@ -92,5 +92,5 @@ void main() {
   UV = vec2(0.0, 0.0);
 #endif
 
-  gl_Position = ModelViewProjectionMatrix * Vertex;
+  gl_Position = ModelMatrix * ViewProjectionMatrix * Vertex;
 }

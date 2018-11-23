@@ -15,84 +15,6 @@
 #pragma GCC diagnostic pop
 #endif
 
-tl::expected<iris::Renderer::Shader, std::system_error>
-iris::Renderer::Shader::CreateFromSource(std::string_view source,
-                                         VkShaderStageFlagBits stage,
-                                         std::string entry,
-                                         std::string name) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sDevice != VK_NULL_HANDLE);
-  Expects(source.size() > 0);
-
-  Shader shader;
-
-  std::vector<std::uint32_t> code;
-  if (auto c = CompileShaderFromSource(source, stage, "", entry)) {
-    code = std::move(*c);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kShaderCompileFailed, c.error()));
-  }
-
-  VkShaderModuleCreateInfo smci = {};
-  smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  // codeSize is in bytes, not count of words (which is what vector.size() is)
-  smci.codeSize = gsl::narrow_cast<std::uint32_t>(code.size() * 4);
-  smci.pCode = code.data();
-
-  if (auto result =
-        vkCreateShaderModule(sDevice, &smci, nullptr, &shader.handle);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create shader module"));
-  }
-
-  if (!name.empty()) {
-    NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shader.handle, name.c_str());
-  }
-
-  shader.stage = stage;
-  shader.entry = std::move(entry);
-  shader.name = std::move(name);
-
-  Ensures(shader.handle != VK_NULL_HANDLE);
-  IRIS_LOG_LEAVE();
-  return std::move(shader);
-} // iris::Renderer::Shader::CreateFromSource
-
-iris::Renderer::Shader::Shader(Shader&& other) noexcept
-  : stage(other.stage)
-  , handle(other.handle)
-  , entry(std::move(other.entry))
-  , name(std::move(other.name)) {
-  other.handle = nullptr;
-} // iris::Renderer::Shader::Shader
-
-iris::Renderer::Shader& iris::Renderer::Shader::operator=(Shader&& rhs) noexcept {
-  if (this == &rhs) return *this;
-
-  stage = rhs.stage;
-  handle = rhs.handle;
-  entry = std::move(rhs.entry);
-  name = std::move(rhs.name);
-
-  rhs.handle = VK_NULL_HANDLE;
-
-  return *this;
-} // iris::Renderer::Shader::operator=
-
-iris::Renderer::Shader::~Shader() noexcept {
-  if (handle == VK_NULL_HANDLE) return;
-  IRIS_LOG_ENTER();
-  Expects(sDevice != VK_NULL_HANDLE);
-
-  vkDestroyShaderModule(sDevice, handle, nullptr);
-
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::~Shader
-
 namespace iris::Renderer {
 
 class ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
@@ -170,13 +92,11 @@ void ShaderIncluder::ReleaseInclude(shaderc_include_result* result) {
   IRIS_LOG_LEAVE();
 } // ShaderIncluder::ReleaseInclude
 
-} // namespace iris::Renderer
-
-tl::expected<std::vector<std::uint32_t>, std::string>
-iris::Renderer::CompileShaderFromSource(std::string_view source,
-                                        VkShaderStageFlagBits shaderStage,
-                                        filesystem::path const& path,
-                                        std::string const& entryPoint) {
+[[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
+CompileShaderFromSource(std::string_view source,
+                        VkShaderStageFlagBits shaderStage,
+                        filesystem::path const& path,
+                        std::string const& entryPoint) {
   IRIS_LOG_ENTER();
   Expects(source.size() > 0);
 
@@ -201,7 +121,7 @@ iris::Renderer::CompileShaderFromSource(std::string_view source,
                                        entryPoint.c_str(), options);
   if (spv.GetCompilationStatus() != shaderc_compilation_status_success) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(spv.GetErrorMessage());
+    return tl::unexpected("\n" + spv.GetErrorMessage());
   }
 
   std::vector<std::uint32_t> code;
@@ -210,66 +130,141 @@ iris::Renderer::CompileShaderFromSource(std::string_view source,
   Ensures(code.size() > 0);
   IRIS_LOG_LEAVE();
   return code;
-} // iris::Renderer::CompileShaderFromSource
+} // CompileShaderFromSource
 
-tl::expected<std::vector<std::uint32_t>, std::string>
-iris::Renderer::CompileShaderFromFile(filesystem::path const& path,
-                                      VkShaderStageFlagBits shaderStage,
-                                      std::string const& entryPoint) {
+} // namespace iris::Renderer
+
+tl::expected<iris::Renderer::Shader, std::system_error>
+iris::Renderer::Shader::CreateFromSource(std::string_view source,
+                                         VkShaderStageFlagBits stage,
+                                         std::string entry,
+                                         std::string name) noexcept {
   IRIS_LOG_ENTER();
-  Expects(!path.empty());
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(source.size() > 0);
 
-  std::vector<std::byte> source;
-  if (auto s = io::ReadFile(path)) {
-    source = std::move(*s);
+  Shader shader;
+
+  std::vector<std::uint32_t> code;
+  if (auto c = CompileShaderFromSource(source, stage, "<inline>", entry)) {
+    code = std::move(*c);
   } else {
-    return tl::unexpected(s.error().what());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, c.error()));
   }
 
-  auto code = CompileShaderFromSource(
-    {reinterpret_cast<char*>(source.data()), source.size()}, shaderStage, path,
-    entryPoint);
+  VkShaderModuleCreateInfo smci = {};
+  smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  // codeSize is in bytes, not count of words (which is what vector.size() is)
+  smci.codeSize = gsl::narrow_cast<std::uint32_t>(code.size() * 4);
+  smci.pCode = code.data();
+
+  if (auto result =
+        vkCreateShaderModule(sDevice, &smci, nullptr, &shader.handle);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create shader module"));
+  }
+
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shader.handle, name.c_str());
+  }
+
+  shader.stage = stage;
+  shader.entry = std::move(entry);
+  shader.name = std::move(name);
+
+  Ensures(shader.handle != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return code;
-} // iris::Renderer::CompileShaderFromFile
+  return std::move(shader);
+} // iris::Renderer::Shader::CreateFromSource
 
-#if 0
-tl::expected<VkShaderModule, std::error_code>
-iris::Renderer::CreateShaderFromFile(filesystem::path const& path,
-                                     VkShaderStageFlagBits shaderStage,
-                                     std::string const& entry) noexcept {
+tl::expected<iris::Renderer::Shader, std::system_error>
+iris::Renderer::Shader::CreateFromFile(filesystem::path const& path,
+                                       VkShaderStageFlagBits stage,
+                                       std::string entry,
+                                       std::string name) noexcept {
   IRIS_LOG_ENTER();
-  VkResult result;
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(!path.empty());
 
-  std::vector<char> source;
+  Shader shader;
+
+  std::vector<std::byte> source;
   if (auto s = io::ReadFile(path)) {
     source = std::move(*s);
   } else {
     return tl::unexpected(s.error());
   }
 
-  if (auto code = CompileShader({source.data(), source.size()}, shaderStage,
-                                path, entry)) {
-    VkShaderModuleCreateInfo smci = {};
-    smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    // codeSize is bytes, not count of words
-    smci.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
-    smci.pCode = code->data();
-
-    VkShaderModule module;
-    result = vkCreateShaderModule(sDevice, &smci, nullptr, &module);
-    if (result != VK_SUCCESS) {
-      GetLogger()->error("Cannot create shader module: {}", to_string(result));
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(make_error_code(result));
-    }
-
-    IRIS_LOG_LEAVE();
-    return module;
+  std::vector<std::uint32_t> code;
+  if (auto c = CompileShaderFromSource(
+        {reinterpret_cast<char*>(source.data()), source.size()}, stage, path,
+        entry)) {
+    code = std::move(*c);
   } else {
-    GetLogger()->error("Cannot compile shader: {}", code.error());
     IRIS_LOG_LEAVE();
-    return tl::unexpected(Error::kShaderCompileFailed);
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, c.error()));
   }
-} // iris::Renderer::CreateShaderFromFile
-#endif
+
+  VkShaderModuleCreateInfo smci = {};
+  smci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  // codeSize is in bytes, not count of words (which is what vector.size() is)
+  smci.codeSize = gsl::narrow_cast<std::uint32_t>(code.size() * 4);
+  smci.pCode = code.data();
+
+  if (auto result =
+        vkCreateShaderModule(sDevice, &smci, nullptr, &shader.handle);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create shader module"));
+  }
+
+  if (!name.empty()) {
+    NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shader.handle, name.c_str());
+  }
+
+  shader.stage = stage;
+  shader.entry = std::move(entry);
+  shader.name = std::move(name);
+
+  Ensures(shader.handle != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return std::move(shader);
+} // iris::Renderer::Shader::CreateFromFile
+
+iris::Renderer::Shader::Shader(Shader&& other) noexcept
+  : stage(other.stage)
+  , handle(other.handle)
+  , entry(std::move(other.entry))
+  , name(std::move(other.name)) {
+  other.handle = nullptr;
+} // iris::Renderer::Shader::Shader
+
+iris::Renderer::Shader& iris::Renderer::Shader::operator=(Shader&& rhs) noexcept {
+  if (this == &rhs) return *this;
+
+  stage = rhs.stage;
+  handle = rhs.handle;
+  entry = std::move(rhs.entry);
+  name = std::move(rhs.name);
+
+  rhs.handle = VK_NULL_HANDLE;
+
+  return *this;
+} // iris::Renderer::Shader::operator=
+
+iris::Renderer::Shader::~Shader() noexcept {
+  if (handle == VK_NULL_HANDLE) return;
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  vkDestroyShaderModule(sDevice, handle, nullptr);
+
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::~Shader
+

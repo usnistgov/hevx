@@ -129,7 +129,8 @@ tl::expected<iris::Renderer::Image, std::system_error>
 iris::Renderer::Image::CreateFromMemory(
   VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlags usage,
   VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
-  std::uint32_t bytes_per_pixel, std::string name) noexcept {
+  std::uint32_t bytesPerPixel, std::string name,
+  VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
@@ -138,12 +139,12 @@ iris::Renderer::Image::CreateFromMemory(
 
   switch(format) {
   case VK_FORMAT_R8G8B8A8_UNORM:
-    Expects(bytes_per_pixel == sizeof(char) * 4);
+    Expects(bytesPerPixel == sizeof(char) * 4);
     imageSize = extent.width * extent.height * extent.depth * sizeof(char) * 4;
     break;
 
   case VK_FORMAT_R32_SFLOAT:
-    Expects(bytes_per_pixel == sizeof(float));
+    Expects(bytesPerPixel == sizeof(float));
     imageSize = extent.width * extent.height * extent.depth * sizeof(float);
     break;
 
@@ -203,14 +204,15 @@ iris::Renderer::Image::CreateFromMemory(
   }
 
   if (auto error = image.Transition(VK_IMAGE_LAYOUT_UNDEFINED,
-                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1,
+                                    commandPool);
       error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }
 
   VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit()) {
+  if (auto cb = BeginOneTimeSubmit(commandPool)) {
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
@@ -228,7 +230,7 @@ iris::Renderer::Image::CreateFromMemory(
   vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image.handle,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }
@@ -237,7 +239,7 @@ iris::Renderer::Image::CreateFromMemory(
         image.Transition(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
                             ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                            : VK_IMAGE_LAYOUT_GENERAL));
+                            : VK_IMAGE_LAYOUT_GENERAL), 1, 1, commandPool);
       error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
@@ -258,7 +260,7 @@ iris::Renderer::Image::CreateFromMemory(
 
 std::system_error iris::Renderer::Image::Transition(
   VkImageLayout oldLayout, VkImageLayout newLayout, std::uint32_t mipLevels,
-  std::uint32_t arrayLayers) noexcept {
+  std::uint32_t arrayLayers, VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(handle != VK_NULL_HANDLE);
@@ -317,7 +319,7 @@ std::system_error iris::Renderer::Image::Transition(
   }
 
   VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit()) {
+  if (auto cb = BeginOneTimeSubmit(commandPool)) {
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
@@ -327,7 +329,7 @@ std::system_error iris::Renderer::Image::Transition(
   vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
     IRIS_LOG_LEAVE();
     return error;
   }

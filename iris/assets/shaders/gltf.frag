@@ -34,6 +34,7 @@
 //     https://www.cs.virginia.edu/~jdl/bib/appearance/analytic%20models/schlick94b.pdf
 
 #version 460 core
+
 #define MAX_LIGHTS 100
 
 struct Light {
@@ -136,10 +137,10 @@ vec4 SRGBtoLINEAR(vec4 srgbIn) {
 vec3 GetNormal() {
   // Retrieve the tangent space matrix
 #ifndef HAS_TANGENTS
-  vec3 pDx = dFdx(Pe.xyz);
-  vec3 pDy = dFdy(Pe.xyz);
-  vec3 tDx = dFdx(vec3(UV, 0.0));
-  vec3 tDy = dFdy(vec3(UV, 0.0));
+  vec3 pDx = dFdx(Pe.xyz));
+  vec3 pDy = dFdy(Pe.xyz));
+  vec3 tDx = dFdx(vec3(UV.st, 0.0)));
+  vec3 tDy = dFdy(vec3(UV.st, 0.0)));
   vec3 t = (tDy.t * pDx - tDx.t * pDy) / (tDx.s * tDy.t - tDy.s * tDx.t);
 
 #ifdef HAS_NORMALS
