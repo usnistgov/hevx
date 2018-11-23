@@ -54,8 +54,8 @@ iris::Renderer::UI::Create() noexcept {
 
   UI ui;
 
-  if (auto cbs = CommandBuffers::Allocate(sGraphicsCommandPool, 2,
-                                          VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
+  if (auto cbs = Renderer::AllocateCommandBuffers(
+        2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
     ui.commandBuffers = std::move(*cbs);
   } else {
     IRIS_LOG_LEAVE();
@@ -192,9 +192,8 @@ iris::Renderer::UI::Create() noexcept {
   descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
                                    VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
-  if (auto d =
-        DescriptorSets::Create(sDescriptorPool, descriptorSetLayoutBinding,
-                               kNumDescriptorSets, "ui::descriptorSet")) {
+  if (auto d = Renderer::AllocateDescriptorSets(
+        descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
     ui.descriptorSets = std::move(*d);
   } else {
     IRIS_LOG_LEAVE();

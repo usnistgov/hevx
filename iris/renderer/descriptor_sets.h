@@ -9,9 +9,9 @@ namespace iris::Renderer {
 
 struct DescriptorSets {
   static tl::expected<DescriptorSets, std::system_error>
-  Create(VkDescriptorPool pool,
-         gsl::span<VkDescriptorSetLayoutBinding> bindings,
-         std::uint32_t numSets, std::string name = {}) noexcept;
+  Allocate(VkDescriptorPool pool,
+           gsl::span<VkDescriptorSetLayoutBinding> bindings,
+           std::uint32_t numSets, std::string name = {}) noexcept;
 
   VkDescriptorSetLayout layout{VK_NULL_HANDLE};
   absl::FixedArray<VkDescriptorSet> sets;

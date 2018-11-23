@@ -1,4 +1,5 @@
 #include "renderer/io/gltf.h"
+#include "renderer/io/impl.h"
 #include "error.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
@@ -607,31 +608,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-  std::vector<BufferDescription> bufferDescriptions;
-
-  for (auto&& view :
-       gltf.bufferViews.value_or<std::vector<gltf::BufferView>>({})) {
-    VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
-    if (view.target) {
-      if (*view.target == 34963) {
-        bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-      } else if (*view.target != 34962) {
-        GetLogger()->warn("unknown bufferView target; assuming vertex buffer");
-      }
-    } else {
-      GetLogger()->warn("no bufferView target; assuming vertex buffer");
-    }
-
-    int byteOffset = 0;
-    if (view.byteOffset) byteOffset = *view.byteOffset;
-
-    bufferDescriptions.emplace_back(
-      bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-      gsl::span(buffersBytes[view.buffer].data() + byteOffset,
-                view.byteLength));
-  }
-
   std::vector<VkExtent3D> imagesExtents;
   std::vector<std::vector<std::byte>> imagesBytes;
 
@@ -657,6 +633,33 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       return tl::unexpected(std::system_error(
         Error::kFileNotSupported, "image with no uri or bufferView"));
     }
+  }
+
+
+
+  std::vector<BufferDescription> bufferDescriptions;
+
+  for (auto&& view :
+       gltf.bufferViews.value_or<std::vector<gltf::BufferView>>({})) {
+    VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+    if (view.target) {
+      if (*view.target == 34963) {
+        bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+      } else if (*view.target != 34962) {
+        GetLogger()->warn("unknown bufferView target; assuming vertex buffer");
+      }
+    } else {
+      GetLogger()->warn("no bufferView target; assuming vertex buffer");
+    }
+
+    int byteOffset = 0;
+    if (view.byteOffset) byteOffset = *view.byteOffset;
+
+    bufferDescriptions.emplace_back(
+      bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
+      gsl::span(buffersBytes[view.buffer].data() + byteOffset,
+                view.byteLength));
   }
 
   std::vector<TextureDescription> textureDescriptions;

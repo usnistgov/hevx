@@ -34,9 +34,6 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
 
-extern VkCommandPool sGraphicsCommandPool;
-extern VkDescriptorPool sDescriptorPool;
-
 tl::expected<VkCommandBuffer, std::system_error> BeginOneTimeSubmit() noexcept;
 
 [[nodiscard]] std::system_error
@@ -50,6 +47,16 @@ void NameObject(VkObjectType objectType, T objectHandle,
     reinterpret_cast<std::uint64_t>(objectHandle), objectName};
   vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
 } // NameObject
+
+struct CommandBuffers;
+tl::expected<CommandBuffers, std::system_error> AllocateCommandBuffers(
+  std::uint32_t count,
+  VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) noexcept;
+
+struct DescriptorSets;
+tl::expected<DescriptorSets, std::system_error>
+AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> bindings,
+                       std::uint32_t numSets, std::string name = {}) noexcept;
 
 } // namespace iris::Renderer
 

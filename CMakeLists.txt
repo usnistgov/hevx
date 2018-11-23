@@ -8,7 +8,7 @@ project(hevx VERSION 3.0.0 LANGUAGES C CXX)
 # Build options
 ##
 option(BUILD_TESTING "Build the testing tree" ON)
-option(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" ON)
+option(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" OFF)
 option(BUILD_DOCS "Build the documentation" ON)
 option(BUILD_DOCS_INTERNAL "Build the internal developer documentation" ON)
 

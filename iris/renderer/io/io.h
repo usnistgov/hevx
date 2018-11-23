@@ -21,7 +21,7 @@ namespace iris::Renderer::io {
 
 /*! \brief Initialize the IO system.
  */
-std::error_code Initialize() noexcept;
+std::system_error Initialize() noexcept;
 
 /*! \brief Shutdownt the IO system.
  */

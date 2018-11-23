@@ -10,6 +10,8 @@
 #include "config.h"
 #include "error.h"
 #include "protos.h"
+#include "renderer/command_buffers.h"
+#include "renderer/descriptor_sets.h"
 #include "renderer/impl.h"
 #include "renderer/io/io.h"
 #include "renderer/shader.h"
@@ -123,9 +125,6 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
-VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
-
 /////
 //
 // Additional static private variables
@@ -135,7 +134,10 @@ VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 static bool sInitialized{false};
 static std::atomic_bool sRunning{false};
 
+static VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
+static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
+
 
 static std::uint32_t const sNumCommandBuffers{2};
 static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
@@ -1328,11 +1330,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {Error::kAlreadyInitialized};
   }
 
-  if (auto error = io::Initialize()) {
-    IRIS_LOG_LEAVE();
-    return {Error::kAlreadyInitialized};
-  }
-
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
   // over several sub-functions below. Each function is called in-order and
@@ -1450,6 +1447,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
+  if (auto error = io::Initialize(); error.code()) {
+    IRIS_LOG_LEAVE();
+    return error;
+  }
+
   sInitialized = true;
   sRunning = true;
 
@@ -1462,6 +1464,8 @@ void iris::Renderer::Shutdown() noexcept {
 
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
+
+  io::Shutdown();
 
   Windows().clear();
 
@@ -1502,8 +1506,6 @@ void iris::Renderer::Shutdown() noexcept {
   }
 
   if (sInstance != VK_NULL_HANDLE) { vkDestroyInstance(sInstance, nullptr); }
-
-  io::Shutdown();
 
   IRIS_LOG_LEAVE();
 }
@@ -1871,4 +1873,17 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   IRIS_LOG_LEAVE();
   return {Error::kNone};
 } // iris::Renderer::EndOneTimeSubmit
+
+tl::expected<iris::Renderer::CommandBuffers, std::system_error>
+iris::Renderer::AllocateCommandBuffers(std::uint32_t count,
+                                       VkCommandBufferLevel level) noexcept {
+  return CommandBuffers::Allocate(sGraphicsCommandPool, count, level);
+} // iris::Renderer::AllocateCommandBuffers
+
+tl::expected<iris::Renderer::DescriptorSets, std::system_error>
+iris::Renderer::AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> bindings,
+                       std::uint32_t numSets, std::string name) noexcept {
+  return DescriptorSets::Allocate(sDescriptorPool, bindings, numSets,
+                                  std::move(name));
+} // iris::Renderer::AllocateDescriptorSets
 

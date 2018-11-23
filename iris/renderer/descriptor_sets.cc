@@ -2,9 +2,9 @@
 #include "logging.h"
 
 tl::expected<iris::Renderer::DescriptorSets, std::system_error>
-iris::Renderer::DescriptorSets::Create(VkDescriptorPool pool,
-  gsl::span<VkDescriptorSetLayoutBinding> bindings, std::uint32_t numSets,
-  std::string name) noexcept {
+iris::Renderer::DescriptorSets::Allocate(
+  VkDescriptorPool pool, gsl::span<VkDescriptorSetLayoutBinding> bindings,
+  std::uint32_t numSets, std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
@@ -52,7 +52,7 @@ iris::Renderer::DescriptorSets::Create(VkDescriptorPool pool,
   Ensures(descriptorSet.layout != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::move(descriptorSet);
-} // iris::Renderer::DescriptorSets::Create
+} // iris::Renderer::DescriptorSets::Allocate
 
 iris::Renderer::DescriptorSets::DescriptorSets(DescriptorSets&& other) noexcept
   : layout(other.layout)

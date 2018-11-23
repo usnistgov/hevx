@@ -24,11 +24,13 @@ static std::deque<filesystem::path> sRequests{};
 static std::mutex sResultsMutex{};
 static std::vector<std::function<void(void)>> sResults{};
 
-//VkCommandPool sGraphicsCommandPool;
-//VkDescriptorPool sDescriptorPool;
+VkCommandPool sCommandPool{VK_NULL_HANDLE};
+VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 
 static void HandleRequests() {
   IRIS_LOG_ENTER();
+  Expects(sCommandPool != VK_NULL_HANDLE);
+  Expects(sDescriptorPool != VK_NULL_HANDLE);
 
   while (sRunning) {
     filesystem::path path;
@@ -82,13 +84,57 @@ static void HandleRequests() {
 
 } // namespace iris::Renderer::io
 
-std::error_code iris::Renderer::io::Initialize() noexcept {
+std::system_error iris::Renderer::io::Initialize() noexcept {
   IRIS_LOG_ENTER();
 
   if (sInitialized) {
     IRIS_LOG_LEAVE();
-    return Error::kAlreadyInitialized;
+    return {Error::kAlreadyInitialized};
   }
+
+  VkCommandPoolCreateInfo commandPoolCI = {};
+  commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+
+  if (auto result =
+        vkCreateCommandPool(sDevice, &commandPoolCI, nullptr, &sCommandPool);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot create command pool"};
+  }
+
+  NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sCommandPool, "io::sCommandPool");
+
+  absl::FixedArray<VkDescriptorPoolSize> descriptorPoolSizes(11);
+  descriptorPoolSizes[0] = { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 };
+  descriptorPoolSizes[1] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 };
+  descriptorPoolSizes[2] = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 };
+  descriptorPoolSizes[3] = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 };
+  descriptorPoolSizes[4] = { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 };
+  descriptorPoolSizes[5] = { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 };
+  descriptorPoolSizes[6] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 };
+  descriptorPoolSizes[7] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 };
+  descriptorPoolSizes[8] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 };
+  descriptorPoolSizes[9] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 };
+  descriptorPoolSizes[10] = { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 };
+
+  VkDescriptorPoolCreateInfo descriptorPoolCI = {};
+  descriptorPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  descriptorPoolCI.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  descriptorPoolCI.maxSets = 1000;
+  descriptorPoolCI.poolSizeCount =
+    static_cast<uint32_t>(descriptorPoolSizes.size());
+  descriptorPoolCI.pPoolSizes = descriptorPoolSizes.data();
+
+  if (auto result = vkCreateDescriptorPool(sDevice, &descriptorPoolCI, nullptr,
+                                           &sDescriptorPool);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot create descriptor pool"};
+  }
+
+  NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sDescriptorPool,
+             "io::sDescriptorPool");
 
   sRunning = true;
 
@@ -104,7 +150,7 @@ std::error_code iris::Renderer::io::Initialize() noexcept {
   sInitialized = true;
 
   IRIS_LOG_LEAVE();
-  return Error::kNone;
+  return {Error::kNone};
 } // iris::Renderer::io::Initialize()
 
 std::error_code iris::Renderer::io::Shutdown() noexcept {
@@ -118,6 +164,14 @@ std::error_code iris::Renderer::io::Shutdown() noexcept {
     GetLogger()->error("Exception encounted while trying to join IO thread: {}",
                        e.what());
     return e.code();
+  }
+
+  if (sDescriptorPool != VK_NULL_HANDLE) {
+    vkDestroyDescriptorPool(sDevice, sDescriptorPool, nullptr);
+  }
+
+  if (sCommandPool != VK_NULL_HANDLE) {
+    vkDestroyCommandPool(sDevice, sCommandPool, nullptr);
   }
 
   IRIS_LOG_LEAVE();
