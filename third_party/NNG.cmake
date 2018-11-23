@@ -1,6 +1,6 @@
 set(_nng_git_tag v1.0.1)
 
-set(NNG_TESTS OFF CACHE BOOL "" FORCE)
+set(NNG_TESTS ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
 
 FetchContent_Declare(nng
   GIT_REPOSITORY https://github.com/nanomsg/nng

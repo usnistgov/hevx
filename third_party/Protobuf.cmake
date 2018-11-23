@@ -1,8 +1,9 @@
 set(_protobuf_git_tag v3.6.1)
 
-set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(protobuf_WITH_ZLIB OFF CACHE BOOL "" FORCE)
 set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
+#set(protobuf_BUILD_TESTS ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
+set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(protobuf
   GIT_REPOSITORY https://github.com/protocolbuffers/protobuf

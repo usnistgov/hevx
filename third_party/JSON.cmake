@@ -1,4 +1,4 @@
-set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_BuildTests ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
 
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json

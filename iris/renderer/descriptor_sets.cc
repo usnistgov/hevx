@@ -2,7 +2,7 @@
 #include "logging.h"
 
 tl::expected<iris::Renderer::DescriptorSets, std::system_error>
-iris::Renderer::DescriptorSets::Create(
+iris::Renderer::DescriptorSets::Create(VkDescriptorPool pool,
   gsl::span<VkDescriptorSetLayoutBinding> bindings, std::uint32_t numSets,
   std::string name) noexcept {
   IRIS_LOG_ENTER();
@@ -34,7 +34,7 @@ iris::Renderer::DescriptorSets::Create(
 
   VkDescriptorSetAllocateInfo descriptorSetAI = {};
   descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descriptorSetAI.descriptorPool = sDescriptorPool;
+  descriptorSetAI.descriptorPool = pool;
   descriptorSetAI.descriptorSetCount =
     static_cast<uint32_t>(descriptorSetLayouts.size());
   descriptorSetAI.pSetLayouts = descriptorSetLayouts.data();

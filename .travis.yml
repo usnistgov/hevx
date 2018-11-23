@@ -27,5 +27,7 @@ matrix:
     - mkdir ${HOME}/vulkan && travis_retry wget --no-check-certificate --quiet -O - "${VULKAN_URL}" | tar --strip-components=1 -xz -C ${HOME}/vulkan
     - pip3 install --user wheezy.template
     script:
-    - cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF -H. -Bb
+    - cmake -DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON -H. -Bb
     - cmake --build b
+    - CTEST_OPTS="-E glslang-gtests|test-testsuites_all|test-testsuites_default|test-ubjson_all|test-regression_all|test-regression_default|test-msgpack_all|test-msgpack_default|test-json_patch_all|test-json_patch_default|test-json_patch_all|test-inspection_all|test-inspection_default|test-cbor_all|test-cbor_default|test-bson_all|test-unicode_all"
+    - cd b && ctest ${CTEST_OPTS}

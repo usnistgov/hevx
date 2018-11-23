@@ -8,6 +8,7 @@ project(hevx VERSION 3.0.0 LANGUAGES C CXX)
 # Build options
 ##
 option(BUILD_TESTING "Build the testing tree" ON)
+option(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" ON)
 option(BUILD_DOCS "Build the documentation" ON)
 option(BUILD_DOCS_INTERNAL "Build the internal developer documentation" ON)
 
@@ -29,7 +30,7 @@ endif()
 ##
 # Required libraries and third-party components
 ##
-find_package(Vulkan REQUIRED)
+find_package(VulkanSDK 1.1.85.0 REQUIRED)
 get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
 get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
 

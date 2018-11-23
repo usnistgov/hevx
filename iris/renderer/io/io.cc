@@ -1,4 +1,5 @@
 #include "renderer/io/io.h"
+#include "renderer/impl.h"
 #include "config.h"
 #include "error.h"
 #include "logging.h"
@@ -22,6 +23,9 @@ static std::condition_variable sRequestsReady{};
 static std::deque<filesystem::path> sRequests{};
 static std::mutex sResultsMutex{};
 static std::vector<std::function<void(void)>> sResults{};
+
+//VkCommandPool sGraphicsCommandPool;
+//VkDescriptorPool sDescriptorPool;
 
 static void HandleRequests() {
   IRIS_LOG_ENTER();

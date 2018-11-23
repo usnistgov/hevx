@@ -1,4 +1,5 @@
 .vs/
 build/
-hevx.sublime-workspace
-hevx.sublime-project
+*.sublime-workspace
+*.sublime-project
+*.nsight-gfxproj

@@ -22,7 +22,6 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
-#include "tl/expected.hpp"
 #include "wsi/window.h"
 #if PLATFORM_WINDOWS
 #include "wsi/window_win32.h"

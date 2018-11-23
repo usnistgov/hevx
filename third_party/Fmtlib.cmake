@@ -1,3 +1,6 @@
+# fmtlib testing locally includes gmock/gtest which conflicts
+set(FMT_TEST OFF CACHE BOOL "" FORCE)
+
 set(_fmtlib_git_tag 5.2.1)
 
 FetchContent_Declare(fmtlib

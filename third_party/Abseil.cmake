@@ -1,3 +1,5 @@
+set(ABSL_RUN_TESTS ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
+
 FetchContent_Declare(abseil
   GIT_REPOSITORY https://github.com/abseil/abseil-cpp
   GIT_SHALLOW TRUE # Abseil adheres to live-at-head
