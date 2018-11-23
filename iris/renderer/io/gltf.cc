@@ -352,9 +352,9 @@ void from_json(json const& j, Material& m) {
 }
 
 struct Primitive {
-  std::map<std::string, int> attributes;
-  std::optional<int> indices;  // index into gltf.accessors
-  std::optional<int> material; // index into gltf.materials
+  std::map<std::string, int> attributes; // index into gltf.accessors
+  std::optional<int> indices;            // index into gltf.accessors
+  std::optional<int> material;           // index into gltf.materials
   std::optional<int> mode;
   std::optional<std::vector<int>> targets;
 }; // struct Primitive
@@ -664,10 +664,13 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     int byteOffset = 0;
     if (view.byteOffset) byteOffset = *view.byteOffset;
 
+    std::string const bufferName =
+      path.string() + (view.name ? ":" + *view.name : "");
+
     if (auto buffer = Buffer::CreateFromMemory(
           view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-          gsl::not_null(buffersBytes[view.buffer].data() + byteOffset), {},
-          sCommandPool)) {
+          gsl::not_null(buffersBytes[view.buffer].data() + byteOffset),
+          bufferName, sCommandPool)) {
       buffers.push_back(std::move(*buffer));
     } else {
       IRIS_LOG_LEAVE();
@@ -680,14 +683,19 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
   std::size_t const numTextures =
     gltf.textures.value_or<std::vector<gltf::Texture>>({}).size();
+
   for (std::size_t i = 0; i < numTextures; ++i) {
     auto&& texture = (*gltf.textures)[i];
     auto&& bytes = imagesBytes[*texture.source];
 
+    std::string const textureName =
+      path.string() + (texture.name ? ":" + *texture.name : "");
+
     if (auto image = Image::CreateFromMemory(
           VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, imagesExtents[i],
           VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-          gsl::not_null(bytes.data()), 4, {}, sCommandPool)) {
+          gsl::not_null(bytes.data()), 4, textureName + ":image",
+          sCommandPool)) {
       images.push_back(std::move(*image));
     } else {
       IRIS_LOG_LEAVE();
@@ -776,7 +784,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       }
     }
 
-    if (auto s = Sampler::Create(samplerCI)) {
+    if (auto s = Sampler::Create(samplerCI, textureName + ":sampler")) {
       samplers.push_back(std::move(*s));
     } else {
       IRIS_LOG_LEAVE();
@@ -784,6 +792,197 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
+  for (auto&& node : gltf.nodes.value_or<std::vector<gltf::Node>>({})) {
+    //Node:
+    //std::optional<std::vector<int>> children; // indices into gltf.nodes
+    //std::optional<glm::mat4x4> matrix;
+    //std::optional<int> mesh; // index into gltf.meshes
+    //std::optional<glm::quat> rotation;
+    //std::optional<glm::vec3> scale;
+    //std::optional<glm::vec3> translation;
+    //std::optional<std::string> name;
+
+    std::string const nodeName =
+      path.string() + (node.name ? ":" + *node.name : "");
+
+    if (node.children && !node.children->empty()) {
+      GetLogger()->warn("Node children not implemented");
+    }
+
+    if (!node.mesh) {
+      GetLogger()->warn("Transform-only nodes not implemented");
+    }
+
+    if (!gltf.meshes) {
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, "node defines mesh, but no meshes in file"));
+    }
+
+    auto&& mesh = (*gltf.meshes)[*node.mesh];
+    //Mesh:
+    //std::vector<Primitive> primitives;
+
+    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
+
+    for (auto&& primitive : mesh.primitives) {
+      //Primitive:
+      //std::map<std::string, int> attributes; // index into gltf.accessors
+      //std::optional<int> indices;            // index into gltf.accessors
+      //std::optional<int> material;           // index into gltf.materials
+      //std::optional<int> mode;
+      //std::optional<std::vector<int>> targets;
+      //
+      // From the glTF 2.0 spec:
+      //
+      // Implementation note: Each primitive corresponds to one WebGL draw
+      // call (engines are, of course, free to batch draw calls). When a
+      // primitive's indices property is defined, it references the accessor
+      // to use for index data, and GL's drawElements function should be used.
+      // When the indices property is not defined, GL's drawArrays function
+      // should be used with a count equal to the count property of any of the
+      // accessors referenced by the attributes property (they are all equal
+      // for a given primitive).
+      //
+      // Implementation note: When positions are not specified, client
+      // implementations should skip primitive's rendering unless its
+      // positions are provided by other means (e.g., by extension). This
+      // applies to both indexed and non-indexed geometry.
+      //
+      // Implementation note: When normals are not specified, client
+      // implementations should calculate flat normals.
+      //
+      // Implementation note: When tangents are not specified, client
+      // implementations should calculate tangents using default MikkTSpace
+      // algorithms. For best results, the mesh triangles should also be
+      // processed using default MikkTSpace algorithms.
+      //
+      // Implementation note: Vertices of the same triangle should have the
+      // same tangent.w value. When vertices of the same triangle have
+      // different tangent.w values, tangent space is considered undefined.
+      //
+      // Implementation note: When normals and tangents are specified, client
+      // implementations should compute the bitangent by taking the cross
+      // product of the normal and tangent xyz vectors and multiplying against
+      // the w component of the tangent: bitangent = cross(normal,
+      // tangent.xyz) * tangent.w
+
+      for (auto&& [semantic, index] : primitive.attributes) {
+        if (!gltf.accessors) {
+          return tl::unexpected(std::system_error(
+            Error::kFileParseFailed,
+            "mesh defines '" + semantic + "', but no accessors in file"));
+        }
+
+        auto&& accessor = (*gltf.accessors)[index];
+        //Accessor:
+        //std::optional<int> bufferView; // index into gltf.bufferViews
+        //std::optional<int> byteOffset;
+        //int componentType;
+        //std::optional<bool> normalized;
+        //int count;
+        //std::string type;
+        //std::optional<std::vector<double>> min;
+        //std::optional<std::vector<double>> max;
+        //std::optional<std::string> name;
+
+        if (semantic == "POSITION") {
+          if (accessor.type != "VEC3") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "POSITION accessor has wrong type"));
+          }
+          if (accessor.componentType != 5126) {
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "POSITION accessor has wrong componentType"));
+          }
+        } else if (semantic == "NORMAL") {
+          if (accessor.type != "VEC3") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "NORMAL accessor has wrong type"));
+          }
+          if (accessor.componentType != 5126) {
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "NORMAL accessor has wrong componentType"));
+          }
+        } else if (semantic == "TANGENT") {
+          if (accessor.type != "VEC4") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "TANGENT accessor has wrong type"));
+          }
+          if (accessor.componentType != 5126) {
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "TANGENT accessor has wrong componentType"));
+          }
+        } else if (semantic == "TEXCOORD_0") {
+          if (accessor.type != "VEC2") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "TEXCOORD_0 accessor has wrong type"));
+          }
+
+          switch (accessor.componentType) {
+          case 5126: break; // FLOAT
+          case 5121: break; // UNSIGNED_BYTE (normalized)
+          case 5123: break; // UNSIGNED_SHORT (normalized)
+          default:
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "TEXCOORD_0 accessor has wrong componentType"));
+          }
+        } else if (semantic == "TEXCOORD_1") {
+          if (accessor.type != "VEC2") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "TEXCOORD_1 accessor has wrong type"));
+          }
+
+          switch (accessor.componentType) {
+          case 5126: break; // FLOAT
+          case 5121: break; // UNSIGNED_BYTE (normalized)
+          case 5123: break; // UNSIGNED_SHORT (normalized)
+          default:
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "TEXCOORD_1 accessor has wrong componentType"));
+          }
+        } else if (semantic == "COLOR_0") {
+          if (accessor.type != "VEC3" && accessor.type != "VEC4") {
+            return tl::unexpected(std::system_error(
+              Error::kFileParseFailed, "COLOR_0 accessor has wrong type"));
+          }
+
+          switch (accessor.componentType) {
+          case 5126: break; // FLOAT
+          case 5121: break; // UNSIGNED_BYTE (normalized)
+          case 5123: break; // UNSIGNED_SHORT (normalized)
+          default:
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "COLOR_0 accessor has wrong componentType"));
+          }
+        } else if (semantic == "JOINTS_0") {
+          GetLogger()->warn("JOINTS_0 attribute not implemented");
+        } else if (semantic == "WEIGHTS_0") {
+          GetLogger()->warn("WEIGHTS_0 attribute not implemented");
+        }
+      }
+
+      VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+      if (primitive.mode) {
+        switch(*primitive.mode) {
+          case 0: topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; break;
+          case 1: topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
+          // case 2: LINE_LOOP not in VK?
+          case 3: topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP; break;
+          case 4: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
+          case 5: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
+          case 6: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
+        }
+      }
+
+      GetLogger()->debug("drawing {}", topology);
+    }
+  }
 
 #if 0
   std::vector<Shader> shaders;

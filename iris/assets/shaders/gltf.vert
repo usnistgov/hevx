@@ -45,13 +45,17 @@ layout(location = 1) in vec3 Normal;
 layout(location = 2) in vec4 Tangent;
 #endif
 #ifdef HAS_TEXCOORDS
-layout(location = 3) in vec2 Texcoord;
+layout(location = 3) in vec2 Texcoord0;
+#ifdef HAS_TEXCOORDS_1
+layout(location = 4) in vec2 TexCoord1;
+#endif
 #endif
 
-layout(location = 0) out vec2 UV;
-layout(location = 1) out vec4 Pe; // surface position in eye-space
-layout(location = 2) out vec4 Ee; // eye position in eye-space
-layout(location = 3) out vec3 Ve; // view vector in eye-space
+layout(location = 0) out vec4 Pe; // surface position in eye-space
+layout(location = 1) out vec4 Ee; // eye position in eye-space
+layout(location = 2) out vec3 Ve; // view vector in eye-space
+layout(location = 3) out vec2 UV0;
+layout(location = 4) out vec2 UV1;
 
 #ifdef HAS_NORMALS
 
@@ -87,9 +91,13 @@ void main() {
 #endif // HAS_NORMALS
 
 #ifdef HAS_TEXCOORDS
-  UV = Texcoord;
+  UV0 = Texcoord0;
+#ifdef HAS_TEXCOORDS_1
+  UV1 = Texcoord1;
+#endif
 #else
-  UV = vec2(0.0, 0.0);
+  UV0 = vec2(0.0, 0.0);
+  UV1 = vec2(0.0, 0.0);
 #endif
 
   gl_Position = ModelMatrix * ViewProjectionMatrix * Vertex;
