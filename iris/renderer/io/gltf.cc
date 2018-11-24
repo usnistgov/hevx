@@ -557,13 +557,16 @@ void from_json(json const& j, GLTF& g) {
 struct DrawData {
   absl::FixedArray<VkVertexInputBindingDescription> bindingDescriptions;
   absl::FixedArray<VkVertexInputAttributeDescription> attributeDescriptions;
-  std::vector<std::string> shaderMacros;
+  std::vector<iris::Renderer::Shader> shaders{};
   VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
 
   DrawData(std::size_t numBindingDescriptions,
            std::size_t numAttributeDescriptions)
     : bindingDescriptions(numBindingDescriptions)
     , attributeDescriptions(numAttributeDescriptions) {}
+
+  DrawData(DrawData&&) = default;
+  DrawData& operator=(DrawData&&) = default;
 }; // struct DrawData
 
 tl::expected<std::function<void(void)>, std::system_error>
@@ -836,8 +839,11 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     //std::vector<Primitive> primitives;
 
     std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
-
     std::vector<DrawData> draws;
+
+    bool hasPositions = false;
+    bool hasNormals = false;
+    bool hasTangents = false;
 
     for (auto&& primitive : mesh.primitives) {
       //Primitive:
@@ -881,10 +887,10 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       // the w component of the tangent: bitangent = cross(normal,
       // tangent.xyz) * tangent.w
 
+      std::vector<std::string> shaderMacros;
       std::size_t currentAttributeDescriptionIndex = 0;
-      draws.emplace_back(1, primitive.attributes.size());
-      auto&& draw = draws.back();
 
+      DrawData draw(1, primitive.attributes.size());
       draw.bindingDescriptions[0] = {0, 0, VK_VERTEX_INPUT_RATE_VERTEX};
 
       for (auto&& [semantic, index] : primitive.attributes) {
@@ -920,6 +926,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
                                 "POSITION accessor has wrong componentType"));
           }
 
+          hasPositions = true;
           draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
           draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
             0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
@@ -938,10 +945,11 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
                                 "NORMAL accessor has wrong componentType"));
           }
 
+          hasNormals = true;
           draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
           draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
             1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(glm::vec3)};
-          draw.shaderMacros.push_back("HAS_NORMALS");
+          shaderMacros.push_back("HAS_NORMALS");
 
         } else if (semantic == "TANGENT") {
           if (accessor.type != "VEC4") {
@@ -957,10 +965,11 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
                                 "TANGENT accessor has wrong componentType"));
           }
 
+          hasTangents = true;
           draw.bindingDescriptions[0].stride += sizeof(glm::vec4);
           draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
             2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(glm::vec3) * 2};
-          draw.shaderMacros.push_back("HAS_TANGENTS");
+          shaderMacros.push_back("HAS_TANGENTS");
 
         } else if (semantic == "TEXCOORD_0") {
           if (accessor.type != "VEC2") {
@@ -986,7 +995,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
                                 "TEXCOORD_0 accessor has wrong componentType"));
           }
 
-          draw.shaderMacros.push_back("HAS_TEXCOORDS");
+          shaderMacros.push_back("HAS_TEXCOORDS");
 
         } else if (semantic == "TEXCOORD_1") {
           if (accessor.type != "VEC2") {
@@ -1012,7 +1021,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
                                 "TEXCOORD_1 accessor has wrong componentType"));
           }
 
-          draw.shaderMacros.push_back("HAS_TEXCOORDS_1");
+          shaderMacros.push_back("HAS_TEXCOORDS_1");
 
         } else if (semantic == "COLOR_0") {
           if (accessor.type != "VEC3" && accessor.type != "VEC4") {
@@ -1038,6 +1047,24 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         }
       }
 
+      // Implementation note: When positions are not specified, client
+      // implementations should skip primitive's rendering unless its
+      // positions are provided by other means (e.g., by extension). This
+      // applies to both indexed and non-indexed geometry.
+      if (!hasPositions) continue;
+
+      // Implementation note: When normals are not specified, client
+      // implementations should calculate flat normals.
+      if (!hasNormals) {
+      }
+
+      // Implementation note: When tangents are not specified, client
+      // implementations should calculate tangents using default MikkTSpace
+      // algorithms. For best results, the mesh triangles should also be
+      // processed using default MikkTSpace algorithms.
+      if (!hasTangents) {
+      }
+
       if (primitive.mode) {
         switch (*primitive.mode) {
         case 0: draw.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; break;
@@ -1049,6 +1076,26 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         case 6: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
         }
       }
+
+      if (auto vs = Shader::CreateFromFile(
+            "assets/shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT,
+            shaderMacros, "main", meshName + ":VertexShader")) {
+        draw.shaders.push_back(std::move(*vs));
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(vs.error());
+      }
+
+      if (auto fs = Shader::CreateFromFile(
+            "assets/shaders/gltf.frag", VK_SHADER_STAGE_VERTEX_BIT,
+            shaderMacros, "main", meshName + ":VertexShader")) {
+        draw.shaders.push_back(std::move(*fs));
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(fs.error());
+      }
+
+      draws.push_back(std::move(draw));
     }
 
     GetLogger()->debug("drawing mesh {}", meshName);
@@ -1064,25 +1111,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-#if 0
-  std::vector<Shader> shaders;
-
-  if (auto vs = Shader::CreateFromFile("assets/shaders/gltf.vert",
-                                       VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-    shaders.push_back(std::move(*vs));
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(vs.error());
-  }
-
-  if (auto fs = Shader::CreateFromFile("assets/shaders/gltf.frag",
-                                       VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-    shaders.push_back(std::move(*fs));
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(fs.error());
-  }
-#endif
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
   IRIS_LOG_LEAVE();
   return tl::unexpected(

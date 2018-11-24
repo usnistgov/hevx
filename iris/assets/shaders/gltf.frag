@@ -97,9 +97,9 @@ layout(location = 4) in vec2 UV1;
 #ifdef HAS_NORMALS
 
 #ifndef HAS_TANGENTS
-layout(location = 4) in vec3 Ne; // normal vector in eye-space
+layout(location = 5) in vec3 Ne; // normal vector in eye-space
 #else // HAS_TANGENTS defined
-layout(location = 4) in mat3 TBN;
+layout(location = 5) in mat3 TBN;
 #endif
 
 #endif // HAS_NORMALS
