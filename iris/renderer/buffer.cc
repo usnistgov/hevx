@@ -54,7 +54,6 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
                                          VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
-  Expects(commandPool != VK_NULL_HANDLE);
 
   Buffer buffer;
 
@@ -116,7 +115,8 @@ iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
 
   vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &region);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool);
+      error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }

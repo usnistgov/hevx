@@ -133,6 +133,7 @@ void to_json(json& j, Accessor const& accessor) {
 void from_json(json const& j, Accessor& accessor) {
   j.at("componentType").get_to(accessor.componentType);
   j.at("count").get_to(accessor.count);
+  j.at("type").get_to(accessor.type);
 
   if (j.find("bufferView") != j.end()) accessor.bufferView = j["bufferView"];
   if (j.find("byteOffset") != j.end()) accessor.byteOffset = j["byteOffset"];
@@ -553,6 +554,18 @@ void from_json(json const& j, GLTF& g) {
 
 } // namespace gltf
 
+struct DrawData {
+  absl::FixedArray<VkVertexInputBindingDescription> bindingDescriptions;
+  absl::FixedArray<VkVertexInputAttributeDescription> attributeDescriptions;
+  std::vector<std::string> shaderMacros;
+  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+
+  DrawData(std::size_t numBindingDescriptions,
+           std::size_t numAttributeDescriptions)
+    : bindingDescriptions(numBindingDescriptions)
+    , attributeDescriptions(numAttributeDescriptions) {}
+}; // struct DrawData
+
 tl::expected<std::function<void(void)>, std::system_error>
 iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   using namespace std::string_literals;
@@ -824,6 +837,8 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
     std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
 
+    std::vector<DrawData> draws;
+
     for (auto&& primitive : mesh.primitives) {
       //Primitive:
       //std::map<std::string, int> attributes; // index into gltf.accessors
@@ -866,6 +881,12 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       // the w component of the tangent: bitangent = cross(normal,
       // tangent.xyz) * tangent.w
 
+      std::size_t currentAttributeDescriptionIndex = 0;
+      draws.emplace_back(1, primitive.attributes.size());
+      auto&& draw = draws.back();
+
+      draw.bindingDescriptions[0] = {0, 0, VK_VERTEX_INPUT_RATE_VERTEX};
+
       for (auto&& [semantic, index] : primitive.attributes) {
         if (!gltf.accessors) {
           return tl::unexpected(std::system_error(
@@ -874,81 +895,131 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         }
 
         auto&& accessor = (*gltf.accessors)[index];
-        //Accessor:
-        //std::optional<int> bufferView; // index into gltf.bufferViews
-        //std::optional<int> byteOffset;
-        //int componentType;
-        //std::optional<bool> normalized;
-        //int count;
-        //std::string type;
-        //std::optional<std::vector<double>> min;
-        //std::optional<std::vector<double>> max;
-        //std::optional<std::string> name;
+        // Accessor:
+        // std::optional<int> bufferView; // index into gltf.bufferViews
+        // std::optional<int> byteOffset;
+        // int componentType;
+        // std::optional<bool> normalized;
+        // int count;
+        // std::string type;
+        // std::optional<std::vector<double>> min;
+        // std::optional<std::vector<double>> max;
+        // std::optional<std::string> name;
 
         if (semantic == "POSITION") {
           if (accessor.type != "VEC3") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "POSITION accessor has wrong type"));
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "POSITION accessor has wrong type '" +
+                                  accessor.type + "'; expecting 'VEC3'"));
           }
+
           if (accessor.componentType != 5126) {
             return tl::unexpected(
               std::system_error(Error::kFileParseFailed,
                                 "POSITION accessor has wrong componentType"));
           }
+
+          draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
+          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
+            0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
+
         } else if (semantic == "NORMAL") {
           if (accessor.type != "VEC3") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "NORMAL accessor has wrong type"));
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "NORMAL accessor has wrong type '" +
+                                  accessor.type + "'; expecting 'VEC3'"));
           }
+
           if (accessor.componentType != 5126) {
             return tl::unexpected(
               std::system_error(Error::kFileParseFailed,
                                 "NORMAL accessor has wrong componentType"));
           }
+
+          draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
+          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
+            1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(glm::vec3)};
+          draw.shaderMacros.push_back("HAS_NORMALS");
+
         } else if (semantic == "TANGENT") {
           if (accessor.type != "VEC4") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "TANGENT accessor has wrong type"));
+            return tl::unexpected(
+              std::system_error(Error::kFileParseFailed,
+                                "TANGENT accessor has wrong type '" +
+                                  accessor.type + "'; expecting 'VEC4'"));
           }
+
           if (accessor.componentType != 5126) {
             return tl::unexpected(
               std::system_error(Error::kFileParseFailed,
                                 "TANGENT accessor has wrong componentType"));
           }
+
+          draw.bindingDescriptions[0].stride += sizeof(glm::vec4);
+          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
+            2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(glm::vec3) * 2};
+          draw.shaderMacros.push_back("HAS_TANGENTS");
+
         } else if (semantic == "TEXCOORD_0") {
           if (accessor.type != "VEC2") {
             return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "TEXCOORD_0 accessor has wrong type"));
+              Error::kFileParseFailed, "TEXCOORD_0 accessor has wrong type '" +
+                                         accessor.type + "'; expected 'VEC2'"));
           }
 
           switch (accessor.componentType) {
-          case 5126: break; // FLOAT
-          case 5121: break; // UNSIGNED_BYTE (normalized)
-          case 5123: break; // UNSIGNED_SHORT (normalized)
+          case 5126:
+            draw.bindingDescriptions[0].stride += sizeof(glm::vec2);
+            draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
+              3, 0, VK_FORMAT_R32G32_SFLOAT,
+              sizeof(glm::vec3) * 2 + sizeof(glm::vec4)};
+            break;
+          case 5121:
+            // break; // UNSIGNED_BYTE (normalized)
+          case 5123:
+            // break; // UNSIGNED_SHORT (normalized)
           default:
             return tl::unexpected(
               std::system_error(Error::kFileParseFailed,
                                 "TEXCOORD_0 accessor has wrong componentType"));
           }
+
+          draw.shaderMacros.push_back("HAS_TEXCOORDS");
+
         } else if (semantic == "TEXCOORD_1") {
           if (accessor.type != "VEC2") {
             return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "TEXCOORD_1 accessor has wrong type"));
+              Error::kFileParseFailed, "TEXCOORD_1 accessor has wrong type '" +
+                                         accessor.type + "'; expected 'VEC2'"));
           }
 
           switch (accessor.componentType) {
-          case 5126: break; // FLOAT
-          case 5121: break; // UNSIGNED_BYTE (normalized)
-          case 5123: break; // UNSIGNED_SHORT (normalized)
+          case 5126:
+            draw.bindingDescriptions[0].stride += sizeof(glm::vec2);
+            draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
+              3, 0, VK_FORMAT_R32G32_SFLOAT,
+              sizeof(glm::vec3) * 2 + sizeof(glm::vec4)};
+            break;
+          case 5121:
+            // break; // UNSIGNED_BYTE (normalized)
+          case 5123:
+            // break; // UNSIGNED_SHORT (normalized)
           default:
             return tl::unexpected(
               std::system_error(Error::kFileParseFailed,
                                 "TEXCOORD_1 accessor has wrong componentType"));
           }
+
+          draw.shaderMacros.push_back("HAS_TEXCOORDS_1");
+
         } else if (semantic == "COLOR_0") {
           if (accessor.type != "VEC3" && accessor.type != "VEC4") {
             return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "COLOR_0 accessor has wrong type"));
+              Error::kFileParseFailed, "COLOR_0 accessor has wrong type '" +
+                                         accessor.type +
+                                         "'; expected 'VEC3' or 'VEC4'"));
           }
 
           switch (accessor.componentType) {
@@ -967,20 +1038,29 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         }
       }
 
-      VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
       if (primitive.mode) {
-        switch(*primitive.mode) {
-          case 0: topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; break;
-          case 1: topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
-          // case 2: LINE_LOOP not in VK?
-          case 3: topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP; break;
-          case 4: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
-          case 5: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
-          case 6: topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
+        switch (*primitive.mode) {
+        case 0: draw.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; break;
+        case 1: draw.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
+        // case 2: LINE_LOOP not in VK?
+        case 3: draw.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP; break;
+        case 4: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
+        case 5: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
+        case 6: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
         }
       }
+    }
 
-      GetLogger()->debug("drawing {}", topology);
+    GetLogger()->debug("drawing mesh {}", meshName);
+    for (auto&& draw : draws) {
+      GetLogger()->debug("topology {} and stride: {}", draw.topology,
+                         draw.bindingDescriptions[0].stride);
+      for (auto&& attributeDescription : draw.attributeDescriptions) {
+        GetLogger()->debug("attribute location: {} format: {} offset: {}",
+                           attributeDescription.location,
+                           attributeDescription.format,
+                           attributeDescription.offset);
+      }
     }
   }
 
@@ -988,7 +1068,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   std::vector<Shader> shaders;
 
   if (auto vs = Shader::CreateFromFile("assets/shaders/gltf.vert",
-                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+                                       VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
     shaders.push_back(std::move(*vs));
   } else {
     IRIS_LOG_LEAVE();
@@ -996,7 +1076,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   }
 
   if (auto fs = Shader::CreateFromFile("assets/shaders/gltf.frag",
-                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+                                       VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
     shaders.push_back(std::move(*fs));
   } else {
     IRIS_LOG_LEAVE();

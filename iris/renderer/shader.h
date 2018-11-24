@@ -1,6 +1,7 @@
 #ifndef HEV_IRIS_RENDERER_SHADER_H_
 #define HEV_IRIS_RENDERER_SHADER_H_
 
+#include "gsl/gsl"
 #include "iris/renderer/impl.h"
 #if STD_FS_IS_EXPERIMENTAL
 #include <experimental/filesystem>
@@ -18,10 +19,12 @@ namespace iris::Renderer {
 struct Shader {
   static tl::expected<Shader, std::system_error>
   CreateFromSource(std::string_view source, VkShaderStageFlagBits stage,
+                   gsl::span<std::string> macroDefinitinos = {},
                    std::string entry = "main", std::string name = {}) noexcept;
 
   static tl::expected<Shader, std::system_error>
   CreateFromFile(filesystem::path const& path, VkShaderStageFlagBits stage,
+                 gsl::span<std::string> macroDefinitinos = {},
                  std::string entry = "main", std::string name = {}) noexcept;
 
   VkShaderStageFlagBits stage;

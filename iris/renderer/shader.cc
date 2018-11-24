@@ -96,6 +96,7 @@ void ShaderIncluder::ReleaseInclude(shaderc_include_result* result) {
 CompileShaderFromSource(std::string_view source,
                         VkShaderStageFlagBits shaderStage,
                         filesystem::path const& path,
+                        gsl::span<std::string> macroDefinitions,
                         std::string const& entryPoint) {
   IRIS_LOG_ENTER();
   Expects(source.size() > 0);
@@ -104,6 +105,8 @@ CompileShaderFromSource(std::string_view source,
   shaderc::CompileOptions options;
   options.SetOptimizationLevel(shaderc_optimization_level_performance);
   options.SetIncluder(std::make_unique<ShaderIncluder>());
+
+  for (auto&& macro : macroDefinitions) options.AddMacroDefinition(macro);
 
   auto const kind = [&shaderStage]() {
     if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
@@ -135,10 +138,10 @@ CompileShaderFromSource(std::string_view source,
 } // namespace iris::Renderer
 
 tl::expected<iris::Renderer::Shader, std::system_error>
-iris::Renderer::Shader::CreateFromSource(std::string_view source,
-                                         VkShaderStageFlagBits stage,
-                                         std::string entry,
-                                         std::string name) noexcept {
+iris::Renderer::Shader::CreateFromSource(
+  std::string_view source, VkShaderStageFlagBits stage,
+  gsl::span<std::string> macroDefinitions, std::string entry,
+  std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(source.size() > 0);
@@ -146,7 +149,8 @@ iris::Renderer::Shader::CreateFromSource(std::string_view source,
   Shader shader;
 
   std::vector<std::uint32_t> code;
-  if (auto c = CompileShaderFromSource(source, stage, "<inline>", entry)) {
+  if (auto c = CompileShaderFromSource(source, stage, "<inline>",
+                                       macroDefinitions, entry)) {
     code = std::move(*c);
   } else {
     IRIS_LOG_LEAVE();
@@ -184,6 +188,7 @@ iris::Renderer::Shader::CreateFromSource(std::string_view source,
 tl::expected<iris::Renderer::Shader, std::system_error>
 iris::Renderer::Shader::CreateFromFile(filesystem::path const& path,
                                        VkShaderStageFlagBits stage,
+                                       gsl::span<std::string> macroDefinitions,
                                        std::string entry,
                                        std::string name) noexcept {
   IRIS_LOG_ENTER();
@@ -202,7 +207,7 @@ iris::Renderer::Shader::CreateFromFile(filesystem::path const& path,
   std::vector<std::uint32_t> code;
   if (auto c = CompileShaderFromSource(
         {reinterpret_cast<char*>(source.data()), source.size()}, stage, path,
-        entry)) {
+        macroDefinitions, entry)) {
     code = std::move(*c);
   } else {
     IRIS_LOG_LEAVE();

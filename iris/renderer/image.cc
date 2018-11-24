@@ -230,7 +230,8 @@ iris::Renderer::Image::CreateFromMemory(
   vkCmdCopyBufferToImage(commandBuffer, stagingBuffer.handle, image.handle,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool);
+      error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }
@@ -239,7 +240,8 @@ iris::Renderer::Image::CreateFromMemory(
         image.Transition(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
                             ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                            : VK_IMAGE_LAYOUT_GENERAL), 1, 1, commandPool);
+                            : VK_IMAGE_LAYOUT_GENERAL),
+                         1, 1, commandPool);
       error.code()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
@@ -329,7 +331,8 @@ std::system_error iris::Renderer::Image::Transition(
   vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
                        nullptr, 1, &barrier);
 
-  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool); error.code()) {
+  if (auto error = EndOneTimeSubmit(commandBuffer, commandPool);
+      error.code()) {
     IRIS_LOG_LEAVE();
     return error;
   }

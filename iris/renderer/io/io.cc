@@ -15,6 +15,9 @@
 
 namespace iris::Renderer::io {
 
+VkCommandPool sCommandPool{VK_NULL_HANDLE};
+VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+
 static std::atomic_bool sRunning{false};
 static std::thread sThread;
 static bool sInitialized{false};
@@ -23,9 +26,6 @@ static std::condition_variable sRequestsReady{};
 static std::deque<filesystem::path> sRequests{};
 static std::mutex sResultsMutex{};
 static std::vector<std::function<void(void)>> sResults{};
-
-VkCommandPool sCommandPool{VK_NULL_HANDLE};
-VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 
 static void HandleRequests() {
   IRIS_LOG_ENTER();

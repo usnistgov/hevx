@@ -37,7 +37,7 @@ layout(set = 1, binding = 0) uniform ModelBuffer {
   mat4 NormalMatrix;
 };
 
-layout(location = 0) in vec4 Vertex;
+layout(location = 0) in vec3 Vertex;
 #ifdef HAS_NORMALS
 layout(location = 1) in vec3 Normal;
 #endif
@@ -72,7 +72,7 @@ out gl_PerVertex {
 };
 
 void main() {
-  Pe = ModelViewMatrix * Vertex;
+  Pe = ModelViewMatrix * vec4(Vertex, 1.0);
   Ee = -ProjectionMatrixInverse[2];
   Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
 
@@ -100,5 +100,5 @@ void main() {
   UV1 = vec2(0.0, 0.0);
 #endif
 
-  gl_Position = ModelMatrix * ViewProjectionMatrix * Vertex;
+  gl_Position = ModelMatrix * ViewProjectionMatrix * vec4(Vertex, 1.0);
 }

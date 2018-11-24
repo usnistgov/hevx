@@ -106,7 +106,6 @@ VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 VkDevice sDevice{VK_NULL_HANDLE};
 VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
-VkFence sOneTimeSubmit{VK_NULL_HANDLE};
 VkFence sFrameComplete{VK_NULL_HANDLE};
 VmaAllocator sAllocator{VK_NULL_HANDLE};
 
@@ -137,7 +136,8 @@ static std::atomic_bool sRunning{false};
 static VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
 static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
-
+static std::mutex sOneTimeSubmitMutex;
+static VkFence sOneTimeSubmitFence{VK_NULL_HANDLE};
 
 static std::uint32_t const sNumCommandBuffers{2};
 static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
@@ -1072,20 +1072,20 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
 [[nodiscard]] static std::system_error CreateFencesAndSemaphores() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
-  Expects(sOneTimeSubmit == VK_NULL_HANDLE);
+  Expects(sOneTimeSubmitFence == VK_NULL_HANDLE);
   Expects(sFrameComplete == VK_NULL_HANDLE);
   Expects(sImagesReadyForPresent == VK_NULL_HANDLE);
 
   VkFenceCreateInfo fci = {};
   fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
-  if (auto result = vkCreateFence(sDevice, &fci, nullptr, &sOneTimeSubmit);
+  if (auto result = vkCreateFence(sDevice, &fci, nullptr, &sOneTimeSubmitFence);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return {make_error_code(result), "Cannot create fence"};
   }
 
-  NameObject(VK_OBJECT_TYPE_FENCE, sOneTimeSubmit, "sOneTimeSubmit");
+  NameObject(VK_OBJECT_TYPE_FENCE, sOneTimeSubmitFence, "sOneTimeSubmitFence");
 
   fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
@@ -1110,7 +1110,7 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   NameObject(VK_OBJECT_TYPE_SEMAPHORE, sImagesReadyForPresent,
              "sImagesReadyForPresent");
 
-  Ensures(sOneTimeSubmit != VK_NULL_HANDLE);
+  Ensures(sOneTimeSubmitFence != VK_NULL_HANDLE);
   Ensures(sFrameComplete != VK_NULL_HANDLE);
   Ensures(sImagesReadyForPresent != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
@@ -1499,8 +1499,8 @@ void iris::Renderer::Shutdown() noexcept {
     vkDestroyFence(sDevice, sFrameComplete, nullptr);
   }
 
-  if (sOneTimeSubmit != VK_NULL_HANDLE) {
-    vkDestroyFence(sDevice, sOneTimeSubmit, nullptr);
+  if (sOneTimeSubmitFence != VK_NULL_HANDLE) {
+    vkDestroyFence(sDevice, sOneTimeSubmitFence, nullptr);
   }
 
   if (sDescriptorPool != VK_NULL_HANDLE) {
@@ -1845,6 +1845,8 @@ iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
 std::system_error
 iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
                                  VkCommandPool commandPool) noexcept {
+  std::unique_lock<std::mutex> lock{sOneTimeSubmitMutex};
+
   IRIS_LOG_ENTER();
   Expects(commandBuffer != VK_NULL_HANDLE);
   Expects(commandPool != VK_NULL_HANDLE ||
@@ -1865,7 +1867,7 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
   }
 
   if (auto result =
-        vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmit);
+        vkQueueSubmit(sGraphicsCommandQueue, 1, &submit, sOneTimeSubmitFence);
       result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
@@ -1874,14 +1876,14 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
   }
 
   if (auto result =
-        vkWaitForFences(sDevice, 1, &sOneTimeSubmit, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(sDevice, 1, &sOneTimeSubmitFence, VK_TRUE, UINT64_MAX);
       result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return {make_error_code(result), "Cannot wait on one time submit fence"};
   }
 
-  if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmit);
+  if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmitFence);
       result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
