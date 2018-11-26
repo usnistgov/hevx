@@ -102,6 +102,7 @@ set(SOURCES
   renderer/io/io.cc
   renderer/io/gltf.cc
   renderer/io/json.cc
+  renderer/mikktspace.c
   renderer/pipeline.cc
   renderer/renderer.cc
   renderer/surface.cc

@@ -552,22 +552,201 @@ void from_json(json const& j, GLTF& g) {
   }
 }
 
+inline int AccessorTypeCount(std::string const& type) {
+  if (type == "SCALAR") return 1;
+  if (type == "VEC2") return 2;
+  if (type == "VEC3") return 3;
+  if (type == "VEC4") return 4;
+  if (type == "MAT2") return 4;
+  if (type == "MAT3") return 9;
+  if (type == "MAT4") return 16;
+  return 0;
+}
+
+template <class T, class U>
+T GetAccessorDataComponent(gsl::not_null<U*>) {
+  iris::GetLogger()->critical("Not implemented");
+  std::terminate();
+}
+
+template <>
+inline unsigned char
+GetAccessorDataComponent(gsl::not_null<unsigned char*> bytes) {
+  return *bytes;
+}
+
+template <>
+inline unsigned short
+GetAccessorDataComponent(gsl::not_null<unsigned char*> bytes) {
+  return static_cast<unsigned short>(*bytes);
+}
+
+template <>
+inline unsigned int
+GetAccessorDataComponent(gsl::not_null<unsigned char*> bytes) {
+  return static_cast<unsigned int>(*bytes);
+}
+
+template <>
+inline unsigned short
+GetAccessorDataComponent(gsl::not_null<unsigned short*> bytes) {
+  return *bytes;
+}
+
+template <>
+inline unsigned int
+GetAccessorDataComponent(gsl::not_null<unsigned short*> bytes) {
+  return static_cast<unsigned int>(*bytes);
+}
+
+template <>
+inline unsigned int
+GetAccessorDataComponent(gsl::not_null<unsigned int*> bytes) {
+  return *bytes;
+}
+
+template <>
+inline glm::vec2 GetAccessorDataComponent(gsl::not_null<float*> bytes) {
+  return {*bytes, *(bytes.get() + 1)};
+}
+
+template <>
+inline glm::vec3 GetAccessorDataComponent(gsl::not_null<float*> bytes) {
+  return {*bytes, *(bytes.get() + 1), *(bytes.get() + 2)};
+}
+
+template <>
+inline glm::vec4 GetAccessorDataComponent(gsl::not_null<float*> bytes) {
+  return {*bytes, *(bytes.get() + 1), *(bytes.get() + 2), *(bytes.get() + 3)};
+}
+
+template <class T>
+tl::expected<std::vector<T>, std::system_error>
+GetAccessorData(int index, std::string const& accessorType,
+                gsl::span<int> requiredComponentTypes, bool canBeZero,
+                std::optional<std::vector<Accessor>> accessors,
+                std::vector<std::vector<std::byte>> buffersBytes) {
+  std::vector<T> data;
+
+  if (!accessors || accessors->empty()) {
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed, "no accessors"));
+  } else if (accessors->size() < index) {
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed, "too few accessors"));
+  }
+
+  auto&& accessor = (*accessors)[index];
+
+  if (accessor.type != accessorType) {
+    return tl::unexpected(std::system_error(iris::Error::kFileParseFailed,
+                                            "accessor has wrong type '" +
+                                              accessor.type + "'; expecting '" +
+                                              accessorType + "'"));
+  }
+
+  if (!requiredComponentTypes.empty()) {
+    bool goodComponentType = false;
+    for (auto&& componentType : requiredComponentTypes) {
+      if (accessor.componentType == componentType) goodComponentType = true;
+    }
+    if (!goodComponentType) {
+      return tl::unexpected(std::system_error(
+        iris::Error::kFileParseFailed, "accessor has wrong componentType"));
+    }
+  }
+
+  // The index of the bufferView. When not defined, accessor must be
+  // initialized with zeros; sparse property or extensions could override
+  // zeros with actual values.
+  if (!accessor.bufferView) {
+    if (!canBeZero) {
+      return tl::unexpected(std::system_error(iris::Error::kFileParseFailed,
+                                              "accessor has no bufferView"));
+    }
+
+    data.resize(accessor.count);
+    std::fill_n(std::begin(data), accessor.count, T{});
+    return data;
+  }
+
+  if (buffersBytes.size() < accessor.bufferView) {
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed, "too few buffers"));
+  }
+
+  int const componentCount = AccessorTypeCount(accessorType);
+  int const byteOffset = accessor.byteOffset.value_or(0);
+
+  auto&& bufferBytes = buffersBytes[*accessor.bufferView];
+  if (bufferBytes.size() < byteOffset + sizeof(T) * accessor.count) {
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed, "buffer too small"));
+  }
+
+  std::byte* bytes = bufferBytes.data() + byteOffset;
+  data.resize(accessor.count);
+
+  switch (accessor.componentType) {
+  case 5120: {
+    auto p = reinterpret_cast<char*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+
+  case 5121: {
+    auto p = reinterpret_cast<unsigned char*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+
+  case 5122: {
+    auto p = reinterpret_cast<short*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+
+  case 5123: {
+    auto p = reinterpret_cast<unsigned short*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+
+  case 5125: {
+    auto p = reinterpret_cast<unsigned int*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+
+  case 5126: {
+    auto p = reinterpret_cast<float*>(bytes);
+    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+      data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
+    }
+  } break;
+  }
+
+  return tl::unexpected(
+    std::system_error(iris::Error::kFileParseFailed,
+                      "Invalid combination of type and componentType"));
+} // GetAccessorData
+
+template <class T>
+tl::expected<std::vector<T>, std::system_error>
+GetAccessorData(int index, std::string const& accessorType,
+                int requiredComponentTypes, bool canBeZero,
+                std::optional<std::vector<Accessor>> accessors,
+                std::vector<std::vector<std::byte>> buffersBytes) {
+  return GetAccessorData<T>(index, accessorType, {&requiredComponentTypes, 1},
+                            canBeZero, accessors, buffersBytes);
+} // GetAccessorData
+
 } // namespace gltf
-
-struct DrawData {
-  absl::FixedArray<VkVertexInputBindingDescription> bindingDescriptions;
-  absl::FixedArray<VkVertexInputAttributeDescription> attributeDescriptions;
-  std::vector<iris::Renderer::Shader> shaders{};
-  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
-
-  DrawData(std::size_t numBindingDescriptions,
-           std::size_t numAttributeDescriptions)
-    : bindingDescriptions(numBindingDescriptions)
-    , attributeDescriptions(numAttributeDescriptions) {}
-
-  DrawData(DrawData&&) = default;
-  DrawData& operator=(DrawData&&) = default;
-}; // struct DrawData
 
 tl::expected<std::function<void(void)>, std::system_error>
 iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
@@ -589,32 +768,211 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     return tl::unexpected(bytes.error());
   }
 
-  gltf::GLTF gltf;
+  gltf::GLTF g;
   try {
-    gltf = j.get<gltf::GLTF>();
+    g = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                             "Parsing failed: "s + e.what()));
   }
 
-  if (gltf.asset.version != "2.0") {
-    if (gltf.asset.minVersion) {
-      if (gltf.asset.minVersion != "2.0") {
+  if (g.asset.version != "2.0") {
+    if (g.asset.minVersion) {
+      if (g.asset.minVersion != "2.0") {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(
-          std::system_error(Error::kFileParseFailed,
-                            "Unsupported version: " + gltf.asset.version +
-                              " / " + *gltf.asset.minVersion));
+        return tl::unexpected(std::system_error(
+          Error::kFileParseFailed, "Unsupported version: " + g.asset.version +
+                                     " / " + *g.asset.minVersion));
       }
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         Error::kFileParseFailed,
-        "Unsupported version: " + gltf.asset.version + " and no minVersion"));
+        "Unsupported version: " + g.asset.version + " and no minVersion"));
     }
   }
 
+  // FIXME: the below has gotten out-of-hand and I need to rethink this
+  //
+  // I think what might work is for the loader to create a set of Draw commands
+  // that the renderer can then execute every frame. Before doing that, the
+  // loader needs to possible create normals and tangents for the geometry, 
+  // since the glTF spec says implementations should generate them.
+
+  //
+  // Read all the buffers into memory
+  //
+  auto&& buffers =
+    g.buffers.value_or<decltype(gltf::GLTF::buffers)::value_type>({});
+  std::vector<std::vector<std::byte>> bytes;
+
+  for (auto&& buffer : buffers) {
+    if (buffer.uri) {
+      filesystem::path uriPath(*buffer.uri);
+      if (auto b =
+            ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
+        bytes.push_back(std::move(*b));
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(b.error());
+      }
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(Error::kFileParseFailed,
+                                              "unexpected buffer with no uri"));
+    }
+  }
+
+  auto&& nodes = g.nodes.value_or<decltype(gltf::GLTF::nodes)::value_type>({});
+
+  for (auto&& node : nodes) {
+    //Node:
+    //std::optional<std::vector<int>> children; // indices into gltf.nodes
+    //std::optional<glm::mat4x4> matrix;
+    //std::optional<int> mesh; // index into gltf.meshes
+    //std::optional<glm::quat> rotation;
+    //std::optional<glm::vec3> scale;
+    //std::optional<glm::vec3> translation;
+    //std::optional<std::string> name;
+
+    std::string const nodeName =
+      path.string() + (node.name ? ":" + *node.name : "");
+
+    if (node.children && !node.children->empty()) {
+      GetLogger()->warn("Node children not implemented");
+    }
+
+    if (!node.mesh) {
+      GetLogger()->warn("Transform-only nodes not implemented");
+    }
+
+    if (!g.meshes || g.meshes->empty()) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, "node defines mesh, but no meshes"));
+    }
+
+    auto&& meshes = *g.meshes;
+    if (meshes.size() < *node.mesh) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, "node defines mesh, but not enough meshes"));
+    }
+
+    auto&& mesh = meshes[*node.mesh];
+    //Mesh:
+    //std::vector<Primitive> primitives;
+
+    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
+
+    for (auto&& primitive : mesh.primitives) {
+      //Primitive:
+      //std::map<std::string, int> attributes; // index into gltf.accessors
+      //std::optional<int> indices;            // index into gltf.accessors
+      //std::optional<int> material;           // index into gltf.materials
+      //std::optional<int> mode;
+      //std::optional<std::vector<int>> targets;
+      //
+      // From the glTF 2.0 spec:
+      //
+      // Implementation note: Each primitive corresponds to one WebGL draw
+      // call (engines are, of course, free to batch draw calls). When a
+      // primitive's indices property is defined, it references the accessor
+      // to use for index data, and GL's drawElements function should be used.
+      // When the indices property is not defined, GL's drawArrays function
+      // should be used with a count equal to the count property of any of the
+      // accessors referenced by the attributes property (they are all equal
+      // for a given primitive).
+      //
+      // Implementation note: When positions are not specified, client
+      // implementations should skip primitive's rendering unless its
+      // positions are provided by other means (e.g., by extension). This
+      // applies to both indexed and non-indexed geometry.
+      //
+      // Implementation note: When normals are not specified, client
+      // implementations should calculate flat normals.
+      //
+      // Implementation note: When tangents are not specified, client
+      // implementations should calculate tangents using default MikkTSpace
+      // algorithms. For best results, the mesh triangles should also be
+      // processed using default MikkTSpace algorithms.
+      //
+      // Implementation note: Vertices of the same triangle should have the
+      // same tangent.w value. When vertices of the same triangle have
+      // different tangent.w values, tangent space is considered undefined.
+      //
+      // Implementation note: When normals and tangents are specified, client
+      // implementations should compute the bitangent by taking the cross
+      // product of the normal and tangent xyz vectors and multiplying against
+      // the w component of the tangent: bitangent = cross(normal,
+      // tangent.xyz) * tangent.w
+
+      // First get the indices if present
+      std::vector<unsigned int> indices;
+      if (primitive.indices) {
+        if (auto i = gltf::GetAccessorData<unsigned int>(
+              *primitive.indices, "SCALAR", {}, false, g.accessors, bytes)) {
+          indices = std::move(*i);
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(i.error());
+        }
+      }
+
+      // Next get the positions
+      std::vector<glm::vec3> positions;
+
+      for (auto&& [semantic, index] : primitive.attributes) {
+        if (semantic == "POSITION") {
+          if (auto p = gltf::GetAccessorData<glm::vec3>(
+                index, "VEC3", 5126, true, g.accessors, bytes)) {
+            positions = std::move(*p);
+          } else {
+            IRIS_LOG_LEAVE();
+            return tl::unexpected(p.error());
+          }
+        }
+      }
+
+      // primitives with no positions are "ignored"
+      if (!positions.empty()) continue;
+
+      // Now get normals and tangents
+      std::vector<glm::vec3> normals;
+      std::vector<glm::vec4> tangents;
+
+      for (auto&& [semantic, index] : primitive.attributes) {
+        if (semantic == "NORMAL") {
+          if (auto n = gltf::GetAccessorData<glm::vec3>(
+                index, "VEC3", 5126, true, g.accessors, bytes)) {
+            normals = std::move(*n);
+          } else {
+            IRIS_LOG_LEAVE();
+            return tl::unexpected(n.error());
+          }
+        } else if (semantic == "TANGENT") {
+          if (auto t = gltf::GetAccessorData<glm::vec4>(
+                index, "VEC4", 5126, true, g.accessors, bytes)) {
+            tangents = std::move(*t);
+          } else {
+            IRIS_LOG_LEAVE();
+            return tl::unexpected(t.error());
+          }
+        }
+      }
+
+      if (normals.empty()) {
+        if (indices.empty()) {
+        }
+      }
+
+      // Create positions, normals, tangents, and (optionally) indices buffers,
+      // possibly generating normals and tangents from positions.
+    }
+  }
+
+#if 0
   std::vector<std::vector<std::byte>> buffersBytes;
 
   for (auto&& buffer : gltf.buffers.value_or<std::vector<gltf::Buffer>>({})) {
@@ -837,6 +1195,21 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     auto&& mesh = (*gltf.meshes)[*node.mesh];
     //Mesh:
     //std::vector<Primitive> primitives;
+
+struct DrawData {
+  absl::FixedArray<VkVertexInputBindingDescription> bindingDescriptions;
+  absl::FixedArray<VkVertexInputAttributeDescription> attributeDescriptions;
+  std::vector<iris::Renderer::Shader> shaders{};
+  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+
+  DrawData(std::size_t numBindingDescriptions,
+           std::size_t numAttributeDescriptions)
+    : bindingDescriptions(numBindingDescriptions)
+    , attributeDescriptions(numAttributeDescriptions) {}
+
+  DrawData(DrawData&&) = default;
+  DrawData& operator=(DrawData&&) = default;
+}; // struct DrawData
 
     std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
     std::vector<DrawData> draws;
@@ -1110,6 +1483,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       }
     }
   }
+#endif
 
   GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
   IRIS_LOG_LEAVE();
