@@ -631,7 +631,7 @@ GetAccessorData(int index, std::string const& accessorType,
   if (!accessors || accessors->empty()) {
     return tl::unexpected(
       std::system_error(iris::Error::kFileParseFailed, "no accessors"));
-  } else if (accessors->size() < index) {
+  } else if (accessors->size() < static_cast<std::size_t>(index)) {
     return tl::unexpected(
       std::system_error(iris::Error::kFileParseFailed, "too few accessors"));
   }
@@ -854,7 +854,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     }
 
     auto&& meshes = *g.meshes;
-    if (meshes.size() < *node.mesh) {
+    if (meshes.size() < static_cast<std::size_t>(*node.mesh)) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         Error::kFileParseFailed, "node defines mesh, but not enough meshes"));
