@@ -908,7 +908,9 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       // the w component of the tangent: bitangent = cross(normal,
       // tangent.xyz) * tangent.w
 
-      // First get the indices if present
+      // First get the indices if present. We're only getting the indices here
+      // to use them for possible normal/tangent generation. That way the
+      // original format of the indices can be used in the draw call.
       std::vector<unsigned int> indices;
       if (primitive.indices) {
         if (auto i = gltf::GetAccessorData<unsigned int>(
