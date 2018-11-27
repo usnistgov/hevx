@@ -28,6 +28,11 @@
 #pragma warning(disable : 4456)
 #endif
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
