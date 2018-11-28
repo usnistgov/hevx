@@ -1367,7 +1367,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       }
 
       std::shared_ptr<Pipeline> pipeline;
-      VkIndexType indexType;
+      VkIndexType indexType = VK_INDEX_TYPE_UINT16;
       std::uint32_t indexCount = 0;
       std::shared_ptr<Buffer> indexBuffer;
       std::shared_ptr<Buffer> vertexBuffer;
@@ -1387,8 +1387,8 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
           bufferView.byteOffset.value_or(0) + accessor.byteOffset.value_or(0);
 
         switch (accessor.componentType) {
-        case 5123: indexType = VK_INDEX_TYPE_UINT16;
-        case 5125: indexType = VK_INDEX_TYPE_UINT32;
+        case 5123: indexType = VK_INDEX_TYPE_UINT16; break;
+        case 5125: indexType = VK_INDEX_TYPE_UINT32; break;
         }
         indexCount = accessor.count;
 
@@ -1440,12 +1440,13 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         return tl::unexpected(vb.error());
       }
 
-      results.push_back([pipeline, indexCount,
+      results.push_back([pipeline, indexType, indexCount,
                          vertexCount = primData.vertices.size(), indexBuffer,
                          vertexBuffer]() {
         DrawData draw;
         draw.pipeline = std::move(*pipeline);
 
+        draw.indexType = indexType;
         draw.indexCount = indexCount;
         draw.vertexCount = vertexCount;
 
@@ -1454,8 +1455,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
         DrawCommands().push_back(std::move(draw));
       });
-#if 0
-#endif
     }
   }
 

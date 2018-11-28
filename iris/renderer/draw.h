@@ -16,7 +16,7 @@ struct DrawData {
   Buffer indexBuffer{};
   Buffer vertexBuffer{};
 
-  DrawData() noexcept = default;
+  DrawData() = default;
   DrawData(DrawData const&) = delete;
   DrawData(DrawData&&) noexcept = default;
   DrawData& operator=(DrawData const&) = delete;

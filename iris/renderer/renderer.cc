@@ -1656,6 +1656,7 @@ void iris::Renderer::EndFrame() noexcept {
     std::begin(sSecondaryCommandBuffers), std::begin(sSecondaryCommandBuffers),
     [](auto&& titleWindow, auto&& commandBuffer) -> VkCommandBuffer {
       auto&& [title, window] = titleWindow;
+      (void)title;
 
       VkCommandBufferInheritanceInfo inheritanceInfo = {};
       inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
