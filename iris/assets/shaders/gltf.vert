@@ -38,34 +38,17 @@ layout(set = 1, binding = 0) uniform ModelBuffer {
 };
 
 layout(location = 0) in vec3 Vertex;
-#ifdef HAS_NORMALS
 layout(location = 1) in vec3 Normal;
-#endif
-#ifdef HAS_TANGENTS
 layout(location = 2) in vec4 Tangent;
-#endif
 #ifdef HAS_TEXCOORDS
-layout(location = 3) in vec2 Texcoord0;
-#ifdef HAS_TEXCOORDS_1
-layout(location = 4) in vec2 TexCoord1;
-#endif
+layout(location = 3) in vec2 Texcoord;
 #endif
 
 layout(location = 0) out vec4 Pe; // surface position in eye-space
 layout(location = 1) out vec4 Ee; // eye position in eye-space
 layout(location = 2) out vec3 Ve; // view vector in eye-space
-layout(location = 3) out vec2 UV0;
-layout(location = 4) out vec2 UV1;
-
-#ifdef HAS_NORMALS
-
-#ifndef HAS_TANGENTS
-layout(location = 5) out vec3 Ne; // normal vector in eye-space
-#else // HAS_TANGENTS defined
-layout(location = 5) out mat3 TBN;
-#endif
-
-#endif // HAS_NORMALS
+layout(location = 3) out vec2 UV;
+layout(location = 4) out mat3 TBN;
 
 out gl_PerVertex {
   vec4 gl_Position;
@@ -76,28 +59,15 @@ void main() {
   Ee = -ProjectionMatrixInverse[2];
   Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
 
-#ifdef HAS_NORMALS
-
-#ifndef HAS_TANGENTS
-  Ne = normalize(vec3(ModelMatrix * vec4(Normal.xyz, 0.0)));
-#else
-
   vec3 normalW = normalize(vec3(NormalMatrix * vec4(Normal.xyz, 0.0)));
   vec3 tangentW = normalize(vec3(ModelMatrix * vec4(Tangent.xyz, 0.0)));
   vec3 bitangentW = cross(normalW, tangentW) * Tangent.w;
   TBN = mat3(tangentW, bitangentW, normalW);
-#endif
-
-#endif // HAS_NORMALS
 
 #ifdef HAS_TEXCOORDS
-  UV0 = Texcoord0;
-#ifdef HAS_TEXCOORDS_1
-  UV1 = Texcoord1;
-#endif
+  UV = Texcoord0;
 #else
-  UV0 = vec2(0.0, 0.0);
-  UV1 = vec2(0.0, 0.0);
+  UV = vec2(0.0, 0.0);
 #endif
 
   gl_Position = ModelMatrix * ViewProjectionMatrix * vec4(Vertex, 1.0);

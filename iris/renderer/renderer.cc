@@ -12,6 +12,7 @@
 #include "protos.h"
 #include "renderer/command_buffers.h"
 #include "renderer/descriptor_sets.h"
+#include "renderer/draw.h"
 #include "renderer/impl.h"
 #include "renderer/io/io.h"
 #include "renderer/shader.h"
@@ -124,6 +125,11 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
+std::vector<iris::Renderer::DrawData>& DrawCommands() {
+  static std::vector<iris::Renderer::DrawData> sDrawCommands;
+  return sDrawCommands;
+} // DrawCommands
+
 /////
 //
 // Additional static private variables
@@ -144,8 +150,10 @@ static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
                                                          VK_NULL_HANDLE);
 static std::uint32_t sCommandBufferIndex{0};
 
+static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
+
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
-Windows() noexcept {
+Windows() {
   static absl::flat_hash_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
 } // Windows
@@ -1481,6 +1489,11 @@ void iris::Renderer::Shutdown() noexcept {
 
   Windows().clear();
 
+  vkFreeCommandBuffers(
+    sDevice, sGraphicsCommandPool,
+    gsl::narrow_cast<std::uint32_t>(sSecondaryCommandBuffers.size()),
+    sSecondaryCommandBuffers.data());
+
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
                        gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size()),
                        sCommandBuffers.data());
@@ -1575,12 +1588,14 @@ bool iris::Renderer::BeginFrame() noexcept {
 
 void iris::Renderer::EndFrame() noexcept {
   if (!sInitialized || !sRunning) return;
+  IRIS_LOG_ENTER();
+  auto&& windows = Windows();
 
   //
   // Acquire images/semaphores from all iris::Window objects
   //
 
-  for (auto&& [title, window] : Windows()) {
+  for (auto&& [title, window] : windows) {
     VkResult result =
       vkAcquireNextImageKHR(sDevice, window.surface.swapchain, UINT64_MAX,
                             window.surface.imageAvailable, VK_NULL_HANDLE,
@@ -1602,12 +1617,100 @@ void iris::Renderer::EndFrame() noexcept {
       GetLogger()->error(
         "Renderer::Frame: acquiring next image for {} failed: {}", title,
         to_string(result));
-      return;
     }
   }
 
   //
-  // Record primary command buffer for current frame
+  // Build secondary command buffers
+  //
+
+  if (sSecondaryCommandBuffers.size() < windows.size()) {
+    // Re-allocate secondary command buffers
+    if (!sSecondaryCommandBuffers.empty()) {
+      vkFreeCommandBuffers(
+        sDevice, sGraphicsCommandPool,
+        gsl::narrow_cast<std::uint32_t>(sSecondaryCommandBuffers.size()),
+        sSecondaryCommandBuffers.data());
+      sSecondaryCommandBuffers.clear();
+    }
+
+    VkCommandBufferAllocateInfo commandBufferAI = {};
+    commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAI.commandPool = sGraphicsCommandPool;
+    commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+    commandBufferAI.commandBufferCount =
+      gsl::narrow_cast<std::uint32_t>(windows.size());
+
+    sSecondaryCommandBuffers.resize(windows.size());
+    if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
+                                               sSecondaryCommandBuffers.data());
+        result != VK_SUCCESS) {
+      GetLogger()->error(
+        "Renderer::Frame: allocating secondary command buffers failed: {}",
+        to_string(result));
+    }
+  }
+
+  std::transform(
+    std::begin(windows), std::end(windows),
+    std::begin(sSecondaryCommandBuffers), std::begin(sSecondaryCommandBuffers),
+    [](auto&& titleWindow, auto&& commandBuffer) -> VkCommandBuffer {
+      auto&& [title, window] = titleWindow;
+
+      VkCommandBufferInheritanceInfo inheritanceInfo = {};
+      inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+      inheritanceInfo.renderPass = sRenderPass;
+      inheritanceInfo.framebuffer = window.surface.currentFramebuffer();
+
+      VkCommandBufferBeginInfo beginInfo = {};
+      beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+      beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                        VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+      beginInfo.pInheritanceInfo = &inheritanceInfo;
+
+      if (auto result = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+          result != VK_SUCCESS) {
+        GetLogger()->error(
+          "Renderer::Frame: begin secondary command buffer failed: {}",
+          to_string(result));
+      }
+
+      vkCmdSetViewport(commandBuffer, 0, 1, &window.surface.viewport);
+      vkCmdSetScissor(commandBuffer, 0, 1, &window.surface.scissor);
+
+      for (auto&& draw : DrawCommands()) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          draw.pipeline);
+
+        //vkCmdBindDescriptorSets(
+        //  cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline.layout, 0,
+        //  gsl::narrow_cast<std::uint32_t>(ui.descriptorSets.sets.size()),
+        //  ui.descriptorSets.sets.data(), 0, nullptr);
+
+        VkDeviceSize bindingOffset = 0;
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, draw.vertexBuffer.get(),
+                               &bindingOffset);
+
+        if (draw.indexCount > 0) {
+          vkCmdBindIndexBuffer(commandBuffer, draw.indexBuffer, 0, draw.indexType);
+          vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, 0, 0, 0);
+        } else {
+          vkCmdDraw(commandBuffer, draw.vertexCount, 1, 0, 0);
+        }
+      }
+
+      if (auto result = vkEndCommandBuffer(commandBuffer);
+          result != VK_SUCCESS) {
+        GetLogger()->error(
+          "Renderer::Frame: end secondary command buffer failed: {}",
+          to_string(result));
+      }
+
+      return commandBuffer;
+    });
+
+  //
+  // 1. Record primary command buffer for current frame
   //
 
   sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
@@ -1618,7 +1721,6 @@ void iris::Renderer::EndFrame() noexcept {
 
   if (auto result = vkBeginCommandBuffer(cb, &cbi); result != VK_SUCCESS) {
     GetLogger()->error("Error beginning command buffer: {}", to_string(result));
-    return;
   }
 
   absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
@@ -1629,10 +1731,6 @@ void iris::Renderer::EndFrame() noexcept {
   rbi.renderPass = sRenderPass;
   rbi.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(sNumRenderPassAttachments);
-
-  //
-  // 1. Build secondary command buffers
-  //
 
   //
   // 2. For every window, begin rendering
@@ -1668,6 +1766,9 @@ void iris::Renderer::EndFrame() noexcept {
     // 3. Execute secondary command buffers
     //
 
+    vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
+                         sSecondaryCommandBuffers.data());
+
     if (auto wcb = window.EndFrame(rbi.framebuffer)) {
       VkCommandBuffer winCB = *wcb;
       if (winCB != VK_NULL_HANDLE) vkCmdExecuteCommands(cb, 1, &winCB);
@@ -1684,7 +1785,6 @@ void iris::Renderer::EndFrame() noexcept {
 
   if (auto result = vkEndCommandBuffer(cb); result != VK_SUCCESS) {
     GetLogger()->error("Error ending command buffer: {}", to_string(result));
-    return;
   }
 
   //
@@ -1710,7 +1810,6 @@ void iris::Renderer::EndFrame() noexcept {
       result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
-    return;
   }
 
   //
@@ -1731,8 +1830,8 @@ void iris::Renderer::EndFrame() noexcept {
   if (auto result = vkQueuePresentKHR(sGraphicsCommandQueue, &pi);
       result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
-    return;
   }
+  IRIS_LOG_LEAVE();
 } // iris::Renderer::EndFrame
 
 std::error_code

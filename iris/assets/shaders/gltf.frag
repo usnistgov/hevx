@@ -91,18 +91,8 @@ layout(set = 1, binding = 11) uniform texture2D OcclusionTexture;
 layout(location = 0) in vec4 Pe; // surface position in eye-space
 layout(location = 1) in vec4 Ee; // eye position in eye-space
 layout(location = 2) in vec3 Ve; // view vector in eye-space
-layout(location = 3) in vec2 UV0;
-layout(location = 4) in vec2 UV1;
-
-#ifdef HAS_NORMALS
-
-#ifndef HAS_TANGENTS
-layout(location = 5) in vec3 Ne; // normal vector in eye-space
-#else // HAS_TANGENTS defined
-layout(location = 5) in mat3 TBN;
-#endif
-
-#endif // HAS_NORMALS
+layout(location = 3) in vec2 UV;
+layout(location = 4) in mat3 TBN;
 
 layout(location = 0) out vec4 Color;
 
@@ -137,25 +127,7 @@ vec4 SRGBtoLINEAR(vec4 srgbIn) {
 // map or from the interpolated mesh normal and tangent attributes.
 vec3 GetNormal() {
   // Retrieve the tangent space matrix
-#ifndef HAS_TANGENTS
-  vec3 pDx = dFdx(Pe.xyz));
-  vec3 pDy = dFdy(Pe.xyz));
-  vec3 tDx = dFdx(vec3(UV0.st, 0.0)));
-  vec3 tDy = dFdy(vec3(UV0.st, 0.0)));
-  vec3 t = (tDy.t * pDx - tDx.t * pDy) / (tDx.s * tDy.t - tDy.s * tDx.t);
-
-#ifdef HAS_NORMALS
-  vec3 ng = normalize(Ne);
-#else
-  vec3 ng = cross(pDx, pDy);
-#endif
-
-  t = normalize(t - ng * dot(ng, t));
-  vec3 b = normalize(cross(ng, t));
-  mat3 tbn = mat3(t, b, ng);
-#else // HAS_TANGENTS
   mat3 tbn = TBN;
-#endif
 
 #ifdef HAS_NORMAL_MAP
     vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV0.st).rgb;

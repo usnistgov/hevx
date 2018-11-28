@@ -7,9 +7,12 @@
 #include "logging.h"
 #include "nlohmann/json.hpp"
 #include "renderer/buffer.h"
+#include "renderer/draw.h"
 #include "renderer/image.h"
+#include "renderer/impl.h"
 #include "renderer/io/impl.h"
 #include "renderer/mikktspace.h"
+#include "renderer/pipeline.h"
 #include "renderer/shader.h"
 #include "stb_image.h"
 #include <map>
@@ -783,21 +786,68 @@ GetAccessorData(int index, std::string const& accessorType,
 } // namespace gltf
 
 struct PrimitiveData {
-  VkPrimitiveTopology topology;
+  struct Vertex {
+    glm::vec3 position{0.0f, 0.0f, 0.0f};
+    glm::vec3 normal{0.0f, 0.0f, 0.0f};
+    glm::vec4 tangent{0.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec2 texcoord{0.0f, 0.0f};
+  };
 
-  std::vector<glm::vec3> positions;
-  std::vector<glm::vec3> normals;
-  std::vector<glm::vec2> texcoords;
-  std::vector<glm::vec4> tangents;
-
+  std::vector<Vertex> vertices;
   std::vector<unsigned int> indices;
-  iris::Renderer::Buffer indexBuffer;
+
+  VkPrimitiveTopology topology;
+  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+
+  void GenerateNormals() {
+    if (indices.empty()) {
+      std::size_t const num = vertices.size();
+      for (std::size_t i = 0; i < num; i += 3) {
+        auto&& a = vertices[i].position;
+        auto&& b = vertices[i + 1].position;
+        auto&& c = vertices[i + 2].position;
+        auto const n = glm::normalize(glm::cross(b - a, c - a));
+        vertices[i].normal = n;
+        vertices[i + 1].normal = n;
+        vertices[i + 2].normal = n;
+      }
+    } else {
+      std::size_t const num = indices.size();
+      for (std::size_t i = 0; i < num; i += 3) {
+        auto&& a = vertices[indices[i]].position;
+        auto&& b = vertices[indices[i + 1]].position;
+        auto&& c = vertices[indices[i + 2]].position;
+        auto const n = glm::normalize(glm::cross(b - a, c - a));
+        vertices[indices[i]].normal = n;
+        vertices[indices[i + 1]].normal = n;
+        vertices[indices[i + 2]].normal = n;
+      }
+    }
+  } // GenerateNormals
+
+  bool GenerateTangents() {
+    std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
+    ifc->m_getNumFaces = &PrimitiveData::GetNumFaces;
+    ifc->m_getNumVerticesOfFace = &PrimitiveData::GetNumVerticesOfFace;
+    ifc->m_getPosition = &PrimitiveData::GetPosition;
+    ifc->m_getNormal = &PrimitiveData::GetNormal;
+    ifc->m_getTexCoord = &PrimitiveData::GetTexCoord;
+    ifc->m_setTSpaceBasic = &PrimitiveData::SetTSpaceBasic;
+    ifc->m_setTSpace = nullptr;
+
+    std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
+    ctx->m_pInterface = ifc.get();
+    ctx->m_pUserData = this;
+
+    return genTangSpaceDefault(ctx.get());
+  }
 
   static int GetNumFaces(SMikkTSpaceContext const* pContext) {
     auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
 
     if (primData->indices.empty()) {
-      return primData->positions.size() / 3;
+      return primData->vertices.size() / 3;
     } else {
       return primData->indices.size() / 3;
     }
@@ -813,9 +863,9 @@ struct PrimitiveData {
 
     glm::vec3 p;
     if (primData->indices.empty()) {
-      p = primData->positions[iFace * 3 + iVert];
+      p = primData->vertices[iFace * 3 + iVert].position;
     } else {
-      p = primData->positions[primData->indices[iFace * 3 + iVert]];
+      p = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
     }
 
     fvPosOut[0] = p.x;
@@ -829,9 +879,9 @@ struct PrimitiveData {
 
     glm::vec3 n;
     if (primData->indices.empty()) {
-      n = primData->normals[iFace * 3 + iVert];
+      n = primData->vertices[iFace * 3 + iVert].position;
     } else {
-      n = primData->normals[primData->indices[iFace * 3 + iVert]];
+      n = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
     }
 
     fvNormOut[0] = n.x;
@@ -843,18 +893,15 @@ struct PrimitiveData {
                           const int iFace, const int iVert) {
     auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
 
-    glm::vec2 c{0.0f, 0.0f};
-    if (!primData->texcoords.empty()) {
-      if (primData->indices.empty()) {
-        c = primData->texcoords[iFace * 3 + iVert];
-      } else {
-        c = primData->texcoords[primData->indices[iFace * 3 + iVert]];
-      }
+    glm::vec2 c;
+    if (primData->indices.empty()) {
+      c = primData->vertices[iFace * 3 + iVert].texcoord;
+    } else {
+      c = primData->vertices[primData->indices[iFace * 3 + iVert]].texcoord;
     }
 
     fvTexcOut[0] = c.x;
     fvTexcOut[1] = c.y;
-    fvTexcOut[2] = 0.0;
   }
 
   static void SetTSpaceBasic(SMikkTSpaceContext const* pContext,
@@ -865,12 +912,144 @@ struct PrimitiveData {
     glm::vec4 t{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
 
     if (primData->indices.empty()) {
-      primData->tangents[iFace * 3 + iVert] = t;
+      primData->vertices[iFace * 3 + iVert].tangent = t;
     } else {
-      primData->tangents[primData->indices[iFace * 3 + iVert]] = t;
+      primData->vertices[primData->indices[iFace * 3 + iVert]].tangent = t;
     }
   };
 }; // struct PrimitiveData
+
+tl::expected<iris::Renderer::Pipeline, std::system_error>
+CreatePipeline(PrimitiveData& primData) noexcept {
+  std::vector<std::string> shaderMacros;
+  if (primData.attributeDescriptions.size() == 4) {
+    shaderMacros.push_back("-DHAS_TEXCOORDS");
+  }
+
+  absl::FixedArray<iris::Renderer::Shader> shaders(2);
+
+  if (auto vs = iris::Renderer::Shader::CreateFromFile(
+        "assets/shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
+    shaders[0] = std::move(*vs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
+  }
+
+  if (auto fs = iris::Renderer::Shader::CreateFromFile(
+        "assets/shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
+    shaders[1] = std::move(*fs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
+  }
+
+#if 0
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+
+  if (auto d = Renderer::AllocateDescriptorSets(
+        descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
+    ui.descriptorSets = std::move(*d);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(d.error());
+  }
+
+  VkDescriptorImageInfo descriptorSamplerI = {};
+  descriptorSamplerI.sampler = ui.fontImageSampler;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            ui.descriptorSets.sets[0],
+                            0,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLER,
+                            &descriptorSamplerI,
+                            nullptr,
+                            nullptr};
+
+  VkDescriptorImageInfo descriptorImageI = {};
+  descriptorImageI.imageView = ui.fontImageView;
+  descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  writeDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            ui.descriptorSets.sets[0],
+                            1,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                            &descriptorImageI,
+                            nullptr,
+                            nullptr};
+
+  UpdateDescriptorSets(writeDescriptorSets);
+
+  absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
+  pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT, 0,
+                           sizeof(glm::vec2) * 2};
+#endif
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+  inputAssemblyStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyStateCI.topology = primData.topology;
+
+  VkPipelineViewportStateCreateInfo viewportStateCI = {};
+  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportStateCI.viewportCount = 1;
+  viewportStateCI.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+  rasterizationStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationStateCI.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+  multisampleStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleStateCI.rasterizationSamples = iris::Renderer::sSurfaceSampleCount;
+  multisampleStateCI.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+  depthStencilStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilStateCI.depthTestEnable = VK_TRUE;
+  depthStencilStateCI.depthWriteEnable = VK_TRUE;
+  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
+
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_FALSE,                            // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE,                 // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
+
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+  return iris::Renderer::Pipeline::CreateGraphics(
+    {}, {}, shaders, primData.bindingDescriptions,
+    primData.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+    rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+    colorBlendAttachmentStates, dynamicStates, 0, "");
+} // CreatePipeline
 
 inline tl::expected<VkPrimitiveTopology, std::system_error>
 glTFModeToVkPrimitiveTopology(std::optional<int> mode) {
@@ -959,6 +1138,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   }
 
   auto&& nodes = g.nodes.value_or<decltype(gltf::GLTF::nodes)::value_type>({});
+  std::vector<std::function<void(void)>> results;
 
   for (auto&& node : nodes) {
     //Node:
@@ -1003,7 +1183,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
     GetLogger()->trace("{}", json(mesh).dump());
     std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
-    std::vector<PrimitiveData> primitives;
 
     for (auto&& primitive : mesh.primitives) {
       //Primitive:
@@ -1060,7 +1239,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       // to use them for possible normal/tangent generation. That way the
       // original format of the indices can be used in the draw call.
       if (primitive.indices) {
-        std::array<int, 3> componentTypes{5121, 5123, 5125};
+        std::array<int, 3> componentTypes{5123, 5125};
         if (auto i = gltf::GetAccessorData<unsigned int>(
               *primitive.indices, "SCALAR", componentTypes, false, g.accessors,
               g.bufferViews, bytes)) {
@@ -1069,38 +1248,17 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
           IRIS_LOG_LEAVE();
           return tl::unexpected(i.error());
         }
-
-        // GetAccessorData checks the accessor and bufferView, so we can
-        // assume it exists.
-        auto&& accessor = (*g.accessors)[*primitive.indices];
-        auto&& bufferView = (*g.bufferViews)[*accessor.bufferView];
-        auto&& buffer = bytes[bufferView.buffer];
-        int const byteOffset =
-          bufferView.byteOffset.value_or(0) + accessor.byteOffset.value_or(0);
-
-        std::string const bufferName =
-          meshName + (bufferView.name ? ":" + *bufferView.name : "");
-
-        if (auto ib = Buffer::CreateFromMemory(
-              bufferView.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-              VMA_MEMORY_USAGE_GPU_ONLY,
-              gsl::not_null(buffer.data() + byteOffset), bufferName,
-              sCommandPool)) {
-          primData.indexBuffer = std::move(*ib);
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(ib.error());
-        }
       }
 
       //
       // Next get the positions
       //
+      std::vector<glm::vec3> positions;
       for (auto&& [semantic, index] : primitive.attributes) {
         if (semantic == "POSITION") {
           if (auto p = gltf::GetAccessorData<glm::vec3>(
                 index, "VEC3", 5126, true, g.accessors, g.bufferViews, bytes)) {
-            primData.positions = std::move(*p);
+            positions = std::move(*p);
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(p.error());
@@ -1109,16 +1267,20 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       }
 
       // primitives with no positions are "ignored"
-      if (primData.positions.empty()) continue;
+      if (positions.empty()) continue;
 
       //
       // Now get texcoords, normals, and tangents
       //
+      std::vector<glm::vec2> texcoords;
+      std::vector<glm::vec3> normals;
+      std::vector<glm::vec4> tangents;
+
       for (auto&& [semantic, index] : primitive.attributes) {
         if (semantic == "TEXCOORD_0") {
           if (auto t = gltf::GetAccessorData<glm::vec2>(
                 index, "VEC2", 5126, true, g.accessors, g.bufferViews, bytes)) {
-            primData.texcoords = std::move(*t);
+            texcoords = std::move(*t);
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(t.error());
@@ -1126,7 +1288,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         } else if (semantic == "NORMAL") {
           if (auto n = gltf::GetAccessorData<glm::vec3>(
                 index, "VEC3", 5126, true, g.accessors, g.bufferViews, bytes)) {
-            primData.normals = std::move(*n);
+            normals = std::move(*n);
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(n.error());
@@ -1134,7 +1296,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         } else if (semantic == "TANGENT") {
           if (auto t = gltf::GetAccessorData<glm::vec4>(
                 index, "VEC4", 5126, true, g.accessors, g.bufferViews, bytes)) {
-            primData.tangents = std::move(*t);
+            tangents = std::move(*t);
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(t.error());
@@ -1142,67 +1304,162 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         }
       }
 
-      if (primData.normals.empty()) {
-        primData.normals.resize(primData.positions.size());
+      std::size_t const num = positions.size();
+      primData.vertices.resize(num);
 
-        if (primData.indices.empty()) {
-          std::size_t const num = primData.positions.size();
-          for (std::size_t i = 0; i < num; i += 3) {
-            auto&& a = primData.positions[i];
-            auto&& b = primData.positions[i + 1];
-            auto&& c = primData.positions[i + 2];
-            auto const n = glm::normalize(glm::cross(b - a, c - a));
-            primData.normals[i] = n;
-            primData.normals[i + 1] = n;
-            primData.normals[i + 2] = n;
-          }
-        } else {
-          std::size_t const num = primData.indices.size();
-          for (std::size_t i = 0; i < num; i += 3) {
-            auto&& a = primData.positions[primData.indices[i]];
-            auto&& b = primData.positions[primData.indices[i + 1]];
-            auto&& c = primData.positions[primData.indices[i + 2]];
-            auto const n = glm::normalize(glm::cross(b - a, c - a));
-            primData.normals[primData.indices[i]] = n;
-            primData.normals[primData.indices[i + 1]] = n;
-            primData.normals[primData.indices[i + 2]] = n;
-          }
+      for (std::size_t i = 0; i < num; ++i) {
+        primData.vertices[i].position = positions[i];
+      }
+
+      if (!texcoords.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].texcoord = texcoords[i];
         }
       }
 
-      if (primData.tangents.empty()) {
-        primData.tangents.resize(primData.positions.size());
+      if (!normals.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].normal = normals[i];
+        }
+      } else {
+        primData.GenerateNormals();
+      }
 
-        std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
-        ifc->m_getNumFaces = &PrimitiveData::GetNumFaces;
-        ifc->m_getNumVerticesOfFace = &PrimitiveData::GetNumVerticesOfFace;
-        ifc->m_getPosition = &PrimitiveData::GetPosition;
-        ifc->m_getNormal = &PrimitiveData::GetNormal;
-        ifc->m_getTexCoord = &PrimitiveData::GetTexCoord;
-        ifc->m_setTSpaceBasic = &PrimitiveData::SetTSpaceBasic;
-        ifc->m_setTSpace = nullptr;
-
-        std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
-        ctx->m_pInterface = ifc.get();
-        ctx->m_pUserData = &primData;
-
-        if (!genTangSpaceDefault(ctx.get())) {
+      if (!tangents.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].tangent = tangents[i];
+        }
+      } else {
+        if (!primData.GenerateTangents()) {
           IRIS_LOG_LEAVE();
           return tl::unexpected(std::system_error(
-            Error::kFileParseFailed, "Unable to generate tangent space"));
+            iris::Error::kFileParseFailed, "Unable to generate tangent space"));
         }
       }
 
-      GetLogger()->debug("Primitive has {} positions, {} normals, {} tangents",
-                         primData.positions.size(), primData.normals.size(),
-                         primData.tangents.size());
+      GetLogger()->debug("Primitive has {} vertices", primData.vertices.size());
 
-      // Create positions, normals, tangents, and (optionally) indices buffers.
+      primData.bindingDescriptions.push_back(
+        {0, sizeof(PrimitiveData::Vertex), VK_VERTEX_INPUT_RATE_VERTEX});
+
+      if (texcoords.empty()) {
+        primData.attributeDescriptions.resize(3);
+      } else {
+        primData.attributeDescriptions.resize(4);
+      }
+
+      primData.attributeDescriptions[0] = {
+        0, 0, VK_FORMAT_R32G32B32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, position)};
+
+      primData.attributeDescriptions[1] = {
+        1, 0, VK_FORMAT_R32G32B32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, normal)};
+
+      primData.attributeDescriptions[2] = {
+        2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, tangent)};
+
+      if (!texcoords.empty()) {
+        primData.attributeDescriptions[3] = {
+          3, 0, VK_FORMAT_R32G32_SFLOAT,
+          offsetof(PrimitiveData::Vertex, texcoord)};
+      }
+
+      std::shared_ptr<Pipeline> pipeline;
+      VkIndexType indexType;
+      std::uint32_t indexCount = 0;
+      std::shared_ptr<Buffer> indexBuffer;
+      std::shared_ptr<Buffer> vertexBuffer;
+
+      if (auto p = CreatePipeline(primData)) {
+        pipeline.reset(new Pipeline(std::move(*p)));
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(p.error());
+      }
+
+      if (primitive.indices) {
+        auto&& accessor = (*g.accessors)[*primitive.indices];
+        auto&& bufferView = (*g.bufferViews)[*accessor.bufferView];
+        auto&& buffer = bytes[bufferView.buffer];
+        int const byteOffset =
+          bufferView.byteOffset.value_or(0) + accessor.byteOffset.value_or(0);
+
+        switch (accessor.componentType) {
+        case 5123: indexType = VK_INDEX_TYPE_UINT16;
+        case 5125: indexType = VK_INDEX_TYPE_UINT32;
+        }
+        indexCount = accessor.count;
+
+        std::string const bufferName =
+          meshName + (bufferView.name ? ":" + *bufferView.name : "") +
+          ":indexBuffer";
+
+        if (auto ib = Buffer::CreateFromMemory(
+              bufferView.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+              VMA_MEMORY_USAGE_GPU_ONLY,
+              gsl::not_null(buffer.data() + byteOffset), bufferName,
+              sCommandPool)) {
+          indexBuffer.reset(new Buffer(std::move(*ib)));
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(ib.error());
+        }
+      }
+
+      std::vector<float> vertexBufferData;
+      vertexBufferData.reserve(sizeof(glm::vec3) + sizeof(glm::vec3) +
+                               sizeof(glm::vec4) +
+                               (texcoords.empty() ? 0 : sizeof(glm::vec2)));
+      for (auto&& vertex : primData.vertices) {
+        vertexBufferData.push_back(vertex.position.x);
+        vertexBufferData.push_back(vertex.position.y);
+        vertexBufferData.push_back(vertex.position.z);
+        vertexBufferData.push_back(vertex.normal.x);
+        vertexBufferData.push_back(vertex.normal.y);
+        vertexBufferData.push_back(vertex.normal.z);
+        vertexBufferData.push_back(vertex.tangent.x);
+        vertexBufferData.push_back(vertex.tangent.y);
+        vertexBufferData.push_back(vertex.tangent.z);
+        vertexBufferData.push_back(vertex.tangent.w);
+        if (!texcoords.empty()) {
+          vertexBufferData.push_back(vertex.texcoord.x);
+          vertexBufferData.push_back(vertex.texcoord.y);
+        }
+      }
+
+      if (auto vb = Buffer::CreateFromMemory(
+            vertexBufferData.size() * sizeof(float),
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+            gsl::not_null(vertexBufferData.data()), meshName + ":vertexBuffer",
+            sCommandPool)) {
+        vertexBuffer.reset(new Buffer(std::move(*vb)));
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(vb.error());
+      }
+
+      results.push_back([pipeline, indexCount,
+                         vertexCount = primData.vertices.size(), indexBuffer,
+                         vertexBuffer]() {
+        DrawData draw;
+        draw.pipeline = std::move(*pipeline);
+
+        draw.indexCount = indexCount;
+        draw.vertexCount = vertexCount;
+
+        if (indexBuffer) draw.indexBuffer = std::move(*indexBuffer);
+        draw.vertexBuffer = std::move(*vertexBuffer);
+
+        DrawCommands().push_back(std::move(draw));
+      });
+#if 0
+#endif
     }
   }
 
 #if 0
-
   std::vector<VkExtent3D> imagesExtents;
   std::vector<std::vector<std::byte>> imagesBytes;
 
@@ -1229,39 +1486,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         Error::kFileNotSupported, "image with no uri or bufferView"));
-    }
-  }
-
-  std::vector<Buffer> buffers;
-
-  for (auto&& view :
-       gltf.bufferViews.value_or<std::vector<gltf::BufferView>>({})) {
-    VkBufferUsageFlagBits bufferUsage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
-    if (view.target) {
-      if (*view.target == 34963) {
-        bufferUsage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-      } else if (*view.target != 34962) {
-        GetLogger()->warn("unknown bufferView target; assuming vertex buffer");
-      }
-    } else {
-      GetLogger()->warn("no bufferView target; assuming vertex buffer");
-    }
-
-    int byteOffset = 0;
-    if (view.byteOffset) byteOffset = *view.byteOffset;
-
-    std::string const bufferName =
-      path.string() + (view.name ? ":" + *view.name : "");
-
-    if (auto buffer = Buffer::CreateFromMemory(
-          view.byteLength, bufferUsage, VMA_MEMORY_USAGE_GPU_ONLY,
-          gsl::not_null(buffersBytes[view.buffer].data() + byteOffset),
-          bufferName, sCommandPool)) {
-      buffers.push_back(std::move(*buffer));
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(buffer.error());
     }
   }
 
@@ -1378,329 +1602,9 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       return tl::unexpected(s.error());
     }
   }
-
-  for (auto&& node : gltf.nodes.value_or<std::vector<gltf::Node>>({})) {
-    //Node:
-    //std::optional<std::vector<int>> children; // indices into gltf.nodes
-    //std::optional<glm::mat4x4> matrix;
-    //std::optional<int> mesh; // index into gltf.meshes
-    //std::optional<glm::quat> rotation;
-    //std::optional<glm::vec3> scale;
-    //std::optional<glm::vec3> translation;
-    //std::optional<std::string> name;
-
-    std::string const nodeName =
-      path.string() + (node.name ? ":" + *node.name : "");
-
-    if (node.children && !node.children->empty()) {
-      GetLogger()->warn("Node children not implemented");
-    }
-
-    if (!node.mesh) {
-      GetLogger()->warn("Transform-only nodes not implemented");
-    }
-
-    if (!gltf.meshes) {
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "node defines mesh, but no meshes in file"));
-    }
-
-    auto&& mesh = (*gltf.meshes)[*node.mesh];
-    //Mesh:
-    //std::vector<Primitive> primitives;
-
-struct DrawData {
-  absl::FixedArray<VkVertexInputBindingDescription> bindingDescriptions;
-  absl::FixedArray<VkVertexInputAttributeDescription> attributeDescriptions;
-  std::vector<iris::Renderer::Shader> shaders{};
-  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
-
-  DrawData(std::size_t numBindingDescriptions,
-           std::size_t numAttributeDescriptions)
-    : bindingDescriptions(numBindingDescriptions)
-    , attributeDescriptions(numAttributeDescriptions) {}
-
-  DrawData(DrawData&&) = default;
-  DrawData& operator=(DrawData&&) = default;
-}; // struct DrawData
-
-    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
-    std::vector<DrawData> draws;
-
-    bool hasPositions = false;
-    bool hasNormals = false;
-    bool hasTangents = false;
-
-    for (auto&& primitive : mesh.primitives) {
-      //Primitive:
-      //std::map<std::string, int> attributes; // index into gltf.accessors
-      //std::optional<int> indices;            // index into gltf.accessors
-      //std::optional<int> material;           // index into gltf.materials
-      //std::optional<int> mode;
-      //std::optional<std::vector<int>> targets;
-      //
-      // From the glTF 2.0 spec:
-      //
-      // Implementation note: Each primitive corresponds to one WebGL draw
-      // call (engines are, of course, free to batch draw calls). When a
-      // primitive's indices property is defined, it references the accessor
-      // to use for index data, and GL's drawElements function should be used.
-      // When the indices property is not defined, GL's drawArrays function
-      // should be used with a count equal to the count property of any of the
-      // accessors referenced by the attributes property (they are all equal
-      // for a given primitive).
-      //
-      // Implementation note: When positions are not specified, client
-      // implementations should skip primitive's rendering unless its
-      // positions are provided by other means (e.g., by extension). This
-      // applies to both indexed and non-indexed geometry.
-      //
-      // Implementation note: When normals are not specified, client
-      // implementations should calculate flat normals.
-      //
-      // Implementation note: When tangents are not specified, client
-      // implementations should calculate tangents using default MikkTSpace
-      // algorithms. For best results, the mesh triangles should also be
-      // processed using default MikkTSpace algorithms.
-      //
-      // Implementation note: Vertices of the same triangle should have the
-      // same tangent.w value. When vertices of the same triangle have
-      // different tangent.w values, tangent space is considered undefined.
-      //
-      // Implementation note: When normals and tangents are specified, client
-      // implementations should compute the bitangent by taking the cross
-      // product of the normal and tangent xyz vectors and multiplying against
-      // the w component of the tangent: bitangent = cross(normal,
-      // tangent.xyz) * tangent.w
-
-      std::vector<std::string> shaderMacros;
-      std::size_t currentAttributeDescriptionIndex = 0;
-
-      DrawData draw(1, primitive.attributes.size());
-      draw.bindingDescriptions[0] = {0, 0, VK_VERTEX_INPUT_RATE_VERTEX};
-
-      for (auto&& [semantic, index] : primitive.attributes) {
-        if (!gltf.accessors) {
-          return tl::unexpected(std::system_error(
-            Error::kFileParseFailed,
-            "mesh defines '" + semantic + "', but no accessors in file"));
-        }
-
-        auto&& accessor = (*gltf.accessors)[index];
-        // Accessor:
-        // std::optional<int> bufferView; // index into gltf.bufferViews
-        // std::optional<int> byteOffset;
-        // int componentType;
-        // std::optional<bool> normalized;
-        // int count;
-        // std::string type;
-        // std::optional<std::vector<double>> min;
-        // std::optional<std::vector<double>> max;
-        // std::optional<std::string> name;
-
-        if (semantic == "POSITION") {
-          if (accessor.type != "VEC3") {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "POSITION accessor has wrong type '" +
-                                  accessor.type + "'; expecting 'VEC3'"));
-          }
-
-          if (accessor.componentType != 5126) {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "POSITION accessor has wrong componentType"));
-          }
-
-          hasPositions = true;
-          draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
-          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
-            0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-
-        } else if (semantic == "NORMAL") {
-          if (accessor.type != "VEC3") {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "NORMAL accessor has wrong type '" +
-                                  accessor.type + "'; expecting 'VEC3'"));
-          }
-
-          if (accessor.componentType != 5126) {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "NORMAL accessor has wrong componentType"));
-          }
-
-          hasNormals = true;
-          draw.bindingDescriptions[0].stride += sizeof(glm::vec3);
-          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
-            1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(glm::vec3)};
-          shaderMacros.push_back("HAS_NORMALS");
-
-        } else if (semantic == "TANGENT") {
-          if (accessor.type != "VEC4") {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "TANGENT accessor has wrong type '" +
-                                  accessor.type + "'; expecting 'VEC4'"));
-          }
-
-          if (accessor.componentType != 5126) {
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "TANGENT accessor has wrong componentType"));
-          }
-
-          hasTangents = true;
-          draw.bindingDescriptions[0].stride += sizeof(glm::vec4);
-          draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
-            2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(glm::vec3) * 2};
-          shaderMacros.push_back("HAS_TANGENTS");
-
-        } else if (semantic == "TEXCOORD_0") {
-          if (accessor.type != "VEC2") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "TEXCOORD_0 accessor has wrong type '" +
-                                         accessor.type + "'; expected 'VEC2'"));
-          }
-
-          switch (accessor.componentType) {
-          case 5126:
-            draw.bindingDescriptions[0].stride += sizeof(glm::vec2);
-            draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
-              3, 0, VK_FORMAT_R32G32_SFLOAT,
-              sizeof(glm::vec3) * 2 + sizeof(glm::vec4)};
-            break;
-          case 5121:
-            // break; // UNSIGNED_BYTE (normalized)
-          case 5123:
-            // break; // UNSIGNED_SHORT (normalized)
-          default:
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "TEXCOORD_0 accessor has wrong componentType"));
-          }
-
-          shaderMacros.push_back("HAS_TEXCOORDS");
-
-        } else if (semantic == "TEXCOORD_1") {
-          if (accessor.type != "VEC2") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "TEXCOORD_1 accessor has wrong type '" +
-                                         accessor.type + "'; expected 'VEC2'"));
-          }
-
-          switch (accessor.componentType) {
-          case 5126:
-            draw.bindingDescriptions[0].stride += sizeof(glm::vec2);
-            draw.attributeDescriptions[currentAttributeDescriptionIndex++] = {
-              3, 0, VK_FORMAT_R32G32_SFLOAT,
-              sizeof(glm::vec3) * 2 + sizeof(glm::vec4)};
-            break;
-          case 5121:
-            // break; // UNSIGNED_BYTE (normalized)
-          case 5123:
-            // break; // UNSIGNED_SHORT (normalized)
-          default:
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "TEXCOORD_1 accessor has wrong componentType"));
-          }
-
-          shaderMacros.push_back("HAS_TEXCOORDS_1");
-
-        } else if (semantic == "COLOR_0") {
-          if (accessor.type != "VEC3" && accessor.type != "VEC4") {
-            return tl::unexpected(std::system_error(
-              Error::kFileParseFailed, "COLOR_0 accessor has wrong type '" +
-                                         accessor.type +
-                                         "'; expected 'VEC3' or 'VEC4'"));
-          }
-
-          switch (accessor.componentType) {
-          case 5126: break; // FLOAT
-          case 5121: break; // UNSIGNED_BYTE (normalized)
-          case 5123: break; // UNSIGNED_SHORT (normalized)
-          default:
-            return tl::unexpected(
-              std::system_error(Error::kFileParseFailed,
-                                "COLOR_0 accessor has wrong componentType"));
-          }
-        } else if (semantic == "JOINTS_0") {
-          GetLogger()->warn("JOINTS_0 attribute not implemented");
-        } else if (semantic == "WEIGHTS_0") {
-          GetLogger()->warn("WEIGHTS_0 attribute not implemented");
-        }
-      }
-
-      // Implementation note: When positions are not specified, client
-      // implementations should skip primitive's rendering unless its
-      // positions are provided by other means (e.g., by extension). This
-      // applies to both indexed and non-indexed geometry.
-      if (!hasPositions) continue;
-
-      // Implementation note: When normals are not specified, client
-      // implementations should calculate flat normals.
-      if (!hasNormals) {
-      }
-
-      // Implementation note: When tangents are not specified, client
-      // implementations should calculate tangents using default MikkTSpace
-      // algorithms. For best results, the mesh triangles should also be
-      // processed using default MikkTSpace algorithms.
-      if (!hasTangents) {
-      }
-
-      if (primitive.mode) {
-        switch (*primitive.mode) {
-        case 0: draw.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST; break;
-        case 1: draw.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST; break;
-        // case 2: LINE_LOOP not in VK?
-        case 3: draw.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP; break;
-        case 4: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; break;
-        case 5: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP; break;
-        case 6: draw.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN; break;
-        }
-      }
-
-      if (auto vs = Shader::CreateFromFile(
-            "assets/shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT,
-            shaderMacros, "main", meshName + ":VertexShader")) {
-        draw.shaders.push_back(std::move(*vs));
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(vs.error());
-      }
-
-      if (auto fs = Shader::CreateFromFile(
-            "assets/shaders/gltf.frag", VK_SHADER_STAGE_VERTEX_BIT,
-            shaderMacros, "main", meshName + ":VertexShader")) {
-        draw.shaders.push_back(std::move(*fs));
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(fs.error());
-      }
-
-      draws.push_back(std::move(draw));
-    }
-
-    GetLogger()->debug("drawing mesh {}", meshName);
-    for (auto&& draw : draws) {
-      GetLogger()->debug("topology {} and stride: {}", draw.topology,
-                         draw.bindingDescriptions[0].stride);
-      for (auto&& attributeDescription : draw.attributeDescriptions) {
-        GetLogger()->debug("attribute location: {} format: {} offset: {}",
-                           attributeDescription.location,
-                           attributeDescription.format,
-                           attributeDescription.offset);
-      }
-    }
-  }
 #endif
 
-  GetLogger()->error("GLTF loading not implemented yet: {}", path.string());
   IRIS_LOG_LEAVE();
-  return tl::unexpected(
-    std::system_error(Error::kFileNotSupported, path.string()));
+  return [results](){ for (auto&& result : results) result(); };
 } // iris::Renderer::io::LoadGLTF
 

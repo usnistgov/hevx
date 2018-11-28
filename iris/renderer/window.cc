@@ -192,7 +192,6 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   clearValues[sColorTargetAttachmentIndex].color = {{0, 0, 0, 0}};
   clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
 
-  GetLogger()->flush();
   ui.commandBufferIndex =
     (ui.commandBufferIndex + 1) % ui.commandBuffers.size();
   auto&& cb = ui.commandBuffers[ui.commandBufferIndex];
