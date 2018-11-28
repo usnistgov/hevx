@@ -920,7 +920,9 @@ struct PrimitiveData {
 }; // struct PrimitiveData
 
 tl::expected<iris::Renderer::Pipeline, std::system_error>
-CreatePipeline(PrimitiveData& primData) noexcept {
+CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
+  IRIS_LOG_ENTER();
+
   std::vector<std::string> shaderMacros;
   if (primData.attributeDescriptions.size() == 4) {
     shaderMacros.push_back("-DHAS_TEXCOORDS");
@@ -943,13 +945,22 @@ CreatePipeline(PrimitiveData& primData) noexcept {
     IRIS_LOG_LEAVE();
     return tl::unexpected(fs.error());
   }
-
 #if 0
   absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
-  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
-                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
-                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+  descriptorSetLayoutBinding[1] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+
+  if (auto d = iris::Renderer::AllocateDescriptorSets(
+        descriptorSetLayoutBinding, 1, meshName + ":descriptorSet")) {
+    descriptorSets = std::move(*d);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(d.error());
+  }
+#endif
+#if 0
 
   if (auto d = Renderer::AllocateDescriptorSets(
         descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
@@ -1044,11 +1055,14 @@ CreatePipeline(PrimitiveData& primData) noexcept {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
-  return iris::Renderer::Pipeline::CreateGraphics(
+  auto p = iris::Renderer::Pipeline::CreateGraphics(
     {}, {}, shaders, primData.bindingDescriptions,
     primData.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
     rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
     colorBlendAttachmentStates, dynamicStates, 0, "");
+
+  IRIS_LOG_LEAVE();
+  return p;
 } // CreatePipeline
 
 inline tl::expected<VkPrimitiveTopology, std::system_error>
@@ -1372,7 +1386,7 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       std::shared_ptr<Buffer> indexBuffer;
       std::shared_ptr<Buffer> vertexBuffer;
 
-      if (auto p = CreatePipeline(primData)) {
+      if (auto p = CreatePipeline(primData, meshName)) {
         pipeline.reset(new Pipeline(std::move(*p)));
       } else {
         IRIS_LOG_LEAVE();

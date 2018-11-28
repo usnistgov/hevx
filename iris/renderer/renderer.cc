@@ -1767,8 +1767,8 @@ void iris::Renderer::EndFrame() noexcept {
     // 3. Execute secondary command buffers
     //
 
-    vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
-                         sSecondaryCommandBuffers.data());
+    //vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
+                         //sSecondaryCommandBuffers.data());
 
     if (auto wcb = window.EndFrame(rbi.framebuffer)) {
       VkCommandBuffer winCB = *wcb;
