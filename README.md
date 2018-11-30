@@ -18,8 +18,17 @@ Currently this code is under active development and in a pre-release state.
 - Python 3.6
   - Wheezy Template: `pip install --user wheezy.template`
 - GCC >= 7
-- Vulkan SDK >= 1.1.82.1
-  - Specify location using the `VULKAN_SDK` environment variable
+- X11 XCB development libraries
+
+#### Installing requirements
+
+##### CentOS 7
+~~~
+yum install xcb-util-wm-devel libxcb-devel libX11-devel centos-release-scl
+yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum install devtoolset-7\* rh-python36 git cmake3
+scl enable rh-python36 -- pip3 install --user wheezy.template
+~~~
 
 ### Dependencies
 The following packages are fetched and managed with CMake:
@@ -43,7 +52,7 @@ The following packages are fetched and managed with CMake:
 On HEV hosts:
 ~~~
 $ mkdir build && cd build
-$ VULKAN_SDK="/opt/VulkanSDK/1.1.82.1/x86_64" scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 $ make -j
 ~~~
 
