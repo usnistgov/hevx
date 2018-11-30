@@ -10,12 +10,26 @@
 #include "config.h"
 #include "enumerate.h"
 #include "error.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4100)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+#include "google/protobuf/util/json_util.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 #include "protos.h"
 #include "renderer/command_buffers.h"
 #include "renderer/descriptor_sets.h"
-#include "renderer/draw.h"
 #include "renderer/impl.h"
-#include "renderer/io/io.h"
+#include "renderer/io/json.h"
+#include "renderer/io/read_file.h"
 #include "renderer/shader.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
@@ -26,6 +40,8 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
+#include "tbb/concurrent_queue.h"
+#include "tbb/task.h"
 #include "tbb/task_scheduler_init.h"
 #include "wsi/window.h"
 #if PLATFORM_WINDOWS
@@ -126,11 +142,6 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-std::vector<iris::Renderer::DrawData>& DrawCommands() {
-  static std::vector<iris::Renderer::DrawData> sDrawCommands;
-  return sDrawCommands;
-} // DrawCommands
-
 /////
 //
 // Additional static private variables
@@ -139,8 +150,11 @@ std::vector<iris::Renderer::DrawData>& DrawCommands() {
 
 static bool sInitialized{false};
 static std::atomic_bool sRunning{false};
+
 static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
+static tbb::concurrent_queue<std::function<std::system_error(void)>>
+  sIOContinuations;
 
 static std::vector<VkCommandPool> sGraphicsCommandPools;
 static std::vector<VkDescriptorPool> sGraphicsDescriptorPools;
@@ -1482,11 +1496,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
-  if (auto error = io::Initialize(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return error;
-  }
-
   sInitialized = true;
   sRunning = true;
 
@@ -1499,8 +1508,6 @@ void iris::Renderer::Shutdown() noexcept {
 
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
-
-  io::Shutdown();
 
   Windows().clear();
 
@@ -1564,9 +1571,12 @@ bool iris::Renderer::IsRunning() noexcept {
 bool iris::Renderer::BeginFrame() noexcept {
   if (!sInitialized || !sRunning) return false;
 
-  // Handle all IO results (completed requests)
-  std::vector<std::function<void(void)>> results = io::GetResults();
-  for (auto&& result : results) result();
+  decltype(sIOContinuations)::value_type ioContinuation;
+  while (sIOContinuations.try_pop(ioContinuation)) {
+    if (auto error = ioContinuation(); error.code()) {
+      GetLogger()->error(error.what());
+    }
+  }
 
   auto&& windows = Windows();
   if (windows.empty()) return false;
@@ -1765,7 +1775,6 @@ void iris::Renderer::EndFrame() noexcept {
     waitSemaphores[i] = surface.imageAvailable;
     swapchains[i] = surface.swapchain;
     imageIndices[i] = surface.currentImageIndex;
-    //i++;
 
     clearValues[sColorTargetAttachmentIndex].color = surface.clearColor;
     rbi.renderArea.extent = surface.extent;
@@ -1848,6 +1857,49 @@ void iris::Renderer::EndFrame() noexcept {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
   }
 } // iris::Renderer::EndFrame
+
+std::error_code
+iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
+  IRIS_LOG_ENTER();
+
+  class IOTask : public tbb::task {
+  public:
+    IOTask(filesystem::path p) noexcept(noexcept(std::move(p)))
+      : path_(std::move(p)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      GetLogger()->debug("Loading {}", path_.string());
+      auto const& ext = path_.extension();
+
+      if (ext.compare(".json") == 0) {
+        sIOContinuations.push(io::LoadJSON(path_));
+      } else {
+        GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
+                           path_.string());
+      }
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
+  private:
+    filesystem::path path_;
+  }; // struct IOTask
+
+  try {
+    IOTask* ioTask = new (tbb::task::allocate_root()) IOTask(path);
+    tbb::task::enqueue(*ioTask);
+  } catch (std::exception const& e) {
+    GetLogger()->error("Error enqueuing IO task for {}: {}", path.string(),
+                       e.what());
+    return {Error::kFileLoadFailed};
+  }
+
+  IRIS_LOG_LEAVE();
+  return {Error::kNone};
+} // LoadFile
 
 std::error_code
 iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {

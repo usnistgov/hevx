@@ -1,11 +1,19 @@
 #ifndef HEV_IRIS_RENDERER_IO_JSON_H_
 #define HEV_IRIS_RENDERER_IO_JSON_H_
 
-#include "iris/renderer/io/io.h"
+#if STD_FS_IS_EXPERIMENTAL
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
+#include <functional>
+#include <system_error>
 
 namespace iris::Renderer::io {
 
-tl::expected<std::function<void(void)>, std::system_error>
+std::function<std::system_error(void)>
 LoadJSON(filesystem::path const& path) noexcept;
 
 } // namespace iris::Renderer::io

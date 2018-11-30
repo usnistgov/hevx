@@ -99,9 +99,8 @@ set(SOURCES
   renderer/command_buffers.cc
   renderer/descriptor_sets.cc
   renderer/image.cc
-  renderer/io/io.cc
-  renderer/io/gltf.cc
   renderer/io/json.cc
+  renderer/io/read_file.cc
   renderer/mikktspace.c
   renderer/pipeline.cc
   renderer/renderer.cc
