@@ -30,5 +30,6 @@ matrix:
     - pip3 install --user wheezy.template
     script:
     - cmake ${CMAKE_CONFIG} -H. -Bb
-    - cmake --build b && cd b && ctest ${CTEST_OPTS}
+    - cmake --build b
+#    - cmake --build b && cd b && ctest ${CTEST_OPTS}
 #    - ctest -V --build-and-test . b --build-generator "Unix Makefiles" ${CMAKE_CONFIG} --test-command ctest -V ${CTEST_EXCLUDE}
