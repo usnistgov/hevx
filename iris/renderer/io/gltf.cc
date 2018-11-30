@@ -1,5 +1,6 @@
 #include "renderer/io/gltf.h"
 #include "error.h"
+#include "fmt/format.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
@@ -10,7 +11,7 @@
 #include "renderer/draw.h"
 #include "renderer/image.h"
 #include "renderer/impl.h"
-#include "renderer/io/impl.h"
+#include "renderer/io/read_file.h"
 #include "renderer/mikktspace.h"
 #include "renderer/pipeline.h"
 #include "renderer/shader.h"
@@ -1082,10 +1083,11 @@ glTFModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
-tl::expected<std::function<void(void)>, std::system_error>
+std::function<std::system_error(void)>
 iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   using namespace std::string_literals;
   IRIS_LOG_ENTER();
+
   filesystem::path const baseDir = path.parent_path();
 
   json j;
@@ -1094,12 +1096,14 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       j = json::parse(*bytes);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(Error::kFileParseFailed,
-                                              "Parsing failed: "s + e.what()));
+      return [e]() {
+        return std::system_error(Error::kFileParseFailed,
+                                 fmt::format("Parsing failed: {}", e.what()));
+      };
     }
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(bytes.error());
+    return [error = bytes.error()]() { return error; };
   }
 
   gltf::GLTF g;
@@ -1107,26 +1111,40 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     g = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kFileParseFailed,
-                                            "Parsing failed: "s + e.what()));
+    return [e]() {
+      return std::system_error(Error::kFileParseFailed,
+                               fmt::format("Parsing failed: {}", e.what()));
+    };
   }
 
   if (g.asset.version != "2.0") {
     if (g.asset.minVersion) {
       if (g.asset.minVersion != "2.0") {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(std::system_error(
-          Error::kFileParseFailed, "Unsupported version: " + g.asset.version +
-                                     " / " + *g.asset.minVersion));
+        return [asset = g.asset]() {
+          return std::system_error(Error::kFileParseFailed,
+                                   fmt::format("Unsupported version: {} / {}",
+                                               asset.version,
+                                               *asset.minVersion));
+        };
       }
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed,
-        "Unsupported version: " + g.asset.version + " and no minVersion"));
+      return [asset = g.asset]() {
+        return std::system_error(
+          Error::kFileParseFailed,
+          fmt::format("Unsupported version: {} and no minVersion",
+                      asset.version));
+      };
     }
   }
 
+  IRIS_LOG_LEAVE();
+  return []() {
+    return std::system_error(Error::kFileParseFailed,
+                             "GLTF files not implemented");
+  };
+#if 0
   //
   // Read all the buffers into memory
   //
@@ -1619,5 +1637,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
 
   IRIS_LOG_LEAVE();
   return [results](){ for (auto&& result : results) result(); };
+#endif
 } // iris::Renderer::io::LoadGLTF
 

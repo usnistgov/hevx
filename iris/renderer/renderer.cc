@@ -10,24 +10,11 @@
 #include "config.h"
 #include "enumerate.h"
 #include "error.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4100)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-#include "google/protobuf/util/json_util.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#elif PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic pop
-#endif
 #include "protos.h"
 #include "renderer/command_buffers.h"
 #include "renderer/descriptor_sets.h"
 #include "renderer/impl.h"
+#include "renderer/io/gltf.h"
 #include "renderer/io/json.h"
 #include "renderer/io/read_file.h"
 #include "renderer/shader.h"
@@ -1875,6 +1862,8 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
 
       if (ext.compare(".json") == 0) {
         sIOContinuations.push(io::LoadJSON(path_));
+      } else if (ext.compare(".gltf") == 0) {
+        sIOContinuations.push(io::LoadGLTF(path_));
       } else {
         GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
                            path_.string());
