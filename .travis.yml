@@ -16,6 +16,7 @@ matrix:
         sources:
         - ubuntu-toolchain-r-test
         packages:
+        - python3
         - python3-pip
         - g++-7
         - libx11-dev
