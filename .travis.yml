@@ -9,8 +9,7 @@ matrix:
     - COMPILER_NAME=gcc CXX=g++-7 CC=gcc-7
     - PATH=${HOME}/cmake/bin:${HOME}/vulkan/x86_64/bin:${PATH}
     - VULKAN_SDK=${HOME}/vulkan/x86_64
-      #- CMAKE_CONFIG="-DPYTHON_EXECUTABLE=/opt/pyenv/shims/python3 -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON"
-    - CMAKE_CONFIG="-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON"
+    - CMAKE_CONFIG="-DPYTHON_EXECUTABLE=python3 -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON"
     - CTEST_EXCLUDE="-E glslang-gtests|test-testsuites_all|test-testsuites_default|test-ubjson_all|test-regression_all|test-regression_default|test-msgpack_all|test-msgpack_default|test-json_patch_all|test-json_patch_default|test-json_patch_all|test-inspection_all|test-inspection_default|test-cbor_all|test-cbor_default|test-bson_all|test-unicode_all"
     addons:
       apt:
