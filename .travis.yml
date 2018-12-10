@@ -21,13 +21,10 @@ matrix:
             - libxcb-icccm4-dev
 
 env:
-  - CC=gcc-7
-  - CXX=g++-7
-  - CMAKE_CONFIG="-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF"
+  - CMAKE_CONFIG="-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF" CC=gcc-7 CXX=g++-7
 
 install:
   - pip3 install --user wheezy.template
 
 script:
-  - cmake ${CMAKE_CONFIG} -H. -Bb
-  - cmake --build b
+  - cmake ${CMAKE_CONFIG} -H. -Bb && cmake --build b
