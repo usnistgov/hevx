@@ -30,5 +30,4 @@ install:
 
 script:
   - type python3
-  - python3 --version
-  - cmake -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j
+  - cmake -DPYTHON_EXECUTABLE="/opt/pyenv/shims/python3" -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j
