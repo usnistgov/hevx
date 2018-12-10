@@ -12,6 +12,7 @@ matrix:
           packages:
             - python3
             - python3-pip
+            - python3-setuptools
             - g++-7
             - libx11-dev
             - libx11-xcb-dev
@@ -26,4 +27,4 @@ install:
   - pip3 install --user wheezy.template
 
 script:
-  - cmake ${CMAKE_CONFIG} -H. -Bb && cmake --build b
+  - cmake ${CMAKE_CONFIG} -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j
