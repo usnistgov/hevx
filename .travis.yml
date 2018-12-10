@@ -1,37 +1,33 @@
-language: bash
+language: cpp
+
+dist: xenial
+
+python:
+  - "3.7"
 
 matrix:
   include:
-  - os: linux
-    dist: trusty
-    sudo: false
-    env:
-    - COMPILER_NAME=gcc CXX=g++-7 CC=gcc-7
-    - PATH=${HOME}/cmake/bin:${HOME}/vulkan/x86_64/bin:${PATH}
-    - VULKAN_SDK=${HOME}/vulkan/x86_64
-    - CMAKE_CONFIG="-DPYTHON_EXECUTABLE=python3 -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON"
-    - CTEST_EXCLUDE="-E glslang-gtests|test-testsuites_all|test-testsuites_default|test-ubjson_all|test-regression_all|test-regression_default|test-msgpack_all|test-msgpack_default|test-json_patch_all|test-json_patch_default|test-json_patch_all|test-inspection_all|test-inspection_default|test-cbor_all|test-cbor_default|test-bson_all|test-unicode_all"
-    addons:
-      apt:
-        sources:
-        - ubuntu-toolchain-r-test
-        packages:
-        - python3
-        - python3-pip
-        - g++-7
-        - libx11-dev
-        - libx11-xcb-dev
-        - libxrandr-dev
-        - libxcb1-dev
-        - libxcb-icccm4-dev
-    install:
-    - CMAKE_URL="https://cmake.org/files/v3.11/cmake-3.11.4-Linux-x86_64.tar.gz"
-    - mkdir ${HOME}/cmake && travis_retry wget --no-check-certificate --quiet -O - "${CMAKE_URL}" | tar --strip-components=1 -xz -C ${HOME}/cmake
-    - VULKAN_URL="https://sdk.lunarg.com/sdk/download/1.1.82.1/linux/vulkansdk-linux-x86_64-1.1.82.1.tar.gz?u="
-    - mkdir ${HOME}/vulkan && travis_retry wget --no-check-certificate --quiet -O - "${VULKAN_URL}" | tar --strip-components=1 -xz -C ${HOME}/vulkan
-    - pip3 install --user wheezy.template
-    script:
-    - cmake ${CMAKE_CONFIG} -H. -Bb
-    - cmake --build b
-#    - cmake --build b && cd b && ctest ${CTEST_OPTS}
-#    - ctest -V --build-and-test . b --build-generator "Unix Makefiles" ${CMAKE_CONFIG} --test-command ctest -V ${CTEST_EXCLUDE}
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - libx11-dev
+            - libx11-xcb-dev
+            - libxrandr-dev
+            - libxcb1-dev
+            - libxcb-icccm4-dev
+
+env:
+  - CC=gcc-7
+  - CXX=g++-7
+  - CMAKE_CONFIG="-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF"
+
+install:
+  - pip3 install --user wheezy.template
+
+script:
+  - cmake ${CMAKE_CONFIG} -H. -Bb
+  - cmake --build b
