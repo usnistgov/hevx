@@ -11,6 +11,7 @@ if(UNIX)
   #pkg_check_modules(XCB_CURSOR REQUIRED xcb-cursor)
 endif()
 
+set(Python_ADDITIONAL_VERSIONS 3.6 3.7)
 find_package(PythonInterp 3 REQUIRED)
 FetchContent_GetProperties(flextgl)
 
