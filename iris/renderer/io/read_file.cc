@@ -28,11 +28,14 @@ iris::Renderer::io::ReadFile(filesystem::path const& path) noexcept {
 
   std::fseek(fh.get(), 0L, SEEK_END);
   std::vector<std::byte> bytes(std::ftell(fh.get()));
+
   GetLogger()->debug("Reading {} bytes from {}", bytes.size(), path.string());
   std::fseek(fh.get(), 0L, SEEK_SET);
-  std::fread(bytes.data(), sizeof(std::byte), bytes.size(), fh.get());
 
-  if (std::ferror(fh.get()) && !std::feof(fh.get())) {
+  std::size_t nRead =
+    std::fread(bytes.data(), sizeof(std::byte), bytes.size(), fh.get());
+
+  if (std::ferror(fh.get()) && !std::feof(fh.get()) || nRead != bytes.size()) {
     return tl::unexpected(std::system_error(
       std::make_error_code(std::errc::io_error), path.string()));
   }

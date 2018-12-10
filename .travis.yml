@@ -2,33 +2,11 @@ language: cpp
 
 dist: xenial
 
-matrix:
-  include:
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - python3
-            - python3-pip
-            - python3-setuptools
-            - python3-wheel
-            - g++-7
-            - libx11-dev
-            - libx11-xcb-dev
-            - libxrandr-dev
-            - libxcb1-dev
-            - libxcb-icccm4-dev
+services:
+  - docker
 
 before_install:
-  - export CC=gcc-7
-  - export CXX=g++-7
-
-install:
-  - pip3 install --user wheezy.template
+  - docker build -t hevx.el7 -f test/Dockerfile.el7 .
 
 script:
-  - type python3
-  - cmake -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j4
-  #- cmake -DPYTHON_EXECUTABLE="/opt/pyenv/shims/python3" -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j4
+  - scl enable devtoolset-7 rh-python36 -- ctest3 -VV -S CTestScript.cmake
