@@ -59,9 +59,9 @@ if(NOT glslang_POPULATED)
     endif()
   endforeach()
 
-  fetch_source("spirv-tools" ${spirvtools_commit} ${shaderc_SOURCE_DIR}
+  fetch_source("spirv-tools" ${spirvtools_commit} ${glslang_SOURCE_DIR}
     ${spirvtools_subdir} ${spirvtools_subrepo})
-  fetch_source("spirv-headers" ${spirvheaders_commit} ${shaderc_SOURCE_DIR}
+  fetch_source("spirv-headers" ${spirvheaders_commit} ${glslang_SOURCE_DIR}
     ${spirvheaders_subdir} ${spirvheaders_subrepo})
 
   add_subdirectory(${glslang_SOURCE_DIR} ${glslang_BINARY_DIR})
