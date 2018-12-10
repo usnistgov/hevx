@@ -2,9 +2,6 @@ language: cpp
 
 dist: xenial
 
-python:
-  - "3.7"
-
 matrix:
   include:
     - os: linux
@@ -13,6 +10,8 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
           packages:
+            - python3
+            - python3-pip
             - g++-7
             - libx11-dev
             - libx11-xcb-dev
