@@ -28,4 +28,5 @@ install:
   - pip3 install --user wheezy.template
 
 script:
+  - python3 --version
   - cmake -DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -H. -Bb && cmake --build b -- -j
