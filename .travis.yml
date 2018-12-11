@@ -9,4 +9,4 @@ before_install:
   - docker build -t hevx.el7 -f test/Dockerfile.el7 .
 
 script:
-  - scl enable devtoolset-7 rh-python36 -- ctest3 -VV -S CTestScript.cmake
+  - docker run scl enable devtoolset-7 rh-python36 -- ctest3 -VV -S CTestScript.cmake
