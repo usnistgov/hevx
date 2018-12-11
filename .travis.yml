@@ -5,8 +5,12 @@ dist: xenial
 services:
   - docker
 
+env:
+  - PLATFORM=el7 CTEST_CMD="scl enable devtoolset-7 rh-python36 -- ctest3"
+  - PLATFORM=bionic CTEST_CMD="cmake/bin/ctest"
+
 before_install:
-  - docker build -t hevx.el7 -f test/Dockerfile.el7 .
+  - docker build -t hevx.$PLATFORM -f test/Dockerfile.$PLATFORM .
 
 script:
-  - docker run hevx.el7 scl enable devtoolset-7 rh-python36 -- ctest3 -VV -S CTestScript.cmake
+  - docker run hevx.$PLATFORM $CTEST_CMD -V -S CTestScript.cmake

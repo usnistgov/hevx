@@ -5,5 +5,4 @@ RUN yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxc
 RUN scl enable rh-python36 -- pip3 install --user wheezy.template
 
 RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-#RUN scl enable devtoolset-7 rh-python36 -- ctest3 -V -S CTestScript.cmake
 
