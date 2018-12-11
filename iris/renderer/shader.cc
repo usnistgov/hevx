@@ -2,7 +2,14 @@
 #include "logging.h"
 #include "renderer/impl.h"
 #include "renderer/io/read_file.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 #include "glslang/Public/ShaderLang.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 
 namespace iris::Renderer {
 
