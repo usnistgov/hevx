@@ -257,10 +257,10 @@ void to_json(json& j, PBRMetallicRoughness pbr) {
 
 void from_json(json const& j, PBRMetallicRoughness& pbr) {
   if (j.find("baseColorFactor") != j.end()) {
-    pbr.baseColorFactor = j["baseColorFactor"];
+    pbr.baseColorFactor = j["baseColorFactor"].get<glm::vec4>();
   }
   if (j.find("baseColorTexture") != j.end()) {
-    pbr.baseColorTexture = j["baseColorTexture"];
+    pbr.baseColorTexture = j["baseColorTexture"];//.get<TextureInfo>();
   }
   if (j.find("metallicFactor") != j.end()) {
     pbr.metallicFactor = j["metallicFactor"];
@@ -349,7 +349,7 @@ void from_json(json const& j, Material& m) {
     m.emissiveTexture = j["emissiveTexture"];
   }
   if (j.find("emissiveFactor") != j.end()) {
-    m.emissiveFactor = j["emissiveFactor"];
+    m.emissiveFactor = j["emissiveFactor"].get<glm::vec3>();
   }
   if (j.find("alphaMode") != j.end()) m.alphaMode = j["alphaMode"];
   if (j.find("alphaCutoff") != j.end()) m.alphaCutoff = j["alphaCutoff"];
@@ -422,11 +422,15 @@ void from_json(json const& j, Node& node) {
   if (j.find("children") != j.end()) {
     node.children = j["children"].get<decltype(Node::children)::value_type>();
   }
-  if (j.find("matrix") != j.end()) node.matrix = j["matrix"];
+  if (j.find("matrix") != j.end()) node.matrix = j["matrix"].get<glm::mat4x4>();
   if (j.find("mesh") != j.end()) node.mesh = j["mesh"];
-  if (j.find("rotation") != j.end()) node.rotation = j["rotation"];
-  if (j.find("scale") != j.end()) node.scale = j["scale"];
-  if (j.find("translation") != j.end()) node.translation = j["translation"];
+  if (j.find("rotation") != j.end()) {
+    node.rotation = j["rotation"].get<glm::quat>();
+  }
+  if (j.find("scale") != j.end()) node.scale = j["scale"].get<glm::vec3>();
+  if (j.find("translation") != j.end()) {
+    node.translation = j["translation"].get<glm::vec3>();
+  }
   if (j.find("name") != j.end()) node.name = j["name"];
 }
 
