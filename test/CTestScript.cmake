@@ -9,6 +9,9 @@ set(EXCLUDE_RE "resolv|multistress|glslang-gtests|test-testsuites_all|test-tests
 set(CTEST_CONFIGURATION_TYPE "Debug")
 set(CTEST_DASHBOARD_ROOT "/local/tmp/$ENV{USER}/hevx-ci")
 
+# don't flag Python DeprecationWarning messages as errors
+set (CTEST_CUSTOM_ERROR_EXCEPTION "DeprecationWarning")
+
 if(NOT EXISTS ${CTEST_DASHBOARD_ROOT})
   file(MAKE_DIRECTORY ${CTEST_DASHBOARD_ROOT})
 endif()

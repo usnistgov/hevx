@@ -24,10 +24,22 @@ Currently this code is under active development and in a pre-release state.
 
 ##### CentOS 7
 ~~~
-yum install xcb-util-wm-devel libxcb-devel libX11-devel centos-release-scl
-yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-yum install devtoolset-7\* rh-python36 git cmake3
+yum install -y centos-release-scl
+yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel
 scl enable rh-python36 -- pip3 install --user wheezy.template
+~~~
+
+##### Fedora 28 / 29
+~~~
+dnf install -y git cmake gcc-c++ make xcb-util-wm-devel libxcb-devel libX11-devel
+pip3 install --user wheezy.template
+~~~
+
+##### Ubuntu 18.10
+~~~
+apt install -y curl python3-pip cmake git pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxcb-icccm4-dev
+pip3 install --user wheezy.template
 ~~~
 
 ### Dependencies
@@ -49,11 +61,19 @@ The following packages are fetched and managed with CMake:
 - [sailormoon/flags](https://github.com/sailormoon/flags)
 
 ### Instructions
-On HEV hosts:
+
+##### CentOS 7
 ~~~
 $ mkdir build && cd build
 $ scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-$ make -j
+$ cmake --build .
+~~~
+
+##### Fedora 28 / 29 and Ubuntu 18.10
+~~~
+$ mkdir build && cd build
+$ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ cmake --build .
 ~~~
 
 ## Other
