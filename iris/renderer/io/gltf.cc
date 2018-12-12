@@ -1336,12 +1336,9 @@ CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
   return p;
 } // CreatePipeline
 
-} // namespace iris::Renderer::io
-
-std::function<std::system_error(void)>
-iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
-  using namespace std::string_literals;
+std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
+  using namespace std::string_literals;
 
   filesystem::path const baseDir = path.parent_path();
 
@@ -1351,14 +1348,12 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       j = json::parse(*bytes);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
-      return [e]() {
-        return std::system_error(Error::kFileParseFailed,
-                                 fmt::format("Parsing failed: {}", e.what()));
-      };
+      return std::system_error(Error::kFileParseFailed,
+                               fmt::format("Parsing failed: {}", e.what()));
     }
   } else {
     IRIS_LOG_LEAVE();
-    return [error = bytes.error()]() { return error; };
+    return bytes.error();
   }
 
   gltf::GLTF g;
@@ -1366,31 +1361,25 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
     g = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
-    return [e]() {
-      return std::system_error(Error::kFileParseFailed,
-                               fmt::format("Parsing failed: {}", e.what()));
-    };
+    return std::system_error(Error::kFileParseFailed,
+                             fmt::format("Parsing failed: {}", e.what()));
   }
 
   if (g.asset.version != "2.0") {
     if (g.asset.minVersion) {
       if (g.asset.minVersion != "2.0") {
         IRIS_LOG_LEAVE();
-        return [asset = g.asset]() {
-          return std::system_error(Error::kFileParseFailed,
-                                   fmt::format("Unsupported version: {} / {}",
-                                               asset.version,
-                                               *asset.minVersion));
-        };
+        return std::system_error(Error::kFileParseFailed,
+                                 fmt::format("Unsupported version: {} / {}",
+                                             g.asset.version,
+                                             *g.asset.minVersion));
       }
     } else {
       IRIS_LOG_LEAVE();
-      return [asset = g.asset]() {
-        return std::system_error(
-          Error::kFileParseFailed,
-          fmt::format("Unsupported version: {} and no minVersion",
-                      asset.version));
-      };
+      return std::system_error(
+        Error::kFileParseFailed,
+        fmt::format("Unsupported version: {} and no minVersion",
+                    g.asset.version));
     }
   }
 
@@ -1409,28 +1398,293 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
         buffersBytes.push_back(std::move(*b));
       } else {
         IRIS_LOG_LEAVE();
-        return [error = b.error()]() { return error; };
+        b.error();
       }
     } else {
       IRIS_LOG_LEAVE();
-      return []() {
-        return std::system_error(Error::kFileParseFailed,
-                                 "unexpected buffer with no uri");
-      };
+      return std::system_error(Error::kFileParseFailed,
+                               "unexpected buffer with no uri");
+    }
+  }
+
+  //
+  // Read all the images into memory
+  //
+  auto&& images =
+    g.images.value_or<decltype(gltf::GLTF::images)::value_type>({});
+  std::vector<VkExtent3D> imagesExtents;
+  std::vector<std::vector<std::byte>> imagesBytes;
+
+  for (auto&& image : images) {
+    if (image.uri) {
+      filesystem::path uriPath(*image.uri);
+      if (uriPath.is_relative()) uriPath = baseDir / uriPath;
+
+      int x, y, n;
+      if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4);
+          !pixels) {
+        IRIS_LOG_LEAVE();
+        return std::system_error(Error::kFileNotSupported,
+                                 stbi_failure_reason());
+      } else {
+        imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
+                                 reinterpret_cast<std::byte*>(pixels) +
+                                   x * y * 4);
+        imagesExtents.push_back(
+          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), 1});
+      }
+    } else if (image.bufferView) {
+      imagesBytes.push_back(buffersBytes[*image.bufferView]);
+    } else {
+      IRIS_LOG_LEAVE();
+      return std::system_error(Error::kFileNotSupported,
+                               "image with no uri or bufferView");
     }
   }
 
   //
   // Read all the primitives
-  // FIXME: this currently collapses the scenegraph and doesn't support
-  // children
   //
+  auto&& nodes = g.nodes.value_or<decltype(gltf::GLTF::nodes)::value_type>({});
   std::vector<PrimitiveData> primitives;
-  if (auto prims = ParseNodes(g, buffersBytes, path)) {
-    primitives = std::move(*prims);
-  } else {
-    return [error = prims.error()]() { return error; };
+
+  for (auto&& node : nodes) {
+    // Node:
+    // std::optional<std::vector<int>> children; // indices into gltf.nodes
+    // std::optional<glm::mat4x4> matrix;
+    // std::optional<int> mesh; // index into gltf.meshes
+    // std::optional<glm::quat> rotation;
+    // std::optional<glm::vec3> scale;
+    // std::optional<glm::vec3> translation;
+    // std::optional<std::string> name;
+
+    GetLogger()->trace("{}", json(node).dump());
+    std::string const nodeName =
+      path.string() + (node.name ? ":" + *node.name : "");
+
+    if (node.children && !node.children->empty()) {
+      GetLogger()->warn("Node children not implemented");
+      continue;
+    }
+
+    if (!node.mesh) {
+      GetLogger()->warn("Transform-only nodes not implemented");
+      continue;
+    }
+
+    if (!g.meshes || g.meshes->empty()) {
+      IRIS_LOG_LEAVE();
+      return std::system_error(Error::kFileParseFailed,
+                               "node defines mesh, but no meshes");
+    }
+
+    auto&& meshes = *g.meshes;
+    if (meshes.size() < static_cast<std::size_t>(*node.mesh)) {
+      IRIS_LOG_LEAVE();
+      return std::system_error(Error::kFileParseFailed,
+                               "node defines mesh, but not enough meshes");
+    }
+
+    auto&& mesh = meshes[*node.mesh];
+    // Mesh:
+    // std::vector<Primitive> primitives;
+
+    GetLogger()->trace("{}", json(mesh).dump());
+    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
+
+    for (auto&& primitive : mesh.primitives) {
+      // Primitive:
+      // std::map<std::string, int> attributes; // index into gltf.accessors
+      // std::optional<int> indices;            // index into gltf.accessors
+      // std::optional<int> material;           // index into gltf.materials
+      // std::optional<int> mode;
+      // std::optional<std::vector<int>> targets;
+      //
+      // From the glTF 2.0 spec:
+      //
+      // Implementation note: Each primitive corresponds to one WebGL draw
+      // call (engines are, of course, free to batch draw calls). When a
+      // primitive's indices property is defined, it references the accessor
+      // to use for index data, and GL's drawElements function should be used.
+      // When the indices property is not defined, GL's drawArrays function
+      // should be used with a count equal to the count property of any of the
+      // accessors referenced by the attributes property (they are all equal
+      // for a given primitive).
+      //
+      // Implementation note: When positions are not specified, client
+      // implementations should skip primitive's rendering unless its
+      // positions are provided by other means (e.g., by extension). This
+      // applies to both indexed and non-indexed geometry.
+      //
+      // Implementation note: When normals are not specified, client
+      // implementations should calculate flat normals.
+      //
+      // Implementation note: When tangents are not specified, client
+      // implementations should calculate tangents using default MikkTSpace
+      // algorithms. For best results, the mesh triangles should also be
+      // processed using default MikkTSpace algorithms.
+      //
+      // Implementation note: Vertices of the same triangle should have the
+      // same tangent.w value. When vertices of the same triangle have
+      // different tangent.w values, tangent space is considered undefined.
+      //
+      // Implementation note: When normals and tangents are specified, client
+      // implementations should compute the bitangent by taking the cross
+      // product of the normal and tangent xyz vectors and multiplying against
+      // the w component of the tangent: bitangent = cross(normal,
+      // tangent.xyz) * tangent.w
+
+      PrimitiveData primData;
+
+      if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
+        primData.topology = *t;
+      } else {
+        IRIS_LOG_LEAVE();
+        return t.error();
+      }
+
+      // First get the indices if present. We're only getting the indices here
+      // to use them for possible normal/tangent generation. That way the
+      // original format of the indices can be used in the draw call.
+      if (primitive.indices) {
+        std::array<int, 3> componentTypes{5123, 5125};
+        if (auto i = gltf::GetAccessorData<unsigned int>(
+              *primitive.indices, "SCALAR", componentTypes, false, g.accessors,
+              g.bufferViews, buffersBytes)) {
+          primData.indices = std::move(*i);
+        } else {
+          IRIS_LOG_LEAVE();
+          return i.error();
+        }
+      }
+
+      //
+      // Next get the positions
+      //
+      std::vector<glm::vec3> positions;
+      for (auto&& [semantic, index] : primitive.attributes) {
+        if (semantic == "POSITION") {
+          if (auto p = gltf::GetAccessorData<glm::vec3>(
+                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
+                buffersBytes)) {
+            positions = std::move(*p);
+          } else {
+            IRIS_LOG_LEAVE();
+            return p.error();
+          }
+        }
+      }
+
+      // primitives with no positions are "ignored"
+      if (positions.empty()) continue;
+
+      //
+      // Now get texcoords, normals, and tangents
+      //
+      std::vector<glm::vec2> texcoords;
+      std::vector<glm::vec3> normals;
+      std::vector<glm::vec4> tangents;
+
+      for (auto&& [semantic, index] : primitive.attributes) {
+        if (semantic == "TEXCOORD_0") {
+          if (auto t = gltf::GetAccessorData<glm::vec2>(
+                index, "VEC2", 5126, true, g.accessors, g.bufferViews,
+                buffersBytes)) {
+            texcoords = std::move(*t);
+          } else {
+            IRIS_LOG_LEAVE();
+            return t.error();
+          }
+        } else if (semantic == "NORMAL") {
+          if (auto n = gltf::GetAccessorData<glm::vec3>(
+                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
+                buffersBytes)) {
+            normals = std::move(*n);
+          } else {
+            IRIS_LOG_LEAVE();
+            return n.error();
+          }
+        } else if (semantic == "TANGENT") {
+          if (auto t = gltf::GetAccessorData<glm::vec4>(
+                index, "VEC4", 5126, true, g.accessors, g.bufferViews,
+                buffersBytes)) {
+            tangents = std::move(*t);
+          } else {
+            IRIS_LOG_LEAVE();
+            return t.error();
+          }
+        }
+      }
+
+      std::size_t const num = positions.size();
+      primData.vertices.resize(num);
+
+      for (std::size_t i = 0; i < num; ++i) {
+        primData.vertices[i].position = positions[i];
+      }
+
+      if (!texcoords.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].texcoord = texcoords[i];
+        }
+      }
+
+      if (!normals.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].normal = normals[i];
+        }
+      } else {
+        primData.GenerateNormals();
+      }
+
+      if (!tangents.empty()) {
+        for (std::size_t i = 0; i < num; ++i) {
+          primData.vertices[i].tangent = tangents[i];
+        }
+      } else {
+        if (!primData.GenerateTangents()) {
+          IRIS_LOG_LEAVE();
+          return std::system_error(iris::Error::kFileParseFailed,
+                                   "Unable to generate tangent space");
+        }
+      }
+
+      GetLogger()->debug("Primitive has {} vertices", primData.vertices.size());
+
+      primData.bindingDescriptions.push_back(
+        {0, sizeof(PrimitiveData::Vertex), VK_VERTEX_INPUT_RATE_VERTEX});
+
+      if (texcoords.empty()) {
+        primData.attributeDescriptions.resize(3);
+      } else {
+        primData.attributeDescriptions.resize(4);
+      }
+
+      primData.attributeDescriptions[0] = {
+        0, 0, VK_FORMAT_R32G32B32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, position)};
+
+      primData.attributeDescriptions[1] = {
+        1, 0, VK_FORMAT_R32G32B32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, normal)};
+
+      primData.attributeDescriptions[2] = {
+        2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
+        offsetof(PrimitiveData::Vertex, tangent)};
+
+      if (!texcoords.empty()) {
+        primData.attributeDescriptions[3] = {
+          3, 0, VK_FORMAT_R32G32_SFLOAT,
+          offsetof(PrimitiveData::Vertex, texcoord)};
+      }
+
+      primitives.push_back(primData);
+    }
   }
+
+  IRIS_LOG_LEAVE();
+  return std::system_error(Error::kFileParseFailed,
+                           "GLTF files not implemented");
 
 #if 0
       std::shared_ptr<Pipeline> pipeline;
@@ -1524,42 +1778,8 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
       });
 #endif
 
-  IRIS_LOG_LEAVE();
-  return []() {
-    return std::system_error(Error::kFileParseFailed,
-                             "GLTF files not implemented");
-  };
 #if 0
 #if 0
-  std::vector<VkExtent3D> imagesExtents;
-  std::vector<std::vector<std::byte>> imagesBytes;
-
-  for (auto&& image : gltf.images.value_or<std::vector<gltf::Image>>({})) {
-    if (image.uri) {
-      filesystem::path uriPath(*image.uri);
-      if (uriPath.is_relative()) uriPath = baseDir / uriPath;
-
-      int x, y, n;
-      if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4); !pixels) {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(
-          std::system_error(Error::kFileNotSupported, stbi_failure_reason()));
-      } else {
-        imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
-                                 reinterpret_cast<std::byte*>(pixels) +
-                                   x * y * 4);
-        imagesExtents.push_back(
-          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), 1});
-      }
-    } else if (image.bufferView) {
-      imagesBytes.push_back(buffersBytes[*image.bufferView]);
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileNotSupported, "image with no uri or bufferView"));
-    }
-  }
-
   std::vector<Image> images;
   std::vector<Sampler> samplers;
 
@@ -1678,5 +1898,14 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_LEAVE();
   return [results](){ for (auto&& result : results) result(); };
 #endif
+}
+
+} // namespace iris::Renderer::io
+
+std::function<std::system_error(void)>
+iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
+  IRIS_LOG_ENTER();
+  auto error = DoLoadGLTF(path);
+  return [error]() { return error; };
 } // iris::Renderer::io::LoadGLTF
 
