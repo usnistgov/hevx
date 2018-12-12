@@ -11,6 +11,8 @@ matrix:
       env: PLATFORM=el7 CTEST_CMD="scl enable devtoolset-7 rh-python36 -- ctest3"
     - name: "Fedora 28"
       env: PLATFORM=f28 CTEST_CMD="ctest"
+    - name: "Fedora 29"
+      env: PLATFORM=f29 CTEST_CMD="ctest"
     - name: "Unbuntu 18.04"
       env: PLATFORM=bionic CTEST_CMD="cmake/bin/ctest"
     - name: "Unbuntu 18.10"
