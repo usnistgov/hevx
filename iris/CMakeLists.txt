@@ -126,7 +126,7 @@ target_link_libraries(iris
     flags imgui vma
     GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::container absl::hash
-    stb glslang Vulkan::Vulkan
+    stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}

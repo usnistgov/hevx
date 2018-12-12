@@ -10,6 +10,14 @@
 #include "config.h"
 #include "enumerate.h"
 #include "error.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "glslang/Public/ShaderLang.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 #include "protos.h"
 #include "renderer/command_buffers.h"
 #include "renderer/descriptor_sets.h"
@@ -1354,6 +1362,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   GetLogger()->debug("Default number of task threads: {}",
                     sTaskSchedulerInit.default_num_threads());
 
+  glslang::InitializeProcess();
+
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
   // over several sub-functions below. Each function is called in-order and
@@ -1539,6 +1549,8 @@ void iris::Renderer::Shutdown() noexcept {
   }
 
   if (sInstance != VK_NULL_HANDLE) { vkDestroyInstance(sInstance, nullptr); }
+
+  glslang::FinalizeProcess();
 
   sTaskSchedulerInit.terminate();
 
@@ -1922,6 +1934,8 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
             {bg.r(), bg.g(), bg.b(), bg.a()}, options,
             windowMessage.display())) {
         Windows().emplace(windowMessage.name(), std::move(*win));
+      } else {
+        GetLogger()->warn("Createing window failed: {}", win.error().what());
       }
     }
     break;
@@ -1943,6 +1957,8 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
                         static_cast<std::uint16_t>(windowMessage.height())},
           {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display())) {
       Windows().emplace(windowMessage.name(), std::move(*win));
+    } else {
+      GetLogger()->warn("Createing window failed: {}", win.error().what());
     }
   } break;
   default:

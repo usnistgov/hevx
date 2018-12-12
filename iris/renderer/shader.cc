@@ -7,56 +7,185 @@
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 #include "glslang/Public/ShaderLang.h"
+#include "SPIRV/GlslangToSpv.h"
+#include "SPIRV/GLSL.std.450.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
 
 namespace iris::Renderer {
 
+const TBuiltInResource DefaultTBuiltInResource = {
+  /* .MaxLights = */ 32,
+  /* .MaxClipPlanes = */ 6,
+  /* .MaxTextureUnits = */ 32,
+  /* .MaxTextureCoords = */ 32,
+  /* .MaxVertexAttribs = */ 64,
+  /* .MaxVertexUniformComponents = */ 4096,
+  /* .MaxVaryingFloats = */ 64,
+  /* .MaxVertexTextureImageUnits = */ 32,
+  /* .MaxCombinedTextureImageUnits = */ 80,
+  /* .MaxTextureImageUnits = */ 32,
+  /* .MaxFragmentUniformComponents = */ 4096,
+  /* .MaxDrawBuffers = */ 32,
+  /* .MaxVertexUniformVectors = */ 128,
+  /* .MaxVaryingVectors = */ 8,
+  /* .MaxFragmentUniformVectors = */ 16,
+  /* .MaxVertexOutputVectors = */ 16,
+  /* .MaxFragmentInputVectors = */ 15,
+  /* .MinProgramTexelOffset = */ -8,
+  /* .MaxProgramTexelOffset = */ 7,
+  /* .MaxClipDistances = */ 8,
+  /* .MaxComputeWorkGroupCountX = */ 65535,
+  /* .MaxComputeWorkGroupCountY = */ 65535,
+  /* .MaxComputeWorkGroupCountZ = */ 65535,
+  /* .MaxComputeWorkGroupSizeX = */ 1024,
+  /* .MaxComputeWorkGroupSizeY = */ 1024,
+  /* .MaxComputeWorkGroupSizeZ = */ 64,
+  /* .MaxComputeUniformComponents = */ 1024,
+  /* .MaxComputeTextureImageUnits = */ 16,
+  /* .MaxComputeImageUniforms = */ 8,
+  /* .MaxComputeAtomicCounters = */ 8,
+  /* .MaxComputeAtomicCounterBuffers = */ 1,
+  /* .MaxVaryingComponents = */ 60,
+  /* .MaxVertexOutputComponents = */ 64,
+  /* .MaxGeometryInputComponents = */ 64,
+  /* .MaxGeometryOutputComponents = */ 128,
+  /* .MaxFragmentInputComponents = */ 128,
+  /* .MaxImageUnits = */ 8,
+  /* .MaxCombinedImageUnitsAndFragmentOutputs = */ 8,
+  /* .MaxCombinedShaderOutputResources = */ 8,
+  /* .MaxImageSamples = */ 0,
+  /* .MaxVertexImageUniforms = */ 0,
+  /* .MaxTessControlImageUniforms = */ 0,
+  /* .MaxTessEvaluationImageUniforms = */ 0,
+  /* .MaxGeometryImageUniforms = */ 0,
+  /* .MaxFragmentImageUniforms = */ 8,
+  /* .MaxCombinedImageUniforms = */ 8,
+  /* .MaxGeometryTextureImageUnits = */ 16,
+  /* .MaxGeometryOutputVertices = */ 256,
+  /* .MaxGeometryTotalOutputComponents = */ 1024,
+  /* .MaxGeometryUniformComponents = */ 1024,
+  /* .MaxGeometryVaryingComponents = */ 64,
+  /* .MaxTessControlInputComponents = */ 128,
+  /* .MaxTessControlOutputComponents = */ 128,
+  /* .MaxTessControlTextureImageUnits = */ 16,
+  /* .MaxTessControlUniformComponents = */ 1024,
+  /* .MaxTessControlTotalOutputComponents = */ 4096,
+  /* .MaxTessEvaluationInputComponents = */ 128,
+  /* .MaxTessEvaluationOutputComponents = */ 128,
+  /* .MaxTessEvaluationTextureImageUnits = */ 16,
+  /* .MaxTessEvaluationUniformComponents = */ 1024,
+  /* .MaxTessPatchComponents = */ 120,
+  /* .MaxPatchVertices = */ 32,
+  /* .MaxTessGenLevel = */ 64,
+  /* .MaxViewports = */ 16,
+  /* .MaxVertexAtomicCounters = */ 0,
+  /* .MaxTessControlAtomicCounters = */ 0,
+  /* .MaxTessEvaluationAtomicCounters = */ 0,
+  /* .MaxGeometryAtomicCounters = */ 0,
+  /* .MaxFragmentAtomicCounters = */ 8,
+  /* .MaxCombinedAtomicCounters = */ 8,
+  /* .MaxAtomicCounterBindings = */ 1,
+  /* .MaxVertexAtomicCounterBuffers = */ 0,
+  /* .MaxTessControlAtomicCounterBuffers = */ 0,
+  /* .MaxTessEvaluationAtomicCounterBuffers = */ 0,
+  /* .MaxGeometryAtomicCounterBuffers = */ 0,
+  /* .MaxFragmentAtomicCounterBuffers = */ 1,
+  /* .MaxCombinedAtomicCounterBuffers = */ 1,
+  /* .MaxAtomicCounterBufferSize = */ 16384,
+  /* .MaxTransformFeedbackBuffers = */ 4,
+  /* .MaxTransformFeedbackInterleavedComponents = */ 64,
+  /* .MaxCullDistances = */ 8,
+  /* .MaxCombinedClipAndCullDistances = */ 8,
+  /* .MaxSamples = */ 4,
+  /* .maxMeshOutputVerticesNV = */ 256,
+  /* .maxMeshOutputPrimitivesNV = */ 512,
+  /* .maxMeshWorkGroupSizeX_NV = */ 32,
+  /* .maxMeshWorkGroupSizeY_NV = */ 1,
+  /* .maxMeshWorkGroupSizeZ_NV = */ 1,
+  /* .maxTaskWorkGroupSizeX_NV = */ 32,
+  /* .maxTaskWorkGroupSizeY_NV = */ 1,
+  /* .maxTaskWorkGroupSizeZ_NV = */ 1,
+  /* .maxMeshViewCountNV = */ 4,
+
+  /* .limits = */
+  {
+    /* .nonInductiveForLoops = */ true,
+    /* .whileLoops = */ true,
+    /* .doWhileLoops = */ true,
+    /* .generalUniformIndexing = */ true,
+    /* .generalAttributeMatrixVectorIndexing = */ true,
+    /* .generalVaryingIndexing = */ true,
+    /* .generalSamplerIndexing = */ true,
+    /* .generalVariableIndexing = */ true,
+    /* .generalConstantMatrixVectorIndexing = */ true,
+  }};
+
 [[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
 CompileShaderFromSource(std::string_view source,
-                        VkShaderStageFlagBits shaderStage[[maybe_unused]],
-                        filesystem::path const& path[[maybe_unused]],
+                        VkShaderStageFlagBits shaderStage,
+                        filesystem::path const& path,
                         gsl::span<std::string> macroDefinitions[[maybe_unused]],
-                        std::string const& entryPoint[[maybe_unused]]) {
+                        std::string const& entryPoint) {
   IRIS_LOG_ENTER();
   Expects(source.size() > 0);
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(std::string("not implemented"));
-#if 0
-  shaderc::Compiler compiler;
-  shaderc::CompileOptions options;
-  options.SetOptimizationLevel(shaderc_optimization_level_performance);
-  options.SetIncluder(std::make_unique<ShaderIncluder>());
 
-  for (auto&& macro : macroDefinitions) options.AddMacroDefinition(macro);
-
-  auto const kind = [&shaderStage]() {
+  auto const lang = [&shaderStage]() {
     if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
-      return shaderc_vertex_shader;
+      return EShLanguage::EShLangVertex;
     } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
-      return shaderc_fragment_shader;
+      return EShLanguage::EShLangFragment;
     } else {
       GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
       std::terminate();
     }
   }();
 
-  auto spv = compiler.CompileGlslToSpv(source.data(), source.size(), kind,
-                                       path.string().c_str(),
-                                       entryPoint.c_str(), options);
-  if (spv.GetCompilationStatus() != shaderc_compilation_status_success) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected("\n" + spv.GetErrorMessage());
+  char const* strings[] = {source.data()};
+  int lengths[] = {static_cast<int>(source.size())};
+  char const* names[] = {path.string().c_str()};
+
+  glslang::TShader shader(lang);
+  shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
+  shader.setEntryPoint(entryPoint.c_str());
+  shader.setEnvInput(glslang::EShSource::EShSourceGlsl, lang,
+                     glslang::EShClient::EShClientVulkan, 101);
+  shader.setEnvClient(glslang::EShClient::EShClientVulkan,
+                      glslang::EShTargetClientVersion::EShTargetVulkan_1_1);
+  shader.setEnvTarget(glslang::EShTargetLanguage::EShTargetSpv,
+                      glslang::EShTargetLanguageVersion::EShTargetSpv_1_0);
+
+  if (!shader.parse(&DefaultTBuiltInResource, 1, false,
+                    EShMessages::EShMsgDefault)) {
+    return tl::unexpected(std::string(shader.getInfoLog()));
   }
 
-  std::vector<std::uint32_t> code;
-  std::copy(std::begin(spv), std::end(spv), std::back_inserter(code));
+  glslang::TProgram program;
+  program.addShader(&shader);
 
-  Ensures(code.size() > 0);
-  IRIS_LOG_LEAVE();
-  return code;
+  if (!program.link(EShMessages::EShMsgDefault)) {
+    return tl::unexpected(std::string(program.getInfoLog()));
+  }
+
+  if (auto glsl = program.getIntermediate(lang)) {
+    glslang::SpvOptions options;
+    options.validate = true;
+#ifndef NDEBUG
+    options.generateDebugInfo = true;
 #endif
+
+    spv::SpvBuildLogger logger;
+    std::vector<std::uint32_t> code;
+    glslang::GlslangToSpv(*glsl, code, &logger, &options);
+
+    Ensures(code.size() > 0);
+    IRIS_LOG_LEAVE();
+    return code;
+  } else {
+    return tl::unexpected(std::string(
+      "cannot get glsl intermediate representation of compiled shader"));
+  }
 } // CompileShaderFromSource
 
 } // namespace iris::Renderer
