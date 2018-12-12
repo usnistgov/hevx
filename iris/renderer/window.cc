@@ -41,6 +41,9 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
     return tl::unexpected(ui.error());
   }
 
+  window.showUI =
+    (options & Window::Options::kShowUI) == Window::Options::kShowUI;
+
   window.window.Show();
 
   window.window.OnResize(
@@ -113,10 +116,24 @@ std::system_error iris::Renderer::Window::BeginFrame() noexcept {
 } // iris::Renderer::Window::BeginFrame
 
 tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
+iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer,
+                                 int frame[[maybe_unused]], float frameDeltaMS,
+                                 float framerate,
+                                 gsl::span<float> frameTimes) noexcept {
   Expects(framebuffer != VK_NULL_HANDLE);
-
   ImGui::SetCurrentContext(ui.context.get());
+
+  if (showUI) {
+
+    ImGui::Begin("Status");
+    ImGui::Text("Last Frame %.3f ms", frameDeltaMS);
+    ImGui::PlotLines(
+      "Frame Times", frameTimes.data(), frameTimes.size(), 0,
+      fmt::format("Average {:.3f} ms", 1000.f / framerate).c_str(), 0.f,
+      100.f, ImVec2(0, 100));
+    ImGui::End();
+  }
+
   ImGui::EndFrame();
   ImGui::Render();
 
@@ -281,7 +298,8 @@ iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)
   , window(std::move(other.window))
   , surface(std::move(other.surface))
-  , ui(std::move(other.ui)) {
+  , ui(std::move(other.ui))
+  , showUI(other.showUI) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
   window.OnClose(std::bind(&Window::Close, this));
@@ -295,6 +313,7 @@ operator=(Window&& other) noexcept {
   window = std::move(other.window);
   surface = std::move(other.surface);
   ui = std::move(other.ui);
+  showUI = other.showUI;
 
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));

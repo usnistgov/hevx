@@ -1,5 +1,6 @@
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
+#include "absl/container/fixed_array.h"
 #include "fmt/format.h"
 #include "imgui.h"
 #include "iris/config.h"
@@ -80,18 +81,13 @@ int main(int argc, char** argv) {
 
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
+    auto& io = ImGui::GetIO();
 
-    if (!ImGui::GetIO().WantCaptureKeyboard) {
+    if (!io.WantCaptureKeyboard) {
       if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
         iris::Renderer::Terminate();
       }
     }
-
-    ImGui::Begin("Status");
-    ImGui::Text("Last Frame %.3f ms", ImGui::GetIO().DeltaTime);
-    ImGui::Text("Average %.3f ms/frame (%.1f FPS)",
-                1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-    ImGui::End();
 
     iris::Renderer::EndFrame();
   }

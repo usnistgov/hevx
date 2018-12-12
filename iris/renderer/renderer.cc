@@ -168,6 +168,9 @@ Windows() {
   return sWindows;
 } // Windows
 
+absl::FixedArray<float> sFrameTimes(100);
+std::uint64_t sFrameNum = 0;
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT messageTypes,
@@ -1793,7 +1796,11 @@ void iris::Renderer::EndFrame() noexcept {
     //vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
                          //sSecondaryCommandBuffers.data());
 
-    if (auto wcb = window.EndFrame(rbi.framebuffer)) {
+    float const frameDeltaMS = ImGui::GetIO().DeltaTime;
+    float const framerate = ImGui::GetIO().Framerate;
+
+    if (auto wcb = window.EndFrame(rbi.framebuffer, sFrameNum, frameDeltaMS,
+                                   framerate, sFrameTimes)) {
       VkCommandBuffer winCB = *wcb;
       if (winCB != VK_NULL_HANDLE) vkCmdExecuteCommands(cb, 1, &winCB);
     } else {
@@ -1855,6 +1862,8 @@ void iris::Renderer::EndFrame() noexcept {
       result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
   }
+
+  sFrameTimes[sFrameNum++ % sFrameTimes.size()] = ImGui::GetIO().DeltaTime;
 } // iris::Renderer::EndFrame
 
 std::error_code
@@ -1914,6 +1923,11 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   }
 
   switch (controlMessage.type()) {
+
+  //
+  // FIXME: DRY
+  //
+
   case iris::Control::Control_Type_DISPLAYS:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
@@ -1924,6 +1938,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
         options |= Window::Options::kDecorated;
       }
       if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
+      if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
       if (auto win = Window::Create(
             windowMessage.name().c_str(),
@@ -1948,6 +1963,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
       options |= Window::Options::kDecorated;
     }
     if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
+    if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
     if (auto win = Window::Create(
           windowMessage.name().c_str(),

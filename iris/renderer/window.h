@@ -18,6 +18,7 @@ struct Window {
     kDecorated = (1 << 0), //!< The window has decorations (title bar, borders).
     kSizeable = (1 << 1),  //!< The window is sizeable.
     kStereo = (1 << 2),    //!< The window will have stereo output.
+    kShowUI = (1 << 3),    //!< The window should display UI elements.
   };
 
   // forward-declare this so that it can be used below in Create
@@ -31,6 +32,7 @@ struct Window {
   bool resized{false};
   wsi::Window window{};
   Surface surface{};
+  bool showUI{false};
   UI ui{};
 
   void Resize(wsi::Extent2D const& newExtent) noexcept;
@@ -39,7 +41,8 @@ struct Window {
   [[nodiscard]] std::system_error BeginFrame() noexcept;
 
   tl::expected<VkCommandBuffer, std::system_error>
-  EndFrame(VkFramebuffer framebuffer) noexcept;
+  EndFrame(VkFramebuffer framebuffer, int frame, float frameDeltaMS,
+           float framerate, gsl::span<float> frameTimes) noexcept;
 
   Window() = default;
   Window(Window const&) = delete;
