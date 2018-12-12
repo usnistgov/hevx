@@ -7,7 +7,7 @@ if(NOT WIN32 AND NOT "$ENV{VULKAN_SDK}")
   endif()
 
   set(_file "vulkansdk-linux-x86_64-${VulkanSDK_FIND_VERSION}.tar.gz")
-  set(_url "https://sdk.lunarg.com/sdk/download/${VulkanSDK_FIND_VERSION}/linux/${_file}?u=")
+  set(_url "https://sdk.lunarg.com/sdk/download/${VulkanSDK_FIND_VERSION}/linux/${_file}?Human=true")
 
   if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${_file})
     message(STATUS "Downloading Vulkan SDK v${VulkanSDK_FIND_VERSION}")

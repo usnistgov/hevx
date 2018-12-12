@@ -8,13 +8,15 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "config.h"
+#include "enumerate.h"
 #include "error.h"
 #include "protos.h"
 #include "renderer/command_buffers.h"
 #include "renderer/descriptor_sets.h"
-#include "renderer/draw.h"
 #include "renderer/impl.h"
-#include "renderer/io/io.h"
+#include "renderer/io/gltf.h"
+#include "renderer/io/json.h"
+#include "renderer/io/read_file.h"
 #include "renderer/shader.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
@@ -25,6 +27,9 @@
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
 #endif
+#include "tbb/concurrent_queue.h"
+#include "tbb/task.h"
+#include "tbb/task_scheduler_init.h"
 #include "wsi/window.h"
 #if PLATFORM_WINDOWS
 #include "wsi/window_win32.h"
@@ -110,7 +115,6 @@ VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
 VkFence sFrameComplete{VK_NULL_HANDLE};
 VmaAllocator sAllocator{VK_NULL_HANDLE};
 
-// These are the desired properties of all surfaces for the renderer.
 VkSurfaceFormatKHR sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
                                        VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 VkFormat sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
@@ -125,11 +129,6 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-std::vector<iris::Renderer::DrawData>& DrawCommands() {
-  static std::vector<iris::Renderer::DrawData> sDrawCommands;
-  return sDrawCommands;
-} // DrawCommands
-
 /////
 //
 // Additional static private variables
@@ -139,8 +138,13 @@ std::vector<iris::Renderer::DrawData>& DrawCommands() {
 static bool sInitialized{false};
 static std::atomic_bool sRunning{false};
 
-static VkCommandPool sGraphicsCommandPool{VK_NULL_HANDLE};
-static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+static tbb::task_scheduler_init sTaskSchedulerInit{
+  tbb::task_scheduler_init::deferred};
+static tbb::concurrent_queue<std::function<std::system_error(void)>>
+  sIOContinuations;
+
+static std::vector<VkCommandPool> sGraphicsCommandPools;
+static std::vector<VkDescriptorPool> sGraphicsDescriptorPools;
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 static std::mutex sOneTimeSubmitMutex;
 static VkFence sOneTimeSubmitFence{VK_NULL_HANDLE};
@@ -149,8 +153,6 @@ static std::uint32_t const sNumCommandBuffers{2};
 static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
                                                          VK_NULL_HANDLE);
 static std::uint32_t sCommandBufferIndex{0};
-
-static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
 
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
 Windows() {
@@ -803,12 +805,12 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   // Check for a graphics queue
   std::uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
 
-  for (std::size_t i = 0; i < queueFamilyProperties.size(); ++i) {
-    auto&& qfProps = queueFamilyProperties[i].queueFamilyProperties;
+  for (auto [i, props] : enumerate(queueFamilyProperties)) {
+    auto&& qfProps = props.queueFamilyProperties;
     if (qfProps.queueCount == 0) continue;
     if (!(qfProps.queueFlags & VK_QUEUE_GRAPHICS_BIT)) continue;
-    graphicsQueueFamilyIndex = gsl::narrow_cast<std::uint32_t>(i);
 
+    graphicsQueueFamilyIndex = gsl::narrow_cast<std::uint32_t>(i);
     break;
   }
 
@@ -858,10 +860,9 @@ static void FindDeviceGroup() {
 
   absl::FixedArray<VkPhysicalDeviceGroupProperties>
     physicalDeviceGroupProperties(numPhysicalDeviceGroups);
-  for (std::uint32_t i = 0; i < numPhysicalDeviceGroups; ++i) {
-    physicalDeviceGroupProperties[i].sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
-    physicalDeviceGroupProperties[i].pNext = nullptr;
+  for (auto&& prop : physicalDeviceGroupProperties) {
+    prop.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+    prop.pNext = nullptr;
   }
 
   if (auto result =
@@ -921,8 +922,8 @@ ChoosePhysicalDevice(VkPhysicalDeviceFeatures2 features,
 
   // Iterate and dump every physical device
   GetLogger()->debug("{} physical devices", numPhysicalDevices);
-  for (std::uint32_t i = 0; i < numPhysicalDevices; ++i) {
-    DumpPhysicalDevice(physicalDevices[i], i);
+  for (auto [i, physicalDevice] : enumerate(physicalDevices)) {
+    DumpPhysicalDevice(physicalDevice, i);
   }
 
   // Iterate through each physical device to find one that we can use.
@@ -1014,34 +1015,39 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   return {Error::kNone};
 } // CreateDevice
 
-[[nodiscard]] static std::system_error CreateCommandPool() noexcept {
+[[nodiscard]] static std::system_error CreateCommandPools() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
-  Expects(sGraphicsCommandPool == VK_NULL_HANDLE);
+  Expects(sGraphicsCommandPools.empty());
 
   VkCommandPoolCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   ci.queueFamilyIndex = sGraphicsQueueFamilyIndex;
 
-  if (auto result =
-        vkCreateCommandPool(sDevice, &ci, nullptr, &sGraphicsCommandPool);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return {make_error_code(result), "Cannot create command pool"};
+  sGraphicsCommandPools.resize(sTaskSchedulerInit.default_num_threads());
+  for (auto&& [i, commandPool] : enumerate(sGraphicsCommandPools)) {
+    if (auto result = vkCreateCommandPool(sDevice, &ci, nullptr, &commandPool);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return {make_error_code(result),
+              fmt::format("Cannot create command pool {}", i)};
+    }
+
+    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, commandPool,
+               fmt::format("sGraphicsCommandPools:{}", i).c_str());
   }
 
-  NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sGraphicsCommandPool,
-             "sGraphicsCommandPool");
-
-  Ensures(sGraphicsCommandPool != VK_NULL_HANDLE);
+  for (auto&& commandPool : sGraphicsCommandPools) {
+    Ensures(commandPool != VK_NULL_HANDLE);
+  }
   IRIS_LOG_LEAVE();
   return {Error::kNone};
-} // CreateCommandPool
+} // CreateCommandPools
 
-[[nodiscard]] static std::system_error CreateDescriptorPool() noexcept {
+[[nodiscard]] static std::system_error CreateDescriptorPools() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
-  Expects(sDescriptorPool == VK_NULL_HANDLE);
+  Expects(sGraphicsDescriptorPools.empty());
 
   absl::FixedArray<VkDescriptorPoolSize> descriptorPoolSizes(11);
   descriptorPoolSizes[0] = { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 };
@@ -1063,19 +1069,25 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   ci.poolSizeCount = static_cast<uint32_t>(descriptorPoolSizes.size());
   ci.pPoolSizes = descriptorPoolSizes.data();
 
-  if (auto result =
-        vkCreateDescriptorPool(sDevice, &ci, nullptr, &sDescriptorPool);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return {make_error_code(result), "Cannot create descriptor pool"};
+  sGraphicsDescriptorPools.resize(sTaskSchedulerInit.default_num_threads());
+  for (auto&& [i, descriptorPool] : enumerate(sGraphicsDescriptorPools)) {
+    if (auto result =
+          vkCreateDescriptorPool(sDevice, &ci, nullptr, &descriptorPool);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return {make_error_code(result), "Cannot create descriptor pool"};
+    }
+
+    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, descriptorPool,
+               fmt::format("sGraphicsDescriptorPools:{}", i).c_str());
   }
 
-  NameObject(VK_OBJECT_TYPE_COMMAND_POOL, sDescriptorPool, "sDescriptorPool");
-
-  Ensures(sDescriptorPool != VK_NULL_HANDLE);
+  for (auto&& descriptorPool : sGraphicsDescriptorPools) {
+    Ensures(descriptorPool != VK_NULL_HANDLE);
+  }
   IRIS_LOG_LEAVE();
   return {Error::kNone};
-} // CreateDescriptorPool
+} // CreateDescriptorPools
 
 [[nodiscard]] static std::system_error CreateFencesAndSemaphores() noexcept {
   IRIS_LOG_ENTER();
@@ -1302,7 +1314,7 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
 
   VkCommandBufferAllocateInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  ai.commandPool = sGraphicsCommandPool;
+  ai.commandPool = sGraphicsCommandPools[0];
   ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   ai.commandBufferCount = sNumCommandBuffers;
 
@@ -1331,12 +1343,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   GetLogger(logSinks);
   IRIS_LOG_ENTER();
 
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
   if (sInitialized) {
     IRIS_LOG_LEAVE();
     return {Error::kAlreadyInitialized};
   }
+
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  sTaskSchedulerInit.initialize();
+  GetLogger()->debug("Default number of task threads: {}",
+                    sTaskSchedulerInit.default_num_threads());
 
   ////
   // In order to reduce the verbosity of the Vulakn API, initialization occurs
@@ -1437,12 +1453,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
-  if (auto error = CreateCommandPool(); error.code()) {
+  if (auto error = CreateCommandPools(); error.code()) {
     IRIS_LOG_LEAVE();
     return {error};
   }
 
-  if (auto error = CreateDescriptorPool(); error.code()) {
+  if (auto error = CreateDescriptorPools(); error.code()) {
     IRIS_LOG_LEAVE();
     return {error};
   }
@@ -1467,11 +1483,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
-  if (auto error = io::Initialize(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return error;
-  }
-
   sInitialized = true;
   sRunning = true;
 
@@ -1485,16 +1496,9 @@ void iris::Renderer::Shutdown() noexcept {
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
 
-  io::Shutdown();
-
   Windows().clear();
 
-  vkFreeCommandBuffers(
-    sDevice, sGraphicsCommandPool,
-    gsl::narrow_cast<std::uint32_t>(sSecondaryCommandBuffers.size()),
-    sSecondaryCommandBuffers.data());
-
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPool,
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0],
                        gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size()),
                        sCommandBuffers.data());
 
@@ -1516,12 +1520,16 @@ void iris::Renderer::Shutdown() noexcept {
     vkDestroyFence(sDevice, sOneTimeSubmitFence, nullptr);
   }
 
-  if (sDescriptorPool != VK_NULL_HANDLE) {
-    vkDestroyDescriptorPool(sDevice, sDescriptorPool, nullptr);
+  for (auto&& descriptorPool : sGraphicsDescriptorPools) {
+    if (descriptorPool != VK_NULL_HANDLE) {
+      vkDestroyDescriptorPool(sDevice, descriptorPool, nullptr);
+    }
   }
 
-  if (sGraphicsCommandPool != VK_NULL_HANDLE) {
-    vkDestroyCommandPool(sDevice, sGraphicsCommandPool, nullptr);
+  for (auto&& commandPool : sGraphicsCommandPools) {
+    if (commandPool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(sDevice, commandPool, nullptr);
+    }
   }
 
   if (sDevice != VK_NULL_HANDLE) { vkDestroyDevice(sDevice, nullptr); }
@@ -1531,6 +1539,8 @@ void iris::Renderer::Shutdown() noexcept {
   }
 
   if (sInstance != VK_NULL_HANDLE) { vkDestroyInstance(sInstance, nullptr); }
+
+  sTaskSchedulerInit.terminate();
 
   IRIS_LOG_LEAVE();
 }
@@ -1548,9 +1558,12 @@ bool iris::Renderer::IsRunning() noexcept {
 bool iris::Renderer::BeginFrame() noexcept {
   if (!sInitialized || !sRunning) return false;
 
-  // Handle all IO results (completed requests)
-  std::vector<std::function<void(void)>> results = io::GetResults();
-  for (auto&& result : results) result();
+  decltype(sIOContinuations)::value_type ioContinuation;
+  while (sIOContinuations.try_pop(ioContinuation)) {
+    if (auto error = ioContinuation(); error.code()) {
+      GetLogger()->error(error.what());
+    }
+  }
 
   auto&& windows = Windows();
   if (windows.empty()) return false;
@@ -1577,7 +1590,7 @@ bool iris::Renderer::BeginFrame() noexcept {
     return false;
   }
 
-  if (auto result = vkResetCommandPool(sDevice, sGraphicsCommandPool, 0);
+  if (auto result = vkResetCommandPool(sDevice, sGraphicsCommandPools[0], 0);
       result != VK_SUCCESS) {
     GetLogger()->error("Error resetting command pool: {}", to_string(result));
     return false;
@@ -1588,7 +1601,6 @@ bool iris::Renderer::BeginFrame() noexcept {
 
 void iris::Renderer::EndFrame() noexcept {
   if (!sInitialized || !sRunning) return;
-  IRIS_LOG_ENTER();
   auto&& windows = Windows();
 
   //
@@ -1623,7 +1635,7 @@ void iris::Renderer::EndFrame() noexcept {
   //
   // Build secondary command buffers
   //
-
+#if 0
   if (sSecondaryCommandBuffers.size() < windows.size()) {
     // Re-allocate secondary command buffers
     if (!sSecondaryCommandBuffers.empty()) {
@@ -1709,6 +1721,7 @@ void iris::Renderer::EndFrame() noexcept {
 
       return commandBuffer;
     });
+#endif
 
   //
   // 1. Record primary command buffer for current frame
@@ -1737,20 +1750,18 @@ void iris::Renderer::EndFrame() noexcept {
   // 2. For every window, begin rendering
   //
 
-  std::size_t const numWindows = Windows().size();
+  std::size_t const numWindows = windows.size();
   absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
   absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
   absl::FixedArray<std::uint32_t> imageIndices(numWindows);
 
-  std::size_t i = 0;
-  for (auto&& iter : Windows()) {
+  for (auto [i, iter] : enumerate(windows)) {
     auto&& window = iter.second;
     auto&& surface = window.surface;
 
     waitSemaphores[i] = surface.imageAvailable;
     swapchains[i] = surface.swapchain;
     imageIndices[i] = surface.currentImageIndex;
-    i++;
 
     clearValues[sColorTargetAttachmentIndex].color = surface.clearColor;
     rbi.renderArea.extent = surface.extent;
@@ -1832,8 +1843,52 @@ void iris::Renderer::EndFrame() noexcept {
       result != VK_SUCCESS) {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
   }
-  IRIS_LOG_LEAVE();
 } // iris::Renderer::EndFrame
+
+std::error_code
+iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
+  IRIS_LOG_ENTER();
+
+  class IOTask : public tbb::task {
+  public:
+    IOTask(filesystem::path p) noexcept(noexcept(std::move(p)))
+      : path_(std::move(p)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      GetLogger()->debug("Loading {}", path_.string());
+      auto const& ext = path_.extension();
+
+      if (ext.compare(".json") == 0) {
+        sIOContinuations.push(io::LoadJSON(path_));
+      } else if (ext.compare(".gltf") == 0) {
+        sIOContinuations.push(io::LoadGLTF(path_));
+      } else {
+        GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
+                           path_.string());
+      }
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
+  private:
+    filesystem::path path_;
+  }; // struct IOTask
+
+  try {
+    IOTask* ioTask = new (tbb::task::allocate_root()) IOTask(path);
+    tbb::task::enqueue(*ioTask);
+  } catch (std::exception const& e) {
+    GetLogger()->error("Error enqueuing IO task for {}: {}", path.string(),
+                       e.what());
+    return {Error::kFileLoadFailed};
+  }
+
+  IRIS_LOG_LEAVE();
+  return {Error::kNone};
+} // LoadFile
 
 std::error_code
 iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
@@ -1907,9 +1962,9 @@ iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(commandPool != VK_NULL_HANDLE ||
-          sGraphicsCommandPool != VK_NULL_HANDLE);
+          sGraphicsCommandPools[0] != VK_NULL_HANDLE);
 
-  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPool;
+  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPools[0];
   VkCommandBuffer commandBuffer;
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
@@ -1950,9 +2005,9 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
   IRIS_LOG_ENTER();
   Expects(commandBuffer != VK_NULL_HANDLE);
   Expects(commandPool != VK_NULL_HANDLE ||
-          sGraphicsCommandPool != VK_NULL_HANDLE);
+          sGraphicsCommandPools[0] != VK_NULL_HANDLE);
 
-  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPool;
+  if (commandPool == VK_NULL_HANDLE) commandPool = sGraphicsCommandPools[0];
 
   VkSubmitInfo submit = {};
   submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1998,13 +2053,13 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
 tl::expected<iris::Renderer::CommandBuffers, std::system_error>
 iris::Renderer::AllocateCommandBuffers(std::uint32_t count,
                                        VkCommandBufferLevel level) noexcept {
-  return CommandBuffers::Allocate(sGraphicsCommandPool, count, level);
+  return CommandBuffers::Allocate(sGraphicsCommandPools[0], count, level);
 } // iris::Renderer::AllocateCommandBuffers
 
 tl::expected<iris::Renderer::DescriptorSets, std::system_error>
 iris::Renderer::AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> bindings,
                        std::uint32_t numSets, std::string name) noexcept {
-  return DescriptorSets::Allocate(sDescriptorPool, bindings, numSets,
-                                  std::move(name));
+  return DescriptorSets::Allocate(sGraphicsDescriptorPools[0], bindings,
+                                  numSets, std::move(name));
 } // iris::Renderer::AllocateDescriptorSets
 

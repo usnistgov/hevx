@@ -15,6 +15,7 @@ enum class Error {
   kInitializationFailed,  //!< Initialization failed for some reason.
   kAlreadyInitialized,    //!< The renderer has already been initialized.
   kNoPhysicalDevice,      //!< No physical device available.
+  kFileLoadFailed,        //!< File load failed.
   kFileNotSupported,      //!< File is not supported.
   kFileParseFailed,       //!< Parsing a file failed.
   kControlMessageInvalid, //!< Control message invalid.
@@ -39,6 +40,7 @@ public:
     case Error::kInitializationFailed: return "initialization failed"s;
     case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device"s;
+    case Error::kFileLoadFailed: return "file load failed"s;
     case Error::kFileNotSupported: return "file not supported"s;
     case Error::kFileParseFailed: return "file parse failed"s;
     case Error::kControlMessageInvalid: return "control message invalid"s;

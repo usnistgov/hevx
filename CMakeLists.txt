@@ -5,26 +5,35 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE
 project(hevx VERSION 3.0.0 LANGUAGES C CXX)
 
 ##
+# CMake helpers
+##
+include(CMakeDependentOption)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+##
 # Build options
 ##
-option(BUILD_TESTING "Build the testing tree" ON)
-option(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" OFF)
 option(BUILD_DOCS "Build the documentation" ON)
 option(BUILD_DOCS_INTERNAL "Build the internal developer documentation" ON)
 
+# The CTest module adds a BUILD_TESTING option (default: ON) and calls enable_testing
+if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  include(CTest)
+endif()
+
+CMAKE_DEPENDENT_OPTION(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" ON "BUILD_TESTING" OFF)
+
 ##
-# CMake configuration
+# HEVx configuration
 ##
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(HEVToolchain)
 include(GNUInstallDirs)
 
 ##
 # Unit testing
 ##
-if(BUILD_TESTING AND (PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR))
+if(BUILD_TESTING)
   enable_testing()
-  #add_subdirectory(test)
 endif()
 
 ##

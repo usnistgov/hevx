@@ -1,6 +1,8 @@
 #include "renderer/io/json.h"
-#include "renderer/impl.h"
+#include "config.h"
 #include "error.h"
+#include "renderer/io/read_file.h"
+#include "renderer/renderer.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4100)
@@ -18,26 +20,29 @@
 #include "logging.h"
 #include "protos.h"
 
-tl::expected<std::function<void(void)>, std::system_error>
+std::function<std::system_error(void)>
 iris::Renderer::io::LoadJSON(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
+
   std::string json;
   if (auto&& bytes = ReadFile(path)) {
     json =
       std::string(reinterpret_cast<char const*>(bytes->data()), bytes->size());
   } else {
-    return tl::unexpected(bytes.error());
+    IRIS_LOG_LEAVE();
+    return [error = bytes.error()]() { return error; };
   }
 
   iris::Control::Control cMsg;
   if (auto status = google::protobuf::util::JsonStringToMessage(json, &cMsg);
       status.ok()) {
     IRIS_LOG_LEAVE();
-    return [cMsg](){ Control(cMsg); };
+    return [cMsg]() { return Control(cMsg); };
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed, status.ToString()));
+    return [message = status.ToString()]() {
+      return std::system_error(Error::kFileParseFailed, message);
+    };
   }
 } // iris::Renderer::io::LoadJSON
 

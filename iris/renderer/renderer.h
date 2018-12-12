@@ -5,6 +5,13 @@
  */
 
 #include "expected.hpp"
+#if STD_FS_IS_EXPERIMENTAL
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 #include "gsl/gsl"
 #include "spdlog/sinks/sink.h"
 #include <cstdint>
@@ -45,6 +52,8 @@ bool IsRunning() noexcept;
 
 bool BeginFrame() noexcept;
 void EndFrame() noexcept;
+
+[[nodiscard]] std::error_code LoadFile(filesystem::path const& path) noexcept;
 
 std::error_code Control(iris::Control::Control const& control) noexcept;
 

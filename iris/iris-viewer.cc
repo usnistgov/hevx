@@ -3,7 +3,6 @@
 #include "fmt/format.h"
 #include "imgui.h"
 #include "iris/config.h"
-#include "iris/renderer/io/io.h"
 #include "iris/renderer/renderer.h"
 #include "iris/wsi/window.h"
 #if PLATFORM_COMPILER_MSVC
@@ -73,7 +72,11 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  for (auto&& file : files) iris::Renderer::io::LoadFile(file);
+  for (auto&& file : files) {
+    if (auto error = iris::Renderer::LoadFile(file)) {
+      logger.error("Error loading {}: {}", file, error.message());
+    }
+  }
 
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;

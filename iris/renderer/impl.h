@@ -21,6 +21,7 @@ extern VkQueue sGraphicsCommandQueue;
 extern VkFence sFrameComplete;
 extern VmaAllocator sAllocator;
 
+// These are the desired properties of all surfaces for the renderer.
 extern VkSurfaceFormatKHR sSurfaceColorFormat;
 extern VkFormat sSurfaceDepthStencilFormat;
 extern VkSampleCountFlagBits sSurfaceSampleCount;

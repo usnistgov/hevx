@@ -12,6 +12,11 @@
 #pragma warning(pop)
 #endif
 
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 namespace iris {
 
 static spdlog::logger* GetLogger() noexcept {
@@ -20,6 +25,10 @@ static spdlog::logger* GetLogger() noexcept {
 }
 
 } // namespace iris::Renderer
+
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 
 #ifndef NDEBUG
 
