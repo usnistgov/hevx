@@ -957,7 +957,7 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   IRIS_LOG_ENTER();
   std::vector<iris::Renderer::io::PrimitiveData> primitiveData;
 
-  if (!nodes || nodes->size() < nodeIdx) {
+  if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
     iris::GetLogger()->error("not enough nodes to handle index {}", nodeIdx);
     return tl::unexpected(
       std::system_error(iris::Error::kFileParseFailed,

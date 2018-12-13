@@ -293,8 +293,8 @@ iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)
   , window(std::move(other.window))
   , surface(std::move(other.surface))
-  , ui(std::move(other.ui))
-  , showUI(other.showUI) {
+  , showUI(other.showUI)
+  , ui(std::move(other.ui)) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
   window.OnClose(std::bind(&Window::Close, this));
@@ -307,8 +307,8 @@ operator=(Window&& other) noexcept {
   resized = other.resized;
   window = std::move(other.window);
   surface = std::move(other.surface);
-  ui = std::move(other.ui);
   showUI = other.showUI;
+  ui = std::move(other.ui);
 
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
