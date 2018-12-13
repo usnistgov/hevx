@@ -38,11 +38,11 @@ struct Window {
   void Resize(wsi::Extent2D const& newExtent) noexcept;
   void Close() noexcept;
 
-  [[nodiscard]] std::system_error BeginFrame() noexcept;
+  [[nodiscard]] std::system_error BeginFrame(float frameDelta) noexcept;
 
   tl::expected<VkCommandBuffer, std::system_error>
-  EndFrame(VkFramebuffer framebuffer, int frame, float frameDeltaMS,
-           float framerate, gsl::span<float> frameTimes) noexcept;
+  EndFrame(VkFramebuffer framebuffer, int frame,
+           gsl::span<float> frameTimes) noexcept;
 
   Window() = default;
   Window(Window const&) = delete;

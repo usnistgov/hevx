@@ -65,7 +65,8 @@ void iris::Renderer::Window::Close() noexcept {
   Renderer::Terminate();
 } // iris::Renderer::Window::Close
 
-std::system_error iris::Renderer::Window::BeginFrame() noexcept {
+std::system_error
+iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
   window.PollEvents();
 
   if (resized) {
@@ -101,35 +102,29 @@ std::system_error iris::Renderer::Window::BeginFrame() noexcept {
   io.MousePos.x = static_cast<float>(mousePos.x);
   io.MousePos.y = static_cast<float>(mousePos.y);
 
-  UI::TimePoint currentTime = std::chrono::steady_clock::now();
-  io.DeltaTime = ui.previousTime.time_since_epoch().count() > 0
-                   ? (currentTime - ui.previousTime).count()
-                   : 1.f / 60.f;
-  ui.previousTime = currentTime;
-
   io.DisplaySize.x = static_cast<float>(window.Extent().width);
   io.DisplaySize.y = static_cast<float>(window.Extent().height);
   io.DisplayFramebufferScale = {0.f, 0.f};
 
+  io.DeltaTime = frameDelta;
   ImGui::NewFrame();
   return {Error::kNone};
 } // iris::Renderer::Window::BeginFrame
 
 tl::expected<VkCommandBuffer, std::system_error>
 iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer,
-                                 int frame[[maybe_unused]], float frameDeltaMS,
-                                 float framerate,
+                                 int frame[[maybe_unused]],
                                  gsl::span<float> frameTimes) noexcept {
   Expects(framebuffer != VK_NULL_HANDLE);
   ImGui::SetCurrentContext(ui.context.get());
+  ImGuiIO& io = ImGui::GetIO();
 
   if (showUI) {
-
     ImGui::Begin("Status");
-    ImGui::Text("Last Frame %.3f ms", frameDeltaMS);
-    ImGui::PlotLines(
+    ImGui::Text("Last Frame %.3f ms", 1000.f * io.DeltaTime);
+    ImGui::PlotHistogram(
       "Frame Times", frameTimes.data(), frameTimes.size(), 0,
-      fmt::format("Average {:.3f} ms", 1000.f / framerate).c_str(), 0.f,
+      fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
       100.f, ImVec2(0, 100));
     ImGui::End();
   }

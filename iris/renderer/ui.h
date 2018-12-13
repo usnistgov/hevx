@@ -9,17 +9,12 @@
 #include "iris/renderer/image.h"
 #include "iris/renderer/impl.h"
 #include "iris/renderer/pipeline.h"
-#include <chrono>
 #include <memory>
 #include <system_error>
 
 namespace iris::Renderer {
 
 struct UI {
-  using Duration = std::chrono::duration<float, std::ratio<1, 1>>;
-  using TimePoint =
-    std::chrono::time_point<std::chrono::steady_clock, Duration>;
-
   tl::expected<iris::Renderer::UI, std::system_error>
   static Create() noexcept;
 
@@ -36,7 +31,6 @@ struct UI {
   DescriptorSets descriptorSets;
   Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
-  TimePoint previousTime{};
 
   UI()
   noexcept

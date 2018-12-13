@@ -168,6 +168,7 @@ Windows() {
   return sWindows;
 } // Windows
 
+std::chrono::steady_clock::time_point sPreviousFrameTime;
 absl::FixedArray<float> sFrameTimes(100);
 std::uint64_t sFrameNum = 0;
 
@@ -1404,6 +1405,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   physicalDeviceFeatures.features.tessellationShader = VK_TRUE;
   physicalDeviceFeatures.features.depthClamp = VK_TRUE;
   physicalDeviceFeatures.features.fillModeNonSolid = VK_TRUE;
+  physicalDeviceFeatures.features.wideLines = VK_TRUE;
+  physicalDeviceFeatures.features.largePoints = VK_TRUE;
   physicalDeviceFeatures.features.multiViewport = VK_TRUE;
   physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
   physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize = VK_TRUE;
@@ -1573,6 +1576,11 @@ bool iris::Renderer::IsRunning() noexcept {
 bool iris::Renderer::BeginFrame() noexcept {
   if (!sInitialized || !sRunning) return false;
 
+  auto currentTime = std::chrono::steady_clock::now();
+  auto const frameDelta =
+    std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
+  sPreviousFrameTime = currentTime;
+
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
     if (auto error = ioContinuation(); error.code()) {
@@ -1586,7 +1594,7 @@ bool iris::Renderer::BeginFrame() noexcept {
   for (auto&& iter : windows) {
     auto&& window = iter.second;
 
-    if (auto error = window.BeginFrame(); error.code()) {
+    if (auto error = window.BeginFrame(frameDelta); error.code()) {
       GetLogger()->error("Error beginning window frame: {}", error.what());
       return false;
     }
@@ -1796,11 +1804,7 @@ void iris::Renderer::EndFrame() noexcept {
     //vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
                          //sSecondaryCommandBuffers.data());
 
-    float const frameDeltaMS = ImGui::GetIO().DeltaTime;
-    float const framerate = ImGui::GetIO().Framerate;
-
-    if (auto wcb = window.EndFrame(rbi.framebuffer, sFrameNum, frameDeltaMS,
-                                   framerate, sFrameTimes)) {
+    if (auto wcb = window.EndFrame(rbi.framebuffer, sFrameNum, sFrameTimes)) {
       VkCommandBuffer winCB = *wcb;
       if (winCB != VK_NULL_HANDLE) vkCmdExecuteCommands(cb, 1, &winCB);
     } else {
@@ -1863,7 +1867,8 @@ void iris::Renderer::EndFrame() noexcept {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
   }
 
-  sFrameTimes[sFrameNum++ % sFrameTimes.size()] = ImGui::GetIO().DeltaTime;
+  sFrameTimes[sFrameNum++ % sFrameTimes.size()] =
+    1000.f * ImGui::GetIO().DeltaTime;
 } // iris::Renderer::EndFrame
 
 std::error_code
