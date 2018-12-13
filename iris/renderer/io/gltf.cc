@@ -2,6 +2,7 @@
 #include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "gsl/gsl"
@@ -20,6 +21,145 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace iris::Renderer::io {
+
+struct PrimitiveData {
+  struct Vertex {
+    glm::vec3 position{0.0f, 0.0f, 0.0f};
+    glm::vec3 normal{0.0f, 0.0f, 0.0f};
+    glm::vec4 tangent{0.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec2 texcoord{0.0f, 0.0f};
+  };
+
+  glm::mat4x4 matrix;
+  std::vector<Vertex> vertices;
+  std::vector<unsigned int> indices;
+
+  VkPrimitiveTopology topology;
+  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+
+  void GenerateNormals() {
+    if (indices.empty()) {
+      std::size_t const num = vertices.size();
+      for (std::size_t i = 0; i < num; i += 3) {
+        auto&& a = vertices[i].position;
+        auto&& b = vertices[i + 1].position;
+        auto&& c = vertices[i + 2].position;
+        auto const n = glm::normalize(glm::cross(b - a, c - a));
+        vertices[i].normal = n;
+        vertices[i + 1].normal = n;
+        vertices[i + 2].normal = n;
+      }
+    } else {
+      std::size_t const num = indices.size();
+      for (std::size_t i = 0; i < num; i += 3) {
+        auto&& a = vertices[indices[i]].position;
+        auto&& b = vertices[indices[i + 1]].position;
+        auto&& c = vertices[indices[i + 2]].position;
+        auto const n = glm::normalize(glm::cross(b - a, c - a));
+        vertices[indices[i]].normal = n;
+        vertices[indices[i + 1]].normal = n;
+        vertices[indices[i + 2]].normal = n;
+      }
+    }
+  } // GenerateNormals
+
+  bool GenerateTangents() {
+    std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
+    ifc->m_getNumFaces = &PrimitiveData::GetNumFaces;
+    ifc->m_getNumVerticesOfFace = &PrimitiveData::GetNumVerticesOfFace;
+    ifc->m_getPosition = &PrimitiveData::GetPosition;
+    ifc->m_getNormal = &PrimitiveData::GetNormal;
+    ifc->m_getTexCoord = &PrimitiveData::GetTexCoord;
+    ifc->m_setTSpaceBasic = &PrimitiveData::SetTSpaceBasic;
+    ifc->m_setTSpace = nullptr;
+
+    std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
+    ctx->m_pInterface = ifc.get();
+    ctx->m_pUserData = this;
+
+    return genTangSpaceDefault(ctx.get());
+  }
+
+  static int GetNumFaces(SMikkTSpaceContext const* pContext) {
+    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
+
+    if (primData->indices.empty()) {
+      return primData->vertices.size() / 3;
+    } else {
+      return primData->indices.size() / 3;
+    }
+  } // GetNumFaces
+
+  static int GetNumVerticesOfFace(SMikkTSpaceContext const*, int const) {
+    return 3;
+  } // GetNumVerticesOfFace
+
+  static void GetPosition(SMikkTSpaceContext const* pContext, float fvPosOut[],
+                          int const iFace, int const iVert) {
+    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
+
+    glm::vec3 p;
+    if (primData->indices.empty()) {
+      p = primData->vertices[iFace * 3 + iVert].position;
+    } else {
+      p = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
+    }
+
+    fvPosOut[0] = p.x;
+    fvPosOut[1] = p.y;
+    fvPosOut[2] = p.z;
+  } // GetPosition
+
+  static void GetNormal(SMikkTSpaceContext const* pContext, float fvNormOut[],
+                        const int iFace, const int iVert) {
+    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
+
+    glm::vec3 n;
+    if (primData->indices.empty()) {
+      n = primData->vertices[iFace * 3 + iVert].position;
+    } else {
+      n = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
+    }
+
+    fvNormOut[0] = n.x;
+    fvNormOut[1] = n.y;
+    fvNormOut[2] = n.z;
+  };
+
+  static void GetTexCoord(SMikkTSpaceContext const* pContext, float fvTexcOut[],
+                          const int iFace, const int iVert) {
+    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
+
+    glm::vec2 c;
+    if (primData->indices.empty()) {
+      c = primData->vertices[iFace * 3 + iVert].texcoord;
+    } else {
+      c = primData->vertices[primData->indices[iFace * 3 + iVert]].texcoord;
+    }
+
+    fvTexcOut[0] = c.x;
+    fvTexcOut[1] = c.y;
+  }
+
+  static void SetTSpaceBasic(SMikkTSpaceContext const* pContext,
+                             float const fvTangent[], float const fSign,
+                             int const iFace, int const iVert) {
+    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
+
+    glm::vec4 t{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
+
+    if (primData->indices.empty()) {
+      primData->vertices[iFace * 3 + iVert].tangent = t;
+    } else {
+      primData->vertices[primData->indices[iFace * 3 + iVert]].tangent = t;
+    }
+  };
+}; // struct PrimitiveData
+
+} // namespace iris::Renderer::io
 
 namespace nlohmann {
 
@@ -510,6 +650,11 @@ struct GLTF {
   std::optional<int> scene;
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
+
+  tl::expected<std::vector<iris::Renderer::io::PrimitiveData>,
+               std::system_error>
+  ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
+            std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -805,390 +950,286 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
-} // namespace gltf
-
-namespace iris::Renderer::io {
-
-struct PrimitiveData {
-  struct Vertex {
-    glm::vec3 position{0.0f, 0.0f, 0.0f};
-    glm::vec3 normal{0.0f, 0.0f, 0.0f};
-    glm::vec4 tangent{0.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec2 texcoord{0.0f, 0.0f};
-  };
-
-  std::vector<Vertex> vertices;
-  std::vector<unsigned int> indices;
-
-  VkPrimitiveTopology topology;
-  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
-  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
-
-  void GenerateNormals() {
-    if (indices.empty()) {
-      std::size_t const num = vertices.size();
-      for (std::size_t i = 0; i < num; i += 3) {
-        auto&& a = vertices[i].position;
-        auto&& b = vertices[i + 1].position;
-        auto&& c = vertices[i + 2].position;
-        auto const n = glm::normalize(glm::cross(b - a, c - a));
-        vertices[i].normal = n;
-        vertices[i + 1].normal = n;
-        vertices[i + 2].normal = n;
-      }
-    } else {
-      std::size_t const num = indices.size();
-      for (std::size_t i = 0; i < num; i += 3) {
-        auto&& a = vertices[indices[i]].position;
-        auto&& b = vertices[indices[i + 1]].position;
-        auto&& c = vertices[indices[i + 2]].position;
-        auto const n = glm::normalize(glm::cross(b - a, c - a));
-        vertices[indices[i]].normal = n;
-        vertices[indices[i + 1]].normal = n;
-        vertices[indices[i + 2]].normal = n;
-      }
-    }
-  } // GenerateNormals
-
-  bool GenerateTangents() {
-    std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
-    ifc->m_getNumFaces = &PrimitiveData::GetNumFaces;
-    ifc->m_getNumVerticesOfFace = &PrimitiveData::GetNumVerticesOfFace;
-    ifc->m_getPosition = &PrimitiveData::GetPosition;
-    ifc->m_getNormal = &PrimitiveData::GetNormal;
-    ifc->m_getTexCoord = &PrimitiveData::GetTexCoord;
-    ifc->m_setTSpaceBasic = &PrimitiveData::SetTSpaceBasic;
-    ifc->m_setTSpace = nullptr;
-
-    std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
-    ctx->m_pInterface = ifc.get();
-    ctx->m_pUserData = this;
-
-    return genTangSpaceDefault(ctx.get());
-  }
-
-  static int GetNumFaces(SMikkTSpaceContext const* pContext) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    if (primData->indices.empty()) {
-      return primData->vertices.size() / 3;
-    } else {
-      return primData->indices.size() / 3;
-    }
-  } // GetNumFaces
-
-  static int GetNumVerticesOfFace(SMikkTSpaceContext const*, int const) {
-    return 3;
-  } // GetNumVerticesOfFace
-
-  static void GetPosition(SMikkTSpaceContext const* pContext, float fvPosOut[],
-                          int const iFace, int const iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec3 p;
-    if (primData->indices.empty()) {
-      p = primData->vertices[iFace * 3 + iVert].position;
-    } else {
-      p = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
-    }
-
-    fvPosOut[0] = p.x;
-    fvPosOut[1] = p.y;
-    fvPosOut[2] = p.z;
-  } // GetPosition
-
-  static void GetNormal(SMikkTSpaceContext const* pContext, float fvNormOut[],
-                        const int iFace, const int iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec3 n;
-    if (primData->indices.empty()) {
-      n = primData->vertices[iFace * 3 + iVert].position;
-    } else {
-      n = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
-    }
-
-    fvNormOut[0] = n.x;
-    fvNormOut[1] = n.y;
-    fvNormOut[2] = n.z;
-  };
-
-  static void GetTexCoord(SMikkTSpaceContext const* pContext, float fvTexcOut[],
-                          const int iFace, const int iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec2 c;
-    if (primData->indices.empty()) {
-      c = primData->vertices[iFace * 3 + iVert].texcoord;
-    } else {
-      c = primData->vertices[primData->indices[iFace * 3 + iVert]].texcoord;
-    }
-
-    fvTexcOut[0] = c.x;
-    fvTexcOut[1] = c.y;
-  }
-
-  static void SetTSpaceBasic(SMikkTSpaceContext const* pContext,
-                             float const fvTangent[], float const fSign,
-                             int const iFace, int const iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec4 t{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
-
-    if (primData->indices.empty()) {
-      primData->vertices[iFace * 3 + iVert].tangent = t;
-    } else {
-      primData->vertices[primData->indices[iFace * 3 + iVert]].tangent = t;
-    }
-  };
-}; // struct PrimitiveData
-
-tl::expected<std::vector<PrimitiveData>, std::system_error>
-ParseNodes(gltf::GLTF const& g,
-           std::vector<std::vector<std::byte>> buffersBytes,
-           filesystem::path const& path) noexcept {
+tl::expected<std::vector<iris::Renderer::io::PrimitiveData>, std::system_error>
+GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
+                filesystem::path const& path,
+                std::vector<std::vector<std::byte>> const& buffersBytes) {
   IRIS_LOG_ENTER();
+  std::vector<iris::Renderer::io::PrimitiveData> primitiveData;
 
-  auto&& nodes = g.nodes.value_or<decltype(gltf::GLTF::nodes)::value_type>({});
-  std::vector<PrimitiveData> primitives;
+  if (!nodes || nodes->size() < nodeIdx) {
+    iris::GetLogger()->error("not enough nodes to handle index {}", nodeIdx);
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed,
+                        "node defines mesh, but not enough meshes"));
+  }
 
-  for (auto&& node : nodes) {
-    // Node:
-    // std::optional<std::vector<int>> children; // indices into gltf.nodes
-    // std::optional<glm::mat4x4> matrix;
-    // std::optional<int> mesh; // index into gltf.meshes
-    // std::optional<glm::quat> rotation;
-    // std::optional<glm::vec3> scale;
-    // std::optional<glm::vec3> translation;
-    // std::optional<std::string> name;
+  auto&& node = (*nodes)[nodeIdx];
+  // Node:
+  // std::optional<std::vector<int>> children; // indices into gltf.nodes
+  // std::optional<glm::mat4x4> matrix;
+  // std::optional<int> mesh; // index into gltf.meshes
+  // std::optional<glm::quat> rotation;
+  // std::optional<glm::vec3> scale;
+  // std::optional<glm::vec3> translation;
+  // std::optional<std::string> name;
 
-    GetLogger()->trace("{}", json(node).dump());
-    std::string const nodeName =
-      path.string() + (node.name ? ":" + *node.name : "");
+  iris::GetLogger()->trace("{}", json(node).dump());
+  std::string const nodeName =
+    path.string() + (node.name ? ":" + *node.name : "");
 
-    if (node.children && !node.children->empty()) {
-      GetLogger()->warn("Node children not implemented");
-      continue;
+  glm::mat4x4 nodeMat(1.f);
+
+  if (node.matrix) {
+    nodeMat = *node.matrix;
+    if (node.translation || node.rotation || node.scale) {
+      iris::GetLogger()->warn("node has both matrix and TRS; using matrix");
     }
+  } else {
+    if (node.translation) nodeMat *= glm::translate({}, *node.translation);
+    if (node.rotation) nodeMat *= glm::mat4_cast(*node.rotation);
+    if (node.scale) nodeMat *= glm::scale({}, *node.scale);
+  }
 
-    if (!node.mesh) {
-      GetLogger()->warn("Transform-only nodes not implemented");
-      continue;
-    }
+  auto&& children =
+    node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
-    if (!g.meshes || g.meshes->empty()) {
+  if (!node.mesh) {
+    // Transform-only node
+    if (children.empty()) {
+      iris::GetLogger()->warn("transform-only node with no children; ignoring");
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "node defines mesh, but no meshes"));
+      return primitiveData;
     }
+  }
 
-    auto&& meshes = *g.meshes;
-    if (meshes.size() < static_cast<std::size_t>(*node.mesh)) {
+  for (auto&& child : children) {
+    if (auto d = ParseNode(child, parentMat * nodeMat, path, buffersBytes)) {
+      primitiveData.insert(primitiveData.end(), d->begin(), d->end());
+    } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "node defines mesh, but not enough meshes"));
+      return tl::unexpected(d.error());
+    }
+  }
+
+  if (!meshes || meshes->empty()) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      iris::Error::kFileParseFailed, "node defines mesh, but no meshes"));
+  }
+
+  if (meshes->size() < static_cast<std::size_t>(*node.mesh)) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileParseFailed,
+                        "node defines mesh, but not enough meshes"));
+  }
+
+  auto&& mesh = (*meshes)[*node.mesh];
+  // Mesh:
+  // std::vector<Primitive> primitives;
+
+  iris::GetLogger()->trace("{}", json(mesh).dump());
+  std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
+
+  for (auto&& primitive : mesh.primitives) {
+    // Primitive:
+    // std::map<std::string, int> attributes; // index into gltf.accessors
+    // std::optional<int> indices;            // index into gltf.accessors
+    // std::optional<int> material;           // index into gltf.materials
+    // std::optional<int> mode;
+    // std::optional<std::vector<int>> targets;
+    //
+    // From the glTF 2.0 spec:
+    //
+    // Implementation note: Each primitive corresponds to one WebGL draw
+    // call (engines are, of course, free to batch draw calls). When a
+    // primitive's indices property is defined, it references the accessor
+    // to use for index data, and GL's drawElements function should be used.
+    // When the indices property is not defined, GL's drawArrays function
+    // should be used with a count equal to the count property of any of the
+    // accessors referenced by the attributes property (they are all equal
+    // for a given primitive).
+    //
+    // Implementation note: When positions are not specified, client
+    // implementations should skip primitive's rendering unless its
+    // positions are provided by other means (e.g., by extension). This
+    // applies to both indexed and non-indexed geometry.
+    //
+    // Implementation note: When normals are not specified, client
+    // implementations should calculate flat normals.
+    //
+    // Implementation note: When tangents are not specified, client
+    // implementations should calculate tangents using default MikkTSpace
+    // algorithms. For best results, the mesh triangles should also be
+    // processed using default MikkTSpace algorithms.
+    //
+    // Implementation note: Vertices of the same triangle should have the
+    // same tangent.w value. When vertices of the same triangle have
+    // different tangent.w values, tangent space is considered undefined.
+    //
+    // Implementation note: When normals and tangents are specified, client
+    // implementations should compute the bitangent by taking the cross
+    // product of the normal and tangent xyz vectors and multiplying against
+    // the w component of the tangent: bitangent = cross(normal,
+    // tangent.xyz) * tangent.w
+
+    iris::Renderer::io::PrimitiveData primData;
+
+    if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
+      primData.topology = *t;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(t.error());
     }
 
-    auto&& mesh = meshes[*node.mesh];
-    // Mesh:
-    // std::vector<Primitive> primitives;
-
-    GetLogger()->trace("{}", json(mesh).dump());
-    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
-
-    for (auto&& primitive : mesh.primitives) {
-      // Primitive:
-      // std::map<std::string, int> attributes; // index into gltf.accessors
-      // std::optional<int> indices;            // index into gltf.accessors
-      // std::optional<int> material;           // index into gltf.materials
-      // std::optional<int> mode;
-      // std::optional<std::vector<int>> targets;
-      //
-      // From the glTF 2.0 spec:
-      //
-      // Implementation note: Each primitive corresponds to one WebGL draw
-      // call (engines are, of course, free to batch draw calls). When a
-      // primitive's indices property is defined, it references the accessor
-      // to use for index data, and GL's drawElements function should be used.
-      // When the indices property is not defined, GL's drawArrays function
-      // should be used with a count equal to the count property of any of the
-      // accessors referenced by the attributes property (they are all equal
-      // for a given primitive).
-      //
-      // Implementation note: When positions are not specified, client
-      // implementations should skip primitive's rendering unless its
-      // positions are provided by other means (e.g., by extension). This
-      // applies to both indexed and non-indexed geometry.
-      //
-      // Implementation note: When normals are not specified, client
-      // implementations should calculate flat normals.
-      //
-      // Implementation note: When tangents are not specified, client
-      // implementations should calculate tangents using default MikkTSpace
-      // algorithms. For best results, the mesh triangles should also be
-      // processed using default MikkTSpace algorithms.
-      //
-      // Implementation note: Vertices of the same triangle should have the
-      // same tangent.w value. When vertices of the same triangle have
-      // different tangent.w values, tangent space is considered undefined.
-      //
-      // Implementation note: When normals and tangents are specified, client
-      // implementations should compute the bitangent by taking the cross
-      // product of the normal and tangent xyz vectors and multiplying against
-      // the w component of the tangent: bitangent = cross(normal,
-      // tangent.xyz) * tangent.w
-
-      PrimitiveData primData;
-
-      if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-        primData.topology = *t;
+    // First get the indices if present. We're only getting the indices here
+    // to use them for possible normal/tangent generation. That way the
+    // original format of the indices can be used in the draw call.
+    if (primitive.indices) {
+      std::array<int, 3> componentTypes{5123, 5125};
+      if (auto i = gltf::GetAccessorData<unsigned int>(
+            *primitive.indices, "SCALAR", componentTypes, false, accessors,
+            bufferViews, buffersBytes)) {
+        primData.indices = std::move(*i);
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(t.error());
+        return tl::unexpected(i.error());
       }
+    }
 
-      // First get the indices if present. We're only getting the indices here
-      // to use them for possible normal/tangent generation. That way the
-      // original format of the indices can be used in the draw call.
-      if (primitive.indices) {
-        std::array<int, 3> componentTypes{5123, 5125};
-        if (auto i = gltf::GetAccessorData<unsigned int>(
-              *primitive.indices, "SCALAR", componentTypes, false, g.accessors,
-              g.bufferViews, buffersBytes)) {
-          primData.indices = std::move(*i);
+    //
+    // Next get the positions
+    //
+    std::vector<glm::vec3> positions;
+    for (auto&& [semantic, index] : primitive.attributes) {
+      if (semantic == "POSITION") {
+        if (auto p = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
+                                                      accessors, bufferViews,
+                                                      buffersBytes)) {
+          positions = std::move(*p);
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(i.error());
+          return tl::unexpected(p.error());
         }
       }
-
-      //
-      // Next get the positions
-      //
-      std::vector<glm::vec3> positions;
-      for (auto&& [semantic, index] : primitive.attributes) {
-        if (semantic == "POSITION") {
-          if (auto p = gltf::GetAccessorData<glm::vec3>(
-                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            positions = std::move(*p);
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(p.error());
-          }
-        }
-      }
-
-      // primitives with no positions are "ignored"
-      if (positions.empty()) continue;
-
-      //
-      // Now get texcoords, normals, and tangents
-      //
-      std::vector<glm::vec2> texcoords;
-      std::vector<glm::vec3> normals;
-      std::vector<glm::vec4> tangents;
-
-      for (auto&& [semantic, index] : primitive.attributes) {
-        if (semantic == "TEXCOORD_0") {
-          if (auto t = gltf::GetAccessorData<glm::vec2>(
-                index, "VEC2", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            texcoords = std::move(*t);
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(t.error());
-          }
-        } else if (semantic == "NORMAL") {
-          if (auto n = gltf::GetAccessorData<glm::vec3>(
-                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            normals = std::move(*n);
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(n.error());
-          }
-        } else if (semantic == "TANGENT") {
-          if (auto t = gltf::GetAccessorData<glm::vec4>(
-                index, "VEC4", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            tangents = std::move(*t);
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(t.error());
-          }
-        }
-      }
-
-      std::size_t const num = positions.size();
-      primData.vertices.resize(num);
-
-      for (std::size_t i = 0; i < num; ++i) {
-        primData.vertices[i].position = positions[i];
-      }
-
-      if (!texcoords.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].texcoord = texcoords[i];
-        }
-      }
-
-      if (!normals.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].normal = normals[i];
-        }
-      } else {
-        primData.GenerateNormals();
-      }
-
-      if (!tangents.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].tangent = tangents[i];
-        }
-      } else {
-        if (!primData.GenerateTangents()) {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(std::system_error(
-            iris::Error::kFileParseFailed, "Unable to generate tangent space"));
-        }
-      }
-
-      GetLogger()->debug("Primitive has {} vertices", primData.vertices.size());
-
-      primData.bindingDescriptions.push_back(
-        {0, sizeof(PrimitiveData::Vertex), VK_VERTEX_INPUT_RATE_VERTEX});
-
-      if (texcoords.empty()) {
-        primData.attributeDescriptions.resize(3);
-      } else {
-        primData.attributeDescriptions.resize(4);
-      }
-
-      primData.attributeDescriptions[0] = {
-        0, 0, VK_FORMAT_R32G32B32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, position)};
-
-      primData.attributeDescriptions[1] = {
-        1, 0, VK_FORMAT_R32G32B32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, normal)};
-
-      primData.attributeDescriptions[2] = {
-        2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, tangent)};
-
-      if (!texcoords.empty()) {
-        primData.attributeDescriptions[3] = {
-          3, 0, VK_FORMAT_R32G32_SFLOAT,
-          offsetof(PrimitiveData::Vertex, texcoord)};
-      }
-
-      primitives.push_back(primData);
     }
+
+    // primitives with no positions are "ignored"
+    if (positions.empty()) continue;
+
+    //
+    // Now get texcoords, normals, and tangents
+    //
+    std::vector<glm::vec2> texcoords;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec4> tangents;
+
+    for (auto&& [semantic, index] : primitive.attributes) {
+      if (semantic == "TEXCOORD_0") {
+        if (auto t = gltf::GetAccessorData<glm::vec2>(index, "VEC2", 5126, true,
+                                                      accessors, bufferViews,
+                                                      buffersBytes)) {
+          texcoords = std::move(*t);
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(t.error());
+        }
+      } else if (semantic == "NORMAL") {
+        if (auto n = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
+                                                      accessors, bufferViews,
+                                                      buffersBytes)) {
+          normals = std::move(*n);
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(n.error());
+        }
+      } else if (semantic == "TANGENT") {
+        if (auto t = gltf::GetAccessorData<glm::vec4>(index, "VEC4", 5126, true,
+                                                      accessors, bufferViews,
+                                                      buffersBytes)) {
+          tangents = std::move(*t);
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(t.error());
+        }
+      }
+    }
+
+    std::size_t const num = positions.size();
+    primData.vertices.resize(num);
+
+    for (std::size_t i = 0; i < num; ++i) {
+      primData.vertices[i].position = positions[i];
+    }
+
+    if (!texcoords.empty()) {
+      for (std::size_t i = 0; i < num; ++i) {
+        primData.vertices[i].texcoord = texcoords[i];
+      }
+    }
+
+    if (!normals.empty()) {
+      for (std::size_t i = 0; i < num; ++i) {
+        primData.vertices[i].normal = normals[i];
+      }
+    } else {
+      primData.GenerateNormals();
+    }
+
+    if (!tangents.empty()) {
+      for (std::size_t i = 0; i < num; ++i) {
+        primData.vertices[i].tangent = tangents[i];
+      }
+    } else {
+      if (!primData.GenerateTangents()) {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(std::system_error(
+          iris::Error::kFileParseFailed, "Unable to generate tangent space"));
+      }
+    }
+
+    iris::GetLogger()->debug("Primitive has {} vertices",
+                             primData.vertices.size());
+
+    primData.bindingDescriptions.push_back(
+      {0, sizeof(iris::Renderer::io::PrimitiveData::Vertex),
+       VK_VERTEX_INPUT_RATE_VERTEX});
+
+    if (texcoords.empty()) {
+      primData.attributeDescriptions.resize(3);
+    } else {
+      primData.attributeDescriptions.resize(4);
+    }
+
+    primData.attributeDescriptions[0] = {
+      0, 0, VK_FORMAT_R32G32B32_SFLOAT,
+      offsetof(iris::Renderer::io::PrimitiveData::Vertex, position)};
+
+    primData.attributeDescriptions[1] = {
+      1, 0, VK_FORMAT_R32G32B32_SFLOAT,
+      offsetof(iris::Renderer::io::PrimitiveData::Vertex, normal)};
+
+    primData.attributeDescriptions[2] = {
+      2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
+      offsetof(iris::Renderer::io::PrimitiveData::Vertex, tangent)};
+
+    if (!texcoords.empty()) {
+      primData.attributeDescriptions[3] = {
+        3, 0, VK_FORMAT_R32G32_SFLOAT,
+        offsetof(iris::Renderer::io::PrimitiveData::Vertex, texcoord)};
+    }
+
+    primitiveData.push_back(primData);
   }
 
   IRIS_LOG_LEAVE();
-  return primitives;
-} // ParseNodes
+  return primitiveData;
+} // GLTF::ParseNode
+
+} // namespace gltf
+
+namespace iris::Renderer::io {
 
 tl::expected<Pipeline, std::system_error>
 CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
@@ -1442,245 +1483,22 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-  //
-  // Read all the primitives
-  //
-  auto&& nodes = g.nodes.value_or<decltype(gltf::GLTF::nodes)::value_type>({});
-  std::vector<PrimitiveData> primitives;
-
-  for (auto&& node : nodes) {
-    // Node:
-    // std::optional<std::vector<int>> children; // indices into gltf.nodes
-    // std::optional<glm::mat4x4> matrix;
-    // std::optional<int> mesh; // index into gltf.meshes
-    // std::optional<glm::quat> rotation;
-    // std::optional<glm::vec3> scale;
-    // std::optional<glm::vec3> translation;
-    // std::optional<std::string> name;
-
-    GetLogger()->trace("{}", json(node).dump());
-    std::string const nodeName =
-      path.string() + (node.name ? ":" + *node.name : "");
-
-    if (node.children && !node.children->empty()) {
-      GetLogger()->warn("Node children not implemented");
-      continue;
-    }
-
-    if (!node.mesh) {
-      GetLogger()->warn("Transform-only nodes not implemented");
-      continue;
-    }
-
-    if (!g.meshes || g.meshes->empty()) {
-      IRIS_LOG_LEAVE();
-      return std::system_error(Error::kFileParseFailed,
-                               "node defines mesh, but no meshes");
-    }
-
-    auto&& meshes = *g.meshes;
-    if (meshes.size() < static_cast<std::size_t>(*node.mesh)) {
-      IRIS_LOG_LEAVE();
-      return std::system_error(Error::kFileParseFailed,
-                               "node defines mesh, but not enough meshes");
-    }
-
-    auto&& mesh = meshes[*node.mesh];
-    // Mesh:
-    // std::vector<Primitive> primitives;
-
-    GetLogger()->trace("{}", json(mesh).dump());
-    std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
-
-    for (auto&& primitive : mesh.primitives) {
-      // Primitive:
-      // std::map<std::string, int> attributes; // index into gltf.accessors
-      // std::optional<int> indices;            // index into gltf.accessors
-      // std::optional<int> material;           // index into gltf.materials
-      // std::optional<int> mode;
-      // std::optional<std::vector<int>> targets;
-      //
-      // From the glTF 2.0 spec:
-      //
-      // Implementation note: Each primitive corresponds to one WebGL draw
-      // call (engines are, of course, free to batch draw calls). When a
-      // primitive's indices property is defined, it references the accessor
-      // to use for index data, and GL's drawElements function should be used.
-      // When the indices property is not defined, GL's drawArrays function
-      // should be used with a count equal to the count property of any of the
-      // accessors referenced by the attributes property (they are all equal
-      // for a given primitive).
-      //
-      // Implementation note: When positions are not specified, client
-      // implementations should skip primitive's rendering unless its
-      // positions are provided by other means (e.g., by extension). This
-      // applies to both indexed and non-indexed geometry.
-      //
-      // Implementation note: When normals are not specified, client
-      // implementations should calculate flat normals.
-      //
-      // Implementation note: When tangents are not specified, client
-      // implementations should calculate tangents using default MikkTSpace
-      // algorithms. For best results, the mesh triangles should also be
-      // processed using default MikkTSpace algorithms.
-      //
-      // Implementation note: Vertices of the same triangle should have the
-      // same tangent.w value. When vertices of the same triangle have
-      // different tangent.w values, tangent space is considered undefined.
-      //
-      // Implementation note: When normals and tangents are specified, client
-      // implementations should compute the bitangent by taking the cross
-      // product of the normal and tangent xyz vectors and multiplying against
-      // the w component of the tangent: bitangent = cross(normal,
-      // tangent.xyz) * tangent.w
-
-      PrimitiveData primData;
-
-      if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-        primData.topology = *t;
-      } else {
-        IRIS_LOG_LEAVE();
-        return t.error();
-      }
-
-      // First get the indices if present. We're only getting the indices here
-      // to use them for possible normal/tangent generation. That way the
-      // original format of the indices can be used in the draw call.
-      if (primitive.indices) {
-        std::array<int, 3> componentTypes{5123, 5125};
-        if (auto i = gltf::GetAccessorData<unsigned int>(
-              *primitive.indices, "SCALAR", componentTypes, false, g.accessors,
-              g.bufferViews, buffersBytes)) {
-          primData.indices = std::move(*i);
-        } else {
-          IRIS_LOG_LEAVE();
-          return i.error();
-        }
-      }
-
-      //
-      // Next get the positions
-      //
-      std::vector<glm::vec3> positions;
-      for (auto&& [semantic, index] : primitive.attributes) {
-        if (semantic == "POSITION") {
-          if (auto p = gltf::GetAccessorData<glm::vec3>(
-                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            positions = std::move(*p);
-          } else {
-            IRIS_LOG_LEAVE();
-            return p.error();
-          }
-        }
-      }
-
-      // primitives with no positions are "ignored"
-      if (positions.empty()) continue;
-
-      //
-      // Now get texcoords, normals, and tangents
-      //
-      std::vector<glm::vec2> texcoords;
-      std::vector<glm::vec3> normals;
-      std::vector<glm::vec4> tangents;
-
-      for (auto&& [semantic, index] : primitive.attributes) {
-        if (semantic == "TEXCOORD_0") {
-          if (auto t = gltf::GetAccessorData<glm::vec2>(
-                index, "VEC2", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            texcoords = std::move(*t);
-          } else {
-            IRIS_LOG_LEAVE();
-            return t.error();
-          }
-        } else if (semantic == "NORMAL") {
-          if (auto n = gltf::GetAccessorData<glm::vec3>(
-                index, "VEC3", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            normals = std::move(*n);
-          } else {
-            IRIS_LOG_LEAVE();
-            return n.error();
-          }
-        } else if (semantic == "TANGENT") {
-          if (auto t = gltf::GetAccessorData<glm::vec4>(
-                index, "VEC4", 5126, true, g.accessors, g.bufferViews,
-                buffersBytes)) {
-            tangents = std::move(*t);
-          } else {
-            IRIS_LOG_LEAVE();
-            return t.error();
-          }
-        }
-      }
-
-      std::size_t const num = positions.size();
-      primData.vertices.resize(num);
-
-      for (std::size_t i = 0; i < num; ++i) {
-        primData.vertices[i].position = positions[i];
-      }
-
-      if (!texcoords.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].texcoord = texcoords[i];
-        }
-      }
-
-      if (!normals.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].normal = normals[i];
-        }
-      } else {
-        primData.GenerateNormals();
-      }
-
-      if (!tangents.empty()) {
-        for (std::size_t i = 0; i < num; ++i) {
-          primData.vertices[i].tangent = tangents[i];
-        }
-      } else {
-        if (!primData.GenerateTangents()) {
-          IRIS_LOG_LEAVE();
-          return std::system_error(iris::Error::kFileParseFailed,
-                                   "Unable to generate tangent space");
-        }
-      }
-
-      GetLogger()->debug("Primitive has {} vertices", primData.vertices.size());
-
-      primData.bindingDescriptions.push_back(
-        {0, sizeof(PrimitiveData::Vertex), VK_VERTEX_INPUT_RATE_VERTEX});
-
-      if (texcoords.empty()) {
-        primData.attributeDescriptions.resize(3);
-      } else {
-        primData.attributeDescriptions.resize(4);
-      }
-
-      primData.attributeDescriptions[0] = {
-        0, 0, VK_FORMAT_R32G32B32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, position)};
-
-      primData.attributeDescriptions[1] = {
-        1, 0, VK_FORMAT_R32G32B32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, normal)};
-
-      primData.attributeDescriptions[2] = {
-        2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
-        offsetof(PrimitiveData::Vertex, tangent)};
-
-      if (!texcoords.empty()) {
-        primData.attributeDescriptions[3] = {
-          3, 0, VK_FORMAT_R32G32_SFLOAT,
-          offsetof(PrimitiveData::Vertex, texcoord)};
-      }
-
-      primitives.push_back(primData);
-    }
+  if (!g.scene) {
+    GetLogger()->warn("no default scene specified; using first node");
+    g.scene = 0;
   }
+
+  //
+  // Parse the scene graph
+  //
+  std::vector<PrimitiveData> primitives;
+  if (auto p = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
+    primitives = std::move(*p);
+  } else {
+    IRIS_LOG_LEAVE();
+    return p.error();
+  }
+  GetLogger()->warn("parsed {} primitives", primitives.size());
 
   IRIS_LOG_LEAVE();
   return std::system_error(Error::kFileParseFailed,
