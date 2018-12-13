@@ -125,7 +125,7 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer,
     ImGui::PlotHistogram(
       "Frame Times", frameTimes.data(), frameTimes.size(), 0,
       fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
-      100.f, ImVec2(0, 100));
+      100.f, ImVec2(0, 50));
     ImGui::End();
   }
 

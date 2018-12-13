@@ -8,158 +8,14 @@
 #include "gsl/gsl"
 #include "logging.h"
 #include "nlohmann/json.hpp"
-#include "renderer/buffer.h"
-#include "renderer/draw.h"
-#include "renderer/image.h"
 #include "renderer/impl.h"
 #include "renderer/io/read_file.h"
-#include "renderer/mikktspace.h"
-#include "renderer/pipeline.h"
-#include "renderer/shader.h"
+#include "renderer/mesh.h"
 #include "stb_image.h"
 #include <map>
 #include <optional>
 #include <string>
 #include <vector>
-
-namespace iris::Renderer::io {
-
-struct PrimitiveData {
-  struct Vertex {
-    glm::vec3 position{0.0f, 0.0f, 0.0f};
-    glm::vec3 normal{0.0f, 0.0f, 0.0f};
-    glm::vec4 tangent{0.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec2 texcoord{0.0f, 0.0f};
-  };
-
-  glm::mat4x4 matrix;
-  std::vector<Vertex> vertices;
-  std::vector<unsigned int> indices;
-
-  VkPrimitiveTopology topology;
-  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
-  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
-
-  void GenerateNormals() {
-    if (indices.empty()) {
-      std::size_t const num = vertices.size();
-      for (std::size_t i = 0; i < num; i += 3) {
-        auto&& a = vertices[i].position;
-        auto&& b = vertices[i + 1].position;
-        auto&& c = vertices[i + 2].position;
-        auto const n = glm::normalize(glm::cross(b - a, c - a));
-        vertices[i].normal = n;
-        vertices[i + 1].normal = n;
-        vertices[i + 2].normal = n;
-      }
-    } else {
-      std::size_t const num = indices.size();
-      for (std::size_t i = 0; i < num; i += 3) {
-        auto&& a = vertices[indices[i]].position;
-        auto&& b = vertices[indices[i + 1]].position;
-        auto&& c = vertices[indices[i + 2]].position;
-        auto const n = glm::normalize(glm::cross(b - a, c - a));
-        vertices[indices[i]].normal = n;
-        vertices[indices[i + 1]].normal = n;
-        vertices[indices[i + 2]].normal = n;
-      }
-    }
-  } // GenerateNormals
-
-  bool GenerateTangents() {
-    std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
-    ifc->m_getNumFaces = &PrimitiveData::GetNumFaces;
-    ifc->m_getNumVerticesOfFace = &PrimitiveData::GetNumVerticesOfFace;
-    ifc->m_getPosition = &PrimitiveData::GetPosition;
-    ifc->m_getNormal = &PrimitiveData::GetNormal;
-    ifc->m_getTexCoord = &PrimitiveData::GetTexCoord;
-    ifc->m_setTSpaceBasic = &PrimitiveData::SetTSpaceBasic;
-    ifc->m_setTSpace = nullptr;
-
-    std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
-    ctx->m_pInterface = ifc.get();
-    ctx->m_pUserData = this;
-
-    return genTangSpaceDefault(ctx.get());
-  }
-
-  static int GetNumFaces(SMikkTSpaceContext const* pContext) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    if (primData->indices.empty()) {
-      return primData->vertices.size() / 3;
-    } else {
-      return primData->indices.size() / 3;
-    }
-  } // GetNumFaces
-
-  static int GetNumVerticesOfFace(SMikkTSpaceContext const*, int const) {
-    return 3;
-  } // GetNumVerticesOfFace
-
-  static void GetPosition(SMikkTSpaceContext const* pContext, float fvPosOut[],
-                          int const iFace, int const iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec3 p;
-    if (primData->indices.empty()) {
-      p = primData->vertices[iFace * 3 + iVert].position;
-    } else {
-      p = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
-    }
-
-    fvPosOut[0] = p.x;
-    fvPosOut[1] = p.y;
-    fvPosOut[2] = p.z;
-  } // GetPosition
-
-  static void GetNormal(SMikkTSpaceContext const* pContext, float fvNormOut[],
-                        const int iFace, const int iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec3 n;
-    if (primData->indices.empty()) {
-      n = primData->vertices[iFace * 3 + iVert].position;
-    } else {
-      n = primData->vertices[primData->indices[iFace * 3 + iVert]].position;
-    }
-
-    fvNormOut[0] = n.x;
-    fvNormOut[1] = n.y;
-    fvNormOut[2] = n.z;
-  };
-
-  static void GetTexCoord(SMikkTSpaceContext const* pContext, float fvTexcOut[],
-                          const int iFace, const int iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec2 c;
-    if (primData->indices.empty()) {
-      c = primData->vertices[iFace * 3 + iVert].texcoord;
-    } else {
-      c = primData->vertices[primData->indices[iFace * 3 + iVert]].texcoord;
-    }
-
-    fvTexcOut[0] = c.x;
-    fvTexcOut[1] = c.y;
-  }
-
-  static void SetTSpaceBasic(SMikkTSpaceContext const* pContext,
-                             float const fvTangent[], float const fSign,
-                             int const iFace, int const iVert) {
-    auto primData = reinterpret_cast<PrimitiveData*>(pContext->m_pUserData);
-
-    glm::vec4 t{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
-
-    if (primData->indices.empty()) {
-      primData->vertices[iFace * 3 + iVert].tangent = t;
-    } else {
-      primData->vertices[primData->indices[iFace * 3 + iVert]].tangent = t;
-    }
-  };
-}; // struct PrimitiveData
-
-} // namespace iris::Renderer::io
 
 namespace nlohmann {
 
@@ -651,8 +507,7 @@ struct GLTF {
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
 
-  tl::expected<std::vector<iris::Renderer::io::PrimitiveData>,
-               std::system_error>
+  tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
   ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
@@ -804,7 +659,7 @@ GetAccessorData(int index, std::string const& accessorType,
   }
 
   auto&& accessor = (*accessors)[index];
-  iris::GetLogger()->trace("{}", json(accessor).dump());
+  iris::GetLogger()->trace("accessor: {}", json(accessor).dump());
 
   if (accessor.type != accessorType) {
     return tl::unexpected(std::system_error(iris::Error::kFileParseFailed,
@@ -848,7 +703,7 @@ GetAccessorData(int index, std::string const& accessorType,
   }
 
   auto&& bufferView = (*bufferViews)[*accessor.bufferView];
-  iris::GetLogger()->trace("{}", json(bufferView).dump());
+  iris::GetLogger()->trace("bufferView: {}", json(bufferView).dump());
 
   if (buffersBytes.size() < static_cast<std::size_t>(bufferView.buffer)) {
     return tl::unexpected(
@@ -950,18 +805,16 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
-tl::expected<std::vector<iris::Renderer::io::PrimitiveData>, std::system_error>
+tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
 GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
                 filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes) {
   IRIS_LOG_ENTER();
-  std::vector<iris::Renderer::io::PrimitiveData> primitiveData;
+  std::vector<iris::Renderer::MeshData> primitiveData;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
-    iris::GetLogger()->error("not enough nodes to handle index {}", nodeIdx);
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed,
-                        "node defines mesh, but not enough meshes"));
+      std::system_error(iris::Error::kFileParseFailed, "not enough nodes"));
   }
 
   auto&& node = (*nodes)[nodeIdx];
@@ -974,14 +827,14 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   // std::optional<glm::vec3> translation;
   // std::optional<std::string> name;
 
-  iris::GetLogger()->trace("{}", json(node).dump());
+  iris::GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
     path.string() + (node.name ? ":" + *node.name : "");
 
-  glm::mat4x4 nodeMat(1.f);
+  glm::mat4x4 nodeMat = parentMat;
 
   if (node.matrix) {
-    nodeMat = *node.matrix;
+    nodeMat *= *node.matrix;
     if (node.translation || node.rotation || node.scale) {
       iris::GetLogger()->warn("node has both matrix and TRS; using matrix");
     }
@@ -994,22 +847,18 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   auto&& children =
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
-  if (!node.mesh) {
-    // Transform-only node
-    if (children.empty()) {
-      iris::GetLogger()->warn("transform-only node with no children; ignoring");
-      IRIS_LOG_LEAVE();
-      return primitiveData;
-    }
-  }
-
   for (auto&& child : children) {
-    if (auto d = ParseNode(child, parentMat * nodeMat, path, buffersBytes)) {
+    if (auto d = ParseNode(child, nodeMat, path, buffersBytes)) {
       primitiveData.insert(primitiveData.end(), d->begin(), d->end());
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(d.error());
     }
+  }
+
+  if (!node.mesh) {
+    IRIS_LOG_ENTER();
+    return primitiveData;
   }
 
   if (!meshes || meshes->empty()) {
@@ -1029,7 +878,7 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   // Mesh:
   // std::vector<Primitive> primitives;
 
-  iris::GetLogger()->trace("{}", json(mesh).dump());
+  iris::GetLogger()->trace("mesh: {}", json(mesh).dump());
   std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
 
   for (auto&& primitive : mesh.primitives) {
@@ -1074,10 +923,11 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     // the w component of the tangent: bitangent = cross(normal,
     // tangent.xyz) * tangent.w
 
-    iris::Renderer::io::PrimitiveData primData;
+    iris::Renderer::MeshData meshData;
+    meshData.matrix = nodeMat;
 
     if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-      primData.topology = *t;
+      meshData.topology = *t;
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(t.error());
@@ -1091,7 +941,7 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
       if (auto i = gltf::GetAccessorData<unsigned int>(
             *primitive.indices, "SCALAR", componentTypes, false, accessors,
             bufferViews, buffersBytes)) {
-        primData.indices = std::move(*i);
+        meshData.indices = std::move(*i);
       } else {
         IRIS_LOG_LEAVE();
         return tl::unexpected(i.error());
@@ -1157,32 +1007,32 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     }
 
     std::size_t const num = positions.size();
-    primData.vertices.resize(num);
+    meshData.vertices.resize(num);
 
     for (std::size_t i = 0; i < num; ++i) {
-      primData.vertices[i].position = positions[i];
+      meshData.vertices[i].position = positions[i];
     }
 
     if (!texcoords.empty()) {
       for (std::size_t i = 0; i < num; ++i) {
-        primData.vertices[i].texcoord = texcoords[i];
+        meshData.vertices[i].texcoord = texcoords[i];
       }
     }
 
     if (!normals.empty()) {
       for (std::size_t i = 0; i < num; ++i) {
-        primData.vertices[i].normal = normals[i];
+        meshData.vertices[i].normal = normals[i];
       }
     } else {
-      primData.GenerateNormals();
+      meshData.GenerateNormals();
     }
 
     if (!tangents.empty()) {
       for (std::size_t i = 0; i < num; ++i) {
-        primData.vertices[i].tangent = tangents[i];
+        meshData.vertices[i].tangent = tangents[i];
       }
     } else {
-      if (!primData.GenerateTangents()) {
+      if (!meshData.GenerateTangents()) {
         IRIS_LOG_LEAVE();
         return tl::unexpected(std::system_error(
           iris::Error::kFileParseFailed, "Unable to generate tangent space"));
@@ -1190,37 +1040,37 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     }
 
     iris::GetLogger()->debug("Primitive has {} vertices",
-                             primData.vertices.size());
+                             meshData.vertices.size());
 
-    primData.bindingDescriptions.push_back(
-      {0, sizeof(iris::Renderer::io::PrimitiveData::Vertex),
+    meshData.bindingDescriptions.push_back(
+      {0, sizeof(iris::Renderer::MeshData::Vertex),
        VK_VERTEX_INPUT_RATE_VERTEX});
 
     if (texcoords.empty()) {
-      primData.attributeDescriptions.resize(3);
+      meshData.attributeDescriptions.resize(3);
     } else {
-      primData.attributeDescriptions.resize(4);
+      meshData.attributeDescriptions.resize(4);
     }
 
-    primData.attributeDescriptions[0] = {
+    meshData.attributeDescriptions[0] = {
       0, 0, VK_FORMAT_R32G32B32_SFLOAT,
-      offsetof(iris::Renderer::io::PrimitiveData::Vertex, position)};
+      offsetof(iris::Renderer::MeshData::Vertex, position)};
 
-    primData.attributeDescriptions[1] = {
+    meshData.attributeDescriptions[1] = {
       1, 0, VK_FORMAT_R32G32B32_SFLOAT,
-      offsetof(iris::Renderer::io::PrimitiveData::Vertex, normal)};
+      offsetof(iris::Renderer::MeshData::Vertex, normal)};
 
-    primData.attributeDescriptions[2] = {
+    meshData.attributeDescriptions[2] = {
       2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,
-      offsetof(iris::Renderer::io::PrimitiveData::Vertex, tangent)};
+      offsetof(iris::Renderer::MeshData::Vertex, tangent)};
 
     if (!texcoords.empty()) {
-      primData.attributeDescriptions[3] = {
+      meshData.attributeDescriptions[3] = {
         3, 0, VK_FORMAT_R32G32_SFLOAT,
-        offsetof(iris::Renderer::io::PrimitiveData::Vertex, texcoord)};
+        offsetof(iris::Renderer::MeshData::Vertex, texcoord)};
     }
 
-    primitiveData.push_back(primData);
+    primitiveData.push_back(meshData);
   }
 
   IRIS_LOG_LEAVE();
@@ -1231,12 +1081,13 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
 
 namespace iris::Renderer::io {
 
+#if 0
 tl::expected<Pipeline, std::system_error>
-CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
+CreatePipeline(MeshData& meshData, std::string const& ) noexcept {
   IRIS_LOG_ENTER();
 
   std::vector<std::string> shaderMacros;
-  if (primData.attributeDescriptions.size() == 4) {
+  if (meshData.attributeDescriptions.size() == 4) {
     shaderMacros.push_back("-DHAS_TEXCOORDS");
   }
 
@@ -1257,7 +1108,7 @@ CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
     IRIS_LOG_LEAVE();
     return tl::unexpected(fs.error());
   }
-#if 0
+
   absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
   descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
                                    VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
@@ -1271,8 +1122,6 @@ CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
     IRIS_LOG_LEAVE();
     return tl::unexpected(d.error());
   }
-#endif
-#if 0
 
   if (auto d = Renderer::AllocateDescriptorSets(
         descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
@@ -1317,12 +1166,11 @@ CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
   absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
   pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT, 0,
                            sizeof(glm::vec2) * 2};
-#endif
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
     VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssemblyStateCI.topology = primData.topology;
+  inputAssemblyStateCI.topology = meshData.topology;
 
   VkPipelineViewportStateCreateInfo viewportStateCI = {};
   viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1368,16 +1216,18 @@ CreatePipeline(PrimitiveData& primData, std::string const& ) noexcept {
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
   auto p = Pipeline::CreateGraphics(
-    {}, {}, shaders, primData.bindingDescriptions,
-    primData.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+    {}, {}, shaders, meshData.bindingDescriptions,
+    meshData.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
     rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
     colorBlendAttachmentStates, dynamicStates, 0, "");
 
   IRIS_LOG_LEAVE();
   return p;
 } // CreatePipeline
+#endif
 
-std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
+tl::expected<std::vector<MeshData>, std::system_error>
+ReadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
@@ -1389,12 +1239,12 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       j = json::parse(*bytes);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
-      return std::system_error(Error::kFileParseFailed,
-                               fmt::format("Parsing failed: {}", e.what()));
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, fmt::format("Parsing failed: {}", e.what())));
     }
   } else {
     IRIS_LOG_LEAVE();
-    return bytes.error();
+    return tl::unexpected(bytes.error());
   }
 
   gltf::GLTF g;
@@ -1402,25 +1252,25 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
     g = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
-    return std::system_error(Error::kFileParseFailed,
-                             fmt::format("Parsing failed: {}", e.what()));
+    return tl::unexpected(std::system_error(
+      Error::kFileParseFailed, fmt::format("Parsing failed: {}", e.what())));
   }
 
   if (g.asset.version != "2.0") {
     if (g.asset.minVersion) {
       if (g.asset.minVersion != "2.0") {
         IRIS_LOG_LEAVE();
-        return std::system_error(Error::kFileParseFailed,
-                                 fmt::format("Unsupported version: {} / {}",
-                                             g.asset.version,
-                                             *g.asset.minVersion));
+        return tl::unexpected(
+          std::system_error(Error::kFileParseFailed,
+                            fmt::format("Unsupported version: {} / {}",
+                                        g.asset.version, *g.asset.minVersion)));
       }
     } else {
       IRIS_LOG_LEAVE();
-      return std::system_error(
+      return tl::unexpected(std::system_error(
         Error::kFileParseFailed,
         fmt::format("Unsupported version: {} and no minVersion",
-                    g.asset.version));
+                    g.asset.version)));
     }
   }
 
@@ -1443,8 +1293,8 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       }
     } else {
       IRIS_LOG_LEAVE();
-      return std::system_error(Error::kFileParseFailed,
-                               "unexpected buffer with no uri");
+      return tl::unexpected(std::system_error(Error::kFileParseFailed,
+                                              "unexpected buffer with no uri"));
     }
   }
 
@@ -1465,8 +1315,8 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4);
           !pixels) {
         IRIS_LOG_LEAVE();
-        return std::system_error(Error::kFileNotSupported,
-                                 stbi_failure_reason());
+        return tl::unexpected(
+          std::system_error(Error::kFileNotSupported, stbi_failure_reason()));
       } else {
         imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
                                  reinterpret_cast<std::byte*>(pixels) +
@@ -1478,8 +1328,8 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       imagesBytes.push_back(buffersBytes[*image.bufferView]);
     } else {
       IRIS_LOG_LEAVE();
-      return std::system_error(Error::kFileNotSupported,
-                               "image with no uri or bufferView");
+      return tl::unexpected(std::system_error(
+        Error::kFileNotSupported, "image with no uri or bufferView"));
     }
   }
 
@@ -1491,18 +1341,16 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
   //
   // Parse the scene graph
   //
-  std::vector<PrimitiveData> primitives;
+  std::vector<MeshData> meshData;
   if (auto p = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
-    primitives = std::move(*p);
+    meshData = std::move(*p);
   } else {
     IRIS_LOG_LEAVE();
-    return p.error();
+    return tl::unexpected(p.error());
   }
-  GetLogger()->warn("parsed {} primitives", primitives.size());
 
   IRIS_LOG_LEAVE();
-  return std::system_error(Error::kFileParseFailed,
-                           "GLTF files not implemented");
+  return meshData;
 
 #if 0
       std::shared_ptr<Pipeline> pipeline;
@@ -1511,7 +1359,7 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       std::shared_ptr<Buffer> indexBuffer;
       std::shared_ptr<Buffer> vertexBuffer;
 
-      if (auto p = CreatePipeline(primData, meshName)) {
+      if (auto p = CreatePipeline(meshData, meshName)) {
         pipeline.reset(new Pipeline(std::move(*p)));
       } else {
         IRIS_LOG_LEAVE();
@@ -1551,7 +1399,7 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       vertexBufferData.reserve(sizeof(glm::vec3) + sizeof(glm::vec3) +
                                sizeof(glm::vec4) +
                                (texcoords.empty() ? 0 : sizeof(glm::vec2)));
-      for (auto&& vertex : primData.vertices) {
+      for (auto&& vertex : meshData.vertices) {
         vertexBufferData.push_back(vertex.position.x);
         vertexBufferData.push_back(vertex.position.y);
         vertexBufferData.push_back(vertex.position.z);
@@ -1580,7 +1428,7 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
       }
 
       results.push_back([pipeline, indexType, indexCount,
-                         vertexCount = primData.vertices.size(), indexBuffer,
+                         vertexCount = meshData.vertices.size(), indexBuffer,
                          vertexBuffer]() {
         DrawData draw;
         draw.pipeline = std::move(*pipeline);
@@ -1594,10 +1442,7 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
 
         DrawCommands().push_back(std::move(draw));
       });
-#endif
 
-#if 0
-#if 0
   std::vector<Image> images;
   std::vector<Sampler> samplers;
 
@@ -1712,18 +1557,33 @@ std::system_error DoLoadGLTF(filesystem::path const& path) noexcept {
     }
   }
 #endif
-
-  IRIS_LOG_LEAVE();
-  return [results](){ for (auto&& result : results) result(); };
-#endif
-}
+} // ReadGLTF
 
 } // namespace iris::Renderer::io
 
 std::function<std::system_error(void)>
 iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
-  auto error = DoLoadGLTF(path);
-  return [error]() { return error; };
+
+  std::vector<MeshData> meshData;
+  if (auto p = ReadGLTF(path)) {
+    meshData = std::move(*p);
+  } else {
+    IRIS_LOG_LEAVE();
+    return [error = p.error()]() { return error; };
+  }
+
+  IRIS_LOG_LEAVE();
+  return [meshData]() {
+    for (auto&& data : meshData) {
+      if (auto m = Mesh::Create(data)) {
+        Meshes().push_back(std::move(*m));
+      } else {
+        return m.error();
+      }
+    }
+
+    return std::system_error(Error::kNone);
+  };
 } // iris::Renderer::io::LoadGLTF
 

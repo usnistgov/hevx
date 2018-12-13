@@ -14,14 +14,16 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 # Build options
 ##
 option(BUILD_DOCS "Build the documentation" ON)
-option(BUILD_DOCS_INTERNAL "Build the internal developer documentation" ON)
+CMAKE_DEPENDENT_OPTION(BUILD_DOCS_INTERNAL "Build developer documentation"
+  ON "BUILD_DOCS" OFF)
 
 # The CTest module adds a BUILD_TESTING option (default: ON) and calls enable_testing
 if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   include(CTest)
 endif()
 
-CMAKE_DEPENDENT_OPTION(BUILD_DEPENDENCY_TESTING "Build tests in dependencies" ON "BUILD_TESTING" OFF)
+CMAKE_DEPENDENT_OPTION(BUILD_DEPENDENCY_TESTING "Build tests in dependencies"
+  ON "BUILD_TESTING" OFF)
 
 ##
 # HEVx configuration

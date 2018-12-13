@@ -103,6 +103,7 @@ set(SOURCES
   renderer/io/gltf.cc
   renderer/io/json.cc
   renderer/io/read_file.cc
+  renderer/mesh.cc
   renderer/mikktspace.c
   renderer/pipeline.cc
   renderer/renderer.cc

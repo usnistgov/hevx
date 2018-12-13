@@ -25,6 +25,7 @@
 #include "renderer/io/gltf.h"
 #include "renderer/io/json.h"
 #include "renderer/io/read_file.h"
+#include "renderer/mesh.h"
 #include "renderer/shader.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
@@ -136,6 +137,11 @@ std::uint32_t sDepthStencilTargetAttachmentIndex{2};
 std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
+
+std::vector<Mesh>& Meshes() {
+  static std::vector<Mesh> sMeshes;
+  return sMeshes;
+} // Meshes
 
 /////
 //

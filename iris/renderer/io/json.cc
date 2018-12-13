@@ -37,7 +37,7 @@ iris::Renderer::io::LoadJSON(filesystem::path const& path) noexcept {
   if (auto status = google::protobuf::util::JsonStringToMessage(json, &cMsg);
       status.ok()) {
     IRIS_LOG_LEAVE();
-    return [cMsg]() { return Control(cMsg); };
+    return [cMsg]() { return std::system_error(Control(cMsg)); };
   } else {
     IRIS_LOG_LEAVE();
     return [message = status.ToString()]() {

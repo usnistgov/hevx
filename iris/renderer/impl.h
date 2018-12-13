@@ -35,6 +35,9 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
 
+struct Mesh;
+std::vector<Mesh>& Meshes();
+
 tl::expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
