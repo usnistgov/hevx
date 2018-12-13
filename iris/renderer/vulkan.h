@@ -21,6 +21,7 @@ using PFN_vkCreateBuffer = decltype(vkCreateBuffer);
 using PFN_vkDestroyBuffer = decltype(vkDestroyBuffer);
 using PFN_vkCreateImage = decltype(vkCreateImage);
 using PFN_vkDestroyImage = decltype(vkDestroyImage);
+using PFN_vkCmdCopyBuffer = decltype(vkCmdCopyBuffer);
 
 #if PLATFORM_COMPILER_MSVC
 #if defined(NOMINMAX)

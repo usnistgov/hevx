@@ -1,6 +1,6 @@
 FetchContent_Declare(vma
   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-  GIT_SHALLOW TRUE # VulkanMemoryAllocator "should" be stable at head
+  GIT_SHALLOW TRUE GIT_TAG v2.2.0
 )
 
 FetchContent_GetProperties(vma)
