@@ -461,6 +461,8 @@ void iris::wsi::Window::Impl::Dispatch(
       case 1: buttons_[Buttons::kButtonLeft] = true; break;
       case 2: buttons_[Buttons::kButtonMiddle] = true; break;
       case 3: buttons_[Buttons::kButtonRight] = true; break;
+      case 4: scroll_.y += 1.f; break;
+      case 5: scroll_.y -= 1.f; break;
     }
   } break;
 
@@ -471,8 +473,6 @@ void iris::wsi::Window::Impl::Dispatch(
       case 1: buttons_[Buttons::kButtonLeft] = false; break;
       case 2: buttons_[Buttons::kButtonMiddle] = false; break;
       case 3: buttons_[Buttons::kButtonRight] = false; break;
-      case 4: scroll_.y += 1.f; break;
-      case 5: scroll_.y -= 1.f; break;
     }
   } break;
 

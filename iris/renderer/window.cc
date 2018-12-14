@@ -1,7 +1,9 @@
 #include "renderer/window.h"
 #include "absl/strings/str_split.h"
 #include "error.h"
+#include "glm/gtc/matrix_access.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/ext/matrix_clip_space.hpp"
 #include "logging.h"
 #include "renderer/impl.h"
 #include "renderer/renderer.h"
@@ -44,6 +46,10 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
   window.showUI =
     (options & Window::Options::kShowUI) == Window::Options::kShowUI;
 
+  window.projectionMatrix = glm::perspectiveFov(
+    glm::radians(60.f), static_cast<float>(window.window.Extent().width),
+    static_cast<float>(window.window.Extent().height), 0.1f, 1000.f);
+
   window.window.Show();
 
   window.window.OnResize(
@@ -57,6 +63,11 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
 void iris::Renderer::Window::Resize(wsi::Extent2D const& newExtent) noexcept {
   GetLogger()->debug("Window resized: ({}x{})", newExtent.width,
                      newExtent.height);
+
+  projectionMatrix =
+    glm::perspectiveFov(glm::radians(60.f), static_cast<float>(newExtent.width),
+                        static_cast<float>(newExtent.height), 0.1f, 1000.f);
+
   resized = true;
 } // iris::Renderer::Window::Resize
 
@@ -102,12 +113,30 @@ iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
   io.MousePos.x = static_cast<float>(mousePos.x);
   io.MousePos.y = static_cast<float>(mousePos.y);
 
+  //auto const mouseWheel = window.ScrollWheel();
+  //io.MouseWheel = static_cast<float>(mouseWheel.y);
+
   io.DisplaySize.x = static_cast<float>(window.Extent().width);
   io.DisplaySize.y = static_cast<float>(window.Extent().height);
   io.DisplayFramebufferScale = {0.f, 0.f};
 
   io.DeltaTime = frameDelta;
   ImGui::NewFrame();
+
+  if (!io.WantCaptureKeyboard) {
+    if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
+      iris::Renderer::Terminate();
+    }
+  }
+
+  if (!io.WantCaptureMouse) {
+    if (io.MouseDown[iris::wsi::Buttons::kButtonMiddle]) {
+      sViewMatrix[3].z +=
+        io.MouseDragMaxDistanceAbs[iris::wsi::Buttons::kButtonMiddle].y;
+      //sViewMatrix[3].z += io.MouseDelta.y;
+    }
+  }
+
   return {Error::kNone};
 } // iris::Renderer::Window::BeginFrame
 
@@ -121,11 +150,45 @@ iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer,
 
   if (showUI) {
     ImGui::Begin("Status");
-    ImGui::Text("Last Frame %.3f ms", 1000.f * io.DeltaTime);
-    ImGui::PlotHistogram(
-      "Frame Times", frameTimes.data(), frameTimes.size(), 0,
-      fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
-      100.f, ImVec2(0, 50));
+    {
+      ImGui::Text("Last Frame %.3f ms", 1000.f * io.DeltaTime);
+      ImGui::PlotHistogram(
+        "Frame Times", frameTimes.data(), frameTimes.size(), 0,
+        fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
+        100.f, ImVec2(0, 50));
+    }
+    ImGui::End();
+
+    ImGui::Begin("Matrices");
+    {
+      if (ImGui::CollapsingHeader("View Matrix")) {
+        glm::vec4 rows[] = {
+          glm::row(sViewMatrix, 0),
+          glm::row(sViewMatrix, 1),
+          glm::row(sViewMatrix, 2),
+          glm::row(sViewMatrix, 3),
+        };
+
+        ImGui::InputFloat4("", glm::value_ptr(rows[0]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[1]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[2]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[3]));
+      }
+
+      if (ImGui::CollapsingHeader("Projection Matrix")) {
+        glm::vec4 rows[] = {
+          glm::row(projectionMatrix, 0),
+          glm::row(projectionMatrix, 1),
+          glm::row(projectionMatrix, 2),
+          glm::row(projectionMatrix, 3),
+        };
+
+        ImGui::InputFloat4("", glm::value_ptr(rows[0]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[1]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[2]));
+        ImGui::InputFloat4("", glm::value_ptr(rows[3]));
+      }
+    }
     ImGui::End();
   }
 
@@ -294,21 +357,23 @@ iris::Renderer::Window::Window(Window&& other) noexcept
   , window(std::move(other.window))
   , surface(std::move(other.surface))
   , showUI(other.showUI)
-  , ui(std::move(other.ui)) {
+  , ui(std::move(other.ui))
+  , projectionMatrix(std::move(other.projectionMatrix)) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
   window.OnClose(std::bind(&Window::Close, this));
 } // iris::Renderer::Window::Window
 
 iris::Renderer::Window& iris::Renderer::Window::
-operator=(Window&& other) noexcept {
-  if (this == &other) return *this;
+operator=(Window&& rhs) noexcept {
+  if (this == &rhs) return *this;
 
-  resized = other.resized;
-  window = std::move(other.window);
-  surface = std::move(other.surface);
-  showUI = other.showUI;
-  ui = std::move(other.ui);
+  resized = rhs.resized;
+  window = std::move(rhs.window);
+  surface = std::move(rhs.surface);
+  showUI = rhs.showUI;
+  ui = std::move(rhs.ui);
+  projectionMatrix = std::move(rhs.projectionMatrix);
 
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));

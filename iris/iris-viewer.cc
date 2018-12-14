@@ -81,14 +81,6 @@ int main(int argc, char** argv) {
 
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
-    auto& io = ImGui::GetIO();
-
-    if (!io.WantCaptureKeyboard) {
-      if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
-        iris::Renderer::Terminate();
-      }
-    }
-
     iris::Renderer::EndFrame();
   }
 

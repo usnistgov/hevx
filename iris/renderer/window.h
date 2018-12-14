@@ -35,6 +35,8 @@ struct Window {
   bool showUI{false};
   UI ui{};
 
+  glm::mat4 projectionMatrix;
+
   void Resize(wsi::Extent2D const& newExtent) noexcept;
   void Close() noexcept;
 

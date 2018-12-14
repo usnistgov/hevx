@@ -4,6 +4,7 @@
 #include "absl/container/fixed_array.h"
 #include "config.h"
 #include "error.h"
+#include "glm/mat4x4.hpp"
 #include "gsl/gsl"
 #include "renderer/renderer.h"
 #include "renderer/vulkan.h"
@@ -35,6 +36,9 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
 extern VkDescriptorSetLayout sBaseDescriptorSetLayout;
+
+// FIXME: putting this here for now; ugly ugly
+extern glm::mat4 sViewMatrix;
 
 [[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;

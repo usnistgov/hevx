@@ -139,6 +139,8 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
+glm::mat4 sViewMatrix;
+
 /////
 //
 // Additional static private variables
@@ -1683,6 +1685,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   sInitialized = true;
   sRunning = true;
+  sViewMatrix = glm::mat4(1.f);
 
   IRIS_LOG_LEAVE();
   return {Error::kNone};
@@ -1758,7 +1761,7 @@ void iris::Renderer::Shutdown() noexcept {
   sTaskSchedulerInit.terminate();
 
   IRIS_LOG_LEAVE();
-}
+} // iris::Renderer::Shutdown
 
 void iris::Renderer::Terminate() noexcept {
   IRIS_LOG_ENTER();
@@ -1953,22 +1956,6 @@ void iris::Renderer::EndFrame() noexcept {
 
   void* ptr;
 
-  if (auto result = vmaMapMemory(sAllocator, sMatrixBufferAllocation, &ptr);
-      result != VK_SUCCESS) {
-    GetLogger()->error("Error mapping sMatrixBuffer: {}", to_string(result));
-  }
-
-  auto pMatrices = static_cast<MatrixBufferData*>(ptr);
-  pMatrices->ViewMatrix = glm::mat4(1.f);
-  pMatrices->ViewMatrixInverse = glm::mat4(1.f);
-  pMatrices->ProjectionMatrix = glm::mat4(1.f);
-  pMatrices->ProjectionMatrixInverse = glm::mat4(1.f);
-  pMatrices->ViewProjectionMatrix = glm::mat4(1.f);
-  pMatrices->ViewProjectionMatrixInverse = glm::mat4(1.f);
-
-  vmaFlushAllocation(sAllocator, sMatrixBufferAllocation, 0, VK_WHOLE_SIZE);
-  vmaUnmapMemory(sAllocator, sMatrixBufferAllocation);
-
   if (auto result = vmaMapMemory(sAllocator, sLightBufferAllocation, &ptr);
       result != VK_SUCCESS) {
     GetLogger()->error("Error mapping sLightBuffer: {}", to_string(result));
@@ -2014,6 +2001,23 @@ void iris::Renderer::EndFrame() noexcept {
   for (auto [i, iter] : enumerate(windows)) {
     auto&& window = iter.second;
     auto&& surface = window.surface;
+
+    if (auto result = vmaMapMemory(sAllocator, sMatrixBufferAllocation, &ptr);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error mapping sMatrixBuffer: {}", to_string(result));
+    }
+
+    auto pMatrices = static_cast<MatrixBufferData*>(ptr);
+    pMatrices->ViewMatrix = sViewMatrix;
+    pMatrices->ViewMatrixInverse = glm::inverse(sViewMatrix);
+    pMatrices->ProjectionMatrix = window.projectionMatrix;
+    pMatrices->ProjectionMatrixInverse = glm::inverse(window.projectionMatrix);
+    pMatrices->ViewProjectionMatrix = window.projectionMatrix * sViewMatrix;
+    pMatrices->ViewProjectionMatrixInverse =
+      glm::inverse(pMatrices->ViewProjectionMatrix);
+
+    vmaFlushAllocation(sAllocator, sMatrixBufferAllocation, 0, VK_WHOLE_SIZE);
+    vmaUnmapMemory(sAllocator, sMatrixBufferAllocation);
 
     waitSemaphores[i] = surface.imageAvailable;
     swapchains[i] = surface.swapchain;

@@ -309,3 +309,4 @@ iris::Renderer::UI::Create() noexcept {
   IRIS_LOG_LEAVE();
   return std::move(ui);
 } // iris::Renderer::ui::Initialize
+
