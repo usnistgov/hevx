@@ -27,6 +27,7 @@
 #include "renderer/io/read_file.h"
 #include "renderer/mesh.h"
 #include "renderer/shader.h"
+#include "renderer/vulkan.h"
 #include "renderer/window.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -138,11 +139,6 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-std::vector<Mesh>& Meshes() {
-  static std::vector<Mesh> sMeshes;
-  return sMeshes;
-} // Meshes
-
 /////
 //
 // Additional static private variables
@@ -167,12 +163,48 @@ static std::uint32_t const sNumCommandBuffers{2};
 static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
                                                          VK_NULL_HANDLE);
 static std::uint32_t sCommandBufferIndex{0};
+static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
+
+struct MatrixBufferData {
+  glm::mat4 ViewMatrix;
+  glm::mat4 ViewMatrixInverse;
+  glm::mat4 ModelViewMatrix;
+  glm::mat4 ProjectionMatrix;
+  glm::mat4 ProjectionMatrixInverse;
+  glm::mat4 ViewProjectionMatrix;
+  glm::mat4 ViewProjectionMatrixInverse;
+}; // struct MatrixBufferData
+
+#define MAX_LIGHTS 100
+
+struct Light {
+  glm::vec3 direction;
+  glm::vec3 color;
+  bool on;
+};
+
+struct LightBufferData {
+  Light Lights[MAX_LIGHTS];
+  int NumLights;
+}; // struct LightBufferData
+
+static VkBuffer sMatrixBuffer{VK_NULL_HANDLE};
+static VmaAllocation sMatrixBufferAllocation{VK_NULL_HANDLE};
+static VkBuffer sLightBuffer{VK_NULL_HANDLE};
+static VmaAllocation sLightBufferAllocation{VK_NULL_HANDLE};
+VkDescriptorSetLayout sBaseDescriptorSetLayout{VK_NULL_HANDLE};
+static absl::FixedArray<VkDescriptorSet> sBaseDescriptorSets(2, VK_NULL_HANDLE);
 
 static absl::flat_hash_map<std::string, iris::Renderer::Window>&
 Windows() {
   static absl::flat_hash_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
 } // Windows
+
+static std::vector<Mesh>& Meshes() {
+  static std::vector<Mesh> sMeshes;
+  return sMeshes;
+} // Meshes
 
 std::chrono::steady_clock::time_point sPreviousFrameTime;
 absl::FixedArray<float> sFrameTimes(100);
@@ -1352,6 +1384,140 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   return {Error::kNone};
 } // AllocateCommandBuffers
 
+[[nodiscard]] static std::system_error CreateUniformBuffers() noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  VkBufferCreateInfo bufferCI = {};
+  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferCI.size = static_cast<std::uint32_t>(sizeof(MatrixBufferData));
+  bufferCI.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+
+  std::string matrixBufferName = "sMatrixBuffer";
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+  allocationCI.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
+  allocationCI.pUserData = matrixBufferName.data();
+
+  if (auto result =
+        vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &sMatrixBuffer,
+                        &sMatrixBufferAllocation, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Error creating sMatrixBuffer"};
+  }
+
+  bufferCI.size =
+    static_cast<std::uint32_t>(sizeof(Light) * MAX_LIGHTS + sizeof(int));
+  std::string lightBufferName = "sLightBuffer";
+  allocationCI.pUserData = lightBufferName.data();
+
+  if (auto result =
+        vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI, &sLightBuffer,
+                        &sLightBufferAllocation, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Error creating sLightBuffer"};
+  }
+
+  NameObject(VK_OBJECT_TYPE_BUFFER, sMatrixBuffer, "sMatrixBuffer");
+  NameObject(VK_OBJECT_TYPE_BUFFER, sLightBuffer, "sLightBuffer");
+
+  Ensures(sMatrixBuffer != VK_NULL_HANDLE);
+  Ensures(sLightBuffer != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return {Error::kNone};
+} // CreateUniformBuffers
+
+[[nodiscard]] static std::system_error CreateDescriptorSets() noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding> bindings(
+    sBaseDescriptorSets.size());
+  bindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                 VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+  bindings[1] = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                 VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+
+  VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
+  descriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(bindings.size());
+  descriptorSetLayoutCI.pBindings = bindings.data();
+
+  if (auto result = vkCreateDescriptorSetLayout(
+        sDevice, &descriptorSetLayoutCI, nullptr, &sBaseDescriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot create descriptor set layout"};
+  }
+
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sBaseDescriptorSetLayout,
+             "sBaseDescriptorSetLayout");
+
+  absl::FixedArray<VkDescriptorSetLayout> layouts(sBaseDescriptorSets.size(),
+                                                  sBaseDescriptorSetLayout);
+
+  VkDescriptorSetAllocateInfo descriptorSetAI = {};
+  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptorSetAI.descriptorPool = sGraphicsDescriptorPools[0];
+  descriptorSetAI.descriptorSetCount = static_cast<uint32_t>(layouts.size());
+  descriptorSetAI.pSetLayouts = layouts.data();
+
+  if (auto result = vkAllocateDescriptorSets(sDevice, &descriptorSetAI,
+                                             sBaseDescriptorSets.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return {make_error_code(result), "Cannot create descriptor set"};
+  }
+
+  VkDescriptorBufferInfo modelBufferInfo;
+  modelBufferInfo.buffer = sMatrixBuffer;
+  modelBufferInfo.offset = 0;
+  modelBufferInfo.range = VK_WHOLE_SIZE;
+
+  VkDescriptorBufferInfo materialBufferInfo;
+  materialBufferInfo.buffer = sLightBuffer;
+  materialBufferInfo.offset = 0;
+  materialBufferInfo.range = VK_WHOLE_SIZE;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+
+  writeDescriptorSets[0] = {
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    nullptr,                           // pNext
+    sBaseDescriptorSets[0],            // dstSet
+    0,                                 // dstBinding
+    0,                                 // dstArrayElement
+    1,                                 // descriptorCount
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+    nullptr,                           // pImageInfo
+    &modelBufferInfo,                  // pBufferInfo
+    nullptr                            // pTexelBufferView
+  };
+
+  writeDescriptorSets[1] = {
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    nullptr,                           // pNext
+    sBaseDescriptorSets[0],            // dstSet
+    1,                                 // dstBinding
+    0,                                 // dstArrayElement
+    1,                                 // descriptorCount
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+    nullptr,                           // pImageInfo
+    &materialBufferInfo,               // pBufferInfo
+    nullptr                            // pTexelBufferView
+  };
+
+  UpdateDescriptorSets(writeDescriptorSets);
+
+  Ensures(sBaseDescriptorSetLayout != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return {Error::kNone};
+} // CreateDescriptorSets
+
 } // namespace iris::Renderer
 
 std::system_error
@@ -1505,6 +1671,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
+  if (auto error = CreateUniformBuffers(); error.code()) {
+    IRIS_LOG_LEAVE();
+    return {error};
+  }
+
+  if (auto error = CreateDescriptorSets(); error.code()) {
+    IRIS_LOG_LEAVE();
+    return {error};
+  }
+
   sInitialized = true;
   sRunning = true;
 
@@ -1518,7 +1694,22 @@ void iris::Renderer::Shutdown() noexcept {
   vkQueueWaitIdle(sGraphicsCommandQueue);
   vkDeviceWaitIdle(sDevice);
 
+  Meshes().clear();
   Windows().clear();
+
+  if (sMatrixBuffer != VK_NULL_HANDLE ||
+      sMatrixBufferAllocation != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(sAllocator, sMatrixBuffer, sMatrixBufferAllocation);
+  }
+
+  if (sLightBuffer != VK_NULL_HANDLE ||
+      sLightBufferAllocation != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(sAllocator, sLightBuffer, sLightBufferAllocation);
+  }
+
+  if (sBaseDescriptorSetLayout != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(sDevice, sBaseDescriptorSetLayout, nullptr);
+  }
 
   vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0],
                        gsl::narrow_cast<std::uint32_t>(sCommandBuffers.size()),
@@ -1664,12 +1855,11 @@ void iris::Renderer::EndFrame() noexcept {
   //
   // Build secondary command buffers
   //
-#if 0
   if (sSecondaryCommandBuffers.size() < windows.size()) {
     // Re-allocate secondary command buffers
     if (!sSecondaryCommandBuffers.empty()) {
       vkFreeCommandBuffers(
-        sDevice, sGraphicsCommandPool,
+        sDevice, sGraphicsCommandPools[0],
         gsl::narrow_cast<std::uint32_t>(sSecondaryCommandBuffers.size()),
         sSecondaryCommandBuffers.data());
       sSecondaryCommandBuffers.clear();
@@ -1677,7 +1867,7 @@ void iris::Renderer::EndFrame() noexcept {
 
     VkCommandBufferAllocateInfo commandBufferAI = {};
     commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAI.commandPool = sGraphicsCommandPool;
+    commandBufferAI.commandPool = sGraphicsCommandPools[0];
     commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
     commandBufferAI.commandBufferCount =
       gsl::narrow_cast<std::uint32_t>(windows.size());
@@ -1720,24 +1910,30 @@ void iris::Renderer::EndFrame() noexcept {
       vkCmdSetViewport(commandBuffer, 0, 1, &window.surface.viewport);
       vkCmdSetScissor(commandBuffer, 0, 1, &window.surface.scissor);
 
-      for (auto&& draw : DrawCommands()) {
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          draw.pipeline);
+      absl::FixedArray<VkDescriptorSet> descriptorSets(2);
+      descriptorSets[0] = sBaseDescriptorSets[0];
 
-        //vkCmdBindDescriptorSets(
-        //  cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline.layout, 0,
-        //  gsl::narrow_cast<std::uint32_t>(ui.descriptorSets.sets.size()),
-        //  ui.descriptorSets.sets.data(), 0, nullptr);
+      for (auto&& mesh : Meshes()) {
+        descriptorSets[1] = mesh.descriptorSets.sets[0];
+
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          mesh.pipeline);
+
+        vkCmdBindDescriptorSets(
+          commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh.pipeline.layout,
+          0, gsl::narrow_cast<std::uint32_t>(descriptorSets.size()),
+          descriptorSets.data(), 0, nullptr);
 
         VkDeviceSize bindingOffset = 0;
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, draw.vertexBuffer.get(),
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, mesh.vertexBuffer.get(),
                                &bindingOffset);
 
-        if (draw.indexCount > 0) {
-          vkCmdBindIndexBuffer(commandBuffer, draw.indexBuffer, 0, draw.indexType);
-          vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, 0, 0, 0);
+        if (mesh.numIndices > 0) {
+          vkCmdBindIndexBuffer(commandBuffer, mesh.indexBuffer, 0,
+                               VK_INDEX_TYPE_UINT32);
+          vkCmdDrawIndexed(commandBuffer, mesh.numIndices, 1, 0, 0, 0);
         } else {
-          vkCmdDraw(commandBuffer, draw.vertexCount, 1, 0, 0);
+          vkCmdDraw(commandBuffer, mesh.numVertices, 1, 0, 0);
         }
       }
 
@@ -1750,11 +1946,42 @@ void iris::Renderer::EndFrame() noexcept {
 
       return commandBuffer;
     });
-#endif
 
   //
   // 1. Record primary command buffer for current frame
   //
+
+  void* ptr;
+
+  if (auto result = vmaMapMemory(sAllocator, sMatrixBufferAllocation, &ptr);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error mapping sMatrixBuffer: {}", to_string(result));
+  }
+
+  auto pMatrices = static_cast<MatrixBufferData*>(ptr);
+  pMatrices->ViewMatrix = glm::mat4(1.f);
+  pMatrices->ViewMatrixInverse = glm::mat4(1.f);
+  pMatrices->ProjectionMatrix = glm::mat4(1.f);
+  pMatrices->ProjectionMatrixInverse = glm::mat4(1.f);
+  pMatrices->ViewProjectionMatrix = glm::mat4(1.f);
+  pMatrices->ViewProjectionMatrixInverse = glm::mat4(1.f);
+
+  vmaFlushAllocation(sAllocator, sMatrixBufferAllocation, 0, VK_WHOLE_SIZE);
+  vmaUnmapMemory(sAllocator, sMatrixBufferAllocation);
+
+  if (auto result = vmaMapMemory(sAllocator, sLightBufferAllocation, &ptr);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error mapping sLightBuffer: {}", to_string(result));
+  }
+
+  auto pLights = static_cast<LightBufferData*>(ptr);
+  pLights->Lights[0].direction = glm::vec3(0, -std::sqrt(2.f), -std::sqrt(2.f));
+  pLights->Lights[0].color = glm::vec3(1, 1, 1);
+  pLights->Lights[0].on = true;
+  pLights->NumLights = 1;
+
+  vmaFlushAllocation(sAllocator, sLightBufferAllocation, 0, VK_WHOLE_SIZE);
+  vmaUnmapMemory(sAllocator, sLightBufferAllocation);
 
   sCommandBufferIndex = (sCommandBufferIndex + 1) % sCommandBuffers.size();
   auto&& cb = sCommandBuffers[sCommandBufferIndex];
@@ -1807,8 +2034,8 @@ void iris::Renderer::EndFrame() noexcept {
     // 3. Execute secondary command buffers
     //
 
-    //vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
-                         //sSecondaryCommandBuffers.data());
+    vkCmdExecuteCommands(cb, sSecondaryCommandBuffers.size(),
+                         sSecondaryCommandBuffers.data());
 
     if (auto wcb = window.EndFrame(rbi.framebuffer, sFrameNum, sFrameTimes)) {
       VkCommandBuffer winCB = *wcb;
@@ -2105,4 +2332,21 @@ iris::Renderer::AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> b
   return DescriptorSets::Allocate(sGraphicsDescriptorPools[0], bindings,
                                   numSets, std::move(name));
 } // iris::Renderer::AllocateDescriptorSets
+
+[[nodiscard]] std::system_error
+iris::Renderer::CreateMeshes(gsl::span<const MeshData> meshData) noexcept {
+  IRIS_LOG_ENTER();
+
+  auto&& meshes = Meshes();
+  for (auto&& data : meshData) {
+    if (auto m = Mesh::Create(data)) {
+      meshes.push_back(std::move(*m));
+    } else {
+      return m.error();
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return std::system_error(Error::kNone);
+} // iris::Renderer::CreateMeshes
 

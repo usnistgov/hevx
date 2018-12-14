@@ -67,8 +67,8 @@ struct adl_serializer<glm::quat> {
 }; // struct adl_serializer<glm::vec4>
 
 template <>
-struct adl_serializer<glm::mat4x4> {
-  static void to_json(json& j, glm::mat4x4 const& mat) {
+struct adl_serializer<glm::mat4> {
+  static void to_json(json& j, glm::mat4 const& mat) {
     j = std::vector<float>(glm::value_ptr(mat), glm::value_ptr(mat) + 16);
   }
 
@@ -829,7 +829,7 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
 
   iris::GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
-    path.string() + (node.name ? ":" + *node.name : "");
+    path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
 
   glm::mat4x4 nodeMat = parentMat;
 
@@ -879,9 +879,9 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   // std::vector<Primitive> primitives;
 
   iris::GetLogger()->trace("mesh: {}", json(mesh).dump());
-  std::string const meshName = nodeName + (mesh.name ? ":" + *mesh.name : "");
 
-  for (auto&& primitive : mesh.primitives) {
+  for (std::size_t primIdx = 0; primIdx < mesh.primitives.size(); ++primIdx) {
+    auto&& primitive = mesh.primitives[primIdx];
     // Primitive:
     // std::map<std::string, int> attributes; // index into gltf.accessors
     // std::optional<int> indices;            // index into gltf.accessors
@@ -924,6 +924,8 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     // tangent.xyz) * tangent.w
 
     iris::Renderer::MeshData meshData;
+    meshData.name =
+      nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
     meshData.matrix = nodeMat;
 
     if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
@@ -1081,151 +1083,6 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
 
 namespace iris::Renderer::io {
 
-#if 0
-tl::expected<Pipeline, std::system_error>
-CreatePipeline(MeshData& meshData, std::string const& ) noexcept {
-  IRIS_LOG_ENTER();
-
-  std::vector<std::string> shaderMacros;
-  if (meshData.attributeDescriptions.size() == 4) {
-    shaderMacros.push_back("-DHAS_TEXCOORDS");
-  }
-
-  absl::FixedArray<Shader> shaders(2);
-
-  if (auto vs = Shader::CreateFromFile(
-        "assets/shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-    shaders[0] = std::move(*vs);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(vs.error());
-  }
-
-  if (auto fs = Shader::CreateFromFile(
-        "assets/shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
-    shaders[1] = std::move(*fs);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(fs.error());
-  }
-
-  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
-  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
-  descriptorSetLayoutBinding[1] = {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
-
-  if (auto d = AllocateDescriptorSets(
-        descriptorSetLayoutBinding, 1, meshName + ":descriptorSet")) {
-    descriptorSets = std::move(*d);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(d.error());
-  }
-
-  if (auto d = Renderer::AllocateDescriptorSets(
-        descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
-    ui.descriptorSets = std::move(*d);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(d.error());
-  }
-
-  VkDescriptorImageInfo descriptorSamplerI = {};
-  descriptorSamplerI.sampler = ui.fontImageSampler;
-
-  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
-  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            nullptr,
-                            ui.descriptorSets.sets[0],
-                            0,
-                            0,
-                            1,
-                            VK_DESCRIPTOR_TYPE_SAMPLER,
-                            &descriptorSamplerI,
-                            nullptr,
-                            nullptr};
-
-  VkDescriptorImageInfo descriptorImageI = {};
-  descriptorImageI.imageView = ui.fontImageView;
-  descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-  writeDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            nullptr,
-                            ui.descriptorSets.sets[0],
-                            1,
-                            0,
-                            1,
-                            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                            &descriptorImageI,
-                            nullptr,
-                            nullptr};
-
-  UpdateDescriptorSets(writeDescriptorSets);
-
-  absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
-  pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT, 0,
-                           sizeof(glm::vec2) * 2};
-
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
-  inputAssemblyStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssemblyStateCI.topology = meshData.topology;
-
-  VkPipelineViewportStateCreateInfo viewportStateCI = {};
-  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportStateCI.viewportCount = 1;
-  viewportStateCI.scissorCount = 1;
-
-  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
-  rasterizationStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
-  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizationStateCI.lineWidth = 1.f;
-
-  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
-  multisampleStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampleStateCI.rasterizationSamples = sSurfaceSampleCount;
-  multisampleStateCI.minSampleShading = 1.f;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
-  depthStencilStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencilStateCI.depthTestEnable = VK_TRUE;
-  depthStencilStateCI.depthWriteEnable = VK_TRUE;
-  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
-
-  absl::FixedArray<VkPipelineColorBlendAttachmentState>
-    colorBlendAttachmentStates(1);
-  colorBlendAttachmentStates[0] = {
-    VK_FALSE,                            // blendEnable
-    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
-    VK_BLEND_OP_ADD,                     // colorBlendOp
-    VK_BLEND_FACTOR_ONE,                 // srcAlphaBlendFactor
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstAlphaBlendFactor
-    VK_BLEND_OP_ADD,                     // alphaBlendOp
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
-  };
-
-  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
-                                                 VK_DYNAMIC_STATE_SCISSOR};
-
-  auto p = Pipeline::CreateGraphics(
-    {}, {}, shaders, meshData.bindingDescriptions,
-    meshData.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
-    rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
-    colorBlendAttachmentStates, dynamicStates, 0, "");
-
-  IRIS_LOG_LEAVE();
-  return p;
-} // CreatePipeline
-#endif
-
 tl::expected<std::vector<MeshData>, std::system_error>
 ReadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
@@ -1353,96 +1210,6 @@ ReadGLTF(filesystem::path const& path) noexcept {
   return meshData;
 
 #if 0
-      std::shared_ptr<Pipeline> pipeline;
-      VkIndexType indexType = VK_INDEX_TYPE_UINT16;
-      std::uint32_t indexCount = 0;
-      std::shared_ptr<Buffer> indexBuffer;
-      std::shared_ptr<Buffer> vertexBuffer;
-
-      if (auto p = CreatePipeline(meshData, meshName)) {
-        pipeline.reset(new Pipeline(std::move(*p)));
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(p.error());
-      }
-
-      if (primitive.indices) {
-        auto&& accessor = (*g.accessors)[*primitive.indices];
-        auto&& bufferView = (*g.bufferViews)[*accessor.bufferView];
-        auto&& buffer = bytes[bufferView.buffer];
-        int const byteOffset =
-          bufferView.byteOffset.value_or(0) + accessor.byteOffset.value_or(0);
-
-        switch (accessor.componentType) {
-        case 5123: indexType = VK_INDEX_TYPE_UINT16; break;
-        case 5125: indexType = VK_INDEX_TYPE_UINT32; break;
-        }
-        indexCount = accessor.count;
-
-        std::string const bufferName =
-          meshName + (bufferView.name ? ":" + *bufferView.name : "") +
-          ":indexBuffer";
-
-        if (auto ib = Buffer::CreateFromMemory(
-              bufferView.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-              VMA_MEMORY_USAGE_GPU_ONLY,
-              gsl::not_null(buffer.data() + byteOffset), bufferName,
-              sCommandPool)) {
-          indexBuffer.reset(new Buffer(std::move(*ib)));
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(ib.error());
-        }
-      }
-
-      std::vector<float> vertexBufferData;
-      vertexBufferData.reserve(sizeof(glm::vec3) + sizeof(glm::vec3) +
-                               sizeof(glm::vec4) +
-                               (texcoords.empty() ? 0 : sizeof(glm::vec2)));
-      for (auto&& vertex : meshData.vertices) {
-        vertexBufferData.push_back(vertex.position.x);
-        vertexBufferData.push_back(vertex.position.y);
-        vertexBufferData.push_back(vertex.position.z);
-        vertexBufferData.push_back(vertex.normal.x);
-        vertexBufferData.push_back(vertex.normal.y);
-        vertexBufferData.push_back(vertex.normal.z);
-        vertexBufferData.push_back(vertex.tangent.x);
-        vertexBufferData.push_back(vertex.tangent.y);
-        vertexBufferData.push_back(vertex.tangent.z);
-        vertexBufferData.push_back(vertex.tangent.w);
-        if (!texcoords.empty()) {
-          vertexBufferData.push_back(vertex.texcoord.x);
-          vertexBufferData.push_back(vertex.texcoord.y);
-        }
-      }
-
-      if (auto vb = Buffer::CreateFromMemory(
-            vertexBufferData.size() * sizeof(float),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-            gsl::not_null(vertexBufferData.data()), meshName + ":vertexBuffer",
-            sCommandPool)) {
-        vertexBuffer.reset(new Buffer(std::move(*vb)));
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(vb.error());
-      }
-
-      results.push_back([pipeline, indexType, indexCount,
-                         vertexCount = meshData.vertices.size(), indexBuffer,
-                         vertexBuffer]() {
-        DrawData draw;
-        draw.pipeline = std::move(*pipeline);
-
-        draw.indexType = indexType;
-        draw.indexCount = indexCount;
-        draw.vertexCount = vertexCount;
-
-        if (indexBuffer) draw.indexBuffer = std::move(*indexBuffer);
-        draw.vertexBuffer = std::move(*vertexBuffer);
-
-        DrawCommands().push_back(std::move(draw));
-      });
-
   std::vector<Image> images;
   std::vector<Sampler> samplers;
 
@@ -1574,16 +1341,6 @@ iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
   }
 
   IRIS_LOG_LEAVE();
-  return [meshData]() {
-    for (auto&& data : meshData) {
-      if (auto m = Mesh::Create(data)) {
-        Meshes().push_back(std::move(*m));
-      } else {
-        return m.error();
-      }
-    }
-
-    return std::system_error(Error::kNone);
-  };
+  return [meshData]() { return CreateMeshes(meshData); };
 } // iris::Renderer::io::LoadGLTF
 

@@ -49,7 +49,7 @@ tl::expected<iris::Renderer::Buffer, std::system_error>
 iris::Renderer::Buffer::CreateFromMemory(VkDeviceSize size,
                                          VkBufferUsageFlags bufferUsage,
                                          VmaMemoryUsage memoryUsage,
-                                         gsl::not_null<void*> data,
+                                         gsl::not_null<void const*> data,
                                          std::string name,
                                          VkCommandPool commandPool) noexcept {
   IRIS_LOG_ENTER();

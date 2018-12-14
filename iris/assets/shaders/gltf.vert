@@ -25,7 +25,6 @@
 layout(set = 0, binding = 0) uniform MatricesBuffer {
   mat4 ViewMatrix;
   mat4 ViewMatrixInverse;
-  mat4 ModelViewMatrix;
   mat4 ProjectionMatrix;
   mat4 ProjectionMatrixInverse;
   mat4 ViewProjectionMatrix;
@@ -55,7 +54,7 @@ out gl_PerVertex {
 };
 
 void main() {
-  Pe = ModelViewMatrix * vec4(Vertex, 1.0);
+  Pe = ViewMatrix * ModelMatrix * vec4(Vertex, 1.0);
   Ee = -ProjectionMatrixInverse[2];
   Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
 
@@ -70,5 +69,5 @@ void main() {
   UV = vec2(0.0, 0.0);
 #endif
 
-  gl_Position = ModelMatrix * ViewProjectionMatrix * vec4(Vertex, 1.0);
+  gl_Position = ViewProjectionMatrix * ModelMatrix * vec4(Vertex, 1.0);
 }

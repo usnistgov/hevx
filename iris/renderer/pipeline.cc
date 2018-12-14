@@ -3,18 +3,22 @@
 
 tl::expected<iris::Renderer::Pipeline, std::system_error>
 iris::Renderer::Pipeline::CreateGraphics(
-  gsl::span<VkDescriptorSetLayout> descriptorSetLayouts,
-  gsl::span<VkPushConstantRange> pushConstantRanges, gsl::span<Shader> shaders,
-  gsl::span<VkVertexInputBindingDescription> vertexInputBindingDescriptions,
-  gsl::span<VkVertexInputAttributeDescription> vertexInputAttributeDescriptions,
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+  gsl::span<const VkPushConstantRange> pushConstantRanges,
+  gsl::span<const Shader> shaders,
+  gsl::span<const VkVertexInputBindingDescription>
+    vertexInputBindingDescriptions,
+  gsl::span<const VkVertexInputAttributeDescription>
+    vertexInputAttributeDescriptions,
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
   VkPipelineViewportStateCreateInfo viewportStateCI,
   VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
   VkPipelineMultisampleStateCreateInfo multisampleStateCI,
   VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
-  gsl::span<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates,
-  gsl::span<VkDynamicState> dynamicStates, std::uint32_t renderPassSubpass,
-  std::string name) noexcept {
+  gsl::span<const VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates,
+  gsl::span<const VkDynamicState> dynamicStates,
+  std::uint32_t renderPassSubpass, std::string name) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sRenderPass != VK_NULL_HANDLE);

@@ -129,7 +129,232 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   IRIS_LOG_ENTER();
   Expects(!data.bindingDescriptions.empty());
 
+  bool const hasTexCoords = (data.attributeDescriptions.size() == 4);
   Mesh mesh;
+
+  if (auto b = Buffer::Create(
+        sizeof(ModelBufferData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU, data.name + ":modelBuffer")) {
+    mesh.modelBuffer = std::move(*b);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(b.error());
+  }
+
+  if (auto p = mesh.modelBuffer.Map<ModelBufferData*>()) {
+    (*p)->modelMatrix = data.matrix;
+    (*p)->normalMatrix = glm::inverse(data.matrix);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(p.error());
+  }
+
+  if (auto b = Buffer::Create(
+        sizeof(MaterialBufferData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU, data.name + ":materialBuffer")) {
+    mesh.materialBuffer = std::move(*b);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(b.error());
+  }
+
+  if (auto p = mesh.materialBuffer.Map<MaterialBufferData*>()) {
+    (*p)->BaseColorFactor = glm::vec4(0.8f, 0.f, 0.f, 1.f);
+    (*p)->MetallicRoughnessValues = glm::vec2(0.f, 0.f);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(p.error());
+  }
+
+  std::vector<std::string> shaderMacros;
+  if (hasTexCoords) shaderMacros.push_back("-DHAS_TEXCOORDS");
+
+  absl::FixedArray<Shader> shaders(2);
+
+  if (auto vs = Shader::CreateFromFile(
+        "assets/shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
+    shaders[0] = std::move(*vs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
+  }
+
+  if (auto fs = Shader::CreateFromFile(
+        "assets/shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
+    shaders[1] = std::move(*fs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
+  }
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                   VK_SHADER_STAGE_ALL_GRAPHICS, nullptr};
+
+  if (auto d =
+        AllocateDescriptorSets(descriptorSetLayoutBinding, kNumDescriptorSets,
+                               data.name + ":descriptorSet")) {
+    mesh.descriptorSets = std::move(*d);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(d.error());
+  }
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+
+  VkDescriptorBufferInfo modelBufferInfo;
+  modelBufferInfo.buffer = mesh.modelBuffer;
+  modelBufferInfo.offset = 0;
+  modelBufferInfo.range = VK_WHOLE_SIZE;
+
+  VkDescriptorBufferInfo materialBufferInfo;
+  materialBufferInfo.buffer = mesh.materialBuffer;
+  materialBufferInfo.offset = 0;
+  materialBufferInfo.range = VK_WHOLE_SIZE;
+
+  writeDescriptorSets[0] = {
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    nullptr,                           // pNext
+    mesh.descriptorSets.sets[0],       // dstSet
+    0,                                 // dstBinding
+    0,                                 // dstArrayElement
+    1,                                 // descriptorCount
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+    nullptr,                           // pImageInfo
+    &modelBufferInfo,                  // pBufferInfo
+    nullptr                            // pTexelBufferView
+  };
+
+  writeDescriptorSets[1] = {
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    nullptr,                           // pNext
+    mesh.descriptorSets.sets[0],       // dstSet
+    1,                                 // dstBinding
+    0,                                 // dstArrayElement
+    1,                                 // descriptorCount
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+    nullptr,                           // pImageInfo
+    &materialBufferInfo,               // pBufferInfo
+    nullptr                            // pTexelBufferView
+  };
+
+  UpdateDescriptorSets(writeDescriptorSets);
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+  inputAssemblyStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyStateCI.topology = data.topology;
+
+  VkPipelineViewportStateCreateInfo viewportStateCI = {};
+  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportStateCI.viewportCount = 1;
+  viewportStateCI.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+  rasterizationStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationStateCI.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+  multisampleStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleStateCI.rasterizationSamples = sSurfaceSampleCount;
+  multisampleStateCI.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+  depthStencilStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilStateCI.depthTestEnable = VK_TRUE;
+  depthStencilStateCI.depthWriteEnable = VK_TRUE;
+  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
+
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_FALSE,                            // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE,                 // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
+
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+  absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts(2);
+  descriptorSetLayouts[0] = sBaseDescriptorSetLayout;
+  descriptorSetLayouts[1] = mesh.descriptorSets.layout;
+
+  if (auto p = Pipeline::CreateGraphics(
+        descriptorSetLayouts, {}, shaders, data.bindingDescriptions,
+        data.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0,
+        data.name + ":pipeline")) {
+    mesh.pipeline = std::move(*p);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(p.error());
+  }
+
+  if (!data.indices.empty()) {
+    mesh.numIndices = static_cast<std::uint32_t>(data.indices.size());
+
+    if (auto ib = Buffer::CreateFromMemory(
+          data.indices.size() * sizeof(decltype(data.indices)::value_type),
+          VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+          gsl::not_null(data.indices.data()), data.name + ":indexBuffer")) {
+      mesh.indexBuffer = std::move(*ib);
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(ib.error());
+    }
+  }
+
+  std::size_t const stride = (3 + 3 + 4 + (hasTexCoords ? 2 : 0));
+  std::vector<float> vertexBuffer(data.vertices.size() * stride);
+  for (std::size_t i = 0; i < data.vertices.size(); ++i) {
+    auto&& vertex = data.vertices[i];
+    std::size_t const offset = i * stride;
+    vertexBuffer[offset + 0] = vertex.position.x;
+    vertexBuffer[offset + 1] = vertex.position.y;
+    vertexBuffer[offset + 2] = vertex.position.z;
+    vertexBuffer[offset + 3] = vertex.normal.x;
+    vertexBuffer[offset + 4] = vertex.normal.y;
+    vertexBuffer[offset + 5] = vertex.normal.z;
+    vertexBuffer[offset + 6] = vertex.tangent.x;
+    vertexBuffer[offset + 7] = vertex.tangent.y;
+    vertexBuffer[offset + 8] = vertex.tangent.z;
+    vertexBuffer[offset + 9] = vertex.tangent.w;
+    if (hasTexCoords) {
+      vertexBuffer[offset + 10] = vertex.texcoord.x;
+      vertexBuffer[offset + 11] = vertex.texcoord.y;
+    }
+  }
+
+  if (auto vb = Buffer::CreateFromMemory(
+        vertexBuffer.size() * sizeof(float), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(vertexBuffer.data()),
+        data.name + ":vertexBuffer")) {}
+
+  if (auto vb = Buffer::CreateFromMemory(
+        data.vertices.size() * sizeof(decltype(data.vertices)::value_type),
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+        gsl::not_null(data.vertices.data()), data.name + ":vertexBuffer")) {
+    mesh.vertexBuffer = std::move(*vb);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vb.error());
+  }
 
   IRIS_LOG_LEAVE();
   return std::move(mesh);

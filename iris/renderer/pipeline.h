@@ -10,21 +10,24 @@
 namespace iris::Renderer {
 
 struct Pipeline {
-  static tl::expected<Pipeline, std::system_error> CreateGraphics(
-    gsl::span<VkDescriptorSetLayout> descriptorSetLayouts,
-    gsl::span<VkPushConstantRange> pushConstantRanges,
-    gsl::span<Shader> shaders,
-    gsl::span<VkVertexInputBindingDescription> vertexInputBindingDescriptions,
-    gsl::span<VkVertexInputAttributeDescription>
-      vertexInputAttributeDescriptions,
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
-    VkPipelineViewportStateCreateInfo viewportStateCI,
-    VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
-    VkPipelineMultisampleStateCreateInfo multisampleStateCI,
-    VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
-    gsl::span<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates,
-    gsl::span<VkDynamicState> dynamicStates, std::uint32_t renderPassSubpass,
-    std::string name = {}) noexcept;
+  static tl::expected<Pipeline, std::system_error>
+  CreateGraphics(gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+                 gsl::span<const VkPushConstantRange> pushConstantRanges,
+                 gsl::span<const Shader> shaders,
+                 gsl::span<const VkVertexInputBindingDescription>
+                   vertexInputBindingDescriptions,
+                 gsl::span<const VkVertexInputAttributeDescription>
+                   vertexInputAttributeDescriptions,
+                 VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
+                 VkPipelineViewportStateCreateInfo viewportStateCI,
+                 VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
+                 VkPipelineMultisampleStateCreateInfo multisampleStateCI,
+                 VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
+                 gsl::span<const VkPipelineColorBlendAttachmentState>
+                   colorBlendAttachmentStates,
+                 gsl::span<const VkDynamicState> dynamicStates,
+                 std::uint32_t renderPassSubpass,
+                 std::string name = {}) noexcept;
 
   VkPipelineLayout layout{VK_NULL_HANDLE};
   VkPipeline handle{VK_NULL_HANDLE};

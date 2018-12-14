@@ -14,7 +14,7 @@ struct Buffer {
 
   static tl::expected<Buffer, std::system_error>
   CreateFromMemory(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
-                   VmaMemoryUsage memoryUsage, gsl::not_null<void*> data,
+                   VmaMemoryUsage memoryUsage, gsl::not_null<void const*> data,
                    std::string name = {},
                    VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 

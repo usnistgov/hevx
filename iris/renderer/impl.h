@@ -34,11 +34,9 @@ extern std::uint32_t sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 
 extern VkRenderPass sRenderPass;
+extern VkDescriptorSetLayout sBaseDescriptorSetLayout;
 
-struct Mesh;
-std::vector<Mesh>& Meshes();
-
-tl::expected<VkCommandBuffer, std::system_error>
+[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 
 [[nodiscard]] std::system_error
@@ -55,14 +53,19 @@ void NameObject(VkObjectType objectType, T objectHandle,
 } // NameObject
 
 struct CommandBuffers;
-tl::expected<CommandBuffers, std::system_error> AllocateCommandBuffers(
+[[nodiscard]] tl::expected<CommandBuffers, std::system_error>
+AllocateCommandBuffers(
   std::uint32_t count,
   VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) noexcept;
 
 struct DescriptorSets;
-tl::expected<DescriptorSets, std::system_error>
+[[nodiscard]] tl::expected<DescriptorSets, std::system_error>
 AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> bindings,
                        std::uint32_t numSets, std::string name = {}) noexcept;
+
+struct MeshData;
+[[nodiscard]] std::system_error
+CreateMeshes(gsl::span<const MeshData> meshData) noexcept;
 
 } // namespace iris::Renderer
 

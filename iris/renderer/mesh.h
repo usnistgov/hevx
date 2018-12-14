@@ -3,6 +3,7 @@
 
 #include "glm/glm.hpp"
 #include "renderer/buffer.h"
+#include "renderer/descriptor_sets.h"
 #include "renderer/pipeline.h"
 #include <vector>
 
@@ -16,27 +17,52 @@ struct MeshData {
     glm::vec2 texcoord{0.0f, 0.0f};
   };
 
+  std::string name{};
   glm::mat4x4 matrix{1.f};
-  std::vector<Vertex> vertices;
-  std::vector<unsigned int> indices;
 
-  VkPrimitiveTopology topology;
-  std::vector<VkVertexInputBindingDescription> bindingDescriptions;
-  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+  std::vector<Vertex> vertices{};
+  std::vector<unsigned int> indices{};
+
+  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+  std::vector<VkVertexInputBindingDescription> bindingDescriptions{};
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions{};
 
   void GenerateNormals();
   bool GenerateTangents();
 }; // struct MeshData
 
 struct Mesh {
+  static constexpr std::size_t const kNumDescriptorSets = 1;
+
   static tl::expected<Mesh, std::system_error>
   Create(MeshData const& data) noexcept;
 
+  struct ModelBufferData {
+    glm::mat4 modelMatrix;
+    glm::mat3 normalMatrix;
+  };
+
+  struct MaterialBufferData {
+    glm::vec2 MetallicRoughnessValues;
+    glm::vec4 BaseColorFactor;
+
+    //float NormalScale; // optional
+    //glm::vec3 EmissiveFactor; // optional
+    //float OcclusionStrength; // optional
+  };
+
+  Buffer modelBuffer{};
+  Buffer materialBuffer{};
+  DescriptorSets descriptorSets;
+  Pipeline pipeline{};
   Buffer vertexBuffer{};
   Buffer indexBuffer{};
-  Pipeline pipeline{};
+  std::uint32_t numVertices{0};
+  std::uint32_t numIndices{0};
 
-  Mesh() = default;
+  Mesh()
+    : descriptorSets(kNumDescriptorSets) {}
+
   Mesh(Mesh const&) = delete;
   Mesh(Mesh&& other) = default;
   Mesh& operator=(Mesh const&) = delete;
