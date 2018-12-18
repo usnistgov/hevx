@@ -10,6 +10,7 @@
 #include "config.h"
 #include "enumerate.h"
 #include "error.h"
+#include "glm/ext/matrix_transform.hpp"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -140,6 +141,7 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
 glm::mat4 sViewMatrix;
+glm::mat4 sViewMatrixInverse;
 
 /////
 //
@@ -170,19 +172,15 @@ static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
 struct MatrixBufferData {
   glm::mat4 ViewMatrix;
   glm::mat4 ViewMatrixInverse;
-  glm::mat4 ModelViewMatrix;
   glm::mat4 ProjectionMatrix;
   glm::mat4 ProjectionMatrixInverse;
-  glm::mat4 ViewProjectionMatrix;
-  glm::mat4 ViewProjectionMatrixInverse;
 }; // struct MatrixBufferData
 
 #define MAX_LIGHTS 100
 
 struct Light {
-  glm::vec3 direction;
-  glm::vec3 color;
-  bool on;
+  glm::vec4 direction;
+  glm::vec4 color;
 };
 
 struct LightBufferData {
@@ -1410,8 +1408,7 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
     return {make_error_code(result), "Error creating sMatrixBuffer"};
   }
 
-  bufferCI.size =
-    static_cast<std::uint32_t>(sizeof(Light) * MAX_LIGHTS + sizeof(int));
+  bufferCI.size = static_cast<std::uint32_t>(sizeof(LightBufferData));
   std::string lightBufferName = "sLightBuffer";
   allocationCI.pUserData = lightBufferName.data();
 
@@ -1685,7 +1682,13 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   sInitialized = true;
   sRunning = true;
-  sViewMatrix = glm::mat4(1.f);
+
+  glm::vec3 eye(2.f, 2.f, 2.f);
+  glm::vec3 target(0.f, 0.f, 0.f);
+  glm::vec3 up(0.f, 0.f, 1.f);
+
+  sViewMatrix= glm::lookAt(eye, target, up);
+  sViewMatrixInverse = glm::inverse(sViewMatrixInverse);
 
   IRIS_LOG_LEAVE();
   return {Error::kNone};
@@ -1962,9 +1965,8 @@ void iris::Renderer::EndFrame() noexcept {
   }
 
   auto pLights = static_cast<LightBufferData*>(ptr);
-  pLights->Lights[0].direction = glm::vec3(0, -std::sqrt(2.f), -std::sqrt(2.f));
-  pLights->Lights[0].color = glm::vec3(1, 1, 1);
-  pLights->Lights[0].on = true;
+  pLights->Lights[0].direction = glm::vec4(0, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
+  pLights->Lights[0].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
   pLights->NumLights = 1;
 
   vmaFlushAllocation(sAllocator, sLightBufferAllocation, 0, VK_WHOLE_SIZE);
@@ -2009,12 +2011,9 @@ void iris::Renderer::EndFrame() noexcept {
 
     auto pMatrices = static_cast<MatrixBufferData*>(ptr);
     pMatrices->ViewMatrix = sViewMatrix;
-    pMatrices->ViewMatrixInverse = glm::inverse(sViewMatrix);
+    pMatrices->ViewMatrixInverse = sViewMatrixInverse;
     pMatrices->ProjectionMatrix = window.projectionMatrix;
-    pMatrices->ProjectionMatrixInverse = glm::inverse(window.projectionMatrix);
-    pMatrices->ViewProjectionMatrix = window.projectionMatrix * sViewMatrix;
-    pMatrices->ViewProjectionMatrixInverse =
-      glm::inverse(pMatrices->ViewProjectionMatrix);
+    pMatrices->ProjectionMatrixInverse = window.projectionMatrixInverse;
 
     vmaFlushAllocation(sAllocator, sMatrixBufferAllocation, 0, VK_WHOLE_SIZE);
     vmaUnmapMemory(sAllocator, sMatrixBufferAllocation);

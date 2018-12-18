@@ -38,9 +38,8 @@
 #define MAX_LIGHTS 100
 
 struct Light {
-  vec3 direction;
-  vec3 color;
-  bool on;
+  vec4 direction;
+  vec4 color;
 };
 
 layout(set = 0, binding = 1) uniform LightsBuffer {
@@ -186,12 +185,11 @@ void main() {
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
   vec3 reflection = -normalize(reflect(v, n));
 
+  float roughnessSq = alphaRoughness * alphaRoughness;
   vec3 color = vec3(0.0, 0.0, 0.0);
 
   for (int i = 0; i < NumLights; ++i) {
-    if (!Lights[i].on) continue;
-
-    vec3 l = normalize(Lights[i].direction);
+    vec3 l = normalize(Lights[i].direction.xyz);
     vec3 h = normalize(l + v);
 
     float NdotL = clamp(dot(n, l), 0.001, 1.0);
@@ -199,21 +197,18 @@ void main() {
     float LdotH = clamp(dot(l, h), 0.0, 1.0);
     float VdotH = clamp(dot(v, h), 0.0, 1.0);
 
-    float attenuationL = 2.0 * NdotL /
-      (NdotL + sqrt(alphaRoughness * alphaRoughness +
-        (1.0 - alphaRoughness * alphaRoughness) * (NdotL * NdotL)));
-
-    float attenuationV = 2.0 * NdotV /
-      (NdotV + sqrt(alphaRoughness * alphaRoughness +
-        (1.0 - alphaRoughness * alphaRoughness) * (NdotV * NdotV)));
-
-    float roughnessSq = alphaRoughness * alphaRoughness;
-    float f = (NdotH * roughnessSq - NdotH) * NdotH + 1.0;
-
     // Calculate the shading terms for the microfacet specular shading model
+
     vec3 F = specularEnvironmentR0 + specularEnvironmentR90R0Delta *
              pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+
+    float attenuationL = 2.0 * NdotL /
+      (NdotL + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotL * NdotL)));
+    float attenuationV = 2.0 * NdotV /
+      (NdotV + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotV * NdotV)));
     float G = attenuationL * attenuationV;
+
+    float f = (NdotH * roughnessSq - NdotH) * NdotH + 1.0;
     float D = roughnessSq / (M_PI * f * f);
 
     // Calculation of analytical lighting contribution
@@ -221,7 +216,7 @@ void main() {
     vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
 
     // Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
-    color += NdotL * Lights[i].color * (diffuseContrib + specContrib);
+    color += NdotL * Lights[i].color.rgb * (diffuseContrib + specContrib);
   }
 
   // Apply optional PBR terms for additional (optional) shading

@@ -49,6 +49,8 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
   window.projectionMatrix = glm::perspectiveFov(
     glm::radians(60.f), static_cast<float>(window.window.Extent().width),
     static_cast<float>(window.window.Extent().height), 0.1f, 1000.f);
+  window.projectionMatrix[1][1] *= -1;
+  window.projectionMatrixInverse = glm::inverse(window.projectionMatrix);
 
   window.window.Show();
 
@@ -67,6 +69,7 @@ void iris::Renderer::Window::Resize(wsi::Extent2D const& newExtent) noexcept {
   projectionMatrix =
     glm::perspectiveFov(glm::radians(60.f), static_cast<float>(newExtent.width),
                         static_cast<float>(newExtent.height), 0.1f, 1000.f);
+  projectionMatrixInverse = glm::inverse(projectionMatrix);
 
   resized = true;
 } // iris::Renderer::Window::Resize
@@ -130,11 +133,6 @@ iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
   }
 
   if (!io.WantCaptureMouse) {
-    if (io.MouseDown[iris::wsi::Buttons::kButtonMiddle]) {
-      sViewMatrix[3].z +=
-        io.MouseDragMaxDistanceAbs[iris::wsi::Buttons::kButtonMiddle].y;
-      //sViewMatrix[3].z += io.MouseDelta.y;
-    }
   }
 
   return {Error::kNone};

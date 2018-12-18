@@ -160,7 +160,7 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
 
   if (auto p = mesh.materialBuffer.Map<MaterialBufferData*>()) {
     (*p)->BaseColorFactor = glm::vec4(0.8f, 0.f, 0.f, 1.f);
-    (*p)->MetallicRoughnessValues = glm::vec2(0.f, 0.f);
+    (*p)->MetallicRoughnessValues = glm::vec2(0.f, 1.f);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(p.error());
@@ -256,8 +256,12 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   rasterizationStateCI.sType =
     VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
-  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
+  if (glm::determinant(data.matrix) < 0.f) {
+    rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  } else {
+    rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  }
   rasterizationStateCI.lineWidth = 1.f;
 
   VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
@@ -271,7 +275,7 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
     VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
   depthStencilStateCI.depthTestEnable = VK_TRUE;
   depthStencilStateCI.depthWriteEnable = VK_TRUE;
-  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
+  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
   absl::FixedArray<VkPipelineColorBlendAttachmentState>
     colorBlendAttachmentStates(1);

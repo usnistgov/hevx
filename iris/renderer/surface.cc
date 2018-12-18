@@ -330,12 +330,14 @@ iris::Renderer::Surface::Resize(VkExtent2D newExtent) noexcept {
 
   VkExtent3D imageExtent{newExtent.width, newExtent.height, 1};
 
-  VkViewport newViewport{0.f,
-                         0.f,
-                         static_cast<float>(newExtent.width),
-                         static_cast<float>(newExtent.height),
-                         0.f,
-                         1.f};
+  VkViewport newViewport{
+    0.f,                                  // x
+    0.f,                                  // y
+    static_cast<float>(newExtent.width),  // width
+    static_cast<float>(newExtent.height), // height
+    0.f,                                  // minDepth
+    1.f                                   // maxDepth
+  };
 
   VkRect2D newScissor{{0, 0}, newExtent};
 
