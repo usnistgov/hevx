@@ -159,8 +159,8 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   }
 
   if (auto p = mesh.materialBuffer.Map<MaterialBufferData*>()) {
-    (*p)->BaseColorFactor = glm::vec4(0.8f, 0.f, 0.f, 1.f);
-    (*p)->MetallicRoughnessValues = glm::vec2(0.f, 1.f);
+    (*p)->metallicRoughnessValues = glm::vec2(0.f, 1.f);
+    (*p)->baseColorFactor = glm::vec4(0.8f, 0.f, 0.f, 1.f);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(p.error());
