@@ -127,9 +127,9 @@ iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
   ImGui::NewFrame();
 
   if (!io.WantCaptureKeyboard) {
-    if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
-      iris::Renderer::Terminate();
-    }
+    //if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
+      //iris::Renderer::Terminate();
+    //}
   }
 
   if (!io.WantCaptureMouse) {

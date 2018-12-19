@@ -895,6 +895,7 @@ IsPhysicalDeviceGood(VkPhysicalDevice device,
   return graphicsQueueFamilyIndex;
 } // IsPhysicalDeviceGood
 
+#if 0
 static void FindDeviceGroup() {
   IRIS_LOG_ENTER();
   Expects(sInstance != VK_NULL_HANDLE);
@@ -938,6 +939,7 @@ static void FindDeviceGroup() {
 
   IRIS_LOG_LEAVE();
 } // FindDeviceGroup
+#endif
 
 /*! \brief Choose the Vulkan physical device - \b MUST only be called from
  * \ref Initialize.
@@ -1624,7 +1626,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
-  FindDeviceGroup();
+  //FindDeviceGroup();
 
   if (auto error = ChoosePhysicalDevice(physicalDeviceFeatures,
                                         physicalDeviceExtensionNames);
