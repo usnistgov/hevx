@@ -26,8 +26,6 @@ matrix:
 
 before_install:
   - docker build -t hevx.$PLATFORM -f test/Dockerfile.$PLATFORM .
-  - docker run --detach --name hevx hevx.$PLATFORM curl -O $CTEST_SCRIPT_URI
-  - docker ps -a
 
 script:
-  - docker exec hevx $CTEST_CMD -V -S CTestScript.cmake
+  - docker run hevx.$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD -V -S CTestScript.cmake"
