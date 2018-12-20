@@ -131,6 +131,7 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
 
   bool const hasTexCoords = (data.attributeDescriptions.size() == 4);
   Mesh mesh;
+  mesh.modelMatrix = data.matrix;
 
   if (auto b = Buffer::Create(
         sizeof(ModelBufferData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -143,7 +144,7 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
 
   if (auto p = mesh.modelBuffer.Map<ModelBufferData*>()) {
     (*p)->modelMatrix = data.matrix;
-    (*p)->normalMatrix = glm::inverse(data.matrix);
+    (*p)->modelMatrixInverse = glm::inverse(data.matrix);
     mesh.modelBuffer.Unmap();
   } else {
     IRIS_LOG_LEAVE();
@@ -205,6 +206,10 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   }
 
   absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+
+  absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
+  pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT, 0,
+                           sizeof(glm::mat4) * 2 + sizeof(glm::mat3)};
 
   VkDescriptorBufferInfo modelBufferInfo;
   modelBufferInfo.buffer = mesh.modelBuffer;
@@ -301,11 +306,11 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   descriptorSetLayouts[1] = mesh.descriptorSets.layout;
 
   if (auto p = Pipeline::CreateGraphics(
-        descriptorSetLayouts, {}, shaders, data.bindingDescriptions,
-        data.attributeDescriptions, inputAssemblyStateCI, viewportStateCI,
-        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
-        colorBlendAttachmentStates, dynamicStates, 0,
-        data.name + ":pipeline")) {
+        descriptorSetLayouts, pushConstantRanges, shaders,
+        data.bindingDescriptions, data.attributeDescriptions,
+        inputAssemblyStateCI, viewportStateCI, rasterizationStateCI,
+        multisampleStateCI, depthStencilStateCI, colorBlendAttachmentStates,
+        dynamicStates, 0, data.name + ":pipeline")) {
     mesh.pipeline = std::move(*p);
   } else {
     IRIS_LOG_LEAVE();

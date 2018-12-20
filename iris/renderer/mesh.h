@@ -39,7 +39,7 @@ struct Mesh {
 
   struct ModelBufferData {
     glm::mat4 modelMatrix;
-    glm::mat3 normalMatrix;
+    glm::mat4 modelMatrixInverse;
   };
 
   struct MaterialBufferData {
@@ -52,6 +52,7 @@ struct Mesh {
     //float OcclusionStrength; // optional
   };
 
+  glm::mat4 modelMatrix{1.f};
   Buffer modelBuffer{};
   Buffer materialBuffer{};
   DescriptorSets descriptorSets;

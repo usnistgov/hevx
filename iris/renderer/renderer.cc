@@ -11,6 +11,7 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -1922,6 +1923,10 @@ void iris::Renderer::EndFrame() noexcept {
       descriptorSets[0] = sBaseDescriptorSets[0];
 
       for (auto&& mesh : Meshes()) {
+        glm::mat4 const modelViewMatrix = sViewMatrix * mesh.modelMatrix;
+        glm::mat4 const modelViewMatrixInverse = glm::inverse(modelViewMatrix);
+        glm::mat3 const normalMatrix = glm::transpose(modelViewMatrixInverse);
+
         descriptorSets[1] = mesh.descriptorSets.sets[0];
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1931,6 +1936,17 @@ void iris::Renderer::EndFrame() noexcept {
           commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh.pipeline.layout,
           0, gsl::narrow_cast<std::uint32_t>(descriptorSets.size()),
           descriptorSets.data(), 0, nullptr);
+
+        vkCmdPushConstants(commandBuffer, mesh.pipeline.layout,
+                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
+                           glm::value_ptr(modelViewMatrix));
+        vkCmdPushConstants(commandBuffer, mesh.pipeline.layout,
+                           VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4),
+                           sizeof(glm::mat4),
+                           glm::value_ptr(modelViewMatrixInverse));
+        vkCmdPushConstants(commandBuffer, mesh.pipeline.layout,
+                           VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4) * 2,
+                           sizeof(glm::mat3), glm::value_ptr(normalMatrix));
 
         VkDeviceSize bindingOffset = 0;
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, mesh.vertexBuffer.get(),
