@@ -5,6 +5,10 @@ dist: xenial
 services:
   - docker
 
+env:
+  global:
+    - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
+
 matrix:
   include:
     - name: "CentOS 7 (GCC 7.3.1)"
@@ -22,6 +26,7 @@ matrix:
 
 before_install:
   - docker build -t hevx.$PLATFORM -f test/Dockerfile.$PLATFORM .
+  - docker run hevx.$PLATFORM curl -O $CTEST_SCRIPT_URI
 
 script:
-  - docker run hevx.$PLATFORM "curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake && $CTEST_CMD -V -S CTestScript.cmake"
+  - docker run hevx.$PLATFORM $CTEST_CMD -V -S CTestScript.cmake
