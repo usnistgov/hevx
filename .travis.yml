@@ -24,5 +24,4 @@ before_install:
   - docker build -t hevx.$PLATFORM -f test/Dockerfile.$PLATFORM .
 
 script:
-  - docker run hevx.$PLATFORM curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-  - docker run hevx.$PLATFORM $CTEST_CMD -V -S CTestScript.cmake
+  - docker run hevx.$PLATFORM curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake && $CTEST_CMD -V -S CTestScript.cmake
