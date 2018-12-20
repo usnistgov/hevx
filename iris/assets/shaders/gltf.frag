@@ -87,9 +87,10 @@ layout(set = 1, binding = 10) uniform sampler OcclusionSampler;
 layout(set = 1, binding = 11) uniform texture2D OcclusionTexture;
 #endif
 
-layout(location = 0) in vec4 Pe; // surface position in eye-space
-layout(location = 1) in vec4 Ee; // eye position in eye-space
-layout(location = 2) in vec3 Ve; // view vector in eye-space
+layout(location = 1) in vec3 Pc; // surface position in clip-space
+//layout(location = 0) in vec4 Pe; // surface position in eye-space
+//layout(location = 1) in vec4 Ee; // eye position in eye-space
+//layout(location = 2) in vec3 Ve; // view vector in eye-space
 layout(location = 3) in vec2 UV;
 layout(location = 4) in mat3 TBN;
 
@@ -181,7 +182,8 @@ void main() {
   vec3 specularEnvironmentR90R0Delta = specularEnvironmentR90 - specularEnvironmentR0;
 
   vec3 n = GetNormal();
-  vec3 v = normalize(Ve);
+  vec3 v = normalize(vec3(2.0) - Pc);
+  //vec3 v = normalize(Ve);
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
   vec3 reflection = -normalize(reflect(v, n));
 

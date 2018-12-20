@@ -41,9 +41,10 @@ layout(location = 2) in vec4 Tangent;
 layout(location = 3) in vec2 Texcoord;
 #endif
 
-layout(location = 0) out vec4 Pe; // surface position in eye-space
-layout(location = 1) out vec4 Ee; // eye position in eye-space
-layout(location = 2) out vec3 Ve; // view vector in eye-space
+layout(location = 0) out vec3 Pc; // surface position in clip-space
+//layout(location = 0) out vec4 Pe; // surface position in eye-space
+//layout(location = 1) out vec4 Ee; // eye position in eye-space
+//layout(location = 2) out vec3 Ve; // view vector in eye-space
 layout(location = 3) out vec2 UV;
 layout(location = 4) out mat3 TBN;
 
@@ -52,9 +53,11 @@ out gl_PerVertex {
 };
 
 void main() {
-  Pe = ViewMatrix * ModelMatrix * vec4(Vertex, 1.0);
-  Ee = -ProjectionMatrixInverse[2];
-  Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
+  vec4 P = ModelMatrix * vec4(Vertex, 1.0);
+  Pc = P.xyz / P.w;
+  //Pe = ViewMatrix * ModelMatrix * vec4(Vertex, 1.0);
+  //Ee = -ProjectionMatrixInverse[2];
+  //Ve = normalize(Ee.xyz*Pe.w-Pe.xyz*Ee.w);
 
   vec3 normalW = normalize(vec3(NormalMatrix * vec4(Normal.xyz, 0.0)));
   vec3 tangentW = normalize(vec3(ModelMatrix * vec4(Tangent.xyz, 0.0)));
@@ -67,5 +70,5 @@ void main() {
   UV = vec2(0.0, 0.0);
 #endif
 
-  gl_Position = ProjectionMatrix * Pe;
+  gl_Position = ProjectionMatrix * ViewMatrix * P;
 }

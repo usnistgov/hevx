@@ -44,6 +44,7 @@ struct Mesh {
 
   struct MaterialBufferData {
     glm::vec2 metallicRoughnessValues;
+    glm::vec2 pad0;
     glm::vec4 baseColorFactor;
 
     //float NormalScale; // optional
