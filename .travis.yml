@@ -29,4 +29,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD -V -S CTestScript.cmake"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD -V -S CTestScript.cmake"
