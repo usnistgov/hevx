@@ -20,6 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+//
+// Additional changes made by Wesley Griffin <wesley.griffin@nist.gov>
+// to adapt it to Vulkan GLSL and HEVx https://github.com/usnistgov/hevx
+//
+
 #version 460 core
 
 layout(push_constant) uniform PushConstants {

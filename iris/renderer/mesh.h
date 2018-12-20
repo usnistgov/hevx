@@ -53,6 +53,7 @@ struct Mesh {
   };
 
   glm::mat4 modelMatrix{1.f};
+  glm::mat4 modelMatrixInverse{1.f};
   Buffer modelBuffer{};
   Buffer materialBuffer{};
   DescriptorSets descriptorSets;

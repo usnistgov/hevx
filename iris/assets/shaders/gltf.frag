@@ -33,6 +33,11 @@
 // [4] "An Inexpensive BRDF Model for Physically based Rendering" by Christophe Schlick
 //     https://www.cs.virginia.edu/~jdl/bib/appearance/analytic%20models/schlick94b.pdf
 
+//
+// Additional changes made by Wesley Griffin <wesley.griffin@nist.gov>
+// to adapt it to Vulkan GLSL and HEVx https://github.com/usnistgov/hevx
+//
+
 #version 460 core
 
 #define MAX_LIGHTS 100
@@ -196,34 +201,36 @@ void main() {
   vec3 color = vec3(0.0, 0.0, 0.0);
 
   for (int i = 0; i < NumLights; ++i) {
-    vec3 l = normalize(Lights[i].direction.xyz);
-    vec3 h = normalize(l + v);
+    if (Lights[i].color.a > 0) {
+      vec3 l = normalize(Lights[i].direction.xyz);
+      vec3 h = normalize(l + v);
 
-    float NdotL = clamp(dot(n, l), 0.001, 1.0);
-    float NdotH = clamp(dot(n, h), 0.0, 1.0);
-    float LdotH = clamp(dot(l, h), 0.0, 1.0);
-    float VdotH = clamp(dot(v, h), 0.0, 1.0);
+      float NdotL = clamp(dot(n, l), 0.001, 1.0);
+      float NdotH = clamp(dot(n, h), 0.0, 1.0);
+      float LdotH = clamp(dot(l, h), 0.0, 1.0);
+      float VdotH = clamp(dot(v, h), 0.0, 1.0);
 
-    // Calculate the shading terms for the microfacet specular shading model
+      // Calculate the shading terms for the microfacet specular shading model
 
-    vec3 F = specularEnvironmentR0 + specularEnvironmentR90R0Delta *
-             pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+      vec3 F = specularEnvironmentR0 + specularEnvironmentR90R0Delta *
+               pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 
-    float attenuationL = 2.0 * NdotL /
-      (NdotL + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotL * NdotL)));
-    float attenuationV = 2.0 * NdotV /
-      (NdotV + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotV * NdotV)));
-    float G = attenuationL * attenuationV;
+      float attenuationL = 2.0 * NdotL /
+        (NdotL + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotL * NdotL)));
+      float attenuationV = 2.0 * NdotV /
+        (NdotV + sqrt(roughnessSq + (1.0 - roughnessSq) * (NdotV * NdotV)));
+      float G = attenuationL * attenuationV;
 
-    float f = (NdotH * roughnessSq - NdotH) * NdotH + 1.0;
-    float D = roughnessSq / (M_PI * f * f);
+      float f = (NdotH * roughnessSq - NdotH) * NdotH + 1.0;
+      float D = roughnessSq / (M_PI * f * f);
 
-    // Calculation of analytical lighting contribution
-    vec3 diffuseContrib = (1.0 - F) * (diffuseColor / M_PI);
-    vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
+      // Calculation of analytical lighting contribution
+      vec3 diffuseContrib = (1.0 - F) * (diffuseColor / M_PI);
+      vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
 
-    // Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
-    color += NdotL * Lights[i].color.rgb * (diffuseContrib + specContrib);
+      // Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
+      color += NdotL * Lights[i].color.rgb * (diffuseContrib + specContrib);
+    }
   }
 
   // Apply optional PBR terms for additional (optional) shading

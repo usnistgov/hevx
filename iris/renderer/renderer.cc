@@ -171,10 +171,10 @@ static std::uint32_t sCommandBufferIndex{0};
 static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
 
 struct MatrixBufferData {
-  glm::mat4 ViewMatrix;
-  glm::mat4 ViewMatrixInverse;
-  glm::mat4 ProjectionMatrix;
-  glm::mat4 ProjectionMatrixInverse;
+  glm::mat4 viewMatrix;
+  glm::mat4 viewMatrixInverse;
+  glm::mat4 projectionMatrix;
+  glm::mat4 projectionMatrixInverse;
 }; // struct MatrixBufferData
 
 #define MAX_LIGHTS 100
@@ -185,8 +185,8 @@ struct Light {
 };
 
 struct LightBufferData {
-  Light Lights[MAX_LIGHTS];
-  int NumLights;
+  Light lights[MAX_LIGHTS];
+  int numLights;
 }; // struct LightBufferData
 
 static VkBuffer sMatrixBuffer{VK_NULL_HANDLE};
@@ -1690,8 +1690,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   glm::vec3 target(0.f, 0.f, 0.f);
   glm::vec3 up(0.f, 0.f, 1.f);
 
-  sViewMatrix= glm::lookAt(eye, target, up);
-  sViewMatrixInverse = glm::inverse(sViewMatrixInverse);
+  sViewMatrix = glm::lookAt(eye, target, up);
+  sViewMatrixInverse = glm::inverse(sViewMatrix);
 
   IRIS_LOG_LEAVE();
   return {Error::kNone};
@@ -1924,7 +1924,8 @@ void iris::Renderer::EndFrame() noexcept {
 
       for (auto&& mesh : Meshes()) {
         glm::mat4 const modelViewMatrix = sViewMatrix * mesh.modelMatrix;
-        glm::mat4 const modelViewMatrixInverse = glm::inverse(modelViewMatrix);
+        glm::mat4 const modelViewMatrixInverse =
+          sViewMatrixInverse * mesh.modelMatrixInverse;
         glm::mat3 const normalMatrix = glm::transpose(modelViewMatrixInverse);
 
         descriptorSets[1] = mesh.descriptorSets.sets[0];
@@ -1983,9 +1984,9 @@ void iris::Renderer::EndFrame() noexcept {
   }
 
   auto pLights = static_cast<LightBufferData*>(ptr);
-  pLights->Lights[0].direction = glm::vec4(0, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
-  pLights->Lights[0].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
-  pLights->NumLights = 1;
+  pLights->lights[0].direction = glm::vec4(0, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
+  pLights->lights[0].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
+  pLights->numLights = 1;
 
   vmaFlushAllocation(sAllocator, sLightBufferAllocation, 0, VK_WHOLE_SIZE);
   vmaUnmapMemory(sAllocator, sLightBufferAllocation);
@@ -2028,10 +2029,10 @@ void iris::Renderer::EndFrame() noexcept {
     }
 
     auto pMatrices = static_cast<MatrixBufferData*>(ptr);
-    pMatrices->ViewMatrix = sViewMatrix;
-    pMatrices->ViewMatrixInverse = sViewMatrixInverse;
-    pMatrices->ProjectionMatrix = window.projectionMatrix;
-    pMatrices->ProjectionMatrixInverse = window.projectionMatrixInverse;
+    pMatrices->viewMatrix = sViewMatrix;
+    pMatrices->viewMatrixInverse = sViewMatrixInverse;
+    pMatrices->projectionMatrix = window.projectionMatrix;
+    pMatrices->projectionMatrixInverse = window.projectionMatrixInverse;
 
     vmaFlushAllocation(sAllocator, sMatrixBufferAllocation, 0, VK_WHOLE_SIZE);
     vmaUnmapMemory(sAllocator, sMatrixBufferAllocation);

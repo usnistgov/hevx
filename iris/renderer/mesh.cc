@@ -132,6 +132,7 @@ iris::Renderer::Mesh::Create(MeshData const& data) noexcept {
   bool const hasTexCoords = (data.attributeDescriptions.size() == 4);
   Mesh mesh;
   mesh.modelMatrix = data.matrix;
+  mesh.modelMatrixInverse = glm::inverse(mesh.modelMatrix);
 
   if (auto b = Buffer::Create(
         sizeof(ModelBufferData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
