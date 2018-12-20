@@ -25,7 +25,8 @@ matrix:
       env: PLATFORM=cosmic CTEST_CMD="ctest -VV"
 
 before_install:
-  - docker build -t hevx.$PLATFORM -f test/Dockerfile.$PLATFORM .
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run hevx.$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD -V -S CTestScript.cmake"
+  - docker run hevx /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD -V -S CTestScript.cmake"
