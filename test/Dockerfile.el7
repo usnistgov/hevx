@@ -4,5 +4,4 @@ RUN yum install -y centos-release-scl
 RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel
 RUN scl enable rh-python36 -- pip3 install --user wheezy.template
-RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
 

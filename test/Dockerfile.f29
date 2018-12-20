@@ -2,5 +2,4 @@ FROM fedora:29
 RUN dnf update -y
 RUN dnf install -y git cmake gcc-c++ make xcb-util-wm-devel libxcb-devel libX11-devel
 RUN pip3 install --user wheezy.template
-RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
 

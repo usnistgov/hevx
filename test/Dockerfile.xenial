@@ -15,5 +15,4 @@ RUN update-alternatives \
   --install /usr/bin/python python /usr/bin/python3 60
 RUN pip3 install --user wheezy.template
 RUN mkdir cmake && curl -L $CMAKE_URL | tar --strip-components=1 -xz -C cmake
-RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
 
