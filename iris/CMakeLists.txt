@@ -13,7 +13,6 @@ endif()
 
 set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4)
 find_package(PythonInterp 3 REQUIRED)
-FetchContent_GetProperties(flextgl)
 
 set(protos_PROTOS
   protos/color.proto
@@ -66,7 +65,7 @@ add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  COMMAND ${PYTHON_EXECUTABLE} ${flextgl_SOURCE_DIR}/flextGLgen.py
+  COMMAND ${PYTHON_EXECUTABLE} ${FLEXTGL_SOURCE_DIR}/flextGLgen.py
   ARGS
       -D.
       -t${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan
@@ -127,7 +126,7 @@ target_link_libraries(iris
     flags imgui vma
     GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
-    stb glslang SPIRV Vulkan::Vulkan
+    stb glslang SPIRV vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}

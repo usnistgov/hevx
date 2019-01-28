@@ -41,9 +41,9 @@ endif()
 ##
 # Required libraries and third-party components
 ##
-find_package(VulkanSDK 1.1.97.0 REQUIRED)
-get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
-get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
+#find_package(VulkanSDK 1.1.97.0 REQUIRED)
+#get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
+#get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
 
 add_subdirectory(third_party)
 

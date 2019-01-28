@@ -1,13 +1,10 @@
 set(JSON_BuildTests ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
 
-FetchContent_Declare(json
+message(STATUS "Populating build dependency: json")
+FetchContent_Populate(json
   GIT_REPOSITORY https://github.com/nlohmann/json
   GIT_SHALLOW TRUE # json HEAD "should be" stable
+  QUIET
 )
 
-FetchContent_GetProperties(json)
-if(NOT json_POPULATED)
-  message(STATUS "Populating build dependency: json")
-  FetchContent_Populate(json)
-  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR})
-endif()
+add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR})

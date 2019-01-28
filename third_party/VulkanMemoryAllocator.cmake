@@ -1,26 +1,28 @@
-FetchContent_Declare(vma
+set(_vulkanmemoryallocator_git_tag v2.2.0)
+
+message(STATUS "Populating build dependency: VulkanMemoryAllocator")
+FetchContent_Populate(VulkanMemoryAllocator
   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-  GIT_SHALLOW TRUE GIT_TAG v2.2.0
+  GIT_SHALLOW TRUE GIT_TAG ${_vulkanmemoryallocator_git_tag}
+  QUIET
 )
 
-FetchContent_GetProperties(vma)
-if(NOT vma_POPULATED)
-  message(STATUS "Populating build dependency: vma")
-  FetchContent_Populate(vma)
-
-  if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/vk_mem_alloc.cc)
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/vk_mem_alloc.cc
-         "#define VMA_IMPLEMENTATION\n#include \"vk_mem_alloc.h\"")
-  endif()
-
-  add_library(vma ${CMAKE_CURRENT_BINARY_DIR}/vk_mem_alloc.cc)
-  target_include_directories(vma PUBLIC ${vma_SOURCE_DIR}/src)
-  target_link_libraries(vma PUBLIC Vulkan::Vulkan)
-  target_compile_definitions(vma
-    PUBLIC
-      $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
-    PRIVATE
-      $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
-      $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
-  )
+if(NOT EXISTS ${vulkanmemoryallocator_BINARY_DIR}/vk_mem_alloc.cc)
+  file(WRITE ${vulkanmemoryallocator_BINARY_DIR}/vk_mem_alloc.cc
+        "#define VMA_IMPLEMENTATION\n#include \"vk_mem_alloc.h\"")
 endif()
+
+add_library(vma ${vulkanmemoryallocator_BINARY_DIR}/vk_mem_alloc.cc)
+target_include_directories(vma
+  PUBLIC
+    ${vulkanmemoryallocator_SOURCE_DIR}/src
+    ${VULKAN_HEADERS_INSTALL_DIR}
+)
+target_link_libraries(vma PUBLIC vulkan)
+target_compile_definitions(vma
+  PUBLIC
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+  PRIVATE
+    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
+    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
+)

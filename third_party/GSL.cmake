@@ -1,14 +1,11 @@
 #set(GSL_TEST ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
 set(GSL_TEST OFF CACHE BOOL "" FORCE)
 
-FetchContent_Declare(gsl
+message(STATUS "Populating build dependency: gsl")
+FetchContent_Populate(gsl
   GIT_REPOSITORY https://github.com/Microsoft/GSL
   GIT_SHALLOW TRUE # GSL *should* be stable at HEAD
+  QUIET
 )
 
-FetchContent_GetProperties(gsl)
-if(NOT gsl_POPULATED)
-  message(STATUS "Populating build dependency: gsl")
-  FetchContent_Populate(gsl)
-  add_subdirectory(${gsl_SOURCE_DIR} ${gsl_BINARY_DIR})
-endif()
+add_subdirectory(${gsl_SOURCE_DIR} ${gsl_BINARY_DIR})
