@@ -7,14 +7,8 @@ find_package(PythonInterp 3 REQUIRED)
 
 # used by some of the scripts below
 function(fetch_sources NAME URL COMMIT)
-  set(one_value_args BASEDIR SUBDIR)
-  cmake_parse_arguments(PARSE_ARGV ${ARGC} FS "" "${one_value_args}" "")
-
-  if(NOT FS_BASEDIR)
-    set(BASEDIR ${CMAKE_CURRENT_BINARY_DIR})
-  else()
-    set(BASEDIR ${FS_BASEDIR})
-  endif()
+  set(one_value_args SUBDIR BASEDIR)
+  cmake_parse_arguments(PARSE_ARGV 3 FS "" "${one_value_args}" "")
 
   if(NOT FS_SUBDIR)
     set(SUBDIR ${NAME})
@@ -22,10 +16,16 @@ function(fetch_sources NAME URL COMMIT)
     set(SUBDIR ${FS_SUBDIR})
   endif()
 
+  if(NOT FS_BASEDIR)
+    set(BASEDIR ${CMAKE_CURRENT_BINARY_DIR})
+  else()
+    set(BASEDIR ${FS_BASEDIR})
+  endif()
+
   if(EXISTS ${BASEDIR}/${SUBDIR}/CMakeLists.txt)
     return()
   endif()
-  message(STATUS "Fetching ${NAME}:${COMMIT} to ${SUBDIR}")
+  message(STATUS "Fetching ${URL}:${COMMIT} to ${BASEDIR}/${SUBDIR}")
 
   execute_process(
     COMMAND ${GIT_EXECUTABLE} clone ${URL} ${SUBDIR}

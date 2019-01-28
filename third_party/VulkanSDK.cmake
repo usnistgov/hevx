@@ -7,12 +7,6 @@ if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/known_good.json)
     ${CMAKE_CURRENT_BINARY_DIR}/known_good.json)
 endif()
 
-if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/update_deps.py)
-  file(DOWNLOAD
-    ${_base_url}/Vulkan-ValidationLayers/${_git_tag}/scripts/update_deps.py
-    ${CMAKE_CURRENT_BINARY_DIR}/update_deps.py)
-endif()
-
 file(STRINGS ${CMAKE_CURRENT_BINARY_DIR}/known_good.json
 known_good NEWLINE_CONSUME)
 sbeParseJson(kg known_good)
@@ -22,6 +16,8 @@ foreach(repo ${kg.repos})
     ${kg.repos_${repo}.commit})
 endforeach(repo)
 
+sbeClearJson(kg)
+
 # Required order:
 #  1. glslang
 #  2. Vulkan-Headers
@@ -30,4 +26,19 @@ endforeach(repo)
 #  5. Vulkan-Tools
 #  6. VulkanTools
 
+file(STRINGS ${CMAKE_CURRENT_BINARY_DIR}/glslang/known_good.json known_good
+  NEWLINE_CONSUME)
+sbeParseJson(kg known_good)
+
+foreach(commit ${kg.commits})
+  set(_repo ${kg.commits_${commit}.subrepo})
+  set(_url "https://github.com/${_repo}")
+  fetch_sources(${kg.commits_${commit}.name} ${_url}
+    ${kg.commits_${commit}.commit}
+    SUBDIR ${kg.commits_${commit}.subdir}
+    BASEDIR ${CMAKE_CURRENT_BINARY_DIR}/glslang
+  )
+endforeach(commit)
+
 sbeClearJson(kg)
+
