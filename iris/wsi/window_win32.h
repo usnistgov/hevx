@@ -38,16 +38,10 @@ public:
   Offset2D Offset() const noexcept { return rect_.offset; }
   Extent2D Extent() const noexcept { return rect_.extent; }
 
-  Keyset KeyboardState() const noexcept;
-
-  Buttonset ButtonState() const noexcept { return buttons_; }
-
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
   glm::uvec2 CursorPos() const noexcept;
-
-  glm::uvec2 ScrollWheel() const noexcept { return scroll_; }
 
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
@@ -144,9 +138,7 @@ private:
   DWORD dwStyle_{};
   bool closed_{false};
   bool focused_{false};
-  absl::FixedArray<int> keyLUT_;
-  Buttonset buttons_{};
-  glm::vec2 scroll_{};
+  absl::FixedArray<Keys> keyLUT_;
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

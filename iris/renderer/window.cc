@@ -36,15 +36,34 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
     return tl::unexpected(sfc.error());
   }
 
-  if (auto ui = UI::Create()) {
-    window.ui = std::move(*ui);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(ui.error());
-  }
+  window.isConsole =
+    (options & Window::Options::kIsConsole) == Window::Options::kIsConsole;
 
-  window.showUI =
-    (options & Window::Options::kShowUI) == Window::Options::kShowUI;
+  if (window.isConsole) {
+    ImGuiIO& io = ImGui::GetIO();
+
+    io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
+    io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
+    io.KeyMap[ImGuiKey_RightArrow] = static_cast<int>(wsi::Keys::kRight);
+    io.KeyMap[ImGuiKey_UpArrow] = static_cast<int>(wsi::Keys::kUp);
+    io.KeyMap[ImGuiKey_DownArrow] = static_cast<int>(wsi::Keys::kDown);
+    io.KeyMap[ImGuiKey_PageUp] = static_cast<int>(wsi::Keys::kPageUp);
+    io.KeyMap[ImGuiKey_PageDown] = static_cast<int>(wsi::Keys::kPageDown);
+    io.KeyMap[ImGuiKey_Home] = static_cast<int>(wsi::Keys::kHome);
+    io.KeyMap[ImGuiKey_End] = static_cast<int>(wsi::Keys::kEnd);
+    io.KeyMap[ImGuiKey_Insert] = static_cast<int>(wsi::Keys::kInsert);
+    io.KeyMap[ImGuiKey_Delete] = static_cast<int>(wsi::Keys::kDelete);
+    io.KeyMap[ImGuiKey_Backspace] = static_cast<int>(wsi::Keys::kBackspace);
+    io.KeyMap[ImGuiKey_Space] = static_cast<int>(wsi::Keys::kSpace);
+    io.KeyMap[ImGuiKey_Enter] = static_cast<int>(wsi::Keys::kEnter);
+    io.KeyMap[ImGuiKey_Escape] = static_cast<int>(wsi::Keys::kEscape);
+    io.KeyMap[ImGuiKey_A] = static_cast<int>(wsi::Keys::kA);
+    io.KeyMap[ImGuiKey_C] = static_cast<int>(wsi::Keys::kC);
+    io.KeyMap[ImGuiKey_V] = static_cast<int>(wsi::Keys::kV);
+    io.KeyMap[ImGuiKey_X] = static_cast<int>(wsi::Keys::kX);
+    io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
+    io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
+  }
 
   window.projectionMatrix = glm::perspectiveFov(
     glm::radians(60.f), static_cast<float>(window.window.Extent().width),
@@ -80,7 +99,7 @@ void iris::Renderer::Window::Close() noexcept {
 } // iris::Renderer::Window::Close
 
 std::system_error
-iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
+iris::Renderer::Window::BeginFrame(float frameDelta[[maybe_unused]]) noexcept {
   window.PollEvents();
 
   if (resized) {
@@ -92,270 +111,41 @@ iris::Renderer::Window::BeginFrame(float frameDelta) noexcept {
     resized = false;
   }
 
-  ImGui::SetCurrentContext(ui.context.get());
   ImGuiIO& io = ImGui::GetIO();
 
-  wsi::Keyset const keyState = window.KeyboardState();
-  for (std::size_t i = 0; i <  wsi::Keyset::kMaxKeys; ++i) {
-    io.KeysDown[i] = keyState[static_cast<wsi::Keys>(i)];
-  }
+  // FIXME: hack
+#if PLATFORM_LINUX
+#elif PLATFORM_WINDOWS
+  io.KeyCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+  io.KeyShift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
+  io.KeyAlt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+  io.KeySuper = false;
+#endif
 
-  io.KeyCtrl = io.KeysDown[wsi::Keys::kLeftControl] ||
-               io.KeysDown[wsi::Keys::kRightControl];
-  io.KeyShift =
-    io.KeysDown[wsi::Keys::kLeftShift] || io.KeysDown[wsi::Keys::kRightShift];
-  io.KeyAlt =
-    io.KeysDown[wsi::Keys::kLeftAlt] || io.KeysDown[wsi::Keys::kRightAlt];
+  auto const cursorPos = window.CursorPos();
+  io.MousePos = ImVec2(cursorPos.x, cursorPos.y);
 
-  wsi::Buttonset const buttonState = window.ButtonState();
-  for (std::size_t i = 0; i < wsi::Buttonset::kMaxButtons; ++i) {
-    io.MouseDown[i] = buttonState[static_cast<wsi::Buttons>(i)];
-  }
-
-  auto const mousePos = window.CursorPos();
-  io.MousePos.x = static_cast<float>(mousePos.x);
-  io.MousePos.y = static_cast<float>(mousePos.y);
-
-  //auto const mouseWheel = window.ScrollWheel();
-  //io.MouseWheel = static_cast<float>(mouseWheel.y);
-
-  io.DisplaySize.x = static_cast<float>(window.Extent().width);
-  io.DisplaySize.y = static_cast<float>(window.Extent().height);
-  io.DisplayFramebufferScale = {0.f, 0.f};
-
-  io.DeltaTime = frameDelta;
-  ImGui::NewFrame();
-
-  if (!io.WantCaptureKeyboard) {
-    //if (ImGui::IsKeyReleased(iris::wsi::Keys::kEscape)) {
-      //iris::Renderer::Terminate();
-    //}
-  }
-
-  if (!io.WantCaptureMouse) {
+  // FIXME: this will be overwritten by whichever "console" window writes last
+  if (isConsole) {
+    io.DisplaySize.x = static_cast<float>(window.Extent().width);
+    io.DisplaySize.y = static_cast<float>(window.Extent().height);
+    io.DisplayFramebufferScale = {0.f, 0.f};
   }
 
   return {Error::kNone};
 } // iris::Renderer::Window::BeginFrame
 
 tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer,
-                                 int frame[[maybe_unused]],
-                                 gsl::span<float> frameTimes) noexcept {
+iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   Expects(framebuffer != VK_NULL_HANDLE);
-  ImGui::SetCurrentContext(ui.context.get());
-  ImGuiIO& io = ImGui::GetIO();
-
-  if (showUI) {
-    ImGui::Begin("Status");
-    {
-      ImGui::Text("Last Frame %.3f ms", 1000.f * io.DeltaTime);
-      ImGui::PlotHistogram(
-        "Frame Times", frameTimes.data(), frameTimes.size(), 0,
-        fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
-        100.f, ImVec2(0, 50));
-    }
-    ImGui::End();
-
-    ImGui::Begin("Matrices");
-    {
-      if (ImGui::CollapsingHeader("View Matrix")) {
-        glm::vec4 rows[] = {
-          glm::row(sViewMatrix, 0),
-          glm::row(sViewMatrix, 1),
-          glm::row(sViewMatrix, 2),
-          glm::row(sViewMatrix, 3),
-        };
-
-        ImGui::InputFloat4("", glm::value_ptr(rows[0]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[1]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[2]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[3]));
-      }
-
-      if (ImGui::CollapsingHeader("Projection Matrix")) {
-        glm::vec4 rows[] = {
-          glm::row(projectionMatrix, 0),
-          glm::row(projectionMatrix, 1),
-          glm::row(projectionMatrix, 2),
-          glm::row(projectionMatrix, 3),
-        };
-
-        ImGui::InputFloat4("", glm::value_ptr(rows[0]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[1]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[2]));
-        ImGui::InputFloat4("", glm::value_ptr(rows[3]));
-      }
-    }
-    ImGui::End();
-  }
-
-  ImGui::EndFrame();
-  ImGui::Render();
-
-  ImDrawData* drawData = ImGui::GetDrawData();
-  if (drawData->TotalVtxCount == 0) return VkCommandBuffer{VK_NULL_HANDLE};
-
-  VkDeviceSize newBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
-  if (newBufferSize > ui.vertexBuffer.size) {
-    if (auto vb =
-          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::vertexBuffer")) {
-      auto newVB = std::move(*vb);
-      // ensures old ui.vertexBuffer will get destroyed on scope exit
-      std::swap(ui.vertexBuffer, newVB);
-    } else {
-      using namespace std::string_literals;
-      return tl::unexpected(std::system_error(
-        vb.error().code(),
-        "Cannot resize UI vertex buffer: "s + vb.error().what()));
-    }
-  }
-
-  newBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
-  if (newBufferSize > ui.indexBuffer.size) {
-    if (auto ib =
-          Buffer::Create(newBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                         VMA_MEMORY_USAGE_CPU_TO_GPU, "ui::sIndexBuffer")) {
-      auto newIB = std::move(*ib);
-      // ensures old ui.indexBuffer will get destroyed on scope exit
-      std::swap(ui.indexBuffer, newIB);
-    } else {
-      using namespace std::string_literals;
-      return tl::unexpected(std::system_error(
-        ib.error().code(),
-        "Cannot resize UI index buffer: "s + ib.error().what()));
-    }
-  }
-
-  ImDrawVert* pVerts;
-  if (auto p = ui.vertexBuffer.Map<ImDrawVert*>()) {
-    pVerts = *p;
-  } else {
-    using namespace std::string_literals;
-    return tl::unexpected(std::system_error(
-      p.error().code(),
-      "Cannot map UI vertex staging buffer: "s + p.error().what()));
-  }
-
-  ImDrawIdx* pIndxs;
-  if (auto p = ui.indexBuffer.Map<ImDrawIdx*>()) {
-    pIndxs = *p;
-  } else {
-    using namespace std::string_literals;
-    return tl::unexpected(std::system_error(
-      p.error().code(),
-      "Cannot map UI index staging buffer: "s + p.error().what()));
-  }
-
-  for (int i = 0; i < drawData->CmdListsCount; ++i) {
-    ImDrawList const* cmdList = drawData->CmdLists[i];
-    std::memcpy(pVerts, cmdList->VtxBuffer.Data,
-                cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
-    std::memcpy(pIndxs, cmdList->IdxBuffer.Data,
-                cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
-    pVerts += cmdList->VtxBuffer.Size;
-    pIndxs += cmdList->IdxBuffer.Size;
-  }
-
-  ui.vertexBuffer.Unmap();
-  ui.indexBuffer.Unmap();
-
-  absl::FixedArray<VkClearValue> clearValues(4);
-  clearValues[sColorTargetAttachmentIndex].color = {{0, 0, 0, 0}};
-  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
-
-  ui.commandBufferIndex =
-    (ui.commandBufferIndex + 1) % ui.commandBuffers.size();
-  auto&& cb = ui.commandBuffers[ui.commandBufferIndex];
-
-  VkCommandBufferInheritanceInfo inheritanceInfo = {};
-  inheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  inheritanceInfo.renderPass = sRenderPass;
-  inheritanceInfo.framebuffer = framebuffer;
-
-  VkCommandBufferBeginInfo beginInfo = {};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                    VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-  beginInfo.pInheritanceInfo = &inheritanceInfo;
-
-  if (auto result = vkBeginCommandBuffer(cb, &beginInfo);
-      result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot begin UI command buffer"));
-  }
-
-  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline);
-  vkCmdBindDescriptorSets(
-    cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ui.pipeline.layout, 0,
-    gsl::narrow_cast<std::uint32_t>(ui.descriptorSets.sets.size()),
-    ui.descriptorSets.sets.data(), 0, nullptr);
-
-  VkDeviceSize bindingOffset = 0;
-  vkCmdBindVertexBuffers(cb, 0, 1, ui.vertexBuffer.get(), &bindingOffset);
-  vkCmdBindIndexBuffer(cb, ui.indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
-  glm::vec2 const displaySize{drawData->DisplaySize.x, drawData->DisplaySize.y};
-  glm::vec2 const displayPos{drawData->DisplayPos.x, drawData->DisplayPos.y};
-
-  VkViewport viewport = {0, 0, displaySize.x, displaySize.y, 0.f, 1.f};
-  vkCmdSetViewport(cb, 0, 1, &viewport);
-
-  glm::vec2 const scale = glm::vec2{2.f, 2.f} / displaySize;
-  glm::vec2 const translate = glm::vec2{-1.f, -1.f} - displayPos * scale;
-
-  vkCmdPushConstants(cb, ui.pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                     sizeof(glm::vec2), glm::value_ptr(scale));
-  vkCmdPushConstants(cb, ui.pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
-                     sizeof(glm::vec2), sizeof(glm::vec2),
-                     glm::value_ptr(translate));
-
-  for (int i = 0, idxOff = 0, vtxOff = 0; i < drawData->CmdListsCount; ++i) {
-    ImDrawList* cmdList = drawData->CmdLists[i];
-
-    for (int j = 0; j < cmdList->CmdBuffer.size(); ++j) {
-      ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[j];
-
-      if (drawCmd->UserCallback) {
-        drawCmd->UserCallback(cmdList, drawCmd);
-      } else {
-        VkRect2D scissor;
-        scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
-                             ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
-                             : 0;
-        scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
-                             ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
-                             : 0;
-        scissor.extent.width =
-          (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
-        scissor.extent.height = (uint32_t)(
-          drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1); // FIXME: Why +1 here?
-
-        vkCmdSetScissor(cb, 0, 1, &scissor);
-        vkCmdDrawIndexed(cb, drawCmd->ElemCount, 1, idxOff, vtxOff, 0);
-      }
-
-      idxOff += drawCmd->ElemCount;
-    }
-
-    vtxOff += cmdList->VtxBuffer.Size;
-  }
-
-  if (auto result = vkEndCommandBuffer(cb); result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot end UI command buffer"));
-  }
-
-  return cb;
+  return VkCommandBuffer(VK_NULL_HANDLE);
 } // iris::Renderer::Window::EndFrame
 
 iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)
   , window(std::move(other.window))
   , surface(std::move(other.surface))
-  , showUI(other.showUI)
-  , ui(std::move(other.ui))
+  , isConsole(other.isConsole)
   , projectionMatrix(std::move(other.projectionMatrix)) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
@@ -369,8 +159,7 @@ operator=(Window&& rhs) noexcept {
   resized = rhs.resized;
   window = std::move(rhs.window);
   surface = std::move(rhs.surface);
-  showUI = rhs.showUI;
-  ui = std::move(rhs.ui);
+  isConsole = rhs.isConsole;
   projectionMatrix = std::move(rhs.projectionMatrix);
 
   // Re-bind delegates

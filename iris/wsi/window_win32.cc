@@ -3,132 +3,133 @@
  */
 #include "wsi/window_win32.h"
 #include "absl/base/macros.h"
+#include "imgui.h"
 #include "logging.h"
 
 namespace iris::wsi {
 
-static int KeysToKeycode(Keys key) noexcept {
-  switch(key) {
-  case Keys::kSpace: return VK_SPACE;
-  case Keys::kApostrophe: return 0; // FIXME
-  case Keys::kComma: return 0; // FIXME
-  case Keys::kMinus: return 0; // FIXME
-  case Keys::kPeriod: return 0; // FIXME
-  case Keys::kSlash: return 0; // FIXME
-  case Keys::k0: return 0x30;
-  case Keys::k1: return 0x31;
-  case Keys::k2: return 0x32;
-  case Keys::k3: return 0x33;
-  case Keys::k4: return 0x34;
-  case Keys::k5: return 0x35;
-  case Keys::k6: return 0x36;
-  case Keys::k7: return 0x37;
-  case Keys::k8: return 0x38;
-  case Keys::k9: return 0x39;
-  case Keys::kSemicolon: return 0; // FIXME
-  case Keys::kEqual: return 0; // FIXME
-  case Keys::kA: return 0x41;
-  case Keys::kB: return 0x42;
-  case Keys::kC: return 0x43;
-  case Keys::kD: return 0x44;
-  case Keys::kE: return 0x45;
-  case Keys::kF: return 0x46;
-  case Keys::kG: return 0x47;
-  case Keys::kH: return 0x48;
-  case Keys::kI: return 0x49;
-  case Keys::kJ: return 0x4A;
-  case Keys::kK: return 0x4B;
-  case Keys::kL: return 0x4C;
-  case Keys::kM: return 0x4D;
-  case Keys::kN: return 0x4E;
-  case Keys::kO: return 0x4F;
-  case Keys::kP: return 0x50;
-  case Keys::kQ: return 0x51;
-  case Keys::kR: return 0x52;
-  case Keys::kS: return 0x53;
-  case Keys::kT: return 0x54;
-  case Keys::kU: return 0x55;
-  case Keys::kV: return 0x56;
-  case Keys::kW: return 0x57;
-  case Keys::kX: return 0x58;
-  case Keys::kY: return 0x59;
-  case Keys::kZ: return 0x5A;
-  case Keys::kLeftBracket: return 0; // FIXME
-  case Keys::kBackslash: return 0; // FIXME
-  case Keys::kRightBracket: return 0; // FIXME
-  case Keys::kGraveAccent: return 0; // FIXME
-  case Keys::kEscape: return VK_ESCAPE;
-  case Keys::kEnter: return VK_RETURN;
-  case Keys::kTab: return VK_TAB;
-  case Keys::kBackspace: return VK_BACK;
-  case Keys::kInsert: return VK_INSERT;
-  case Keys::kDelete: return VK_DELETE;
-  case Keys::kRight: return VK_RIGHT;
-  case Keys::kLeft: return VK_LEFT;
-  case Keys::kDown: return VK_DOWN;
-  case Keys::kUp: return VK_UP;
-  case Keys::kPageUp: return VK_PRIOR;
-  case Keys::kPageDown: return VK_NEXT;
-  case Keys::kHome: return VK_HOME;
-  case Keys::kEnd: return VK_END;
-  case Keys::kCapsLock: return 0; // FIXME
-  case Keys::kScrollLock: return 0; // FIXME
-  case Keys::kNumLock: return 0; // FIXME
-  case Keys::kPrintScreen: return 0; // FIXME
-  case Keys::kPause: return 0; // FIXME
-  case Keys::kF1: return VK_F1;
-  case Keys::kF2: return VK_F2;
-  case Keys::kF3: return VK_F3;
-  case Keys::kF4: return VK_F4;
-  case Keys::kF5: return VK_F5;
-  case Keys::kF6: return VK_F6;
-  case Keys::kF7: return VK_F7;
-  case Keys::kF8: return VK_F8;
-  case Keys::kF9: return VK_F9;
-  case Keys::kF10: return VK_F10;
-  case Keys::kF11: return VK_F11;
-  case Keys::kF12: return VK_F12;
-  case Keys::kF13: return VK_F13;
-  case Keys::kF14: return VK_F14;
-  case Keys::kF15: return VK_F15;
-  case Keys::kF16: return VK_F16;
-  case Keys::kF17: return VK_F17;
-  case Keys::kF18: return VK_F19;
-  case Keys::kF19: return VK_F19;
-  case Keys::kF20: return VK_F20;
-  case Keys::kF21: return VK_F21;
-  case Keys::kF22: return VK_F22;
-  case Keys::kF23: return VK_F23;
-  case Keys::kF24: return VK_F24;
-  case Keys::kKeypad0: return VK_NUMPAD0;
-  case Keys::kKeypad1: return VK_NUMPAD1;
-  case Keys::kKeypad2: return VK_NUMPAD2;
-  case Keys::kKeypad3: return VK_NUMPAD3;
-  case Keys::kKeypad4: return VK_NUMPAD4;
-  case Keys::kKeypad5: return VK_NUMPAD5;
-  case Keys::kKeypad6: return VK_NUMPAD6;
-  case Keys::kKeypad7: return VK_NUMPAD7;
-  case Keys::kKeypad8: return VK_NUMPAD8;
-  case Keys::kKeypad9: return VK_NUMPAD9;
-  case Keys::kKeypadDecimal: return VK_DECIMAL;
-  case Keys::kKeypadDivide: return VK_DIVIDE;
-  case Keys::kKeypadMultiply: return VK_MULTIPLY;
-  case Keys::kKeypadSubtract: return VK_SUBTRACT;
-  case Keys::kKeypadAdd: return VK_ADD;
-  case Keys::kKeypadEnter: return 0; // FIXME
-  case Keys::kKeypadEqual: return 0; // FIXME
-  case Keys::kLeftShift: return VK_LSHIFT;
-  case Keys::kLeftControl: return VK_LCONTROL;
-  case Keys::kLeftAlt: return VK_LMENU;
-  case Keys::kLeftSuper: return 0; // FIXME
-  case Keys::kRightShift: return VK_RSHIFT;
-  case Keys::kRightControl: return VK_RCONTROL;
-  case Keys::kRightAlt: return VK_RMENU;
-  case Keys::kRightSuper: return 0; // FIXME
-  case Keys::kMenu: return 0; // FIXME
-  default: return 0; //FIXME
+static Keys KeycodeToKeys(int keycode) noexcept {
+  switch (keycode) {
+  case VK_SPACE: return Keys::kSpace;
+  //case Keys::kApostrophe: return 0; // FIXME
+  //case Keys::kComma: return 0; // FIXME
+  //case Keys::kMinus: return 0; // FIXME
+  //case Keys::kPeriod: return 0; // FIXME
+  //case Keys::kSlash: return 0; // FIXME
+  case 0x30: return Keys::k0;
+  case 0x31: return Keys::k1;
+  case 0x32: return Keys::k2;
+  case 0x33: return Keys::k3;
+  case 0x34: return Keys::k4;
+  case 0x35: return Keys::k5;
+  case 0x36: return Keys::k6;
+  case 0x37: return Keys::k7;
+  case 0x38: return Keys::k8;
+  case 0x39: return Keys::k9;
+  //case Keys::kSemicolon: return 0; // FIXME
+  //case Keys::kEqual: return 0; // FIXME
+  case 0x41: return Keys::kA;
+  case 0x42: return Keys::kB;
+  case 0x43: return Keys::kC;
+  case 0x44: return Keys::kD;
+  case 0x45: return Keys::kE;
+  case 0x46: return Keys::kF;
+  case 0x47: return Keys::kG;
+  case 0x48: return Keys::kH;
+  case 0x49: return Keys::kI;
+  case 0x4A: return Keys::kJ;
+  case 0x4B: return Keys::kK;
+  case 0x4C: return Keys::kL;
+  case 0x4D: return Keys::kM;
+  case 0x4E: return Keys::kN;
+  case 0x4F: return Keys::kO;
+  case 0x50: return Keys::kP;
+  case 0x51: return Keys::kQ;
+  case 0x52: return Keys::kR;
+  case 0x53: return Keys::kS;
+  case 0x54: return Keys::kT;
+  case 0x55: return Keys::kU;
+  case 0x56: return Keys::kV;
+  case 0x57: return Keys::kW;
+  case 0x58: return Keys::kX;
+  case 0x59: return Keys::kY;
+  case 0x5A: return Keys::kZ;
+  //case Keys::kLeftBracket: return 0; // FIXME
+  //case Keys::kBackslash: return 0; // FIXME
+  //case Keys::kRightBracket: return 0; // FIXME
+  //case Keys::kGraveAccent: return 0; // FIXME
+  case VK_ESCAPE: return Keys::kEscape;
+  case VK_RETURN: return Keys::kEnter;
+  case VK_TAB: return Keys::kTab;
+  case VK_BACK: return Keys::kBackspace;
+  case VK_INSERT: return Keys::kInsert;
+  case VK_DELETE: return Keys::kDelete;
+  case VK_RIGHT: return Keys::kRight;
+  case VK_LEFT: return Keys::kLeft;
+  case VK_DOWN: return Keys::kDown;
+  case VK_UP: return Keys::kUp;
+  case VK_PRIOR: return Keys::kPageUp;
+  case VK_NEXT: return Keys::kPageDown;
+  case VK_HOME: return Keys::kHome;
+  case VK_END: return Keys::kEnd;
+  //case Keys::kCapsLock: return 0; // FIXME
+  //case Keys::kScrollLock: return 0; // FIXME
+  //case Keys::kNumLock: return 0; // FIXME
+  //case Keys::kPrintScreen: return 0; // FIXME
+  //case Keys::kPause: return 0; // FIXME
+  case VK_F1: return Keys::kF1;
+  case VK_F2: return Keys::kF2;
+  case VK_F3: return Keys::kF3;
+  case VK_F4: return Keys::kF4;
+  case VK_F5: return Keys::kF5;
+  case VK_F6: return Keys::kF6;
+  case VK_F7: return Keys::kF7;
+  case VK_F8: return Keys::kF8;
+  case VK_F9: return Keys::kF9;
+  case VK_F10: return Keys::kF10;
+  case VK_F11: return Keys::kF11;
+  case VK_F12: return Keys::kF12;
+  case VK_F13: return Keys::kF13;
+  case VK_F14: return Keys::kF14;
+  case VK_F15: return Keys::kF15;
+  case VK_F16: return Keys::kF16;
+  case VK_F17: return Keys::kF17;
+  case VK_F18: return Keys::kF18;
+  case VK_F19: return Keys::kF19;
+  case VK_F20: return Keys::kF20;
+  case VK_F21: return Keys::kF21;
+  case VK_F22: return Keys::kF22;
+  case VK_F23: return Keys::kF23;
+  case VK_F24: return Keys::kF24;
+  case VK_NUMPAD0: return Keys::kKeypad0;
+  case VK_NUMPAD1: return Keys::kKeypad1;
+  case VK_NUMPAD2: return Keys::kKeypad2;
+  case VK_NUMPAD3: return Keys::kKeypad3;
+  case VK_NUMPAD4: return Keys::kKeypad4;
+  case VK_NUMPAD5: return Keys::kKeypad5;
+  case VK_NUMPAD6: return Keys::kKeypad6;
+  case VK_NUMPAD7: return Keys::kKeypad7;
+  case VK_NUMPAD8: return Keys::kKeypad8;
+  case VK_NUMPAD9: return Keys::kKeypad9;
+  case VK_DECIMAL: return Keys::kKeypadDecimal;
+  case VK_DIVIDE: return Keys::kKeypadDivide;
+  case VK_MULTIPLY: return Keys::kKeypadMultiply;
+  case VK_SUBTRACT: Keys::kKeypadSubtract;
+  case VK_ADD: Keys::kKeypadAdd;
+  //case Keys::kKeypadEnter: return 0; // FIXME
+  //case Keys::kKeypadEqual: return 0; // FIXME
+  //case Keys::kLeftShift: return VK_LSHIFT;
+  //case Keys::kLeftControl: return VK_LCONTROL;
+  //case Keys::kLeftAlt: return VK_LMENU;
+  //case Keys::kLeftSuper: return 0; // FIXME
+  //case Keys::kRightShift: return VK_RSHIFT;
+  //case Keys::kRightControl: return VK_RCONTROL;
+  //case Keys::kRightAlt: return VK_RMENU;
+  //case Keys::kRightSuper: return 0; // FIXME
+  //case Keys::kMenu: return 0; // FIXME
+  default: return Keys::kUnknown; //FIXME
   }
-} // KeysToKeycode
+} // KeycodeToKeys
 
 } // namespace iris::wsi
 
@@ -201,28 +202,12 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.extent = std::move(extent);
 
   for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
-    pWin->keyLUT_[i] = KeysToKeycode(static_cast<Keys>(i));
+    pWin->keyLUT_[i] = KeycodeToKeys(i);
   }
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);
 } // iris::wsi::Window::Impl::Create
-
-iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
-  Keyset keyboardState;
-
-  BYTE rawState[256];
-  if (!::GetKeyboardState(rawState)) {
-    GetLogger()->error("Cannot get keyboard state: {}", ::GetLastError());
-    return keyboardState;
-  }
-
-  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
-    keyboardState[static_cast<Keys>(i)] = (rawState[keyLUT_[i]] & 0x80);
-  }
-
-  return keyboardState;
-} // iris::wsi::Window::Impl::KeyboardState
 
 glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
   glm::uvec2 cursorPos{};
@@ -249,6 +234,7 @@ iris::wsi::Window::Impl::~Impl() noexcept {
                                                      ::WPARAM wParam,
                                                      ::LPARAM lParam) noexcept {
   ::LRESULT res = 0;
+  ImGuiIO& io = ImGui::GetIO();
 
   switch (uMsg) {
   case WM_ACTIVATE:
@@ -258,37 +244,70 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   case WM_CHAR:
     break;
 
-  case WM_KEYDOWN: break;
-  case WM_KEYUP: break;
+  case WM_KEYDOWN:
+  case WM_SYSKEYDOWN:
+    io.KeysDown[keyLUT_[wParam]] = 1;
+    break;
 
-  case WM_LBUTTONDOWN: buttons_[Buttons::kButtonLeft] = true; break;
-  case WM_RBUTTONDOWN: buttons_[Buttons::kButtonRight] = true; break;
-  case WM_MBUTTONDOWN: buttons_[Buttons::kButtonMiddle] = true; break;
+  case WM_KEYUP:
+  case WM_SYSKEYUP:
+    io.KeysDown[keyLUT_[wParam]] = 0;
+    break;
+
+  case WM_LBUTTONDOWN:
+  case WM_LBUTTONDBLCLK:
+  case WM_RBUTTONDOWN:
+  case WM_RBUTTONDBLCLK:
+  case WM_MBUTTONDOWN:
+  case WM_MBUTTONDBLCLK:
   case WM_XBUTTONDOWN:
-    switch(GET_XBUTTON_WPARAM(wParam)) {
-    case XBUTTON1: buttons_[Buttons::kButton4] = true; break;
-    case XBUTTON2: buttons_[Buttons::kButton5] = true; break;
+  case WM_XBUTTONDBLCLK: {
+    int button = 0;
+    if (uMsg == WM_LBUTTONDOWN || uMsg == WM_LBUTTONDBLCLK) button = 0;
+    if (uMsg == WM_RBUTTONDOWN || uMsg == WM_RBUTTONDBLCLK) button = 1;
+    if (uMsg == WM_MBUTTONDOWN || uMsg == WM_MBUTTONDBLCLK) button = 2;
+    if (uMsg == WM_XBUTTONDOWN || uMsg == WM_XBUTTONDBLCLK) {
+      switch (GET_XBUTTON_WPARAM(wParam)) {
+      case XBUTTON1: button = 3;
+      case XBUTTON2: button = 4;
+      }
     }
-    break;
 
-  case WM_LBUTTONUP: buttons_[Buttons::kButtonLeft] = false; break;
-  case WM_RBUTTONUP: buttons_[Buttons::kButtonRight] = false; break;
-  case WM_MBUTTONUP: buttons_[Buttons::kButtonMiddle] = false; break;
-  case WM_XBUTTONUP:
-    switch(GET_XBUTTON_WPARAM(wParam)) {
-    case XBUTTON1: buttons_[Buttons::kButton4] = false; break;
-    case XBUTTON2: buttons_[Buttons::kButton5] = false; break;
+    if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL) {
+      ::SetCapture(handle_.hWnd);
     }
-    break;
+    io.MouseDown[button] = true;
+  } break;
+
+  case WM_LBUTTONUP:
+  case WM_RBUTTONUP:
+  case WM_MBUTTONUP:
+  case WM_XBUTTONUP: {
+    int button = 0;
+    if (uMsg == WM_LBUTTONUP) button = 0;
+    if (uMsg == WM_RBUTTONUP) button = 1;
+    if (uMsg == WM_MBUTTONUP) button = 2;
+    if (uMsg == WM_XBUTTONUP) {
+      switch (GET_XBUTTON_WPARAM(wParam)) {
+      case XBUTTON1: button = 3;
+      case XBUTTON2: button = 4;
+      }
+    }
+
+    io.MouseDown[button] = false;
+    if (!ImGui::IsAnyMouseDown() && ::GetCapture() == handle_.hWnd) {
+      ::ReleaseCapture();
+    }
+  } break;
 
   case WM_MOUSEWHEEL:
-    scroll_.y += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
-                 static_cast<float>(WHEEL_DELTA);
+    io.MouseWheel += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+                     static_cast<float>(WHEEL_DELTA);
     break;
 
   case WM_MOUSEHWHEEL:
-    scroll_.x += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
-                 static_cast<float>(WHEEL_DELTA);
+    io.MouseWheelH += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+                      static_cast<float>(WHEEL_DELTA);
     break;
 
   case WM_MOVE:

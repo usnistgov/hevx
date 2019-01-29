@@ -37,20 +37,8 @@ iris::wsi::Extent2D iris::wsi::Window::Extent() const noexcept {
   return pImpl_->Extent();
 }
 
-iris::wsi::Keyset iris::wsi::Window::KeyboardState() const noexcept {
-  return pImpl_->KeyboardState();
-}
-
-iris::wsi::Buttonset iris::wsi::Window::ButtonState() const noexcept {
-  return pImpl_->ButtonState();
-}
-
 glm::uvec2 iris::wsi::Window::CursorPos() const noexcept {
   return pImpl_->CursorPos();
-}
-
-glm::vec2 iris::wsi::Window::ScrollWheel() const noexcept {
-  return pImpl_->ScrollWheel();
 }
 
 void iris::wsi::Window::Retitle(gsl::czstring<> title) noexcept {

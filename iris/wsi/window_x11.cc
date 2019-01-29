@@ -400,32 +400,6 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   return std::move(pWin);
 }
 
-iris::wsi::Keyset iris::wsi::Window::Impl::KeyboardState() const noexcept {
-  Keyset keyboardState;
-
-  auto cookie = ::xcb_query_keymap(handle_.connection);
-  ::xcb_generic_error_t* error;
-  auto keymap = ::xcb_query_keymap_reply(handle_.connection, cookie, &error);
-
-  if (error) {
-    GetLogger()->error("Cannot get keyboard state: {}", error->error_code);
-    std::free(error);
-    return keyboardState;
-  }
-
-  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
-    ::xcb_keycode_t code = keyLUT_[i];
-    if (static_cast<Keys>(i) == Keys::kEscape ||
-        static_cast<Keys>(i) == Keys::kA) {
-    }
-    keyboardState[static_cast<Keys>(i)] =
-      ((keymap->keys[(code / 8) + 1] & (1 << (code % 8))) != 0);
-  }
-
-  std::free(keymap);
-  return keyboardState;
-} // iris::wsi::Window::Impl::KeyboardState
-
 glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
   auto cookie = ::xcb_query_pointer(handle_.connection, handle_.window);
   ::xcb_generic_error_t* error;
@@ -450,30 +424,48 @@ iris::wsi::Window::Impl::~Impl() noexcept {
 
 void iris::wsi::Window::Impl::Dispatch(
   gsl::not_null<::xcb_generic_event_t*> event) noexcept {
+  ImGuiIO& io = ImGui::GetIO();
+
   switch (event->response_type & ~0x80) {
-  case XCB_KEY_PRESS: break;
-  case XCB_KEY_RELEASE: break;
+  case XCB_KEY_PRESS: {
+    auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
+    io.KeysDown[keyLUT_[ev->detail]] = 1;
+  } break;
+
+  case XCB_KEY_RELEASE: {
+  case XCB_KEY_PRESS: {
+    auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
+    io.KeysDown[keyLUT_[ev->detail]] = 0;
+  } break;
 
   case XCB_BUTTON_PRESS: {
     auto ev = reinterpret_cast<::xcb_button_press_event_t*>(event.get());
     if (ev->event != handle_.window) break;
+    int button = 0;
     switch(ev->detail) {
-      case 1: buttons_[Buttons::kButtonLeft] = true; break;
-      case 2: buttons_[Buttons::kButtonMiddle] = true; break;
-      case 3: buttons_[Buttons::kButtonRight] = true; break;
-      case 4: scroll_.y += 1.f; break;
-      case 5: scroll_.y -= 1.f; break;
+      case 1: button = 0; break;
+      case 3: button = 1; break;
+      case 2: button = 2; break;
+      //case 4: scroll_.y += 1.f; break;
+      //case 5: scroll_.y -= 1.f; break;
     }
+
+    io.MouseDown[button] = true;
+    // FIXME: need to handle capture
   } break;
 
   case XCB_BUTTON_RELEASE: {
     auto ev = reinterpret_cast<::xcb_button_release_event_t*>(event.get());
     if (ev->event != handle_.window) break;
+    int button = 0;
     switch(ev->detail) {
-      case 1: buttons_[Buttons::kButtonLeft] = false; break;
-      case 2: buttons_[Buttons::kButtonMiddle] = false; break;
-      case 3: buttons_[Buttons::kButtonRight] = false; break;
+      case 1: button = 0; break;
+      case 3: button = 1; break;
+      case 2: button = 2; break;
     }
+
+    // FIXME: need to handle capture
+    io.MouseDown[button] = false;
   } break;
 
   case XCB_CLIENT_MESSAGE: {

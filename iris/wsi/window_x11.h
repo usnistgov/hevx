@@ -41,16 +41,10 @@ public:
   Offset2D Offset() const noexcept { return rect_.offset; }
   Extent2D Extent() const noexcept { return rect_.extent; }
 
-  Keyset KeyboardState() const noexcept;
-
-  Buttonset ButtonState() const noexcept { return buttons_; }
-
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
   glm::uvec2 CursorPos() const noexcept;
-
-  glm::vec2 ScrollWheel() const noexcept { return scroll_; }
 
   std::string Title() noexcept {
     //::XTextProperty prop;
@@ -178,8 +172,6 @@ private:
   bool closed_{false};
   bool focused_{false};
   absl::FixedArray<::xcb_keycode_t> keyLUT_;
-  Buttonset buttons_{};
-  glm::vec2 scroll_{};
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

@@ -79,8 +79,25 @@ int main(int argc, char** argv) {
     }
   }
 
+  absl::FixedArray<float> frameTimes(100);
+
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
+
+    ImGuiIO& io = ImGui::GetIO();
+    frameTimes[ImGui::GetFrameCount() % frameTimes.size()] =
+      1000.f * io.DeltaTime;
+
+    if (ImGui::Begin("Status")) {
+      ImGui::Text("Last Frame %.3f ms Frame %d", 1000.f * io.DeltaTime,
+                  ImGui::GetFrameCount());
+      ImGui::PlotHistogram(
+        "Frame Times", frameTimes.data(), frameTimes.size(), 0,
+        fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
+        100.f, ImVec2(0, 50));
+    }
+    ImGui::End(); // Status
+
     iris::Renderer::EndFrame();
   }
 

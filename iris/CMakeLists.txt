@@ -178,6 +178,3 @@ if(WIN32)
   endforeach()
   unset(tbb_dlls)
 endif()
-
-add_executable(window_test window_test.cc)
-target_link_libraries(window_test iris absl::failure_signal_handler)

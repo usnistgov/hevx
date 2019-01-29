@@ -16,7 +16,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui":  true
+        "is_console": false
       },
       {
         "name": "leftSimulatorWindow",
@@ -32,7 +32,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui": false
+        "is_console": false
       },
       {
         "name": "floorSimulatorWindow",
@@ -48,7 +48,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui": false
+        "is_console": false
       },
       {
         "name": "consoleWindow",
@@ -64,7 +64,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui": true
+        "is_console": true
       }
     ]
   }

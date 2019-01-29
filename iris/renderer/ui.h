@@ -15,7 +15,7 @@
 namespace iris::Renderer {
 
 struct UI {
-  tl::expected<iris::Renderer::UI, std::system_error>
+  tl::expected<std::unique_ptr<iris::Renderer::UI>, std::system_error>
   static Create() noexcept;
 
   static constexpr std::size_t const kNumCommandBuffers = 2;
@@ -31,6 +31,11 @@ struct UI {
   DescriptorSets descriptorSets;
   Pipeline pipeline{};
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> context;
+
+  [[nodiscard]] std::system_error BeginFrame(float frameDelta) noexcept;
+
+  tl::expected<VkCommandBuffer, std::system_error>
+  EndFrame(VkFramebuffer framebuffer) noexcept;
 
   UI()
   noexcept

@@ -84,16 +84,10 @@ public:
   Offset2D Offset() const noexcept;
   Extent2D Extent() const noexcept;
 
-  Keyset KeyboardState() const noexcept;
-
-  Buttonset ButtonState() const noexcept;
-
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
   glm::uvec2 CursorPos() const noexcept;
-
-  glm::vec2 ScrollWheel() const noexcept;
 
   /*! \brief Change the title of this window.
    * \param[in] title the new title.

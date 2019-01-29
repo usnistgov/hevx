@@ -16,7 +16,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui":  true,
+        "is_console": false,
         "display": 1
       },
       {
@@ -33,7 +33,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui":  false,
+        "is_console": false,
         "display": 2
       },
       {
@@ -50,7 +50,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui":  false,
+        "is_console": false,
         "display": 3
       },
       {
@@ -67,7 +67,7 @@
           "b": 0,
           "a": 1
         },
-        "show_ui":  true
+        "is_console": true
       }
     ]
   }
