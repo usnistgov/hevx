@@ -16,7 +16,7 @@ add_library(vma ${vulkanmemoryallocator_BINARY_DIR}/vk_mem_alloc.cc)
 target_include_directories(vma
   PUBLIC
     ${vulkanmemoryallocator_SOURCE_DIR}/src
-    ${VULKAN_HEADERS_INSTALL_DIR}
+    ${VulkanHeaders_INCLUDE_DIR}
 )
 target_link_libraries(vma PUBLIC vulkan)
 target_compile_definitions(vma

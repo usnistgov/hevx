@@ -28,7 +28,6 @@ function(fetch_sources NAME URL COMMIT)
   if(EXISTS ${BASEDIR}/${SUBDIR}/CMakeLists.txt)
     return()
   endif()
-  message(STATUS "Fetching ${NAME}")
 
   execute_process(
     COMMAND ${GIT_EXECUTABLE} clone ${RECURSE_SUBMODULES} ${URL} ${SUBDIR}
