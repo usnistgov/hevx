@@ -10,7 +10,7 @@ set(_tbb_rel "2018_U5")
 set(_tbb_url "https://github.com/01org/tbb/releases/download/${_tbb_rel}")
 
 if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${_tbb_fn}")
-  message(STATUS "Populating build dependency: tbb")
+  message(STATUS "Fetching tbb")
   file(DOWNLOAD "${_tbb_url}/${_tbb_fn}" ${CMAKE_CURRENT_BINARY_DIR}/${_tbb_fn})
   execute_process(COMMAND ${CMAKE_COMMAND} -E tar xf ${_tbb_fn}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

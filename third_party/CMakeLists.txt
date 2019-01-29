@@ -2,13 +2,16 @@ find_package(Git REQUIRED)
 include(FetchContent)
 include(JSONParser)
 
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4)
-find_package(PythonInterp 3 REQUIRED)
-
-# used by some of the scripts below
 function(fetch_sources NAME URL COMMIT)
+  set(options NO_RECURSE_SUBMODULES)
   set(one_value_args SUBDIR BASEDIR)
-  cmake_parse_arguments(PARSE_ARGV 3 FS "" "${one_value_args}" "")
+  cmake_parse_arguments(PARSE_ARGV 3 FS "${options}" "${one_value_args}" "")
+
+  if(FS_NO_RECURSE_SUBMODULES)
+    set(RECURSE_SUBMODULES "")
+  else()
+    set(RECURSE_SUBMODULES "--recurse-submodules")
+  endif()
 
   if(NOT FS_SUBDIR)
     set(SUBDIR ${NAME})
@@ -25,10 +28,10 @@ function(fetch_sources NAME URL COMMIT)
   if(EXISTS ${BASEDIR}/${SUBDIR}/CMakeLists.txt)
     return()
   endif()
-  message(STATUS "Fetching ${URL}:${COMMIT} to ${BASEDIR}/${SUBDIR}")
+  message(STATUS "Fetching ${NAME}")
 
   execute_process(
-    COMMAND ${GIT_EXECUTABLE} clone ${URL} ${SUBDIR}
+    COMMAND ${GIT_EXECUTABLE} clone ${RECURSE_SUBMODULES} ${URL} ${SUBDIR}
     WORKING_DIRECTORY ${BASEDIR}
     RESULT_VARIABLE git_res OUTPUT_VARIABLE git_out ERROR_VARIABLE git_out)
   if(git_res)
@@ -44,24 +47,23 @@ function(fetch_sources NAME URL COMMIT)
   endif()
 endfunction(fetch_sources)
 
+# The following packages must be included first and in this order
 include(GoogleTest.cmake)
+
+# These packages can be included in any order
 include(Abseil.cmake)
 include(Expected.cmake)
+include(Flags.cmake)
+include(FlextGL.cmake)
 include(Fmtlib.cmake)
 include(GSL.cmake)
 include(GLM.cmake)
+include(ImGui.cmake)
 include(JSON.cmake)
+include(NNG.cmake)
+include(Protobuf.cmake)
 include(Spdlog.cmake)
 include(STB.cmake)
 include(TBB.cmake)
-include(NNG.cmake)
-include(Protobuf.cmake)
-include(VulkanSDK.cmake)
-#include(VulkanValidationLayers.cmake)
-#include(VulkanHeaders.cmake)
-#include(VulkanLoader.cmake)
-#include(Glslang.cmake)
+include(Vulkan.cmake)
 include(VulkanMemoryAllocator.cmake)
-include(FlextGL.cmake)
-include(DearImGui.cmake)
-include(Flags.cmake)
