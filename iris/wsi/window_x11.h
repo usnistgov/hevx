@@ -151,7 +151,7 @@ public:
   //! \brief Default constructor: no initialization.
   Impl() noexcept
     : atoms_(kNumAtoms)
-    , keyLUT_(Keyset::kMaxKeys) {}
+    , keyLUT_(256) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;

@@ -209,10 +209,7 @@ static std::vector<Mesh>& Meshes() {
 } // Meshes
 
 static std::chrono::steady_clock::time_point sPreviousFrameTime;
-static absl::FixedArray<float> sFrameTimes(100);
 static std::uint64_t sFrameNum = 0;
-
-static std::unique_ptr<iris::Renderer::UI> sUI;
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -1607,7 +1604,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #endif
   };
 
-#if PLATFORM_LINUX
+#if 0//PLATFORM_LINUX
   ::setenv(
     "VK_LAYER_PATH",
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
@@ -1686,13 +1683,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 
-  if (auto ui = UI::Create(); !ui) {
-    IRIS_LOG_LEAVE();
-    return {ui.error()};
-  } else {
-    sUI = std::move(*ui);
-  }
-
   sInitialized = true;
   sRunning = true;
 
@@ -1715,8 +1705,6 @@ void iris::Renderer::Shutdown() noexcept {
 
   Meshes().clear();
   Windows().clear();
-
-  sUI.reset();
 
   if (sMatrixBuffer != VK_NULL_HANDLE ||
       sMatrixBufferAllocation != VK_NULL_HANDLE) {
@@ -1799,11 +1787,6 @@ bool iris::Renderer::BeginFrame() noexcept {
     std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
   sPreviousFrameTime = currentTime;
 
-  if (auto error = sUI->BeginFrame(frameDelta); error.code()) {
-    GetLogger()->error("Error beginning UI frame: {}", error.what());
-    return false;
-  }
-
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
     if (auto error = ioContinuation(); error.code()) {
@@ -1814,17 +1797,6 @@ bool iris::Renderer::BeginFrame() noexcept {
   auto&& windows = Windows();
   if (windows.empty()) return false;
 
-  ImGuiIO& io = ImGui::GetIO();
-
-  // FIXME: hack
-#if PLATFORM_LINUX
-#elif PLATFORM_WINDOWS
-  io.KeyCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-  io.KeyShift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
-  io.KeyAlt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-  io.KeySuper = false;
-#endif
-
   for (auto&& iter : windows) {
     auto&& window = iter.second;
 
@@ -1833,9 +1805,6 @@ bool iris::Renderer::BeginFrame() noexcept {
       return false;
     }
   }
-
-  if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
-  ImGui::NewFrame();
 
   if (auto result =
         vkWaitForFences(sDevice, 1, &sFrameComplete, VK_TRUE, UINT64_MAX);
@@ -1867,8 +1836,6 @@ void iris::Renderer::EndFrame() noexcept {
   // Acquire images/semaphores from all iris::Window objects
   //
 
-  VkCommandBuffer uiCB = VK_NULL_HANDLE;
-
   for (auto&& [title, window] : windows) {
     VkResult result =
       vkAcquireNextImageKHR(sDevice, window.surface.swapchain, UINT64_MAX,
@@ -1891,15 +1858,6 @@ void iris::Renderer::EndFrame() noexcept {
       GetLogger()->error(
         "Renderer::BeginFrame: acquiring next image for {} failed: {}", title,
         to_string(result));
-    }
-
-    if (window.isConsole) {
-      if (auto cb = sUI->EndFrame(window.surface.currentFramebuffer())) {
-        uiCB = std::move(*cb);
-      } else {
-        GetLogger()->error("Renderer::BeginFrame: cannot end UI frame: {}",
-                           cb.error().what());
-      }
     }
   }
 
@@ -2108,10 +2066,6 @@ void iris::Renderer::EndFrame() noexcept {
       GetLogger()->error("Error ending window frame: {}", wcb.error().what());
     }
 
-    if (window.isConsole && uiCB != VK_NULL_HANDLE) {
-      vkCmdExecuteCommands(cb, 1, &uiCB);
-    }
-
     //
     // 4. Done rendering
     //
@@ -2168,8 +2122,7 @@ void iris::Renderer::EndFrame() noexcept {
     GetLogger()->error("Error presenting swapchains: {}", to_string(result));
   }
 
-  sFrameTimes[sFrameNum++ % sFrameTimes.size()] =
-    1000.f * ImGui::GetIO().DeltaTime;
+  sFrameNum += 1;
 } // iris::Renderer::EndFrame
 
 std::error_code
@@ -2244,7 +2197,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
         options |= Window::Options::kDecorated;
       }
       if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-      if (windowMessage.is_console()) options |= Window::Options::kIsConsole;
+      if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
       if (auto win = Window::Create(
             windowMessage.name().c_str(),
@@ -2269,7 +2222,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
       options |= Window::Options::kDecorated;
     }
     if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-    if (windowMessage.is_console()) options |= Window::Options::kIsConsole;
+    if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
 
     if (auto win = Window::Create(
           windowMessage.name().c_str(),

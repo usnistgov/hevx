@@ -36,33 +36,45 @@ iris::Renderer::Window::Create(gsl::czstring<> title, wsi::Offset2D offset,
     return tl::unexpected(sfc.error());
   }
 
-  window.isConsole =
-    (options & Window::Options::kIsConsole) == Window::Options::kIsConsole;
+  window.showUI =
+    (options & Window::Options::kShowUI) == Window::Options::kShowUI;
 
-  if (window.isConsole) {
-    ImGuiIO& io = ImGui::GetIO();
+  window.uiContext.reset(ImGui::CreateContext());
+  ImGui::SetCurrentContext(window.uiContext.get());
+  ImGui::StyleColorsDark();
 
-    io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
-    io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
-    io.KeyMap[ImGuiKey_RightArrow] = static_cast<int>(wsi::Keys::kRight);
-    io.KeyMap[ImGuiKey_UpArrow] = static_cast<int>(wsi::Keys::kUp);
-    io.KeyMap[ImGuiKey_DownArrow] = static_cast<int>(wsi::Keys::kDown);
-    io.KeyMap[ImGuiKey_PageUp] = static_cast<int>(wsi::Keys::kPageUp);
-    io.KeyMap[ImGuiKey_PageDown] = static_cast<int>(wsi::Keys::kPageDown);
-    io.KeyMap[ImGuiKey_Home] = static_cast<int>(wsi::Keys::kHome);
-    io.KeyMap[ImGuiKey_End] = static_cast<int>(wsi::Keys::kEnd);
-    io.KeyMap[ImGuiKey_Insert] = static_cast<int>(wsi::Keys::kInsert);
-    io.KeyMap[ImGuiKey_Delete] = static_cast<int>(wsi::Keys::kDelete);
-    io.KeyMap[ImGuiKey_Backspace] = static_cast<int>(wsi::Keys::kBackspace);
-    io.KeyMap[ImGuiKey_Space] = static_cast<int>(wsi::Keys::kSpace);
-    io.KeyMap[ImGuiKey_Enter] = static_cast<int>(wsi::Keys::kEnter);
-    io.KeyMap[ImGuiKey_Escape] = static_cast<int>(wsi::Keys::kEscape);
-    io.KeyMap[ImGuiKey_A] = static_cast<int>(wsi::Keys::kA);
-    io.KeyMap[ImGuiKey_C] = static_cast<int>(wsi::Keys::kC);
-    io.KeyMap[ImGuiKey_V] = static_cast<int>(wsi::Keys::kV);
-    io.KeyMap[ImGuiKey_X] = static_cast<int>(wsi::Keys::kX);
-    io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
-    io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
+  ImGuiIO& io = ImGui::GetIO();
+
+  io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
+  io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
+  io.KeyMap[ImGuiKey_RightArrow] = static_cast<int>(wsi::Keys::kRight);
+  io.KeyMap[ImGuiKey_UpArrow] = static_cast<int>(wsi::Keys::kUp);
+  io.KeyMap[ImGuiKey_DownArrow] = static_cast<int>(wsi::Keys::kDown);
+  io.KeyMap[ImGuiKey_PageUp] = static_cast<int>(wsi::Keys::kPageUp);
+  io.KeyMap[ImGuiKey_PageDown] = static_cast<int>(wsi::Keys::kPageDown);
+  io.KeyMap[ImGuiKey_Home] = static_cast<int>(wsi::Keys::kHome);
+  io.KeyMap[ImGuiKey_End] = static_cast<int>(wsi::Keys::kEnd);
+  io.KeyMap[ImGuiKey_Insert] = static_cast<int>(wsi::Keys::kInsert);
+  io.KeyMap[ImGuiKey_Delete] = static_cast<int>(wsi::Keys::kDelete);
+  io.KeyMap[ImGuiKey_Backspace] = static_cast<int>(wsi::Keys::kBackspace);
+  io.KeyMap[ImGuiKey_Space] = static_cast<int>(wsi::Keys::kSpace);
+  io.KeyMap[ImGuiKey_Enter] = static_cast<int>(wsi::Keys::kEnter);
+  io.KeyMap[ImGuiKey_Escape] = static_cast<int>(wsi::Keys::kEscape);
+  io.KeyMap[ImGuiKey_A] = static_cast<int>(wsi::Keys::kA);
+  io.KeyMap[ImGuiKey_C] = static_cast<int>(wsi::Keys::kC);
+  io.KeyMap[ImGuiKey_V] = static_cast<int>(wsi::Keys::kV);
+  io.KeyMap[ImGuiKey_X] = static_cast<int>(wsi::Keys::kX);
+  io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
+  io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
+
+  if (window.showUI) {
+    if (auto ui = UI::Create()) {
+      window.ui = std::move(*ui);
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(ui.error());
+    }
+
   }
 
   window.projectionMatrix = glm::perspectiveFov(
@@ -100,7 +112,10 @@ void iris::Renderer::Window::Close() noexcept {
 
 std::system_error
 iris::Renderer::Window::BeginFrame(float frameDelta[[maybe_unused]]) noexcept {
+  ImGui::SetCurrentContext(uiContext.get());
   window.PollEvents();
+
+  if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
 
   if (resized) {
     auto const extent = window.Extent();
@@ -112,24 +127,31 @@ iris::Renderer::Window::BeginFrame(float frameDelta[[maybe_unused]]) noexcept {
   }
 
   ImGuiIO& io = ImGui::GetIO();
+  io.DeltaTime = frameDelta;
 
-  // FIXME: hack
-#if PLATFORM_LINUX
-#elif PLATFORM_WINDOWS
-  io.KeyCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
-  io.KeyShift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
-  io.KeyAlt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-  io.KeySuper = false;
-#endif
+  io.KeyCtrl = io.KeysDown[wsi::Keys::kRightControl] |
+               io.KeysDown[wsi::Keys::kLeftControl];
+  io.KeyShift =
+    io.KeysDown[wsi::Keys::kLeftShift] | io.KeysDown[wsi::Keys::kRightShift];
+  io.KeyAlt =
+    io.KeysDown[wsi::Keys::kLeftAlt] | io.KeysDown[wsi::Keys::kRightAlt];
+  io.KeySuper =
+    io.KeysDown[wsi::Keys::kLeftSuper] | io.KeysDown[wsi::Keys::kRightSuper];
 
   auto const cursorPos = window.CursorPos();
   io.MousePos = ImVec2(cursorPos.x, cursorPos.y);
 
-  // FIXME: this will be overwritten by whichever "console" window writes last
-  if (isConsole) {
-    io.DisplaySize.x = static_cast<float>(window.Extent().width);
-    io.DisplaySize.y = static_cast<float>(window.Extent().height);
-    io.DisplayFramebufferScale = {0.f, 0.f};
+  io.DisplaySize.x = static_cast<float>(window.Extent().width);
+  io.DisplaySize.y = static_cast<float>(window.Extent().height);
+  io.DisplayFramebufferScale = {0.f, 0.f};
+
+  ImGui::NewFrame();
+
+  if (showUI) {
+    if (auto error = ui.BeginFrame(frameDelta); error.code()) {
+      GetLogger()->error("Error beginning ui frame: {}", error.what());
+      return error;
+    }
   }
 
   return {Error::kNone};
@@ -138,14 +160,24 @@ iris::Renderer::Window::BeginFrame(float frameDelta[[maybe_unused]]) noexcept {
 tl::expected<VkCommandBuffer, std::system_error>
 iris::Renderer::Window::EndFrame(VkFramebuffer framebuffer) noexcept {
   Expects(framebuffer != VK_NULL_HANDLE);
-  return VkCommandBuffer(VK_NULL_HANDLE);
+
+  ImGui::SetCurrentContext(uiContext.get());
+  ImGui::EndFrame();
+
+  if (showUI) {
+    return ui.EndFrame(framebuffer);
+  } else {
+    return VkCommandBuffer(VK_NULL_HANDLE);
+  }
 } // iris::Renderer::Window::EndFrame
 
 iris::Renderer::Window::Window(Window&& other) noexcept
   : resized(other.resized)
   , window(std::move(other.window))
   , surface(std::move(other.surface))
-  , isConsole(other.isConsole)
+  , showUI(other.showUI)
+  , uiContext(std::move(other.uiContext))
+  , ui(std::move(other.ui))
   , projectionMatrix(std::move(other.projectionMatrix)) {
   // Re-bind delegates
   window.OnResize(std::bind(&Window::Resize, this, std::placeholders::_1));
@@ -159,7 +191,9 @@ operator=(Window&& rhs) noexcept {
   resized = rhs.resized;
   window = std::move(rhs.window);
   surface = std::move(rhs.surface);
-  isConsole = rhs.isConsole;
+  showUI = rhs.showUI;
+  uiContext = std::move(rhs.uiContext);
+  ui = std::move(rhs.ui);
   projectionMatrix = std::move(rhs.projectionMatrix);
 
   // Re-bind delegates

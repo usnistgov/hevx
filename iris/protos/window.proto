@@ -13,5 +13,5 @@ message Window {
   uint32 display = 7;
   bool show_system_decoration = 10;
   Color background_color = 11;
-  bool is_console = 12;
+  bool show_ui = 12;
 }

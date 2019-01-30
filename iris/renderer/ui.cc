@@ -48,24 +48,20 @@ void main() {
 
 } // namespace iris::Renderer
 
-tl::expected<std::unique_ptr<iris::Renderer::UI>, std::system_error>
+tl::expected<iris::Renderer::UI, std::system_error>
 iris::Renderer::UI::Create() noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
 
-  std::unique_ptr<UI> ui{new UI};
+  UI ui;
 
   if (auto cbs = Renderer::AllocateCommandBuffers(
         2, VK_COMMAND_BUFFER_LEVEL_SECONDARY)) {
-    ui->commandBuffers = std::move(*cbs);
+    ui.commandBuffers = std::move(*cbs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(cbs.error());
   }
-
-  ui->context.reset(ImGui::CreateContext());
-  ImGui::SetCurrentContext(ui->context.get());
-  ImGui::StyleColorsDark();
 
   ImGuiIO& io = ImGui::GetIO();
 
@@ -89,16 +85,16 @@ iris::Renderer::UI::Create() noexcept {
         VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
         gsl::not_null(reinterpret_cast<std::byte*>(pixels)), bytes_per_pixel,
         "UI::fontImage")) {
-    ui->fontImage = std::move(*ti);
+    ui.fontImage = std::move(*ti);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ti.error());
   }
 
-  if (auto tv = ui->fontImage.CreateImageView(
+  if (auto tv = ui.fontImage.CreateImageView(
         VK_IMAGE_VIEW_TYPE_2D, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
         "UI::fontImageView")) {
-    ui->fontImageView = std::move(*tv);
+    ui.fontImageView = std::move(*tv);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(tv.error());
@@ -123,7 +119,7 @@ iris::Renderer::UI::Create() noexcept {
   samplerCI.unnormalizedCoordinates = VK_FALSE;
 
   if (auto s = Sampler::Create(samplerCI, "UI::fontImageSampler")) {
-    ui->fontImageSampler = std::move(*s);
+    ui.fontImageSampler = std::move(*s);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(s.error());
@@ -132,7 +128,7 @@ iris::Renderer::UI::Create() noexcept {
   if (auto vb = Buffer::Create(
         1024 * sizeof(ImDrawVert), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VMA_MEMORY_USAGE_CPU_TO_GPU, "UI::vertexBuffer")) {
-    ui->vertexBuffer = std::move(*vb);
+    ui.vertexBuffer = std::move(*vb);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vb.error());
@@ -141,7 +137,7 @@ iris::Renderer::UI::Create() noexcept {
   if (auto ib = Buffer::Create(
         1024 * sizeof(ImDrawIdx), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VMA_MEMORY_USAGE_CPU_TO_GPU, "UI::indexBuffer")) {
-    ui->indexBuffer = std::move(*ib);
+    ui.indexBuffer = std::move(*ib);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(ib.error());
@@ -173,19 +169,19 @@ iris::Renderer::UI::Create() noexcept {
 
   if (auto d = Renderer::AllocateDescriptorSets(
         descriptorSetLayoutBinding, kNumDescriptorSets, "ui::descriptorSet")) {
-    ui->descriptorSets = std::move(*d);
+    ui.descriptorSets = std::move(*d);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(d.error());
   }
 
   VkDescriptorImageInfo descriptorSamplerI = {};
-  descriptorSamplerI.sampler = ui->fontImageSampler;
+  descriptorSamplerI.sampler = ui.fontImageSampler;
 
   absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
   writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                             nullptr,
-                            ui->descriptorSets.sets[0],
+                            ui.descriptorSets.sets[0],
                             0,
                             0,
                             1,
@@ -195,12 +191,12 @@ iris::Renderer::UI::Create() noexcept {
                             nullptr};
 
   VkDescriptorImageInfo descriptorImageI = {};
-  descriptorImageI.imageView = ui->fontImageView;
+  descriptorImageI.imageView = ui.fontImageView;
   descriptorImageI.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   writeDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                             nullptr,
-                            ui->descriptorSets.sets[0],
+                            ui.descriptorSets.sets[0],
                             1,
                             0,
                             1,
@@ -275,12 +271,12 @@ iris::Renderer::UI::Create() noexcept {
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
   if (auto p = Pipeline::CreateGraphics(
-        gsl::make_span(&ui->descriptorSets.layout, 1), pushConstantRanges,
+        gsl::make_span(&ui.descriptorSets.layout, 1), pushConstantRanges,
         shaders, vertexInputBindingDescriptions,
         vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0, "ui::Pipeline")) {
-    ui->pipeline = std::move(*p);
+    ui.pipeline = std::move(*p);
   } else {
     return tl::unexpected(p.error());
   }
@@ -289,11 +285,7 @@ iris::Renderer::UI::Create() noexcept {
   return std::move(ui);
 } // iris::Renderer::UI::Create
 
-std::system_error iris::Renderer::UI::BeginFrame(float frameDelta) noexcept {
-  ImGui::SetCurrentContext(context.get());
-  ImGuiIO& io = ImGui::GetIO();
-
-  io.DeltaTime = frameDelta;
+std::system_error iris::Renderer::UI::BeginFrame(float) noexcept {
   return {Error::kNone};
 } // iris::Renderer::UI::BeginFrame
 
@@ -301,7 +293,6 @@ tl::expected<VkCommandBuffer, std::system_error>
 iris::Renderer::UI::EndFrame(VkFramebuffer framebuffer) noexcept {
   Expects(framebuffer != VK_NULL_HANDLE);
 
-  ImGui::EndFrame();
   ImGui::Render();
 
   ImDrawData* drawData = ImGui::GetDrawData();

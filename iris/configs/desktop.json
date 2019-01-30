@@ -16,7 +16,7 @@
           "b": 0.75,
           "a": 1.0
         },
-        "is_console": true
+        "show_ui": true
       }
     ]
   }

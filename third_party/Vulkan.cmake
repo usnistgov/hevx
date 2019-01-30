@@ -60,6 +60,7 @@ fetch_sources(spirv_headers ${spirv_headers_URL} ${spirv_headers_COMMIT}
   SUBDIR ${spirv_headers_SUBDIR} BASEDIR ${glslang_SOURCE_DIR}
 )
 
+set(BUILD_TESTING OFF)
 add_subdirectory(${glslang_SOURCE_DIR} ${glslang_BINARY_DIR})
 
 message(STATUS "Populating Vulkan-Headers")

@@ -18,7 +18,7 @@ struct Window {
     kDecorated = (1 << 0), //!< The window has decorations (title bar, borders).
     kSizeable = (1 << 1),  //!< The window is sizeable.
     kStereo = (1 << 2),    //!< The window will have stereo output.
-    kIsConsole = (1 << 3), //!< The window should display console UI elements.
+    kShowUI = (1 << 3),    //!< The window should display UI elements.
   };
 
   // forward-declare this so that it can be used below in Create
@@ -32,7 +32,9 @@ struct Window {
   bool resized{false};
   wsi::Window window{};
   Surface surface{};
-  bool isConsole{false};
+  bool showUI{false};
+  std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext;
+  UI ui{};
 
   glm::mat4 projectionMatrix;
   glm::mat4 projectionMatrixInverse;
@@ -45,7 +47,8 @@ struct Window {
   tl::expected<VkCommandBuffer, std::system_error>
   EndFrame(VkFramebuffer framebuffer) noexcept;
 
-  Window() = default;
+  Window()
+    : uiContext(nullptr, &ImGui::DestroyContext) {}
   Window(Window const&) = delete;
   Window(Window&& other) noexcept;
   Window& operator=(Window const&) = delete;

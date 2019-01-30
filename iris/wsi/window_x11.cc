@@ -4,6 +4,7 @@
 #include "wsi/window_x11.h"
 #include "absl/base/macros.h"
 #include "fmt/format.h"
+#include "imgui.h"
 #include "logging.h"
 #include <X11/keysym.h>
 #include <cstdint>
@@ -38,154 +39,136 @@ inline std::error_category const& GetXCategory() {
   return gXCategory;
 }
 
-static ::xcb_keycode_t KeysToKeyCode(::xcb_connection_t* conn,
-                                     Keys key) noexcept {
-  auto cookie = ::xcb_get_keyboard_mapping(conn, 8, 255 - 8);
-  ::xcb_generic_error_t* error;
-  auto reply = ::xcb_get_keyboard_mapping_reply(conn, cookie, &error);
+static Keys
+KeyCodeToKeys(::xcb_keycode_t keycode,
+              ::xcb_get_keyboard_mapping_reply_t* mapping) noexcept {
+  auto keysyms = reinterpret_cast<xcb_keysym_t*>(mapping + 1);
 
-  if (error) {
-    GetLogger()->error("Cannot get keyboard mapping: {}", error->error_code);
-    std::free(error);
-    return XCB_NONE;
-  }
-
-  ::xcb_keysym_t* keysyms = ::xcb_get_keyboard_mapping_keysyms(reply);
-  std::uint8_t const keysyms_per_keycode = reply->keysyms_per_keycode;
-
-  auto findKeySym = [&keysyms, &keysyms_per_keycode](::xcb_keysym_t sym) {
-    for (long int i = 0; i < 255 - 8; ++i) {
-      for (std::uint8_t j = 0; j < keysyms_per_keycode; ++j) {
-        if (keysyms[i * keysyms_per_keycode + j] == sym) {
-          return i;
-        }
-      }
+  for (int j = 0; j < mapping->keysyms_per_keycode; ++j) {
+    xcb_keysym_t keysym = keysyms[j + keycode * mapping->keysyms_per_keycode];
+    switch(keysym) {
+    case XK_space: return Keys::kSpace;
+    case XK_apostrophe: return Keys::kApostrophe;
+    case XK_comma: return Keys::kComma;
+    case XK_minus: return Keys::kMinus;
+    case XK_period: return Keys::kPeriod;
+    case XK_slash: return Keys::kSlash;
+    case XK_0: return Keys::k0;
+    case XK_1: return Keys::k1;
+    case XK_2: return Keys::k2;
+    case XK_3: return Keys::k3;
+    case XK_4: return Keys::k4;
+    case XK_5: return Keys::k5;
+    case XK_6: return Keys::k6;
+    case XK_7: return Keys::k7;
+    case XK_8: return Keys::k8;
+    case XK_9: return Keys::k9;
+    case XK_semicolon: return Keys::kSemicolon;
+    case XK_equal: return Keys::kEqual;
+    case XK_a: return Keys::kA;
+    case XK_b: return Keys::kB;
+    case XK_c: return Keys::kC;
+    case XK_d: return Keys::kD;
+    case XK_e: return Keys::kE;
+    case XK_f: return Keys::kF;
+    case XK_g: return Keys::kG;
+    case XK_h: return Keys::kH;
+    case XK_i: return Keys::kI;
+    case XK_j: return Keys::kJ;
+    case XK_k: return Keys::kK;
+    case XK_l: return Keys::kL;
+    case XK_m: return Keys::kM;
+    case XK_n: return Keys::kN;
+    case XK_o: return Keys::kO;
+    case XK_p: return Keys::kP;
+    case XK_q: return Keys::kQ;
+    case XK_r: return Keys::kR;
+    case XK_s: return Keys::kS;
+    case XK_t: return Keys::kT;
+    case XK_u: return Keys::kU;
+    case XK_v: return Keys::kV;
+    case XK_w: return Keys::kW;
+    case XK_x: return Keys::kX;
+    case XK_y: return Keys::kY;
+    case XK_z: return Keys::kZ;
+    case XK_bracketleft: return Keys::kLeftBracket;
+    case XK_backslash: return Keys::kBackslash;
+    case XK_bracketright: return Keys::kRightBracket;
+    case XK_grave: return Keys::kGraveAccent;
+    case XK_Escape: return Keys::kEscape;
+    case XK_Return: return Keys::kEnter;
+    case XK_Tab: return Keys::kTab;
+    case XK_BackSpace: return Keys::kBackspace;
+    case XK_Insert: return Keys::kInsert;
+    case XK_Delete: return Keys::kDelete;
+    case XK_Right: return Keys::kRight;
+    case XK_Left: return Keys::kLeft;
+    case XK_Down: return Keys::kDown;
+    case XK_Up: return Keys::kUp;
+    case XK_Page_Up: return Keys::kPageUp;
+    case XK_Page_Down: return Keys::kPageDown;
+    case XK_Home: return Keys::kHome;
+    case XK_End: return Keys::kEnd;
+    case XK_Caps_Lock: return Keys::kCapsLock;
+    case XK_Scroll_Lock: return Keys::kScrollLock;
+    case XK_Num_Lock: return Keys::kNumLock;
+    case XK_Sys_Req: return Keys::kPrintScreen;
+    case XK_Break: return Keys::kPause;
+    case XK_F1: return Keys::kF1;
+    case XK_F2: return Keys::kF2;
+    case XK_F3: return Keys::kF3;
+    case XK_F4: return Keys::kF4;
+    case XK_F5: return Keys::kF5;
+    case XK_F6: return Keys::kF6;
+    case XK_F7: return Keys::kF7;
+    case XK_F8: return Keys::kF8;
+    case XK_F9: return Keys::kF9;
+    case XK_F10: return Keys::kF10;
+    case XK_F11: return Keys::kF11;
+    case XK_F12: return Keys::kF12;
+    case XK_F13: return Keys::kF13;
+    case XK_F14: return Keys::kF14;
+    case XK_F15: return Keys::kF15;
+    case XK_F16: return Keys::kF16;
+    case XK_F17: return Keys::kF17;
+    case XK_F18: return Keys::kF18;
+    case XK_F19: return Keys::kF19;
+    case XK_F20: return Keys::kF20;
+    case XK_F21: return Keys::kF21;
+    case XK_F22: return Keys::kF22;
+    case XK_F23: return Keys::kF23;
+    case XK_F24: return Keys::kF24;
+    case XK_KP_0: return Keys::kKeypad0;
+    case XK_KP_1: return Keys::kKeypad1;
+    case XK_KP_2: return Keys::kKeypad2;
+    case XK_KP_3: return Keys::kKeypad3;
+    case XK_KP_4: return Keys::kKeypad4;
+    case XK_KP_5: return Keys::kKeypad5;
+    case XK_KP_6: return Keys::kKeypad6;
+    case XK_KP_7: return Keys::kKeypad7;
+    case XK_KP_8: return Keys::kKeypad8;
+    case XK_KP_9: return Keys::kKeypad9;
+    case XK_KP_Decimal: return Keys::kKeypadDecimal;
+    case XK_KP_Divide: return Keys::kKeypadDivide;
+    case XK_KP_Multiply: return Keys::kKeypadMultiply;
+    case XK_KP_Subtract: return Keys::kKeypadSubtract;
+    case XK_KP_Add: return Keys::kKeypadAdd;
+    case XK_KP_Enter: return Keys::kKeypadEnter;
+    case XK_KP_Equal: return Keys::kKeypadEqual;
+    case XK_Shift_L: return Keys::kLeftShift;
+    case XK_Control_L: return Keys::kLeftControl;
+    case XK_Alt_L: return Keys::kLeftAlt;
+    case XK_Super_L: return Keys::kLeftSuper;
+    case XK_Shift_R: return Keys::kRightShift;
+    case XK_Control_R: return Keys::kRightControl;
+    case XK_Alt_R: return Keys::kRightAlt;
+    case XK_Super_R: return Keys::kRightSuper;
+    case XK_Menu: return Keys::kMenu;
     }
-    return XCB_NONE;
-  };
-
-  switch (key) {
-  case Keys::kSpace: return findKeySym(XK_space);
-  case Keys::kApostrophe: return findKeySym(XK_apostrophe);
-  case Keys::kComma: return findKeySym(XK_comma);
-  case Keys::kMinus: return findKeySym(XK_minus);
-  case Keys::kPeriod: return findKeySym(XK_period);
-  case Keys::kSlash: return findKeySym(XK_slash);
-  case Keys::k0: return findKeySym(XK_0);
-  case Keys::k1: return findKeySym(XK_1);
-  case Keys::k2: return findKeySym(XK_2);
-  case Keys::k3: return findKeySym(XK_3);
-  case Keys::k4: return findKeySym(XK_4);
-  case Keys::k5: return findKeySym(XK_5);
-  case Keys::k6: return findKeySym(XK_6);
-  case Keys::k7: return findKeySym(XK_7);
-  case Keys::k8: return findKeySym(XK_8);
-  case Keys::k9: return findKeySym(XK_9);
-  case Keys::kSemicolon: return findKeySym(XK_semicolon);
-  case Keys::kEqual: return findKeySym(XK_equal);
-  case Keys::kA: return findKeySym(XK_a);
-  case Keys::kB: return findKeySym(XK_b);
-  case Keys::kC: return findKeySym(XK_c);
-  case Keys::kD: return findKeySym(XK_d);
-  case Keys::kE: return findKeySym(XK_e);
-  case Keys::kF: return findKeySym(XK_f);
-  case Keys::kG: return findKeySym(XK_g);
-  case Keys::kH: return findKeySym(XK_h);
-  case Keys::kI: return findKeySym(XK_i);
-  case Keys::kJ: return findKeySym(XK_j);
-  case Keys::kK: return findKeySym(XK_k);
-  case Keys::kL: return findKeySym(XK_l);
-  case Keys::kM: return findKeySym(XK_m);
-  case Keys::kN: return findKeySym(XK_n);
-  case Keys::kO: return findKeySym(XK_o);
-  case Keys::kP: return findKeySym(XK_p);
-  case Keys::kQ: return findKeySym(XK_q);
-  case Keys::kR: return findKeySym(XK_r);
-  case Keys::kS: return findKeySym(XK_s);
-  case Keys::kT: return findKeySym(XK_t);
-  case Keys::kU: return findKeySym(XK_u);
-  case Keys::kV: return findKeySym(XK_v);
-  case Keys::kW: return findKeySym(XK_w);
-  case Keys::kX: return findKeySym(XK_x);
-  case Keys::kY: return findKeySym(XK_y);
-  case Keys::kZ: return findKeySym(XK_z);
-  case Keys::kLeftBracket: return findKeySym(XK_bracketleft);
-  case Keys::kBackslash: return findKeySym(XK_backslash);
-  case Keys::kRightBracket: return findKeySym(XK_bracketright);
-  case Keys::kGraveAccent: return findKeySym(XK_grave);
-  case Keys::kEscape: return findKeySym(XK_Escape);
-  case Keys::kEnter: return findKeySym(XK_Return);
-  case Keys::kTab: return findKeySym(XK_Tab);
-  case Keys::kBackspace: return findKeySym(XK_BackSpace);
-  case Keys::kInsert: return findKeySym(XK_Insert); // FIXME: check
-  case Keys::kDelete: return findKeySym(XK_Delete); // FIXME: check
-  case Keys::kRight: return findKeySym(XK_Right);
-  case Keys::kLeft: return findKeySym(XK_Left);
-  case Keys::kDown: return findKeySym(XK_Down);
-  case Keys::kUp: return findKeySym(XK_Up);
-  case Keys::kPageUp: return findKeySym(XK_Page_Up);
-  case Keys::kPageDown: return findKeySym(XK_Page_Down);
-  case Keys::kHome: return findKeySym(XK_Home);
-  case Keys::kEnd: return findKeySym(XK_End);
-  case Keys::kCapsLock: return findKeySym(XK_Caps_Lock);
-  case Keys::kScrollLock: return findKeySym(XK_Scroll_Lock);
-  case Keys::kNumLock: return findKeySym(XK_Num_Lock);
-  case Keys::kPrintScreen: return findKeySym(XK_Sys_Req);
-  case Keys::kPause: return findKeySym(XK_Break);
-  case Keys::kF1: return findKeySym(XK_F1);
-  case Keys::kF2: return findKeySym(XK_F2);
-  case Keys::kF3: return findKeySym(XK_F3);
-  case Keys::kF4: return findKeySym(XK_F4);
-  case Keys::kF5: return findKeySym(XK_F5);
-  case Keys::kF6: return findKeySym(XK_F6);
-  case Keys::kF7: return findKeySym(XK_F7);
-  case Keys::kF8: return findKeySym(XK_F8);
-  case Keys::kF9: return findKeySym(XK_F9);
-  case Keys::kF10: return findKeySym(XK_F10);
-  case Keys::kF11: return findKeySym(XK_F11);
-  case Keys::kF12: return findKeySym(XK_F12);
-  case Keys::kF13: return findKeySym(XK_F13);
-  case Keys::kF14: return findKeySym(XK_F14);
-  case Keys::kF15: return findKeySym(XK_F15);
-  case Keys::kF16: return findKeySym(XK_F16);
-  case Keys::kF17: return findKeySym(XK_F17);
-  case Keys::kF18: return findKeySym(XK_F18);
-  case Keys::kF19: return findKeySym(XK_F19);
-  case Keys::kF20: return findKeySym(XK_F20);
-  case Keys::kF21: return findKeySym(XK_F21);
-  case Keys::kF22: return findKeySym(XK_F22);
-  case Keys::kF23: return findKeySym(XK_F23);
-  case Keys::kF24: return findKeySym(XK_F24);
-  case Keys::kKeypad0: return findKeySym(XK_KP_0);
-  case Keys::kKeypad1: return findKeySym(XK_KP_1);
-  case Keys::kKeypad2: return findKeySym(XK_KP_2);
-  case Keys::kKeypad3: return findKeySym(XK_KP_3);
-  case Keys::kKeypad4: return findKeySym(XK_KP_4);
-  case Keys::kKeypad5: return findKeySym(XK_KP_5);
-  case Keys::kKeypad6: return findKeySym(XK_KP_6);
-  case Keys::kKeypad7: return findKeySym(XK_KP_7);
-  case Keys::kKeypad8: return findKeySym(XK_KP_8);
-  case Keys::kKeypad9: return findKeySym(XK_KP_9);
-  case Keys::kKeypadDecimal: return findKeySym(XK_KP_Decimal);
-  case Keys::kKeypadDivide: return findKeySym(XK_KP_Divide);
-  case Keys::kKeypadMultiply: return findKeySym(XK_KP_Multiply);
-  case Keys::kKeypadSubtract: return findKeySym(XK_KP_Subtract);
-  case Keys::kKeypadAdd: return findKeySym(XK_KP_Add);
-  case Keys::kKeypadEnter: return findKeySym(XK_KP_Enter);
-  case Keys::kKeypadEqual: return findKeySym(XK_KP_Equal);
-  case Keys::kLeftShift: return findKeySym(XK_Shift_L);
-  case Keys::kLeftControl: return findKeySym(XK_Control_L);
-  case Keys::kLeftAlt: return findKeySym(XK_Alt_L);
-  case Keys::kLeftSuper: return findKeySym(XK_Super_L);
-  case Keys::kRightShift: return findKeySym(XK_Shift_R);
-  case Keys::kRightControl: return findKeySym(XK_Control_R);
-  case Keys::kRightAlt: return findKeySym(XK_Alt_R);
-  case Keys::kRightSuper: return findKeySym(XK_Super_R);
-  case Keys::kMenu: return findKeySym(XK_Menu);
-  default: return XCB_NONE; // FIXME
   }
-} // KeysToKeyCode
 
+  return Keys::kUnknown;
+} // KeyCodeToKeys
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
@@ -392,8 +375,26 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.offset = std::move(offset);
   pWin->rect_.extent = std::move(extent);
 
-  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
-    pWin->keyLUT_[i] = KeysToKeyCode(conn, static_cast<Keys>(i));
+  xcb_setup_t const* setup = xcb_get_setup(conn);
+
+  auto cookie = ::xcb_get_keyboard_mapping(
+    conn, setup->min_keycode, setup->max_keycode - setup->min_keycode + 1);
+  ::xcb_generic_error_t* error;
+  auto mapping = ::xcb_get_keyboard_mapping_reply(conn, cookie, &error);
+
+  if (error) {
+    auto const errorCode = error->error_code;
+    std::free(error);
+    return tl::unexpected(
+      std::system_error(std::error_code(errorCode, GetXCategory()),
+                        "Cannot get keyboard mapping"));
+  }
+
+  int const nKeycodes = mapping->length / mapping->keysyms_per_keycode;
+
+  for (int i = 0; i < nKeycodes; ++i) {
+    ::xcb_keycode_t const keycode = setup->min_keycode + i;
+    pWin->keyLUT_[keycode] = KeyCodeToKeys(i, mapping);
   }
 
   IRIS_LOG_LEAVE();
@@ -406,7 +407,6 @@ glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
   auto pointer = ::xcb_query_pointer_reply(handle_.connection, cookie, &error);
 
   if (error) {
-    GetLogger()->error("Cannot get cursor pos: {}", error->error_code);
     std::free(error);
     return glm::vec2(0, 0);
   }
@@ -433,7 +433,6 @@ void iris::wsi::Window::Impl::Dispatch(
   } break;
 
   case XCB_KEY_RELEASE: {
-  case XCB_KEY_PRESS: {
     auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
     io.KeysDown[keyLUT_[ev->detail]] = 0;
   } break;
