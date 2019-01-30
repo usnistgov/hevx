@@ -4,7 +4,7 @@
 #include "iris/flextVk.h"
 #include "iris/config.h"
 
-// FIXME: flextGL should probably generate these PFN definitions...
+// FIXME: vma needs these, flextGL should probably generate them
 using PFN_vkGetPhysicalDeviceProperties = decltype(vkGetPhysicalDeviceProperties);
 using PFN_vkGetPhysicalDeviceMemoryProperties = decltype(vkGetPhysicalDeviceMemoryProperties);
 using PFN_vkAllocateMemory = decltype(vkAllocateMemory);
