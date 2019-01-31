@@ -1,6 +1,8 @@
 include(ProcessorCount)
 ProcessorCount(N)
 
+set(CTEST_MODEL "Experimental")
+
 set(OPTION_CONFIGURE "-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=on")
 set(EXCLUDE_RE "resolv|multistress|glslang-gtests|test-testsuites_all|test-testsuites_default|test-ubjson_all|test-regression_all|test-regression_default|test-msgpack_all|test-msgpack_default|test-json_patch_all|test-json_patch_default|test-json_patch_all|test-inspection_all|test-inspection_default|test-cbor_all|test-cbor_default|test-bson_all|test-unicode_all")
 
