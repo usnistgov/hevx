@@ -30,4 +30,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI; $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "git config --global user.email \"wesley.griffin@nist.gov\" && git config --global user.name \"Wesley Griffin\" && curl -O $CTEST_SCRIPT_URI && $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"
