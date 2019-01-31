@@ -8,7 +8,7 @@ services:
 env:
   global:
     - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=build -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
+    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
 
 matrix:
   include:
