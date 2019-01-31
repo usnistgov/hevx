@@ -82,7 +82,7 @@ set(SPIRV_TOOLS_BINARY_ROOT ${spirv_tools_BINARY_DIR}/tools)
 set(SPIRV_TOOLS_OPT_BINARY_ROOT ${spirv_TOOLS_BINARY_ROOT})
 set(SPIRV_TOOLS_INCLUDE_DIR ${spirv_tools_SOURCE_DIR}/include)
 
-set(BUILD_WSI_WAYLAND_SUPPORT OFF)
+set(BUILD_WSI_WAYLAND_SUPPORT OFF CACHE BOOL "")
 
 message(STATUS "Populating Vulkan-ValidationLayers")
 add_subdirectory(${Vulkan_ValidationLayers_SOURCE_DIR}
