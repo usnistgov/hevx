@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build configuration to test
+BUILD_CONFIG="RelWithDebInfo"
+
 # URL of CTest Script
 URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
 
@@ -42,15 +45,20 @@ if [ -f $lockfile ]; then
 fi
 (\umask 0; echo $$ >> $lockfile)
 
-START_TIME="-DCTEST_NIGHTLY_START_TIME=\"20:00:00 EST\""
-BUILD_CONFIG="RelWithDebInfo"
-CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=$TEST_ROOT $START_TIME -DCTEST_CONFIGURATION_TYPE=$BUILD_CONFIG"
+starttime_arg="-DCTEST_NIGHTLY_START_TIME=\"20:00:00 EST\""
+dashboardroot_arg="-DCTEST_DASHBOARD_ROOT=$TEST_ROOT"
+testtype_arg="-DCTEST_CONFIGURATION_TYPE=$BUILD_CONFIG"
+CTEST_ARGS="-VV $starttime_arg $dashboardroot_arg $testtype_arg -S $scriptfile"
+
+REPORT_ARGS="-C $BUILD_CONFIG -O $HTML_ROOT $TEST_ROOT"
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 scriptfile=$(\mktemp)
 \curl -s $URL | sed -e 's/Experimental/Nightly/' > $scriptfile
 
-echo "scl enable devtoolset-7 rh-python36 -- ctest3 $CTEST_ARGS -S $scriptfile"
-\scl enable devtoolset-7 rh-python36 -- ctest3 $CTEST_ARGS -S $scriptfile
+echo "scl enable devtoolset-7 rh-python36 -- ctest3 $CTEST_ARGS"
+\scl enable devtoolset-7 rh-python36 -- ctest3 $CTEST_ARGS
 
-echo "scl enable rh-python36 -- python create-report.py -C $BUILD_CONFIG -O $HTML_ROOT $TEST_ROOT"
-\scl enable rh-python36 -- python create-report.py -C $BUILD_CONFIG -O $HTML_ROOT $TEST_ROOT
+echo "scl enable rh-python36 -- python $SCRIPT_DIR/create-report.py $REPORT_ARGS"
+\scl enable rh-python36 -- python $SCRIPT_DIR/create-report.py $REPORT_ARGS
