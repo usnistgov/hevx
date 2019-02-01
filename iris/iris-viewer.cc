@@ -155,8 +155,12 @@ int main(int argc, char** argv) {
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
 
-    if (ImGui::IsKeyPressed(iris::wsi::Keys::kS)) showStatusWindow = true;
-    if (ImGui::IsKeyPressed(iris::wsi::Keys::kD)) showDemoWindow = true;
+    if (ImGui::IsKeyPressed(iris::wsi::Keys::kS)) {
+      showStatusWindow = !showStatusWindow;
+    }
+    if (ImGui::IsKeyPressed(iris::wsi::Keys::kD)) {
+      showDemoWindow = !showDemoWindow;
+    }
 
     ImGuiIO& io = ImGui::GetIO();
     frameTimes[ImGui::GetFrameCount() % frameTimes.size()] =

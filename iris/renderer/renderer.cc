@@ -1952,7 +1952,8 @@ void iris::Renderer::EndFrame() noexcept {
         glm::mat4 const modelViewMatrix = sViewMatrix * mesh.modelMatrix;
         glm::mat4 const modelViewMatrixInverse =
           sViewMatrixInverse * mesh.modelMatrixInverse;
-        glm::mat3 const normalMatrix = glm::transpose(modelViewMatrixInverse);
+        glm::mat3 const normalMatrix =
+          glm::transpose(glm::mat3(modelViewMatrixInverse));
 
         descriptorSets[1] = mesh.descriptorSets.sets[0];
 

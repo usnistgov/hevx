@@ -408,10 +408,10 @@ glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
 
   if (error) {
     std::free(error);
-    return glm::vec2(0, 0);
+    return glm::uvec2(0, 0);
   }
 
-  glm::vec2 pos(pointer->win_x, pointer->win_y);
+  glm::uvec2 pos(pointer->win_x, pointer->win_y);
   std::free(pointer);
   return pos;
 } // iris::wsi::Window::Impl::CursorPos
