@@ -123,11 +123,11 @@ target_link_libraries(iris
     flags imgui vma
     GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
-    stb glslang SPIRV vulkan
+    stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}
-    protobuf::libprotobuf nng
+    protobuf::libprotobuf
     TBB::tbb Threads::Threads
     $<$<PLATFORM_ID:Linux>:-ldl>
 )
@@ -136,7 +136,6 @@ target_include_directories(iris
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/..>
-    $<BUILD_INTERFACE:${NNG_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:${INCLUDE_DIR}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

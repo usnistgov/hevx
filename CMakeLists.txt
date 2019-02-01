@@ -42,6 +42,13 @@ if(BUILD_TESTING)
   enable_testing()
 endif()
 
+##
+# Required libraries
+##
+find_package(Vulkan REQUIRED)
+get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
+get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
+
 add_subdirectory(third_party)
 
 ##

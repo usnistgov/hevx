@@ -19,8 +19,13 @@ Currently this code is under active development and in a pre-release state.
   - Wheezy Template: `pip install --user wheezy.template`
 - GCC >= 7
 - X11 XCB development libraries
+- Vulkan SDK
 
 #### Installing requirements
+
+##### Vulkan SDK
+- This is dependent on the OS and distribution.
+- Ensure the VULKAN_SDK environment variable is set before building HEVx.
 
 ##### CentOS 7
 ~~~

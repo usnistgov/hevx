@@ -1610,7 +1610,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #endif
   };
 
-#if 0 // PLATFORM_LINUX
+#if PLATFORM_LINUX
   ::setenv(
     "VK_LAYER_PATH",
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),

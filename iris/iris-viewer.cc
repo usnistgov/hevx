@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
   spdlog::logger logger("iris-viewer", {console_sink, file_sink, ui_sink});
   logger.set_level(spdlog::level::trace);
 
-  logger.info("initialized");
+  logger.info("Logging initialized");
 
   if (auto error = iris::Renderer::Initialize(
         "iris-viewer",
@@ -142,7 +142,10 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
+  logger.info("Renderer initialized. {} files specified on command line.", files.size());
+
   for (auto&& file : files) {
+    logger.info("Loading {}", file);
     if (auto error = iris::Renderer::LoadFile(file)) {
       logger.error("Error loading {}: {}", file, error.message());
     }

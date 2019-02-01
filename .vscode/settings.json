@@ -1,0 +1,4 @@
+{
+  "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools",
+  "cmake.environment": {"VULKAN_SDK": "/home/wng2/local/VulkanSDK/1.1.97.0/x86_64"}
+}
