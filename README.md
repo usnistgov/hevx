@@ -53,7 +53,6 @@ The following packages are fetched and managed with CMake:
 - [GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
 - [Microsoft/GSL](https://github.com/Microsoft/GSL)
 - [mosra/flextgl](https://github.com/mosra/flextgl)
-- [nanomsg/nng](https://github.com/nanomsg/nng)
 - [ocornut/imgui](https://github.com/ocornut/imgui)
 - [protocolbuffers/protobuf](https://github.com/protocolbuffers/protobuf)
 - [nlohmann/json](https://github.com/nlohmann/json)
