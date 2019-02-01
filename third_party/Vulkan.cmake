@@ -2,6 +2,7 @@ set(_git_tag sdk-1.1.97.0)
 
 fetch_sources(Vulkan_ValidationLayers
   https://github.com/KhronosGroup/Vulkan-ValidationLayers ${_git_tag})
+
 set(Vulkan_ValidationLayers_SOURCE_DIR
   ${CMAKE_CURRENT_BINARY_DIR}/Vulkan_ValidationLayers)
 set(Vulkan_ValidationLayers_BINARY_DIR

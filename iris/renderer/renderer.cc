@@ -142,9 +142,6 @@ std::uint32_t sDepthStencilResolveAttachmentIndex{3};
 
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-glm::mat4 sViewMatrix;
-glm::mat4 sViewMatrixInverse;
-
 /////
 //
 // Additional static private variables
@@ -170,6 +167,11 @@ static absl::FixedArray<VkCommandBuffer> sCommandBuffers(sNumCommandBuffers,
                                                          VK_NULL_HANDLE);
 static std::uint32_t sCommandBufferIndex{0};
 static std::vector<VkCommandBuffer> sSecondaryCommandBuffers;
+
+static glm::vec3 sCameraPosition{2.f, 2.f, 2.f};
+static glm::vec3 sCameraTarget{0.f, 0.f, 0.f};
+static glm::mat4 sViewMatrix;
+static glm::mat4 sViewMatrixInverse;
 
 struct MatrixBufferData {
   glm::mat4 viewMatrix;
@@ -197,8 +199,7 @@ static VmaAllocation sLightBufferAllocation{VK_NULL_HANDLE};
 VkDescriptorSetLayout sBaseDescriptorSetLayout{VK_NULL_HANDLE};
 static absl::FixedArray<VkDescriptorSet> sBaseDescriptorSets(2, VK_NULL_HANDLE);
 
-static absl::flat_hash_map<std::string, iris::Renderer::Window>&
-Windows() {
+static absl::flat_hash_map<std::string, iris::Renderer::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Renderer::Window> sWindows;
   return sWindows;
 } // Windows
@@ -1103,17 +1104,17 @@ CreateDeviceAndQueues(VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
   Expects(sGraphicsDescriptorPools.empty());
 
   absl::FixedArray<VkDescriptorPoolSize> descriptorPoolSizes(11);
-  descriptorPoolSizes[0] = { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 };
-  descriptorPoolSizes[1] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 };
-  descriptorPoolSizes[2] = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 };
-  descriptorPoolSizes[3] = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 };
-  descriptorPoolSizes[4] = { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 };
-  descriptorPoolSizes[5] = { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 };
-  descriptorPoolSizes[6] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 };
-  descriptorPoolSizes[7] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 };
-  descriptorPoolSizes[8] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 };
-  descriptorPoolSizes[9] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 };
-  descriptorPoolSizes[10] = { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 };
+  descriptorPoolSizes[0] = {VK_DESCRIPTOR_TYPE_SAMPLER, 1000};
+  descriptorPoolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000};
+  descriptorPoolSizes[2] = {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000};
+  descriptorPoolSizes[3] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000};
+  descriptorPoolSizes[4] = {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000};
+  descriptorPoolSizes[5] = {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000};
+  descriptorPoolSizes[6] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000};
+  descriptorPoolSizes[7] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000};
+  descriptorPoolSizes[8] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000};
+  descriptorPoolSizes[9] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000};
+  descriptorPoolSizes[10] = {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000};
 
   VkDescriptorPoolCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1538,7 +1539,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   sTaskSchedulerInit.initialize();
   GetLogger()->debug("Default number of task threads: {}",
-                    sTaskSchedulerInit.default_num_threads());
+                     sTaskSchedulerInit.default_num_threads());
 
   glslang::InitializeProcess();
 
@@ -1583,11 +1584,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   physicalDeviceFeatures.features.largePoints = VK_TRUE;
   physicalDeviceFeatures.features.multiViewport = VK_TRUE;
   physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
-  physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize = VK_TRUE;
-  physicalDeviceFeatures.features.shaderUniformBufferArrayDynamicIndexing = VK_TRUE;
-  physicalDeviceFeatures.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
-  physicalDeviceFeatures.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
-  physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;
+  physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderUniformBufferArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderSampledImageArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageBufferArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing =
+    VK_TRUE;
   physicalDeviceFeatures.features.shaderClipDistance = VK_TRUE;
   physicalDeviceFeatures.features.shaderCullDistance = VK_TRUE;
   physicalDeviceFeatures.features.shaderFloat64 = VK_TRUE;
@@ -1604,7 +1610,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #endif
   };
 
-#if 0//PLATFORM_LINUX
+#if 0 // PLATFORM_LINUX
   ::setenv(
     "VK_LAYER_PATH",
     absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
@@ -1627,7 +1633,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
-  //FindDeviceGroup();
+  // FindDeviceGroup();
 
   if (auto error = ChoosePhysicalDevice(physicalDeviceFeatures,
                                         physicalDeviceExtensionNames);
@@ -1686,11 +1692,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   sInitialized = true;
   sRunning = true;
 
-  glm::vec3 eye(2.f, 2.f, 2.f);
-  glm::vec3 target(0.f, 0.f, 0.f);
-  glm::vec3 up(0.f, 0.f, 1.f);
-
-  sViewMatrix = glm::lookAt(eye, target, up);
+  sViewMatrix = glm::lookAt(sCameraPosition, sCameraTarget, {0.f, 0.f, 1.f});
   sViewMatrixInverse = glm::inverse(sViewMatrix);
 
   IRIS_LOG_LEAVE();
@@ -1804,6 +1806,30 @@ bool iris::Renderer::BeginFrame() noexcept {
       GetLogger()->error("Error beginning window frame: {}", error.what());
       return false;
     }
+
+    // FIXME: hack just to get this working on desktop windows
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantCaptureMouse) {
+      if (io.MouseDown[wsi::Buttons::kButtonLeft]) {
+        glm::vec2 const mouseDelta = ImGui::GetIO().MouseDelta;
+
+        glm::vec3 const lookDirection = sCameraPosition - sCameraTarget;
+        glm::vec3 const cameraRight =
+          glm::normalize(glm::cross(lookDirection, {0.f, 0.f, 1.f}));
+        glm::vec3 const cameraUp =
+          glm::normalize(glm::cross(cameraRight, lookDirection));
+
+        glm::mat4 const rot =
+          glm::rotate(glm::mat4{1.f}, mouseDelta.x * -.01f, cameraUp) *
+          glm::rotate(glm::mat4{1.f}, mouseDelta.y * .01f, cameraRight);
+
+        sCameraPosition =
+          glm::vec3(rot * glm::vec4(lookDirection, 0.f)) + sCameraTarget;
+
+        sViewMatrix = glm::lookAt(sCameraPosition, sCameraTarget, cameraUp);
+        sViewMatrixInverse = glm::inverse(sViewMatrix);
+      }
+    }
   }
 
   if (auto result =
@@ -1856,7 +1882,7 @@ void iris::Renderer::EndFrame() noexcept {
 
     if (result != VK_SUCCESS) {
       GetLogger()->error(
-        "Renderer::BeginFrame: acquiring next image for {} failed: {}", title,
+        "Renderer::EndFrame: acquiring next image for {} failed: {}", title,
         to_string(result));
     }
   }
@@ -1984,7 +2010,8 @@ void iris::Renderer::EndFrame() noexcept {
   }
 
   auto pLights = static_cast<LightBufferData*>(ptr);
-  pLights->lights[0].direction = glm::vec4(0, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
+  pLights->lights[0].direction =
+    glm::vec4(0, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
   pLights->lights[0].color = glm::vec4(1.f, 1.f, 1.f, 1.f);
   pLights->numLights = 1;
 
@@ -2183,9 +2210,9 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
 
   switch (controlMessage.type()) {
 
-  //
-  // FIXME: DRY
-  //
+    //
+    // FIXME: DRY
+    //
 
   case iris::Control::Control_Type_DISPLAYS:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
@@ -2348,8 +2375,9 @@ iris::Renderer::AllocateCommandBuffers(std::uint32_t count,
 } // iris::Renderer::AllocateCommandBuffers
 
 tl::expected<iris::Renderer::DescriptorSets, std::system_error>
-iris::Renderer::AllocateDescriptorSets(gsl::span<VkDescriptorSetLayoutBinding> bindings,
-                       std::uint32_t numSets, std::string name) noexcept {
+iris::Renderer::AllocateDescriptorSets(
+  gsl::span<VkDescriptorSetLayoutBinding> bindings, std::uint32_t numSets,
+  std::string name) noexcept {
   return DescriptorSets::Allocate(sGraphicsDescriptorPools[0], bindings,
                                   numSets, std::move(name));
 } // iris::Renderer::AllocateDescriptorSets
@@ -2370,4 +2398,3 @@ iris::Renderer::CreateMeshes(gsl::span<const MeshData> meshData) noexcept {
   IRIS_LOG_LEAVE();
   return std::system_error(Error::kNone);
 } // iris::Renderer::CreateMeshes
-

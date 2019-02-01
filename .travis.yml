@@ -8,7 +8,7 @@ services:
 env:
   global:
     - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo -- -DTHIRD_PARTY_UPDATE_DISCONNECTED=OFF"
+    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo -- -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON"
 
 matrix:
   include:
@@ -30,4 +30,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "git config --global user.email \"wesley.griffin@nist.gov\" && git config --global user.name \"Wesley Griffin\" && curl -O $CTEST_SCRIPT_URI && $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI && $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"

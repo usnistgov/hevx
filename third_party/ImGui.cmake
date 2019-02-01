@@ -7,6 +7,8 @@ FetchContent_Populate(imgui
   QUIET
 )
 
+file(REMOVE ${imgui_SOURCE_DIR}/imconfig.h)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/imconfig.h DESTINATION ${imgui_SOURCE_DIR})
 add_library(imgui 
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -15,3 +17,4 @@ add_library(imgui
 )
 
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+target_link_libraries(imgui PUBLIC glm)

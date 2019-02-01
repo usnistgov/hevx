@@ -37,9 +37,6 @@ extern std::uint32_t sDepthStencilResolveAttachmentIndex;
 extern VkRenderPass sRenderPass;
 extern VkDescriptorSetLayout sBaseDescriptorSetLayout;
 
-// FIXME: putting this here for now; ugly ugly
-extern glm::mat4 sViewMatrix;
-
 [[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool = VK_NULL_HANDLE) noexcept;
 

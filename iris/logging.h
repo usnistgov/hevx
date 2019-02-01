@@ -19,7 +19,7 @@
 
 namespace iris {
 
-static spdlog::logger* GetLogger() noexcept {
+inline static spdlog::logger* GetLogger() noexcept {
   static std::shared_ptr<spdlog::logger> sLogger = spdlog::get("iris");
   return sLogger.get();
 }

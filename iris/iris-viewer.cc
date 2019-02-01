@@ -1,6 +1,6 @@
+#include "absl/container/fixed_array.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
-#include "absl/container/fixed_array.h"
 #include "fmt/format.h"
 #include "imgui.h"
 #include "iris/config.h"
@@ -35,9 +35,9 @@ public:
     }
 
     ImGui::Separator();
-    ImGui::BeginChild("scrolling", ImVec2(0, 0), false,
+    ImGui::BeginChild("scrolling", glm::vec2{0, 0}, false,
                       ImGuiWindowFlags_HorizontalScrollbar);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, glm::vec2{0, 0});
 
     char const* bufferStart = textBuffer_.begin();
     char const* bufferEnd = textBuffer_.end();
@@ -77,9 +77,8 @@ protected:
     scrollToBottom_ = true;
   } // sink_it_
 
-  void flush_() override {
-  } // flush_
-}; // class iris_viewer_sink
+  void flush_() override {} // flush_
+};                          // class iris_viewer_sink
 
 using iris_viewer_sink_mt = iris_viewer_sink<std::mutex>;
 using iris_viewer_sink_st = iris_viewer_sink<spdlog::details::null_mutex>;
@@ -118,8 +117,8 @@ int main(int argc, char** argv) {
   flags::args const args(argc, argv);
   auto const& files = args.positional();
 
-  auto file_sink =
-    std::make_shared<spdlog::sinks::basic_file_sink_mt>("iris-viewer.log", true);
+  auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+    "iris-viewer.log", true);
   file_sink->set_level(spdlog::level::trace);
 
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -137,7 +136,8 @@ int main(int argc, char** argv) {
         "iris-viewer",
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers,
-        0, {console_sink, file_sink, ui_sink}); error.code()) {
+        0, {console_sink, file_sink, ui_sink});
+      error.code()) {
     logger.critical("cannot initialize renderer: {}", error.what());
     std::exit(EXIT_FAILURE);
   }
@@ -148,26 +148,35 @@ int main(int argc, char** argv) {
     }
   }
 
+  bool showStatusWindow = false;
+  bool showDemoWindow = false;
   absl::FixedArray<float> frameTimes(100);
 
   while (iris::Renderer::IsRunning()) {
     if (!iris::Renderer::BeginFrame()) continue;
 
+    if (ImGui::IsKeyPressed(iris::wsi::Keys::kS)) showStatusWindow = true;
+    if (ImGui::IsKeyPressed(iris::wsi::Keys::kD)) showDemoWindow = true;
+
     ImGuiIO& io = ImGui::GetIO();
     frameTimes[ImGui::GetFrameCount() % frameTimes.size()] =
       1000.f * io.DeltaTime;
 
-    if (ImGui::Begin("Status")) {
-      ImGui::Text("Last Frame %.3f ms Frame %d", 1000.f * io.DeltaTime,
-                  ImGui::GetFrameCount());
-      ImGui::PlotHistogram(
-        "Frame Times", frameTimes.data(), frameTimes.size(), 0,
-        fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
-        100.f, ImVec2(0, 50));
+    if (showStatusWindow) {
+      if (ImGui::Begin("Status", &showStatusWindow)) {
+        ImGui::Text("Last Frame %.3f ms Frame %d", 1000.f * io.DeltaTime,
+                    ImGui::GetFrameCount());
+        ImGui::PlotHistogram(
+          "Frame Times", frameTimes.data(), frameTimes.size(), 0,
+          fmt::format("Average {:.3f} ms", 1000.f / io.Framerate).c_str(), 0.f,
+          100.f, glm::vec2{0, 50});
 
-      ui_sink->Draw();
+        ui_sink->Draw();
+      }
+      ImGui::End(); // Status
     }
-    ImGui::End(); // Status
+
+    if (showDemoWindow) ImGui::ShowDemoWindow(&showDemoWindow);
 
     iris::Renderer::EndFrame();
   }
@@ -175,4 +184,3 @@ int main(int argc, char** argv) {
   iris::Renderer::Shutdown();
   logger.info("exiting");
 }
-

@@ -139,7 +139,7 @@ iris::Renderer::Window::BeginFrame(float frameDelta[[maybe_unused]]) noexcept {
     io.KeysDown[wsi::Keys::kLeftSuper] | io.KeysDown[wsi::Keys::kRightSuper];
 
   auto const cursorPos = window.CursorPos();
-  io.MousePos = ImVec2(cursorPos.x, cursorPos.y);
+  io.MousePos = glm::vec2(cursorPos.x, cursorPos.y);
 
   io.DisplaySize.x = static_cast<float>(window.Extent().width);
   io.DisplaySize.y = static_cast<float>(window.Extent().height);
