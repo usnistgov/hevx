@@ -1,3 +1,7 @@
 set(BUILD_TESTING OFF)
 message(STATUS "Populating glslang")
-add_subdirectory(${Vulkan_SDK_DIR}/../source/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
+if(WIN32)
+  add_subdirectory(${Vulkan_SDK_DIR}/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
+else()
+  add_subdirectory(${Vulkan_SDK_DIR}/../source/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
+endif()
