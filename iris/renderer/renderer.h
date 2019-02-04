@@ -21,38 +21,80 @@ namespace iris::Control {
 class Control;
 } // namespace iris::Control
 
+// clang-format off
 /*! \brief IRIS renderer
  *
- * There is a single renderer per application-instance. That renderer must be
- * initialized with a call to Renderer::Initialize.
+ * There is a single renderer per application-instance. The expected application
+ * flow is shown in the below diagram. \ref iris-viewer.cc is the main rendering
+ * application.
+ * \dotfile appflow.gv
+ *
+ * Architecture
+ * \dotfile renderer_architecture.gv
  */
+// clang-format on
 namespace iris::Renderer {
 
+/*!
+ * Rendering initialization options.
+ */
 enum class Options {
-  kNone = (0),
-  kReportDebugMessages = (1 << 0),
-  kUseValidationLayers = (1 << 1),
+  kNone = (0),                     //<! No special behavior.
+  kReportDebugMessages = (1 << 0), //<! Report API debug messages.
+  kUseValidationLayers = (1 << 1), //<! Use API validation layers.
 };
 
 /*! \brief Initialize the rendering system.
  *
  * There is only a single renderer per application instance.
  * \param[in] appName the name of the application.
+ * \param[in] options the \ref Options to initialize the renderer with.
  * \param[in] appVersion the version of the application.
+ * \param[in] logSinks a list of sinks to log to.
+ * \return \ref std::system_error
  */
 [[nodiscard]] std::system_error
 Initialize(gsl::czstring<> appName, Options const& options,
            std::uint32_t appVersion = 0,
            spdlog::sinks_init_list logSinks = {}) noexcept;
 
+/*! \brief Shutdown the rendering system.
+ */
 void Shutdown() noexcept;
 
 void Terminate() noexcept;
+
+/*! \brief Indicates if the rendering system is running.
+ *
+ * The rendering system is considered running until \ref Terminate is called
+ * or any window is closed.
+ * \return true if the renderer is running, false if not.
+ */
 bool IsRunning() noexcept;
 
+/*! \brief Begin the next rendering frame.
+ *
+ * This must be called each time through the rendering loop after calling \ref
+ * EndFrame.
+ * \return true if there was no error begining the frame, false otherwise.
+ */
 bool BeginFrame() noexcept;
+
+/*! \brief End the next rendering frame.
+ *
+ * This must be called each time through the rendering loop after calling \ref
+ * BeginFrame.
+ */
 void EndFrame() noexcept;
 
+/*! \brief Load a file into the rendering system.
+ *
+ * This is an async load operation, so the only errors returned are if the
+ * operation failed to be queued.
+ * \param[in] path The path to load.
+ * \return std::error_code indicating if the async operation failed to be
+ * queued.
+ */
 [[nodiscard]] std::error_code LoadFile(filesystem::path const& path) noexcept;
 
 std::error_code Control(iris::Control::Control const& control) noexcept;

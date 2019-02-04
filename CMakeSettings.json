@@ -9,7 +9,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -22,7 +22,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DBUILD_DOCS=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },

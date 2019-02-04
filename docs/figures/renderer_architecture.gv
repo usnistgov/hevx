@@ -1,0 +1,8 @@
+digraph {
+  concentrate=true;
+
+  node [shape="box", style=""];
+
+  renderer -> io;
+  io -> renderer;
+}

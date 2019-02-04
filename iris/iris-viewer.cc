@@ -1,3 +1,7 @@
+/*! \file
+ * \brief main rendering application
+ */
+
 #include "absl/container/fixed_array.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"

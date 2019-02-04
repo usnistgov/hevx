@@ -1,5 +1,4 @@
-HEVx [![Build Status](https://travis-ci.org/usnistgov/hevx.svg?branch=master)](https://travis-ci.org/usnistgov/hevx)
-====
+# HEVx [![Build Status](https://travis-ci.org/usnistgov/hevx.svg?branch=master)](https://travis-ci.org/usnistgov/hevx)
 
 High End Visualization (HEV) is a software environment for developing
 visualization applications in both desktop and immersive environments.
@@ -11,9 +10,9 @@ community.
 
 Currently this code is under active development and in a pre-release state.
 
-## Building
+## Building ##
 
-### Requirements
+### Requirements ###
 - CMake 3.11
 - Python 3.6
   - Wheezy Template: `pip install --user wheezy.template`
@@ -21,13 +20,12 @@ Currently this code is under active development and in a pre-release state.
 - X11 XCB development libraries
 - Vulkan SDK
 
-#### Installing requirements
+### Installation ###
 
-##### Vulkan SDK
-- This is dependent on the OS and distribution.
-- Ensure the VULKAN_SDK environment variable is set before building HEVx.
+#### Vulkan SDK ####
+Ensure the VULKAN_SDK environment variable is set before building HEVx.
 
-##### CentOS 7
+#### CentOS 7 ####
 ~~~
 yum install -y centos-release-scl
 yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
@@ -35,19 +33,19 @@ yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxcb-de
 scl enable rh-python36 -- pip3 install --user wheezy.template
 ~~~
 
-##### Fedora 28 / 29
+#### Fedora 28 / 29 ####
 ~~~
 dnf install -y git cmake gcc-c++ make xcb-util-wm-devel libxcb-devel libX11-devel
 pip3 install --user wheezy.template
 ~~~
 
-##### Ubuntu 18.10
+#### Ubuntu 18.10 ####
 ~~~
 apt install -y curl python3-pip cmake git pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxcb-icccm4-dev
 pip3 install --user wheezy.template
 ~~~
 
-### Dependencies
+### Dependencies ###
 The following packages are fetched and managed with CMake:
 - [01org/tbb](https://github.com/01org/tbb)
 - [abseil/apseil-cpp](https://github.com/abseil/abseil-cpp)
@@ -64,28 +62,28 @@ The following packages are fetched and managed with CMake:
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
 - [sailormoon/flags](https://github.com/sailormoon/flags)
 
-### Instructions
+### Instructions ###
 
-##### CentOS 7
+#### CentOS 7 ####
 ~~~
 $ mkdir build && cd build
 $ scl enable devtoolset-7 rh-python36 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 $ cmake --build .
 ~~~
 
-##### Fedora 28 / 29 and Ubuntu 18.10
+#### Fedora 28 / 29 and Ubuntu 18.10 ####
 ~~~
 $ mkdir build && cd build
 $ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 $ cmake --build .
 ~~~
 
-## Other
+## Other ##
 
-### Developers
+### Developers ###
 - Wesley Griffin wesley.griffin@nist.gov
 
-### License
+### License ###
 This software was developed by employees of the National Institute of
 Standards and Technology (NIST), an agency of the Federal Government and is
 being made available as a public service. Pursuant to title 17 United States
