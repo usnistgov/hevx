@@ -1,3 +1,5 @@
+option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
+
 find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
@@ -52,6 +54,13 @@ target_compile_options(protos
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
+if(ENABLE_INCLUDE_WHAT_YOU_USE)
+  find_program(IWYU_EXECUTABLE include-what-you-use)
+  if(IWYU_EXECUTABLE)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_EXECUTABLE})
+  endif()
+endif()
+
 if(WIN32)
   set(_flextvk_profile vk_win32_khr.txt)
 elseif(UNIX)
@@ -90,23 +99,11 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
-  ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  renderer/buffer.cc
-  renderer/command_buffers.cc
-  renderer/descriptor_sets.cc
-  renderer/image.cc
-  renderer/io/gltf.cc
   renderer/io/json.cc
   renderer/io/read_file.cc
-  renderer/mesh.cc
-  renderer/mikktspace.c
-  renderer/pipeline.cc
   renderer/renderer.cc
-  renderer/surface.cc
-  renderer/shader.cc
-  renderer/ui.cc
-  renderer/window.cc
+  renderer/vulkan_support.cc
   wsi/window.cc
 )
 
@@ -123,7 +120,7 @@ target_link_libraries(iris
     flags imgui vma
     GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
-    stb glslang SPIRV Vulkan::Vulkan
+    mikktspace stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}

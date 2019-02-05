@@ -1,6 +1,7 @@
 #ifndef HEV_IRIS_ENUMERATE_H_
 #define HEV_IRIS_ENUMERATE_H_
 
+#include <cstddef>
 #include <tuple>
 
 namespace iris {
@@ -31,4 +32,3 @@ constexpr auto enumerate(C&& c) noexcept(noexcept(std::begin(c)) &&
 } // namespace iris
 
 #endif // HEV_IRIS_ENUMERATE_H_
-

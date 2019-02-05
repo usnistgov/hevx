@@ -1,6 +1,7 @@
 #include "renderer/io/json.h"
 #include "config.h"
 #include "error.h"
+#include "expected.hpp"
 #include "renderer/io/read_file.h"
 #include "renderer/renderer.h"
 #if PLATFORM_COMPILER_MSVC
@@ -19,6 +20,8 @@
 #endif
 #include "logging.h"
 #include "protos.h"
+#include <string>
+#include <vector>
 
 std::function<std::system_error(void)>
 iris::Renderer::io::LoadJSON(filesystem::path const& path) noexcept {

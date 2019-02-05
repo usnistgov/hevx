@@ -65,3 +65,5 @@ include(Spdlog.cmake)
 include(STB.cmake)
 include(TBB.cmake)
 include(VulkanMemoryAllocator.cmake)
+
+add_subdirectory(mikktspace)

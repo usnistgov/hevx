@@ -5,7 +5,15 @@
  */
 
 #include "absl/container/fixed_array.h"
+#include "expected.hpp"
+#include "gsl/gsl"
 #include "wsi/window.h"
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <string>
 #include <Windows.h>
 
 namespace iris::wsi {

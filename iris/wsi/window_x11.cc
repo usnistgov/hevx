@@ -2,14 +2,19 @@
  * \brief \ref iris::wsi::Window::Impl definition for X11.
  */
 #include "wsi/window_x11.h"
-#include "absl/base/macros.h"
 #include "fmt/format.h"
 #include "imgui.h"
 #include "logging.h"
-#include <X11/keysym.h>
+#include "wsi/input.h"
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <memory>
+#include <system_error>
+#include <type_traits>
+#include <utility>
+#include <X11/keysym.h>
+#include <xcb/xcb_icccm.h>
 
 namespace iris::wsi {
 

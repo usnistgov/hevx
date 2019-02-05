@@ -2,6 +2,10 @@
 #include "config.h"
 #include "logging.h"
 #include <cstdio>
+#include <exception>
+#include <memory>
+#include <string>
+#include <fcntl.h>
 
 tl::expected<std::vector<std::byte>, std::system_error>
 iris::Renderer::io::ReadFile(filesystem::path const& path) noexcept {

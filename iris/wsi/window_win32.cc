@@ -5,6 +5,7 @@
 #include "absl/base/macros.h"
 #include "imgui.h"
 #include "logging.h"
+#include "wsi/input.h"
 
 namespace iris::wsi {
 

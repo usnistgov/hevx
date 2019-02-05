@@ -16,23 +16,20 @@ namespace filesystem = std::filesystem;
 #include "spdlog/sinks/sink.h"
 #include <cstdint>
 #include <system_error>
+#include <type_traits>
 
+// Forward declare the iris::Control::Control class
 namespace iris::Control {
 class Control;
 } // namespace iris::Control
 
-// clang-format off
 /*! \brief IRIS renderer
  *
  * There is a single renderer per application-instance. The expected application
  * flow is shown in the below diagram. \ref iris-viewer.cc is the main rendering
  * application.
  * \dotfile appflow.gv
- *
- * Architecture
- * \dotfile renderer_architecture.gv
  */
-// clang-format on
 namespace iris::Renderer {
 
 /*!
@@ -58,10 +55,8 @@ Initialize(gsl::czstring<> appName, Options const& options,
            std::uint32_t appVersion = 0,
            spdlog::sinks_init_list logSinks = {}) noexcept;
 
-/*! \brief Shutdown the rendering system.
+/*! \brief Request the rendering system to shutdown.
  */
-void Shutdown() noexcept;
-
 void Terminate() noexcept;
 
 /*! \brief Indicates if the rendering system is running.
@@ -76,9 +71,8 @@ bool IsRunning() noexcept;
  *
  * This must be called each time through the rendering loop after calling \ref
  * EndFrame.
- * \return true if there was no error begining the frame, false otherwise.
  */
-bool BeginFrame() noexcept;
+void BeginFrame() noexcept;
 
 /*! \brief End the next rendering frame.
  *
@@ -90,13 +84,19 @@ void EndFrame() noexcept;
 /*! \brief Load a file into the rendering system.
  *
  * This is an async load operation, so the only errors returned are if the
- * operation failed to be queued.
+ * operation failed to be enqueued.
  * \param[in] path The path to load.
  * \return std::error_code indicating if the async operation failed to be
- * queued.
+ * enqueued.
  */
 [[nodiscard]] std::error_code LoadFile(filesystem::path const& path) noexcept;
 
+/*! \brief Execute a control message.
+ *
+ * This is a synchronous execution step.
+ * \param[in] control the \ref iris::Control::Control message.
+ * \return std::error_code indicating if the message failed.
+ */
 std::error_code Control(iris::Control::Control const& control) noexcept;
 
 //! \brief bit-wise or of \ref Options.
@@ -114,4 +114,3 @@ inline Options operator&(Options const& lhs, Options const& rhs) noexcept {
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_RENDERER_H_
-

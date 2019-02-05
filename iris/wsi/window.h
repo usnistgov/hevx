@@ -7,14 +7,12 @@
 #include "expected.hpp"
 #include "glm/vec2.hpp"
 #include "gsl/gsl"
-#include "iris/wsi/input.h"
 #include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <string>
-#include <system_error>
 #include <type_traits>
+#include <utility>
 
 /*! \brief IRIS Windowing System Interface (WSI)
  *
