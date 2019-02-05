@@ -1,35 +1,36 @@
-#ifndef HEV_IRIS_WSI_WINDOW_WIN32_H_
-#define HEV_IRIS_WSI_WINDOW_WIN32_H_
+#ifndef HEV_IRIS_WSI_PLATFORM_WINDOW_X11_H_
+#define HEV_IRIS_WSI_PLATFORM_WINDOW_X11_H_
 /*! \file
- * \brief \ref iris::wsi::Window::Impl declaration for Win32.
+ * \brief \ref iris::wsi::PlatformWindow::Impl declaration for X11.
  */
 
 #include "absl/container/fixed_array.h"
 #include "expected.hpp"
 #include "gsl/gsl"
-#include "wsi/window.h"
+#include "wsi/platform_window.h"
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <string>
-#include <Windows.h>
+#include <xcb/xcb.h>
+#include <xcb/xproto.h>
 
 namespace iris::wsi {
 
 //! \brief Platform-defined window handle.
-struct Window::NativeHandle_t {
-  ::HINSTANCE hInstance{0}; //<! The Win32 instance handle
-  ::HWND hWnd{0};           //<! The Win32 window handle
+struct PlatformWindow::NativeHandle_t {
+  ::xcb_connection_t* connection{nullptr}; //!< The XCB connection.
+  ::xcb_window_t window{}; //!< The XCB window.
 };
 
-/*! \brief Platform-specific window for Win32.
+/*! \brief Platform-specific window for X11.
  * \internal
  * Most of the methods are defined class-inline to hopefully get the compiler
- * to optimize away the function call at the call-site in \ref Window.
+ * to optimize away the function call at the call-site in \ref PlatformWindow.
  */
-class Window::Impl {
+class PlatformWindow::Impl {
 public:
   /*! \brief Create a new Impl.
    * \param[in] title the window title.
@@ -40,7 +41,7 @@ public:
    */
   static tl::expected<std::unique_ptr<Impl>, std::exception>
   Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
-         Options const& options, int);
+         Options const& options, int display) noexcept;
 
   Rect2D Rect() const noexcept { return rect_; }
   Offset2D Offset() const noexcept { return rect_.offset; }
@@ -51,30 +52,46 @@ public:
    */
   glm::uvec2 CursorPos() const noexcept;
 
+  std::string Title() noexcept {
+    //::XTextProperty prop;
+    //::XGetWMName(handle_.display, handle_.window, &prop);
+    return "";//std::string(reinterpret_cast<char*>(prop.value), prop.nitems);
+  }
+
   /*! \brief Change the title of this window.
    * \param[in] title the new title.
    */
   void Retitle(gsl::czstring<> title) noexcept {
-    ::SetWindowText(handle_.hWnd, title);
+    auto const len = std::strlen(title);
+    ::xcb_change_property(handle_.connection, XCB_PROP_MODE_REPLACE,
+                          handle_.window, atoms_[WM_NAME], XCB_ATOM_STRING, 8,
+                          len, title);
+    ::xcb_change_property(handle_.connection, XCB_PROP_MODE_REPLACE,
+                          handle_.window, atoms_[WM_ICON_NAME], XCB_ATOM_STRING,
+                          8, len, title);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Move this window.
    * \param[in] offset the new window offset in screen coordinates.
    */
   void Move(Offset2D const& offset) {
-    ::SetWindowPos(handle_.hWnd, HWND_NOTOPMOST, offset.x, offset.y, 0, 0,
-                   SWP_NOSIZE);
+    std::uint32_t values[2] = {static_cast<std::uint32_t>(offset.x),
+                               static_cast<std::uint32_t>(offset.y)};
+    ::xcb_configure_window(handle_.connection, handle_.window,
+                           XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Resize this window.
    * \param[in] extent the new window extent in screen coordinate.s
    */
   void Resize(Extent2D const& extent) {
-    RECT rect;
-    ::SetRect(&rect, 0, 0, extent.width, extent.height);
-    ::AdjustWindowRect(&rect, dwStyle_, FALSE);
-    ::SetWindowPos(handle_.hWnd, HWND_NOTOPMOST, 0, 0, (rect.right - rect.left),
-                   (rect.bottom - rect.top), SWP_NOMOVE | SWP_NOREPOSITION);
+    std::uint32_t values[2] = {extent.width, extent.height};
+    ::xcb_configure_window(handle_.connection, handle_.window,
+                           XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT,
+                           values);
+    ::xcb_flush(handle_.connection);
   }
 
   /*! \brief Indicates if this window has been closed.
@@ -86,15 +103,21 @@ public:
   void Close() noexcept {
     closed_ = true;
     closeDelegate_();
-    ::DestroyWindow(handle_.hWnd);
-    //::SendMessageA(handle_.hWnd, WM_CLOSE, 0, 0);
+    ::xcb_destroy_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
   }
 
   //! \brief Show this window.
-  void Show() noexcept { ::ShowWindow(handle_.hWnd, SW_SHOW); }
+  void Show() noexcept {
+    ::xcb_map_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
+  }
 
   //! \brief Hide this window.
-  void Hide() noexcept { ::ShowWindow(handle_.hWnd, SW_HIDE); }
+  void Hide() noexcept {
+    ::xcb_unmap_window(handle_.connection, handle_.window);
+    ::xcb_flush(handle_.connection);
+  }
 
   /*! \brief Indicates if this window currently has the WSI focus.
    *  \return true if this window is the focused window, false if not.
@@ -103,11 +126,9 @@ public:
 
   //! \brief Poll for all outstanding window events. Must be regularly called.
   void PollEvents() noexcept {
-    MSG msg = {};
-    msg.message = WM_NULL;
-    while (::PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) {
-      ::TranslateMessage(&msg);
-      ::DispatchMessage(&msg);
+    ::xcb_generic_event_t* event = nullptr;
+    while ((event = ::xcb_poll_for_event(handle_.connection)) != nullptr) {
+      Dispatch(gsl::not_null(event));
     }
   }
 
@@ -135,31 +156,35 @@ public:
 
   //! \brief Default constructor: no initialization.
   Impl() noexcept
-    : keyLUT_(Keyset::kMaxKeys) {}
+    : atoms_(kNumAtoms)
+    , keyLUT_(256) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
 
 private:
-  Rect2D rect_{};
+  enum Atoms {
+    WM_NAME,
+    WM_ICON_NAME,
+    WM_PROTOCOLS,
+    WM_DELETE_WINDOW,
+    _MOTIF_WM_HINTS,
+    kNumAtoms
+  }; // enum Atoms
+
+  Rect2D rect_{Offset2D{}, Extent2D{}};
   NativeHandle_t handle_{};
-  DWORD dwStyle_{};
+  absl::FixedArray<::xcb_atom_t> atoms_;
   bool closed_{false};
   bool focused_{false};
-  absl::FixedArray<Keys> keyLUT_;
+  absl::FixedArray<::xcb_keycode_t> keyLUT_;
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};
 
-  ::LRESULT CALLBACK Dispatch(::UINT uMsg, ::WPARAM wParam,
-                              ::LPARAM lParam) noexcept;
-
-  static ::WNDCLASSA sWindowClass;
-  static ::LRESULT CALLBACK WndProc(::HWND hWnd, ::UINT uMsg, ::WPARAM wParam,
-                                    ::LPARAM lParam) noexcept;
-}; // class Window::Impl
+  void Dispatch(gsl::not_null<::xcb_generic_event_t*> event) noexcept;
+}; // class PlatformWindow::Impl
 
 } // namespace iris::wsi
 
-#endif // HEV_IRIS_WSI_WINDOW_WIN32_H_
-
+#endif // HEV_IRIS_WSI_PLATFORM_WINDOW_X11_H_

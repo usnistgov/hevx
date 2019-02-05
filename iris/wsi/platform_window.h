@@ -1,7 +1,7 @@
-#ifndef HEV_IRIS_WSI_WINDOW_H_
-#define HEV_IRIS_WSI_WINDOW_H_
+#ifndef HEV_IRIS_WSI_PLATFORM_WINDOW_H_
+#define HEV_IRIS_WSI_PLATFORM_WINDOW_H_
 /*! \file
- * \brief \ref iris::wsi::Window declaration.
+ * \brief \ref iris::wsi::PlatformWindow declaration.
  */
 
 #include "expected.hpp"
@@ -16,8 +16,8 @@
 
 /*! \brief IRIS Windowing System Interface (WSI)
  *
- * The main public entry points are wsi::Window and wsi::Input. However, these
- * classes are really for consumption inside Renderer.
+ * The main public entry points are wsi::PlatformWindow and wsi::Input. However,
+ * these classes are really for consumption inside Renderer.
  */
 namespace iris::wsi {
 
@@ -51,11 +51,12 @@ struct Rect2D {
 
 /*! \brief Manages a platform-specific Window.
  *
- * Windows are created with the \ref Create method. The \ref PollEvents method
- * of each created Window must be called on a regular basis (each time through
- * the render loop) to ensure window system events are correctly processed.
+ * PlatformWindows are created with the \ref Create method. The \ref PollEvents
+ * method of each created PlatformWindow must be called on a regular basis (each
+ * time through the render loop) to ensure window system events are correctly
+ * processed.
  */
-class Window {
+class PlatformWindow {
 public:
   //! \brief Options for window creation.
   enum class Options {
@@ -67,14 +68,14 @@ public:
   // forward-declare this so that it can be used below in Create
   friend Options operator|(Options const& lhs, Options const& rhs) noexcept;
 
-  /*! \brief Create a new Window.
+  /*! \brief Create a new PlatformWindow.
    * \param[in] title the window title.
    * \param[in] offset the window offset in screen coordinates.
    * \param[in] extent the window extent in screen coordinates.
    * \param[in] options the Options describing how to create the window.
-   * \return a std::expected of either the Window or a std::exception.
+   * \return a std::expected of either the PlatformWindow or a std::exception.
    */
-  static tl::expected<Window, std::exception>
+  static tl::expected<PlatformWindow, std::exception>
   Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
          Options const& options, int display) noexcept;
 
@@ -160,54 +161,58 @@ public:
   NativeHandle_t NativeHandle() const noexcept;
 
   //! \brief Default constructor: no initialization.
-  Window() noexcept;
+  PlatformWindow() noexcept;
   //! \brief No copies.
-  Window(Window const&) = delete;
+  PlatformWindow(PlatformWindow const&) = delete;
   //! \brief Move constructor.
-  Window(Window&&) noexcept;
+  PlatformWindow(PlatformWindow&&) noexcept;
   //! \brief No copies.
-  Window& operator=(Window const&) = delete;
+  PlatformWindow& operator=(PlatformWindow const&) = delete;
   //! \brief Move assignment operator.
-  Window& operator=(Window&&) noexcept;
+  PlatformWindow& operator=(PlatformWindow&&) noexcept;
   //! \brief Destructor.
-  ~Window() noexcept;
+  ~PlatformWindow() noexcept;
 
 private:
   class Impl;
   std::unique_ptr<Impl> pImpl_;
-}; // class Window
+}; // class PlatformWindow
 
-//! \brief bit-wise or of \ref Window::Options.
-inline Window::Options operator|(Window::Options const& lhs,
-                                 Window::Options const& rhs) noexcept {
-  using U = std::underlying_type_t<Window::Options>;
-  return static_cast<Window::Options>(static_cast<U>(lhs) |
-                                      static_cast<U>(rhs));
+//! \brief bit-wise or of \ref PlatformWindow::Options.
+inline PlatformWindow::Options
+operator|(PlatformWindow::Options const& lhs,
+          PlatformWindow::Options const& rhs) noexcept {
+  using U = std::underlying_type_t<PlatformWindow::Options>;
+  return static_cast<PlatformWindow::Options>(static_cast<U>(lhs) |
+                                              static_cast<U>(rhs));
 }
 
-//! \brief bit-wise or of \ref Window::Options.
-inline Window::Options operator|=(Window::Options& lhs,
-                                  Window::Options const& rhs) noexcept {
+//! \brief bit-wise or of \ref PlatformWindow::Options.
+inline PlatformWindow::Options
+operator|=(PlatformWindow::Options& lhs,
+           PlatformWindow::Options const& rhs) noexcept {
   lhs = lhs | rhs;
   return lhs;
 }
 
-//! \brief bit-wise and of \ref Window::Options.
-inline Window::Options operator&(Window::Options const& lhs,
-                                 Window::Options const& rhs) noexcept {
-  using U = std::underlying_type_t<Window::Options>;
-  return static_cast<Window::Options>(static_cast<U>(lhs) &
-                                      static_cast<U>(rhs));
+//! \brief bit-wise and of \ref PlatformWindow::Options.
+inline PlatformWindow::Options
+operator&(PlatformWindow::Options const& lhs,
+          PlatformWindow::Options const& rhs) noexcept {
+  using U = std::underlying_type_t<PlatformWindow::Options>;
+  return static_cast<PlatformWindow::Options>(static_cast<U>(lhs) &
+                                              static_cast<U>(rhs));
 }
 
-//! \brief bit-wise and of \ref Window::Options.
-inline Window::Options operator&=(Window::Options& lhs,
-                                  Window::Options const& rhs) noexcept {
+//! \brief bit-wise and of \ref PlatformWindow::Options.
+inline PlatformWindow::Options
+operator&=(PlatformWindow::Options& lhs,
+           PlatformWindow::Options const& rhs) noexcept {
   lhs = lhs & rhs;
   return lhs;
 }
 
 } // namespace iris::wsi
 
-#endif // HEV_IRIS_WSI_WINDOW_H_
+#endif // HEV_IRIS_WSI_PLATFORM_WINDOW_H_
 

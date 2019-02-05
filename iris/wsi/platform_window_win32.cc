@@ -1,7 +1,7 @@
 /*! \file
- * \brief \ref iris::wsi::Window::Impl definition for Win32.
+ * \brief \ref iris::wsi::PlatformWindow::Impl definition for Win32.
  */
-#include "wsi/window_win32.h"
+#include "wsi/platform_window_win32.h"
 #include "absl/base/macros.h"
 #include "imgui.h"
 #include "logging.h"
@@ -12,11 +12,11 @@ namespace iris::wsi {
 static Keys KeycodeToKeys(int keycode) noexcept {
   switch (keycode) {
   case VK_SPACE: return Keys::kSpace;
-  //case Keys::kApostrophe: return 0; // FIXME
-  //case Keys::kComma: return 0; // FIXME
-  //case Keys::kMinus: return 0; // FIXME
-  //case Keys::kPeriod: return 0; // FIXME
-  //case Keys::kSlash: return 0; // FIXME
+  // case Keys::kApostrophe: return 0; // FIXME
+  // case Keys::kComma: return 0; // FIXME
+  // case Keys::kMinus: return 0; // FIXME
+  // case Keys::kPeriod: return 0; // FIXME
+  // case Keys::kSlash: return 0; // FIXME
   case 0x30: return Keys::k0;
   case 0x31: return Keys::k1;
   case 0x32: return Keys::k2;
@@ -27,8 +27,8 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case 0x37: return Keys::k7;
   case 0x38: return Keys::k8;
   case 0x39: return Keys::k9;
-  //case Keys::kSemicolon: return 0; // FIXME
-  //case Keys::kEqual: return 0; // FIXME
+  // case Keys::kSemicolon: return 0; // FIXME
+  // case Keys::kEqual: return 0; // FIXME
   case 0x41: return Keys::kA;
   case 0x42: return Keys::kB;
   case 0x43: return Keys::kC;
@@ -55,10 +55,10 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case 0x58: return Keys::kX;
   case 0x59: return Keys::kY;
   case 0x5A: return Keys::kZ;
-  //case Keys::kLeftBracket: return 0; // FIXME
-  //case Keys::kBackslash: return 0; // FIXME
-  //case Keys::kRightBracket: return 0; // FIXME
-  //case Keys::kGraveAccent: return 0; // FIXME
+  // case Keys::kLeftBracket: return 0; // FIXME
+  // case Keys::kBackslash: return 0; // FIXME
+  // case Keys::kRightBracket: return 0; // FIXME
+  // case Keys::kGraveAccent: return 0; // FIXME
   case VK_ESCAPE: return Keys::kEscape;
   case VK_RETURN: return Keys::kEnter;
   case VK_TAB: return Keys::kTab;
@@ -73,11 +73,11 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case VK_NEXT: return Keys::kPageDown;
   case VK_HOME: return Keys::kHome;
   case VK_END: return Keys::kEnd;
-  //case Keys::kCapsLock: return 0; // FIXME
-  //case Keys::kScrollLock: return 0; // FIXME
-  //case Keys::kNumLock: return 0; // FIXME
-  //case Keys::kPrintScreen: return 0; // FIXME
-  //case Keys::kPause: return 0; // FIXME
+  // case Keys::kCapsLock: return 0; // FIXME
+  // case Keys::kScrollLock: return 0; // FIXME
+  // case Keys::kNumLock: return 0; // FIXME
+  // case Keys::kPrintScreen: return 0; // FIXME
+  // case Keys::kPause: return 0; // FIXME
   case VK_F1: return Keys::kF1;
   case VK_F2: return Keys::kF2;
   case VK_F3: return Keys::kF3;
@@ -117,26 +117,27 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case VK_MULTIPLY: return Keys::kKeypadMultiply;
   case VK_SUBTRACT: Keys::kKeypadSubtract;
   case VK_ADD: Keys::kKeypadAdd;
-  //case Keys::kKeypadEnter: return 0; // FIXME
-  //case Keys::kKeypadEqual: return 0; // FIXME
-  //case Keys::kLeftShift: return VK_LSHIFT;
-  //case Keys::kLeftControl: return VK_LCONTROL;
-  //case Keys::kLeftAlt: return VK_LMENU;
-  //case Keys::kLeftSuper: return 0; // FIXME
-  //case Keys::kRightShift: return VK_RSHIFT;
-  //case Keys::kRightControl: return VK_RCONTROL;
-  //case Keys::kRightAlt: return VK_RMENU;
-  //case Keys::kRightSuper: return 0; // FIXME
-  //case Keys::kMenu: return 0; // FIXME
-  default: return Keys::kUnknown; //FIXME
+  // case Keys::kKeypadEnter: return 0; // FIXME
+  // case Keys::kKeypadEqual: return 0; // FIXME
+  // case Keys::kLeftShift: return VK_LSHIFT;
+  // case Keys::kLeftControl: return VK_LCONTROL;
+  // case Keys::kLeftAlt: return VK_LMENU;
+  // case Keys::kLeftSuper: return 0; // FIXME
+  // case Keys::kRightShift: return VK_RSHIFT;
+  // case Keys::kRightControl: return VK_RCONTROL;
+  // case Keys::kRightAlt: return VK_RMENU;
+  // case Keys::kRightSuper: return 0; // FIXME
+  // case Keys::kMenu: return 0; // FIXME
+  default: return Keys::kUnknown; // FIXME
   }
 } // KeycodeToKeys
 
 } // namespace iris::wsi
 
-tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
-iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
-                                Extent2D extent, Options const& options, int) {
+tl::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
+iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
+                                        Extent2D extent, Options const& options,
+                                        int) {
   IRIS_LOG_ENTER();
   std::unique_ptr<Impl> pWin;
 
@@ -208,9 +209,9 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
 
   IRIS_LOG_LEAVE();
   return std::move(pWin);
-} // iris::wsi::Window::Impl::Create
+} // iris::wsi::PlatformWindow::Impl::Create
 
-glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
+glm::uvec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
   glm::uvec2 cursorPos{};
 
   POINT rawPos;
@@ -224,36 +225,28 @@ glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
   cursorPos.x = rawPos.x;
   cursorPos.y = rawPos.y;
   return cursorPos;
-} // iris::wsi::Window::Impl::CursorPos
+} // iris::wsi::PlatformWindow::Impl::CursorPos
 
-iris::wsi::Window::Impl::~Impl() noexcept {
+iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
   IRIS_LOG_ENTER();
   IRIS_LOG_LEAVE();
-} // iris::wsi::Window::Impl::~Impl
+} // iris::wsi::PlatformWindow::Impl::~Impl
 
-::LRESULT CALLBACK iris::wsi::Window::Impl::Dispatch(::UINT uMsg,
-                                                     ::WPARAM wParam,
-                                                     ::LPARAM lParam) noexcept {
+::LRESULT CALLBACK iris::wsi::PlatformWindow::Impl::Dispatch(
+  ::UINT uMsg, ::WPARAM wParam, ::LPARAM lParam) noexcept {
   ::LRESULT res = 0;
   ImGuiIO& io = ImGui::GetIO();
 
   switch (uMsg) {
-  case WM_ACTIVATE:
-    focused_ = (LOWORD(wParam) == WA_ACTIVE);
-    break;
+  case WM_ACTIVATE: focused_ = (LOWORD(wParam) == WA_ACTIVE); break;
 
-  case WM_CHAR:
-    break;
+  case WM_CHAR: break;
 
   case WM_KEYDOWN:
-  case WM_SYSKEYDOWN:
-    io.KeysDown[keyLUT_[wParam]] = 1;
-    break;
+  case WM_SYSKEYDOWN: io.KeysDown[keyLUT_[wParam]] = 1; break;
 
   case WM_KEYUP:
-  case WM_SYSKEYUP:
-    io.KeysDown[keyLUT_[wParam]] = 0;
-    break;
+  case WM_SYSKEYUP: io.KeysDown[keyLUT_[wParam]] = 0; break;
 
   case WM_LBUTTONDOWN:
   case WM_LBUTTONDBLCLK:
@@ -327,9 +320,7 @@ iris::wsi::Window::Impl::~Impl() noexcept {
     }
     break;
 
-  case WM_CLOSE:
-    Close();
-    break;
+  case WM_CLOSE: Close(); break;
 
   case WM_DESTROY: ::PostQuitMessage(0); break;
 
@@ -337,23 +328,15 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   }
 
   return res;
-} // iris::wsi::Display
+} // iris::wsi::PlatformWindow::Impl::Dispatch
 
-::WNDCLASSA iris::wsi::Window::Impl::sWindowClass = {
-  CS_OWNDC | CS_HREDRAW | CS_VREDRAW,
-  &Impl::WndProc,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  nullptr,
-  "HevIrisWsiWindowClass"}; // iris::wsi::Window::Impl::sWindowClass
+::WNDCLASSA iris::wsi::PlatformWindow::Impl::sWindowClass = {
+  CS_OWNDC | CS_HREDRAW | CS_VREDRAW, &Impl::WndProc, 0, 0, 0, 0, 0, 0, nullptr,
+  "HevIrisWsiPlatformWindowClass"}; // iris::wsi::PlatformWindow::Impl::sWindowClass
 
-::LRESULT iris::wsi::Window::Impl::WndProc(::HWND hWnd, ::UINT uMsg,
-                                           ::WPARAM wParam,
-                                           ::LPARAM lParam) noexcept {
+::LRESULT iris::wsi::PlatformWindow::Impl::WndProc(::HWND hWnd, ::UINT uMsg,
+                                                   ::WPARAM wParam,
+                                                   ::LPARAM lParam) noexcept {
   ::LRESULT res = 0;
 
   if (uMsg == WM_NCCREATE) {
@@ -375,5 +358,4 @@ iris::wsi::Window::Impl::~Impl() noexcept {
   }
 
   return res;
-} // iris::wsi::Window::Impl::WndProc
-
+} // iris::wsi::PlatformWindow::Impl::WndProc

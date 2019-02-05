@@ -1,11 +1,12 @@
 /*! \file
- * \brief \ref iris::wsi::Window::Impl definition for X11.
+ * \brief \ref iris::wsi::PlatformWindow::Impl definition for X11.
  */
-#include "wsi/window_x11.h"
+#include "wsi/platform_window_x11.h"
 #include "fmt/format.h"
 #include "imgui.h"
 #include "logging.h"
 #include "wsi/input.h"
+#include <X11/keysym.h>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -13,7 +14,6 @@
 #include <system_error>
 #include <type_traits>
 #include <utility>
-#include <X11/keysym.h>
 #include <xcb/xcb_icccm.h>
 
 namespace iris::wsi {
@@ -51,7 +51,7 @@ KeyCodeToKeys(::xcb_keycode_t keycode,
 
   for (int j = 0; j < mapping->keysyms_per_keycode; ++j) {
     xcb_keysym_t keysym = keysyms[j + keycode * mapping->keysyms_per_keycode];
-    switch(keysym) {
+    switch (keysym) {
     case XK_space: return Keys::kSpace;
     case XK_apostrophe: return Keys::kApostrophe;
     case XK_comma: return Keys::kComma;
@@ -176,12 +176,13 @@ KeyCodeToKeys(::xcb_keycode_t keycode,
 } // KeyCodeToKeys
 } // namespace iris::wsi
 
-tl::expected<std::unique_ptr<iris::wsi::Window::Impl>, std::exception>
-iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
-                                Extent2D extent, Options const& options[[maybe_unused]],
-                                int display) noexcept {
+tl::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
+iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
+                                        Extent2D extent,
+                                        Options const& options [[maybe_unused]],
+                                        int display) noexcept {
   IRIS_LOG_ENTER();
-  std::unique_ptr<iris::wsi::Window::Impl> pWin;
+  std::unique_ptr<iris::wsi::PlatformWindow::Impl> pWin;
 
   try {
     pWin = std::make_unique<Impl>();
@@ -406,7 +407,7 @@ iris::wsi::Window::Impl::Create(gsl::czstring<> title, Offset2D offset,
   return std::move(pWin);
 }
 
-glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
+glm::uvec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
   auto cookie = ::xcb_query_pointer(handle_.connection, handle_.window);
   ::xcb_generic_error_t* error;
   auto pointer = ::xcb_query_pointer_reply(handle_.connection, cookie, &error);
@@ -419,15 +420,15 @@ glm::uvec2 iris::wsi::Window::Impl::CursorPos() const noexcept {
   glm::uvec2 pos(pointer->win_x, pointer->win_y);
   std::free(pointer);
   return pos;
-} // iris::wsi::Window::Impl::CursorPos
+} // iris::wsi::PlatformWindow::Impl::CursorPos
 
-iris::wsi::Window::Impl::~Impl() noexcept {
+iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
   IRIS_LOG_ENTER();
   xcb_disconnect(handle_.connection);
   IRIS_LOG_LEAVE();
-} // iris::wsi::Window::Impl::~Impl
+} // iris::wsi::PlatformWindow::Impl::~Impl
 
-void iris::wsi::Window::Impl::Dispatch(
+void iris::wsi::PlatformWindow::Impl::Dispatch(
   gsl::not_null<::xcb_generic_event_t*> event) noexcept {
   ImGuiIO& io = ImGui::GetIO();
 
@@ -446,12 +447,14 @@ void iris::wsi::Window::Impl::Dispatch(
     auto ev = reinterpret_cast<::xcb_button_press_event_t*>(event.get());
     if (ev->event != handle_.window) break;
     int button = 0;
-    switch(ev->detail) {
-      case 1: button = 0; break;
-      case 3: button = 1; break;
-      case 2: button = 2; break;
-      //case 4: scroll_.y += 1.f; break;
-      //case 5: scroll_.y -= 1.f; break;
+    switch (ev->detail) {
+    case 1: button = 0; break;
+    case 3: button = 1; break;
+    case 2:
+      button = 2;
+      break;
+      // case 4: scroll_.y += 1.f; break;
+      // case 5: scroll_.y -= 1.f; break;
     }
 
     io.MouseDown[button] = true;
@@ -462,10 +465,10 @@ void iris::wsi::Window::Impl::Dispatch(
     auto ev = reinterpret_cast<::xcb_button_release_event_t*>(event.get());
     if (ev->event != handle_.window) break;
     int button = 0;
-    switch(ev->detail) {
-      case 1: button = 0; break;
-      case 3: button = 1; break;
-      case 2: button = 2; break;
+    switch (ev->detail) {
+    case 1: button = 0; break;
+    case 3: button = 1; break;
+    case 2: button = 2; break;
     }
 
     // FIXME: need to handle capture
@@ -492,5 +495,4 @@ void iris::wsi::Window::Impl::Dispatch(
     }
   } break;
   }
-} // iris::wsi::Window::Impl::Dispatch
-
+} // iris::wsi::PlatformWindow::Impl::Dispatch

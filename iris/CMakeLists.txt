@@ -104,13 +104,13 @@ set(SOURCES
   renderer/io/read_file.cc
   renderer/renderer.cc
   renderer/vulkan_support.cc
-  wsi/window.cc
+  wsi/platform_window.cc
 )
 
 if(WIN32)
-  list(APPEND SOURCES wsi/window_win32.cc)
+  list(APPEND SOURCES wsi/platform_window_win32.cc)
 elseif(UNIX)
-  list(APPEND SOURCES wsi/window_x11.cc)
+  list(APPEND SOURCES wsi/platform_window_x11.cc)
 endif()
 
 add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
