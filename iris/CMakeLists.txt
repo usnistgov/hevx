@@ -104,6 +104,7 @@ set(SOURCES
   renderer/io/read_file.cc
   renderer/renderer.cc
   renderer/vulkan_support.cc
+  renderer/window.cc
   wsi/platform_window.cc
 )
 

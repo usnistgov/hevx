@@ -44,6 +44,12 @@ using PFN_vkCmdCopyBuffer = decltype(vkCmdCopyBuffer);
 
 namespace iris::Renderer {
 
+struct Image {
+  VkImage image;
+  VmaAllocation allocation;
+  VkImageView view;
+}; // struct Image
+
 /*! \brief Create a Vulkan Instance.
  *
  * \see
