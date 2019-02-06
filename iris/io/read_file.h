@@ -1,8 +1,5 @@
-#ifndef HEV_IRIS_RENDERER_IO_H_
-#define HEV_IRIS_RENDERER_IO_H_
-/*! \file
- * \brief \ref iris::Renderer::io declaration.
- */
+#ifndef HEV_IRIS_IO_READ_FILE_H_
+#define HEV_IRIS_IO_READ_FILE_H_
 
 #include "expected.hpp"
 #include <cstddef>
@@ -16,13 +13,13 @@ namespace filesystem = std::filesystem;
 #include <system_error>
 #include <vector>
 
-namespace iris::Renderer::io {
+namespace iris::io {
 
 /*! \brief Blocking function to directly read a file.
  */
 tl::expected<std::vector<std::byte>, std::system_error>
 ReadFile(filesystem::path const& path) noexcept;
 
-} // namespace iris::Renderer::io
+} // namespace iris::io
 
-#endif // HEV_IRIS_RENDERER_IO_H_
+#endif // HEV_IRIS_IO_READ_FILE_H_

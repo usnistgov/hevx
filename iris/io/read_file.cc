@@ -1,4 +1,4 @@
-#include "renderer/io/read_file.h"
+#include "io/read_file.h"
 #include "config.h"
 #include "logging.h"
 #include <cstdio>
@@ -8,7 +8,7 @@
 #include <fcntl.h>
 
 tl::expected<std::vector<std::byte>, std::system_error>
-iris::Renderer::io::ReadFile(filesystem::path const& path) noexcept {
+iris::io::ReadFile(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   std::unique_ptr<std::FILE, decltype(&std::fclose)> fh{nullptr, std::fclose};
@@ -47,5 +47,5 @@ iris::Renderer::io::ReadFile(filesystem::path const& path) noexcept {
 
   IRIS_LOG_LEAVE();
   return bytes;
-} // iris::Renderer::io::ReadFile
+} // iris::io::ReadFile
 

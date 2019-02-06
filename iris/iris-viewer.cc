@@ -6,7 +6,7 @@
 #include "absl/debugging/symbolize.h"
 #include "fmt/format.h"
 #include "iris/config.h"
-#include "iris/renderer/renderer.h"
+#include "iris/renderer.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -73,22 +73,23 @@ int main(int argc, char** argv) {
 
   logger.info("Logging initialized");
 
-  if (auto error = iris::Renderer::Initialize(
+  if (auto result = iris::Renderer::Initialize(
         "iris-viewer",
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers,
         0, {console_sink, file_sink});
-      error.code()) {
-    logger.critical("cannot initialize renderer: {}", error.what());
+      !result) {
+    logger.critical("cannot initialize renderer: {}", result.error().what());
     std::exit(EXIT_FAILURE);
   }
 
-  logger.info("Renderer initialized. {} files specified on command line.", files.size());
+  logger.info("Renderer initialized. {} files specified on command line.",
+              files.size());
 
   for (auto&& file : files) {
     logger.info("Loading {}", file);
-    if (auto error = iris::Renderer::LoadFile(file)) {
-      logger.error("Error loading {}: {}", file, error.message());
+    if (auto result = iris::Renderer::LoadFile(file); !result) {
+      logger.error("Error loading {}: {}", file, result.error().what());
     }
   }
 

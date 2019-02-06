@@ -99,12 +99,13 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
+  ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  renderer/io/json.cc
-  renderer/io/read_file.cc
-  renderer/renderer.cc
-  renderer/vulkan_support.cc
-  renderer/window.cc
+  io/json.cc
+  io/read_file.cc
+  renderer.cc
+  vulkan_support.cc
+  window.cc
   wsi/platform_window.cc
 )
 
@@ -144,11 +145,10 @@ target_include_directories(iris
 target_compile_definitions(iris
   PUBLIC
     GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_FORCE_EXPLICIT_CTOR GLM_FORCE_INLINE
-    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX>
+    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
+    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR WIN32_LEAN_AND_MEAN NOMINMAX>
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
-    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
-    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
 )
 
 target_compile_options(iris

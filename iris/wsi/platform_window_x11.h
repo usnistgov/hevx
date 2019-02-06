@@ -23,6 +23,10 @@ namespace iris::wsi {
 struct PlatformWindow::NativeHandle_t {
   ::xcb_connection_t* connection{nullptr}; //!< The XCB connection.
   ::xcb_window_t window{}; //!< The XCB window.
+
+  operator std::tuple<::xcb_connection_t*&, ::xcb_window_t&>() {
+    return std::tie(connection, window);
+  }
 };
 
 /*! \brief Platform-specific window for X11.

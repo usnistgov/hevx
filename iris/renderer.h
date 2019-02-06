@@ -1,8 +1,5 @@
-#ifndef HEV_IRIS_RENDERER_RENDERER_H_
-#define HEV_IRIS_RENDERER_RENDERER_H_
-/*! \file
- * \brief \ref iris::Renderer declaration.
- */
+#ifndef HEV_IRIS_RENDERER_H_
+#define HEV_IRIS_RENDERER_H_
 
 #include "expected.hpp"
 #if STD_FS_IS_EXPERIMENTAL
@@ -13,51 +10,35 @@ namespace filesystem = std::experimental::filesystem;
 namespace filesystem = std::filesystem;
 #endif
 #include "gsl/gsl"
+#include "iris/window.h"
 #include "spdlog/sinks/sink.h"
 #include <cstdint>
 #include <system_error>
 #include <type_traits>
 
-// Forward declare the iris::Control::Control class
-namespace iris::Control {
-class Control;
-} // namespace iris::Control
+#if PLATFORM_WINDOWS
+#undef CreateWindow
+#endif
 
-/*! \brief IRIS renderer
- *
- * There is a single renderer per application-instance. The expected application
- * flow is shown in the below diagram. \ref iris-viewer.cc is the main rendering
- * application.
- * \dotfile appflow.gv
- */
-namespace iris::Renderer {
+namespace iris {
+
+namespace Control {
+class Control;
+} // namespace Control
+
+namespace Renderer {
 
 /*!
  * Rendering initialization options.
  */
 enum class Options {
-  kNone = (0),                     //<! No special behavior.
   kReportDebugMessages = (1 << 0), //<! Report API debug messages.
   kUseValidationLayers = (1 << 1), //<! Use API validation layers.
 };
 
-/*! \brief Initialize the rendering system.
- *
- * There is only a single renderer per application instance.
- * \param[in] appName the name of the application.
- * \param[in] options the \ref Options to initialize the renderer with.
- * \param[in] appVersion the version of the application.
- * \param[in] logSinks a list of sinks to log to.
- * \return \ref std::system_error
- */
-[[nodiscard]] std::system_error
+[[nodiscard]] tl::expected<void, std::system_error>
 Initialize(gsl::czstring<> appName, Options const& options,
-           std::uint32_t appVersion = 0,
-           spdlog::sinks_init_list logSinks = {}) noexcept;
-
-/*! \brief Request the rendering system to shutdown.
- */
-void Terminate() noexcept;
+           std::uint32_t appVersion, spdlog::sinks_init_list logSinks) noexcept;
 
 /*! \brief Indicates if the rendering system is running.
  *
@@ -65,7 +46,16 @@ void Terminate() noexcept;
  * or any window is closed.
  * \return true if the renderer is running, false if not.
  */
-bool IsRunning() noexcept;
+[[nodiscard]] bool IsRunning() noexcept;
+
+/*! \brief Request the rendering system to shutdown.
+ */
+void Terminate() noexcept;
+
+[[nodiscard]] tl::expected<Window, std::exception>
+CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
+             glm::vec4 const& clearColor, Window::Options const& options,
+             int display, std::uint32_t numFrames) noexcept;
 
 /*! \brief Begin the next rendering frame.
  *
@@ -86,23 +76,31 @@ void EndFrame() noexcept;
  * This is an async load operation, so the only errors returned are if the
  * operation failed to be enqueued.
  * \param[in] path The path to load.
- * \return std::error_code indicating if the async operation failed to be
+ * \return std::system_error indicating if the async operation failed to be
  * enqueued.
  */
-[[nodiscard]] std::error_code LoadFile(filesystem::path const& path) noexcept;
+[[nodiscard]] tl::expected<void, std::system_error>
+LoadFile(filesystem::path const& path) noexcept;
 
 /*! \brief Execute a control message.
  *
  * This is a synchronous execution step.
  * \param[in] control the \ref iris::Control::Control message.
- * \return std::error_code indicating if the message failed.
+ * \return std::system_error> indicating if the message failed.
  */
-std::error_code Control(iris::Control::Control const& control) noexcept;
+tl::expected<void, std::system_error>
+Control(iris::Control::Control const& control) noexcept;
 
-//! \brief bit-wise or of \ref Options.
+//! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {
   using U = std::underlying_type_t<Options>;
   return static_cast<Options>(static_cast<U>(lhs) | static_cast<U>(rhs));
+}
+
+//! \brief bit-wise or of \ref Options.
+inline Options operator|=(Options& lhs, Options const& rhs) noexcept {
+  lhs = lhs | rhs;
+  return lhs;
 }
 
 //! \brief bit-wise and of \ref Options.
@@ -111,6 +109,13 @@ inline Options operator&(Options const& lhs, Options const& rhs) noexcept {
   return static_cast<Options>(static_cast<U>(lhs) & static_cast<U>(rhs));
 }
 
-} // namespace iris::Renderer
+//! \brief bit-wise and of \ref Options.
+inline Options operator&=(Options& lhs, Options const& rhs) noexcept {
+  lhs = lhs & rhs;
+  return lhs;
+}
 
-#endif // HEV_IRIS_RENDERER_RENDERER_H_
+} // namespace Renderer
+} // namespace iris
+
+#endif // HEV_IRIS_RENDERER_H_

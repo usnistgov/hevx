@@ -1,10 +1,9 @@
 /*! \file
  * \brief \ref iris::Renderer definition.
  */
-#include "config.h"
-#include "renderer/renderer.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
+#include "config.h"
 #include "error.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -14,9 +13,9 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
+#include "io/json.h"
 #include "protos.h"
-#include "renderer/io/json.h"
-#include "renderer/vulkan_support.h"
+#include "renderer.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -26,8 +25,15 @@
 #pragma warning(pop)
 #endif
 #include "tbb/concurrent_queue.h"
-#include "tbb/task.h"
 #include "tbb/task_scheduler_init.h"
+#include "tbb/task.h"
+#include "vulkan_support.h"
+#include "wsi/input.h"
+#if PLATFORM_LINUX
+#include "wsi/platform_window_x11.h"
+#elif PLATFORM_WINDOWS
+#include "wsi/platform_window_win32.h"
+#endif
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -87,52 +93,50 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 namespace iris::Renderer {
 
+static bool sInitialized{false};
+static bool sRunning{false};
+
 static VkInstance sInstance{VK_NULL_HANDLE};
 static VkDebugUtilsMessengerEXT sDebugUtilsMessenger{VK_NULL_HANDLE};
 static VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 static VkDevice sDevice{VK_NULL_HANDLE};
-static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-static VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
 static VmaAllocator sAllocator{VK_NULL_HANDLE};
 
-static bool sInitialized{false};
-static std::atomic_bool sRunning{false};
+static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
+static VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
+
+static std::uint32_t sFrameNum{0};
 
 static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
-  sIOContinuations;
+  sIOContinuations{};
 
-static std::chrono::steady_clock::time_point sPreviousFrameTime;
-static std::uint64_t sFrameNum = 0;
+template <class T>
+void NameObject(VkObjectType objectType, T objectHandle,
+                gsl::czstring<> objectName) noexcept {
+  VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+    VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
+    reinterpret_cast<std::uint64_t>(objectHandle), objectName};
+  vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
+} // NameObject
 
 } // namespace iris::Renderer
 
-std::system_error
+tl::expected<void, std::system_error>
 iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                            std::uint32_t appVersion,
                            spdlog::sinks_init_list logSinks) noexcept {
   GetLogger(logSinks);
+  Expects(sInstance == VK_NULL_HANDLE);
   IRIS_LOG_ENTER();
 
-  if (sInitialized) {
-    IRIS_LOG_LEAVE();
-    return {Error::kAlreadyInitialized};
-  }
-
   GOOGLE_PROTOBUF_VERIFY_VERSION;
-
   glslang::InitializeProcess();
 
   sTaskSchedulerInit.initialize();
   GetLogger()->debug("Default number of task threads: {}",
                      sTaskSchedulerInit.default_num_threads());
-
-  ////
-  // In order to reduce the verbosity of the Vulkan API, initialization occurs
-  // over several sub-functions below. Each function is called in-order and
-  // assumes the previous functions have all been called.
-  ////
 
   absl::InlinedVector<gsl::czstring<>, 1> layerNames;
   if ((options & Options::kUseValidationLayers) ==
@@ -211,7 +215,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     sInstance = std::move(*instance);
   } else {
     IRIS_LOG_LEAVE();
-    return instance.error();
+    return tl::unexpected(instance.error());
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
@@ -234,14 +238,14 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     sPhysicalDevice = std::move(*physicalDevice);
   } else {
     IRIS_LOG_LEAVE();
-    return physicalDevice.error();
+    return tl::unexpected(physicalDevice.error());
   }
 
   if (auto qfi = GetQueueFamilyIndex(sPhysicalDevice, VK_QUEUE_GRAPHICS_BIT)) {
     sGraphicsQueueFamilyIndex = *qfi;
   } else {
     IRIS_LOG_LEAVE();
-    return qfi.error();
+    return tl::unexpected(qfi.error());
   }
 
   if (auto device =
@@ -250,16 +254,17 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     sDevice = std::move(*device);
   } else {
     IRIS_LOG_LEAVE();
-    return device.error();
+    return tl::unexpected(device.error());
   }
 
-  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0, &sGraphicsCommandQueue);
+  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
+                   &sGraphicsCommandQueue);
 
   if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
     sAllocator = std::move(*allocator);
   } else {
     IRIS_LOG_LEAVE();
-    return allocator.error();
+    return tl::unexpected(allocator.error());
   }
 
 #if 0
@@ -298,31 +303,123 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return {error};
   }
 #endif
-  sInitialized = true;
+
   sRunning = true;
-
   IRIS_LOG_LEAVE();
-  return {Error::kNone};
-} // iris::Renderer::Initialize
-
-void iris::Renderer::Terminate() noexcept {
-  IRIS_LOG_ENTER();
-  sRunning = false;
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::Terminate
+  return {};
+} // iris::Renderer::Create
 
 bool iris::Renderer::IsRunning() noexcept {
   return sRunning;
 } // iris::Renderer::IsRunning
 
+void iris::Renderer::Terminate() noexcept {
+  sRunning = false;
+} // iris::Renderer::Terminate
+
+tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
+  gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
+  glm::vec4 const& clearColor [[maybe_unused]], Window::Options const& options,
+  int display, std::uint32_t numFrames) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sInstance != VK_NULL_HANDLE);
+  Expects(sPhysicalDevice != VK_NULL_HANDLE);
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  Window window(numFrames);
+  window.showUI =
+    (options & Window::Options::kShowUI) == Window::Options::kShowUI;
+
+  wsi::PlatformWindow::Options platformOptions =
+    wsi::PlatformWindow::Options::kSizeable;
+  if ((options & Window::Options::kDecorated) == Window::Options::kDecorated) {
+    platformOptions |= wsi::PlatformWindow::Options::kDecorated;
+  }
+
+  if (auto win =
+        wsi::PlatformWindow::Create(title, std::move(offset), std::move(extent),
+                                    platformOptions, display)) {
+    window.platformWindow = std::move(*win);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(win.error());
+  }
+
+#if defined(VK_USE_PLATFORM_XCB_KHR)
+
+  VkXcbSurfaceCreateInfoKHR sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+  std::tie(sci.connection, sci.window) =
+    window.platformWindow.NativeHandle()
+
+      if (auto result =
+            vkCreateXcbSurfaceKHR(instance, &sci, nullptr, &window.surface);
+          result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create surface"));
+  }
+
+#elif defined(VK_USE_PLATFORM_WIN32_KHR)
+
+  VkWin32SurfaceCreateInfoKHR sci = {};
+  sci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+  std::tie(sci.hinstance, sci.hwnd) = window.platformWindow.NativeHandle();
+
+  if (auto result =
+        vkCreateWin32SurfaceKHR(sInstance, &sci, nullptr, &window.surface);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create surface"));
+  }
+
+#endif
+
+  window.uiContext.reset(ImGui::CreateContext());
+  ImGui::SetCurrentContext(window.uiContext.get());
+  ImGui::StyleColorsDark();
+
+  ImGuiIO& io = ImGui::GetIO();
+
+  io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
+  io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
+  io.KeyMap[ImGuiKey_RightArrow] = static_cast<int>(wsi::Keys::kRight);
+  io.KeyMap[ImGuiKey_UpArrow] = static_cast<int>(wsi::Keys::kUp);
+  io.KeyMap[ImGuiKey_DownArrow] = static_cast<int>(wsi::Keys::kDown);
+  io.KeyMap[ImGuiKey_PageUp] = static_cast<int>(wsi::Keys::kPageUp);
+  io.KeyMap[ImGuiKey_PageDown] = static_cast<int>(wsi::Keys::kPageDown);
+  io.KeyMap[ImGuiKey_Home] = static_cast<int>(wsi::Keys::kHome);
+  io.KeyMap[ImGuiKey_End] = static_cast<int>(wsi::Keys::kEnd);
+  io.KeyMap[ImGuiKey_Insert] = static_cast<int>(wsi::Keys::kInsert);
+  io.KeyMap[ImGuiKey_Delete] = static_cast<int>(wsi::Keys::kDelete);
+  io.KeyMap[ImGuiKey_Backspace] = static_cast<int>(wsi::Keys::kBackspace);
+  io.KeyMap[ImGuiKey_Space] = static_cast<int>(wsi::Keys::kSpace);
+  io.KeyMap[ImGuiKey_Enter] = static_cast<int>(wsi::Keys::kEnter);
+  io.KeyMap[ImGuiKey_Escape] = static_cast<int>(wsi::Keys::kEscape);
+  io.KeyMap[ImGuiKey_A] = static_cast<int>(wsi::Keys::kA);
+  io.KeyMap[ImGuiKey_C] = static_cast<int>(wsi::Keys::kC);
+  io.KeyMap[ImGuiKey_V] = static_cast<int>(wsi::Keys::kV);
+  io.KeyMap[ImGuiKey_X] = static_cast<int>(wsi::Keys::kX);
+  io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
+  io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
+
+  window.platformWindow.Show();
+  window.platformWindow.OnResize(
+    std::bind(&Window::Resize, &window, std::placeholders::_1));
+  window.platformWindow.OnClose(std::bind(&Window::Close, &window));
+
+  IRIS_LOG_LEAVE();
+  return std::move(window);
+} // iris::Renderer::CreateWindow
+
 void iris::Renderer::BeginFrame() noexcept {
-  Expects(sInitialized == true);
   Expects(sRunning == true);
 
   auto currentTime = std::chrono::steady_clock::now();
-  //auto const frameDelta =
-    //std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
-  sPreviousFrameTime = currentTime;
+  // auto const frameDelta =
+  // std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
+  // sPreviousFrameTime = currentTime;
 
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
@@ -333,12 +430,12 @@ void iris::Renderer::BeginFrame() noexcept {
 } // iris::Renderer::BeginFrame()
 
 void iris::Renderer::EndFrame() noexcept {
-  if (!sInitialized || !sRunning) return;
+  Expects(sRunning == true);
 
   sFrameNum += 1;
 } // iris::Renderer::EndFrame
 
-std::error_code
+tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
@@ -355,8 +452,8 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
 
       if (ext.compare(".json") == 0) {
         sIOContinuations.push(io::LoadJSON(path_));
-      //} else if (ext.compare(".gltf") == 0) {
-        //sIOContinuations.push(io::LoadGLTF(path_));
+        //} else if (ext.compare(".gltf") == 0) {
+        // sIOContinuations.push(io::LoadGLTF(path_));
       } else {
         GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
                            path_.string());
@@ -374,16 +471,17 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
     IOTask* ioTask = new (tbb::task::allocate_root()) IOTask(path);
     tbb::task::enqueue(*ioTask);
   } catch (std::exception const& e) {
-    GetLogger()->error("Error enqueuing IO task for {}: {}", path.string(),
-                       e.what());
-    return {Error::kFileLoadFailed};
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(Error::kFileLoadFailed),
+      fmt::format("Enqueing IO task for {}: {}", path.string(), e.what())));
   }
 
   IRIS_LOG_LEAVE();
-  return {Error::kNone};
-} // LoadFile
+  return {};
+} // iris::Renderer::LoadFile
 
-std::error_code
+tl::expected<void, std::system_error>
 iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_ENTER();
 
@@ -391,7 +489,9 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     GetLogger()->error("Invalid controlMessage message type {}",
                        controlMessage.type());
     IRIS_LOG_LEAVE();
-    return Error::kControlMessageInvalid;
+    return tl::unexpected(std::system_error(
+      Error::kControlMessageInvalid,
+      fmt::format("Invalid controlMessage type {}", controlMessage.type())));
   }
 
   switch (controlMessage.type()) {
@@ -401,7 +501,7 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     //
 
   case iris::Control::Control_Type_DISPLAYS:
-  #if 0
+#if 0
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       auto&& windowMessage = controlMessage.displays().windows(i);
       auto const& bg = windowMessage.background_color();
@@ -426,10 +526,10 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
         GetLogger()->warn("Createing window failed: {}", win.error().what());
       }
     }
-    #endif
+#endif
     break;
   case iris::Control::Control_Type_WINDOW: {
-    #if 0
+#if 0
     auto&& windowMessage = controlMessage.window();
     auto const& bg = windowMessage.background_color();
 
@@ -451,16 +551,19 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
     } else {
       GetLogger()->warn("Creating window failed: {}", win.error().what());
     }
-    #endif
+#endif
   } break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",
                        controlMessage.type());
     IRIS_LOG_LEAVE();
-    return Error::kControlMessageInvalid;
+    return tl::unexpected(
+      std::system_error(Error::kControlMessageInvalid,
+                        fmt::format("Unsupported controlMessage type {}",
+                                    controlMessage.type())));
     break;
   }
 
   IRIS_LOG_LEAVE();
-  return Error::kNone;
+  return {};
 } // iris::Renderer::Control

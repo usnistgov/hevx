@@ -13,7 +13,6 @@ namespace iris {
 enum class Error {
   kNone = 0,              //!< No error
   kInitializationFailed,  //!< Initialization failed for some reason.
-  kAlreadyInitialized,    //!< The renderer has already been initialized.
   kNoPhysicalDevice,      //!< No physical device available.
   kFileLoadFailed,        //!< File load failed.
   kFileNotSupported,      //!< File is not supported.
@@ -39,7 +38,6 @@ public:
     switch (static_cast<Error>(code)) {
     case Error::kNone: return "none"s;
     case Error::kInitializationFailed: return "initialization failed"s;
-    case Error::kAlreadyInitialized: return "already initialized"s;
     case Error::kNoPhysicalDevice: return "no physical device"s;
     case Error::kFileLoadFailed: return "file load failed"s;
     case Error::kFileNotSupported: return "file not supported"s;

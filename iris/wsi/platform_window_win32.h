@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <tuple>
 
 namespace iris::wsi {
 
@@ -22,6 +23,10 @@ namespace iris::wsi {
 struct PlatformWindow::NativeHandle_t {
   ::HINSTANCE hInstance{0}; //<! The Win32 instance handle
   ::HWND hWnd{0};           //<! The Win32 window handle
+
+  operator std::tuple<::HINSTANCE&, ::HWND&>() {
+    return std::tie(hInstance, hWnd);
+  }
 };
 
 /*! \brief Platform-specific window for Win32.
@@ -135,7 +140,7 @@ public:
 
   //! \brief Default constructor: no initialization.
   Impl() noexcept
-    : keyLUT_(Keyset::kMaxKeys) {}
+    : keyLUT_(256) {}
 
   //! \brief Destructor.
   ~Impl() noexcept;
@@ -146,7 +151,7 @@ private:
   DWORD dwStyle_{};
   bool closed_{false};
   bool focused_{false};
-  absl::FixedArray<Keys> keyLUT_;
+  absl::FixedArray<int> keyLUT_;
   CloseDelegate closeDelegate_{[]() {}};
   MoveDelegate moveDelegate_{[](auto) {}};
   ResizeDelegate resizeDelegate_{[](auto) {}};

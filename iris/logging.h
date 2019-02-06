@@ -24,7 +24,7 @@ inline static spdlog::logger* GetLogger() noexcept {
   return sLogger.get();
 }
 
-} // namespace iris::Renderer
+} // namespace iris
 
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
