@@ -11,7 +11,7 @@ namespace filesystem = std::filesystem;
 #endif
 #include "gsl/gsl"
 #include "iris/config.h"
-#include "iris/flextVk.h"
+#include "iris/vulkan.h"
 #include "iris/window.h"
 #include "spdlog/sinks/sink.h"
 #include <cstddef>
@@ -57,6 +57,19 @@ void Terminate() noexcept;
 CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
              glm::vec4 const& clearColor, Window::Options const& options,
              int display, std::uint32_t numFrames) noexcept;
+
+tl::expected<void, std::system_error>
+ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
+
+[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
+BeginOneTimeSubmit() noexcept;
+
+tl::expected<void, std::system_error>
+EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
+
+tl::expected<void, std::system_error>
+TransitionImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
+                std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept;
 
 /*! \brief Begin the next rendering frame.
  *

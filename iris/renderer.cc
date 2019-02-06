@@ -6,6 +6,7 @@
 #include "config.h"
 #include "enumerate.h"
 #include "error.h"
+#include "glm/common.hpp"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -28,7 +29,8 @@
 #include "tbb/concurrent_queue.h"
 #include "tbb/task_scheduler_init.h"
 #include "tbb/task.h"
-#include "vulkan_support.h"
+#include "vulkan.h"
+#include "vulkan_util.h"
 #include "wsi/input.h"
 #if PLATFORM_LINUX
 #include "wsi/platform_window_x11.h"
@@ -67,8 +69,6 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 } // namespace iris
 
-#ifndef NDEBUG
-
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
   do {                                                                         \
@@ -85,13 +85,6 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
     ::iris::GetLogger()->flush();                                              \
   } while (false)
 
-#else
-
-#define IRIS_LOG_ENTER()
-#define IRIS_LOG_LEAVE()
-
-#endif
-
 namespace iris::Renderer {
 
 static bool sRunning{false};
@@ -104,6 +97,55 @@ static VmaAllocator sAllocator{VK_NULL_HANDLE};
 
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
+static VkRenderPass sRenderPass{VK_NULL_HANDLE};
+
+static VkCommandPool sOneTimeSubmitCommandPool{VK_NULL_HANDLE};
+static VkFence sOneTimeSubmitFence{VK_NULL_HANDLE};
+
+static constexpr std::uint32_t const sNumRenderPassAttachments{4};
+static constexpr std::uint32_t const sColorTargetAttachmentIndex{0};
+static constexpr std::uint32_t const sColorResolveAttachmentIndex{1};
+static constexpr std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
+static constexpr std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
+
+static constexpr VkSurfaceFormatKHR const sSurfaceColorFormat{
+  VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+static constexpr VkFormat const sSurfaceDepthStencilFormat{
+  VK_FORMAT_D32_SFLOAT};
+static constexpr VkSampleCountFlagBits const sSurfaceSampleCount{
+  VK_SAMPLE_COUNT_4_BIT};
+static constexpr VkPresentModeKHR const sSurfacePresentMode{
+  VK_PRESENT_MODE_FIFO_KHR};
+static constexpr std::uint32_t const sNumWindowFramesBuffered{2};
+
+static absl::flat_hash_map<std::string, iris::Window>& Windows() {
+  static absl::flat_hash_map<std::string, iris::Window> sWindows;
+  return sWindows;
+} // Windows
+
+static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
+  auto const& bg = windowMessage.background_color();
+
+  Window::Options options = Window::Options::kNone;
+  if (windowMessage.show_system_decoration()) {
+    options |= Window::Options::kDecorated;
+  }
+  if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
+  if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
+
+  if (auto win = CreateWindow(
+        windowMessage.name().c_str(),
+        wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
+                      static_cast<std::int16_t>(windowMessage.y())},
+        wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
+                      static_cast<std::uint16_t>(windowMessage.height())},
+        {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display(),
+        sNumWindowFramesBuffered)) {
+    Windows().emplace(windowMessage.name(), std::move(*win));
+  } else {
+    GetLogger()->warn("Createing window failed: {}", win.error().what());
+  }
+} // CreateWindow
 
 static bool sInFrame{false};
 static std::uint32_t sFrameNum{0};
@@ -112,15 +154,6 @@ static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
   sIOContinuations{};
-
-template <class T>
-void NameObject(VkObjectType objectType, T objectHandle,
-                gsl::czstring<> objectName) noexcept {
-  VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
-    VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
-    reinterpret_cast<std::uint64_t>(objectHandle), objectName};
-  vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
-} // NameObject
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -186,506 +219,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   GetLogger()->flush();
   return VK_FALSE;
 } // DebugUtilsMessengerCallback
-
-/*! \brief Create a Vulkan Instance.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#initialization-instances
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extended-functionality-extensions
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extensions
- * \see
- * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
- */
-[[nodiscard]] tl::expected<VkInstance, std::system_error>
-CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion,
-               gsl::span<gsl::czstring<>> extensionNames,
-               gsl::span<gsl::czstring<>> layerNames,
-               bool reportDebug) noexcept {
-  IRIS_LOG_ENTER();
-
-  std::uint32_t instanceVersion;
-  vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
-
-  GetLogger()->debug(
-    "Vulkan Instance Version: {}.{}.{}", VK_VERSION_MAJOR(instanceVersion),
-    VK_VERSION_MINOR(instanceVersion), VK_VERSION_PATCH(instanceVersion));
-
-  // Get the number of instance extension properties.
-  std::uint32_t numExtensionProperties;
-  if (auto result = vkEnumerateInstanceExtensionProperties(
-        nullptr, &numExtensionProperties, nullptr);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
-  }
-
-  // Get the instance extension properties.
-  absl::FixedArray<VkExtensionProperties> extensionProperties(
-    numExtensionProperties);
-  if (auto result = vkEnumerateInstanceExtensionProperties(
-        nullptr, &numExtensionProperties, extensionProperties.data());
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
-  }
-
-  VkApplicationInfo ai = {};
-  ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  ai.pApplicationName = appName;
-  ai.applicationVersion = appVersion;
-  ai.pEngineName = "iris";
-  ai.engineVersion =
-    VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch);
-
-  VkInstanceCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  ci.pApplicationInfo = &ai;
-  ci.enabledLayerCount = gsl::narrow_cast<std::uint32_t>(layerNames.size());
-  ci.ppEnabledLayerNames = layerNames.data();
-  ci.enabledExtensionCount =
-    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
-  ci.ppEnabledExtensionNames = extensionNames.data();
-
-  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
-  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
-  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
-
-  if (reportDebug) ci.pNext = &dumci;
-
-  VkInstance instance;
-  if (auto result = vkCreateInstance(&ci, nullptr, &instance);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create instance"));
-  }
-
-  Ensures(instance != VK_NULL_HANDLE);
-  IRIS_LOG_LEAVE();
-  return instance;
-} // CreateInstance
-
-[[nodiscard]] tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
-CreateDebugUtilsMessenger(VkInstance instance) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(instance != VK_NULL_HANDLE);
-
-  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
-  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
-  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
-
-  VkDebugUtilsMessengerEXT messenger;
-  if (auto result =
-        vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &messenger);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create debug utils messenger"));
-  }
-
-  Ensures(messenger != VK_NULL_HANDLE);
-  IRIS_LOG_LEAVE();
-  return messenger;
-} // CreateDebugUtilsMessenger
-
-/*! \brief Compare two VkPhysicalDeviceFeatures2 structures.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
- */
-[[nodiscard]] bool
-ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
-                              VkPhysicalDeviceFeatures2 b) noexcept {
-  bool result = false;
-  result |= (a.features.robustBufferAccess == b.features.robustBufferAccess);
-  result |= (a.features.fullDrawIndexUint32 == b.features.fullDrawIndexUint32);
-  result |= (a.features.imageCubeArray == b.features.imageCubeArray);
-  result |= (a.features.independentBlend == b.features.independentBlend);
-  result |= (a.features.geometryShader == b.features.geometryShader);
-  result |= (a.features.tessellationShader == b.features.tessellationShader);
-  result |= (a.features.sampleRateShading == b.features.sampleRateShading);
-  result |= (a.features.dualSrcBlend == b.features.dualSrcBlend);
-  result |= (a.features.logicOp == b.features.logicOp);
-  result |= (a.features.multiDrawIndirect == b.features.multiDrawIndirect);
-  result |= (a.features.drawIndirectFirstInstance ==
-             b.features.drawIndirectFirstInstance);
-  result |= (a.features.depthClamp == b.features.depthClamp);
-  result |= (a.features.depthBiasClamp == b.features.depthBiasClamp);
-  result |= (a.features.fillModeNonSolid == b.features.fillModeNonSolid);
-  result |= (a.features.depthBounds == b.features.depthBounds);
-  result |= (a.features.wideLines == b.features.wideLines);
-  result |= (a.features.largePoints == b.features.largePoints);
-  result |= (a.features.alphaToOne == b.features.alphaToOne);
-  result |= (a.features.multiViewport == b.features.multiViewport);
-  result |= (a.features.samplerAnisotropy == b.features.samplerAnisotropy);
-  result |=
-    (a.features.textureCompressionETC2 == b.features.textureCompressionETC2);
-  result |= (a.features.textureCompressionASTC_LDR ==
-             b.features.textureCompressionASTC_LDR);
-  result |=
-    (a.features.textureCompressionBC == b.features.textureCompressionBC);
-  result |=
-    (a.features.occlusionQueryPrecise == b.features.occlusionQueryPrecise);
-  result |=
-    (a.features.pipelineStatisticsQuery == b.features.pipelineStatisticsQuery);
-  result |= (a.features.vertexPipelineStoresAndAtomics ==
-             b.features.vertexPipelineStoresAndAtomics);
-  result |= (a.features.fragmentStoresAndAtomics ==
-             b.features.fragmentStoresAndAtomics);
-  result |= (a.features.shaderTessellationAndGeometryPointSize ==
-             b.features.shaderTessellationAndGeometryPointSize);
-  result |= (a.features.shaderImageGatherExtended ==
-             b.features.shaderImageGatherExtended);
-  result |= (a.features.shaderStorageImageExtendedFormats ==
-             b.features.shaderStorageImageExtendedFormats);
-  result |= (a.features.shaderStorageImageMultisample ==
-             b.features.shaderStorageImageMultisample);
-  result |= (a.features.shaderStorageImageReadWithoutFormat ==
-             b.features.shaderStorageImageReadWithoutFormat);
-  result |= (a.features.shaderStorageImageWriteWithoutFormat ==
-             b.features.shaderStorageImageWriteWithoutFormat);
-  result |= (a.features.shaderUniformBufferArrayDynamicIndexing ==
-             b.features.shaderUniformBufferArrayDynamicIndexing);
-  result |= (a.features.shaderSampledImageArrayDynamicIndexing ==
-             b.features.shaderSampledImageArrayDynamicIndexing);
-  result |= (a.features.shaderStorageBufferArrayDynamicIndexing ==
-             b.features.shaderStorageBufferArrayDynamicIndexing);
-  result |= (a.features.shaderStorageImageArrayDynamicIndexing ==
-             b.features.shaderStorageImageArrayDynamicIndexing);
-  result |= (a.features.shaderClipDistance == b.features.shaderClipDistance);
-  result |= (a.features.shaderCullDistance == b.features.shaderCullDistance);
-  result |= (a.features.shaderFloat64 == b.features.shaderFloat64);
-  result |= (a.features.shaderInt64 == b.features.shaderInt64);
-  result |= (a.features.shaderInt16 == b.features.shaderInt16);
-  result |=
-    (a.features.shaderResourceResidency == b.features.shaderResourceResidency);
-  result |=
-    (a.features.shaderResourceMinLod == b.features.shaderResourceMinLod);
-  result |= (a.features.sparseBinding == b.features.sparseBinding);
-  result |=
-    (a.features.sparseResidencyBuffer == b.features.sparseResidencyBuffer);
-  result |=
-    (a.features.sparseResidencyImage2D == b.features.sparseResidencyImage2D);
-  result |=
-    (a.features.sparseResidencyImage3D == b.features.sparseResidencyImage3D);
-  result |=
-    (a.features.sparseResidency2Samples == b.features.sparseResidency2Samples);
-  result |=
-    (a.features.sparseResidency4Samples == b.features.sparseResidency4Samples);
-  result |=
-    (a.features.sparseResidency8Samples == b.features.sparseResidency8Samples);
-  result |= (a.features.sparseResidency16Samples ==
-             b.features.sparseResidency16Samples);
-  result |=
-    (a.features.sparseResidencyAliased == b.features.sparseResidencyAliased);
-  result |=
-    (a.features.variableMultisampleRate == b.features.variableMultisampleRate);
-  result |= (a.features.inheritedQueries == b.features.inheritedQueries);
-  return result;
-} // ComparePhysicalDeviceFeatures
-
-[[nodiscard]] tl::expected<std::uint32_t, std::system_error>
-GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
-                    VkQueueFlags queueFlags) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(physicalDevice != VK_NULL_HANDLE);
-
-  // Get the number of physical device queue family properties
-  std::uint32_t numQueueFamilyProperties;
-  vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice,
-                                            &numQueueFamilyProperties, nullptr);
-
-  // Get the physical device queue family properties
-  absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties(
-    numQueueFamilyProperties);
-  for (auto& property : queueFamilyProperties) {
-    property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-    property.pNext = nullptr;
-  }
-
-  vkGetPhysicalDeviceQueueFamilyProperties2(
-    physicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
-
-  for (auto [i, props] : enumerate(queueFamilyProperties)) {
-    auto&& qfProps = props.queueFamilyProperties;
-    if (qfProps.queueCount == 0) continue;
-
-    if (qfProps.queueFlags & queueFlags) {
-      IRIS_LOG_LEAVE();
-      return i;
-    }
-  }
-
-  IRIS_LOG_LEAVE();
-  return UINT32_MAX;
-} // GetQueueFamilyIndex
-
-/*! \brief Check if a specific physical device meets specified requirements.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
-[[nodiscard]] tl::expected<bool, std::system_error> IsPhysicalDeviceGood(
-  VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
-  gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(physicalDevice != VK_NULL_HANDLE);
-
-  //
-  // Get the properties.
-  //
-
-  VkPhysicalDeviceMultiviewProperties multiviewProps = {};
-  multiviewProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES;
-
-  VkPhysicalDeviceMaintenance3Properties maint3Props = {};
-  maint3Props.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES;
-  maint3Props.pNext = &multiviewProps;
-
-  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
-  physicalDeviceProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-  physicalDeviceProperties.pNext = &maint3Props;
-
-  vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
-
-  //
-  // Get the features.
-  //
-
-  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
-  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-
-  vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
-
-  //
-  // Get the extension properties.
-  //
-
-  // Get the number of physical device extension properties.
-  std::uint32_t numExtensionProperties;
-  if (auto result = vkEnumerateDeviceExtensionProperties(
-        physicalDevice, nullptr, &numExtensionProperties, nullptr);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result),
-      "Cannot enumerate physical device extension properties"));
-  }
-
-  // Get the physical device extension properties.
-  absl::FixedArray<VkExtensionProperties> extensionProperties(
-    numExtensionProperties);
-  if (auto result = vkEnumerateDeviceExtensionProperties(
-        physicalDevice, nullptr, &numExtensionProperties,
-        extensionProperties.data());
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result),
-      "Cannot enumerate physical device extension properties"));
-  }
-
-  std::uint32_t queueFamilyIndex;
-  if (auto result = GetQueueFamilyIndex(physicalDevice, queueFlags)) {
-    queueFamilyIndex = std::move(*result);
-  } else {
-    return tl::unexpected(result.error());
-  }
-
-  //
-  // Check all queried data to see if this device is good.
-  //
-
-  // Check for any required features
-  if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
-    IRIS_LOG_LEAVE();
-    return false;
-  }
-
-  // Check for each required extension
-  for (auto&& required : extensionNames) {
-    bool found = false;
-
-    for (auto&& property : extensionProperties) {
-      if (std::strcmp(required, property.extensionName) == 0) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      IRIS_LOG_LEAVE();
-      return false;
-    }
-  }
-
-  // Check for the queue
-  if (queueFamilyIndex == UINT32_MAX) {
-    IRIS_LOG_LEAVE();
-    return false;
-  }
-
-  IRIS_LOG_LEAVE();
-  return true;
-} // IsPhysicalDeviceGood
-
-/*! \brief Choose the Vulkan physical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
-[[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
-ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
-                     gsl::span<gsl::czstring<>> extensionNames,
-                     VkQueueFlags queueFlags) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(instance != VK_NULL_HANDLE);
-
-  // Get the number of physical devices present on the system
-  std::uint32_t numPhysicalDevices;
-  if (auto result =
-        vkEnumeratePhysicalDevices(instance, &numPhysicalDevices, nullptr);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
-  }
-
-  // Get the physical devices present on the system
-  absl::FixedArray<VkPhysicalDevice> physicalDevices(numPhysicalDevices);
-  if (auto result = vkEnumeratePhysicalDevices(instance, &numPhysicalDevices,
-                                               physicalDevices.data());
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
-  }
-
-  // Iterate through each physical device to find one that we can use.
-  for (auto&& physicalDevice : physicalDevices) {
-    if (auto good = IsPhysicalDeviceGood(physicalDevice, features,
-                                         extensionNames, queueFlags)) {
-      Ensures(physicalDevice != VK_NULL_HANDLE);
-      IRIS_LOG_LEAVE();
-      return physicalDevice;
-    }
-  }
-
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(std::system_error(Error::kNoPhysicalDevice,
-                                          "No suitable physical device found"));
-} // ChoosePhysicalDevice
-
-/*! \brief Create the Vulkan logical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
- */
-[[nodiscard]] tl::expected<VkDevice, std::system_error>
-CreateDevice(VkPhysicalDevice physicalDevice,
-             VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
-             gsl::span<gsl::czstring<>> extensionNames,
-             std::uint32_t queueFamilyIndex) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(physicalDevice != VK_NULL_HANDLE);
-
-  // Get all of the queue families again, so that we can get the number of
-  // queues to create.
-
-  std::uint32_t numQueueFamilyProperties;
-  vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice,
-                                            &numQueueFamilyProperties, nullptr);
-
-  absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties(
-    numQueueFamilyProperties);
-  for (auto& property : queueFamilyProperties) {
-    property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
-    property.pNext = nullptr;
-  }
-
-  vkGetPhysicalDeviceQueueFamilyProperties2(
-    physicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
-
-  absl::FixedArray<float> priorities(
-    queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount);
-  std::fill_n(std::begin(priorities), priorities.size(), 1.f);
-
-  VkDeviceQueueCreateInfo qci = {};
-  qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  qci.queueFamilyIndex = queueFamilyIndex;
-  qci.queueCount =
-    queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount;
-  qci.pQueuePriorities = priorities.data();
-
-  VkDeviceCreateInfo ci = {};
-  ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  ci.pNext = &physicalDeviceFeatures;
-  ci.queueCreateInfoCount = 1;
-  ci.pQueueCreateInfos = &qci;
-  ci.enabledExtensionCount =
-    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
-  ci.ppEnabledExtensionNames = extensionNames.data();
-
-  VkDevice device;
-  if (auto result = vkCreateDevice(physicalDevice, &ci, nullptr, &device);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create device"));
-  }
-
-  Ensures(device != VK_NULL_HANDLE);
-  IRIS_LOG_LEAVE();
-  return device;
-} // CreateDevice
-
-[[nodiscard]] tl::expected<VmaAllocator, std::system_error>
-CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(physicalDevice != VK_NULL_HANDLE);
-  Expects(device != VK_NULL_HANDLE);
-
-  VmaAllocatorCreateInfo allocatorInfo = {};
-  allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
-  allocatorInfo.physicalDevice = physicalDevice;
-  allocatorInfo.device = device;
-
-  VmaAllocator allocator;
-  if (auto result = vmaCreateAllocator(&allocatorInfo, &allocator);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create allocator"));
-  }
-
-  Ensures(allocator != VK_NULL_HANDLE);
-  IRIS_LOG_LEAVE();
-  return allocator;
-} // CreateAllocator
 
 } // namespace iris::Renderer
 
@@ -777,7 +310,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   if (auto instance =
         CreateInstance(appName, appVersion, instanceExtensionNames, layerNames,
                        (options & Options::kReportDebugMessages) ==
-                         Options::kReportDebugMessages)) {
+                           Options::kReportDebugMessages
+                         ? &DebugUtilsMessengerCallback
+                         : nullptr)) {
     sInstance = std::move(*instance);
   } else {
     IRIS_LOG_LEAVE();
@@ -788,7 +323,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
-    if (auto messenger = CreateDebugUtilsMessenger(sInstance)) {
+    if (auto messenger =
+          CreateDebugUtilsMessenger(sInstance, &DebugUtilsMessengerCallback)) {
       sDebugUtilsMessenger = std::move(*messenger);
     } else {
       GetLogger()->warn("Cannot create DebugUtilsMessenger: {}",
@@ -823,14 +359,164 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(device.error());
   }
 
+  NameObject(sDevice, VK_OBJECT_TYPE_INSTANCE, sInstance, "sInstance");
+  NameObject(sDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE, sPhysicalDevice,
+             "sPhysicalDevice");
+  NameObject(sDevice, VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
+
   vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
                    &sGraphicsCommandQueue);
+
+  NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sGraphicsCommandQueue,
+             "sGraphicsCommandQueue");
 
   if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
     sAllocator = std::move(*allocator);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(allocator.error());
+  }
+
+  /////
+  //
+  // Create the RenderPass
+  //
+  ////
+
+  absl::FixedArray<VkAttachmentDescription> attachments(
+    sNumRenderPassAttachments);
+  attachments[sColorTargetAttachmentIndex] = VkAttachmentDescription{
+    0,                                       // flags
+    sSurfaceColorFormat.format,              // format
+    sSurfaceSampleCount,                     // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,             // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,         // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE,        // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,               // initialLayout
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  attachments[sColorResolveAttachmentIndex] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceColorFormat.format,       // format
+    VK_SAMPLE_COUNT_1_BIT,            // samples
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,     // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR   // finalLayout
+  };
+
+  attachments[sDepthStencilTargetAttachmentIndex] = VkAttachmentDescription{
+    0,                                // flags
+    sSurfaceDepthStencilFormat,       // format
+    sSurfaceSampleCount,                     // samples
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_CLEAR,      // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  attachments[sDepthStencilResolveAttachmentIndex] = VkAttachmentDescription{
+    0,                               // flags
+    sSurfaceDepthStencilFormat,       // format
+    VK_SAMPLE_COUNT_1_BIT,           // samples
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE, // loadOp (color and depth)
+    VK_ATTACHMENT_STORE_OP_STORE,    // storeOp (color and depth)
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE, // stencilLoadOp
+    VK_ATTACHMENT_STORE_OP_STORE,    // stencilStoreOp
+    VK_IMAGE_LAYOUT_UNDEFINED,       // initialLayout
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL // finalLayout
+  };
+
+  VkAttachmentReference color{sColorTargetAttachmentIndex,
+                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference resolve{sColorResolveAttachmentIndex,
+                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthStencil{
+    sDepthStencilTargetAttachmentIndex,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+  VkSubpassDescription subpass = {
+    0,                               // flags
+    VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+    0,                               // inputAttachmentCount
+    nullptr,                         // pInputAttachments
+    1,                               // colorAttachmentCount
+    &color,                          // pColorAttachments (array)
+    &resolve,                        // pResolveAttachments (array)
+    &depthStencil,                   // pDepthStencilAttachment (single)
+    0,                               // preserveAttachmentCount
+    nullptr                          // pPreserveAttachments
+  };
+
+  absl::FixedArray<VkSubpassDependency> dependencies{
+    VkSubpassDependency{
+      VK_SUBPASS_EXTERNAL,                           // srcSubpass
+      0,                                             // dstSubpass
+      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // srcStageMask
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
+      VK_ACCESS_MEMORY_READ_BIT,                     // srcAccessMask
+      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
+      VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+    },
+    VkSubpassDependency{
+      0,                                             // srcSubpass
+      VK_SUBPASS_EXTERNAL,                           // dstSubpass
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
+      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // dstStageMask
+      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // srcAccessMask
+      VK_ACCESS_MEMORY_READ_BIT,              // dstAccessMask
+      VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
+    }};
+
+  VkRenderPassCreateInfo renderPassCI = {};
+  renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  renderPassCI.attachmentCount = attachments.size();
+  renderPassCI.pAttachments = attachments.data();
+  renderPassCI.subpassCount = 1;
+  renderPassCI.pSubpasses = &subpass;
+  renderPassCI.dependencyCount = dependencies.size();
+  renderPassCI.pDependencies = dependencies.data();
+
+  if (auto result =
+        vkCreateRenderPass(sDevice, &renderPassCI, nullptr, &sRenderPass);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create render pass"));
+  }
+
+  NameObject(sDevice, VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
+
+  VkCommandPoolCreateInfo commandPoolCI = {};
+  commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+
+  if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
+                                        &sOneTimeSubmitCommandPool);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create one-time submit command pool"));
+  }
+
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+  if (auto result =
+        vkCreateFence(sDevice, &fenceCI, nullptr, &sOneTimeSubmitFence);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create one-time submit fence"));
   }
 
 #if 0
@@ -845,11 +531,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   if (auto error = CreateFencesAndSemaphores(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = CreateRenderPass(); error.code()) {
     IRIS_LOG_LEAVE();
     return {error};
   }
@@ -892,7 +573,7 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   Expects(sPhysicalDevice != VK_NULL_HANDLE);
   Expects(sDevice != VK_NULL_HANDLE);
 
-  Window window(numFrames);
+  Window window(title, numFrames);
   window.showUI =
     (options & Window::Options::kShowUI) == Window::Options::kShowUI;
 
@@ -915,12 +596,11 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
 
   VkXcbSurfaceCreateInfoKHR sci = {};
   sci.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-  std::tie(sci.connection, sci.window) =
-    window.platformWindow.NativeHandle()
+  std::tie(sci.connection, sci.window) = window.platformWindow.NativeHandle();
 
-      if (auto result =
-            vkCreateXcbSurfaceKHR(instance, &sci, nullptr, &window.surface);
-          result != VK_SUCCESS) {
+  if (auto result =
+        vkCreateXcbSurfaceKHR(sInstance, &sci, nullptr, &window.surface);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create surface"));
@@ -941,6 +621,135 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   }
 
 #endif
+
+  NameObject(sDevice, VK_OBJECT_TYPE_SURFACE_KHR, window.surface,
+             fmt::format("{}.surface", title).c_str());
+
+  VkBool32 surfaceSupported;
+  if (auto result = vkGetPhysicalDeviceSurfaceSupportKHR(
+        sPhysicalDevice, sGraphicsQueueFamilyIndex, window.surface,
+        &surfaceSupported);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot check for physical device surface support"));
+  }
+
+  if (surfaceSupported == VK_FALSE) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kSurfaceNotSupported,
+                        "Surface is not supported by physical device."));
+  }
+
+  bool formatSupported = false;
+  if (auto surfaceFormats =
+        GetPhysicalDeviceSurfaceFormats(sPhysicalDevice, window.surface)) {
+    if (surfaceFormats->size() == 1 &&
+        (*surfaceFormats)[0].format == VK_FORMAT_UNDEFINED) {
+      formatSupported = true;
+    } else {
+      for (auto&& supported : *surfaceFormats) {
+        if (supported.format == sSurfaceColorFormat.format &&
+            supported.colorSpace == sSurfaceColorFormat.colorSpace) {
+          formatSupported = true;
+          break;
+        }
+      }
+    }
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(surfaceFormats.error());
+  }
+
+  if (!formatSupported) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kSurfaceNotSupported,
+                        "Surface format is not supported by physical device"));
+  }
+
+  VkSemaphoreCreateInfo semaphoreCI = {};
+  semaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  VkCommandPoolCreateInfo commandPoolCI = {};
+  commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  for (auto&& [i, frame] : enumerate(window.frames)) {
+    if (auto result = vkCreateSemaphore(sDevice, &semaphoreCI, nullptr,
+                                        &frame.imageAvailable);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create image available semaphore"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_SEMAPHORE, frame.imageAvailable,
+               fmt::format("{}.frames[{}].imageAvailable", title, i).c_str());
+
+    if (auto result = vkCreateSemaphore(sDevice, &semaphoreCI, nullptr,
+                                        &frame.renderFinished);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create render finished semaphore"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_SEMAPHORE, frame.renderFinished,
+               fmt::format("{}.frames[{}].renderFinished", title, i).c_str());
+
+    if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
+                                          &frame.commandPool);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(make_error_code(result),
+                                              "Cannot create command pool"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, frame.commandPool,
+               fmt::format("{}.frames[{}].commandPool", title, i).c_str());
+
+    commandBufferAI.commandPool = frame.commandPool;
+
+    if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
+                                               &frame.commandBuffer);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot allocate command buffer"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, frame.commandBuffer,
+               fmt::format("{}.frames[{}].commandBuffer", title, i).c_str());
+
+    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &frame.fence);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(
+        std::system_error(make_error_code(result), "Cannot create fence"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, frame.fence,
+               fmt::format("{}.frames[{}].fence", title, i).c_str());
+  }
+
+  if (auto result = ResizeWindow(window, {extent.width, extent.height});
+      !result) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
 
   window.uiContext.reset(ImGui::CreateContext());
   ImGui::SetCurrentContext(window.uiContext.get());
@@ -970,20 +779,533 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   io.KeyMap[ImGuiKey_Y] = static_cast<int>(wsi::Keys::kY);
   io.KeyMap[ImGuiKey_Z] = static_cast<int>(wsi::Keys::kZ);
 
-  window.platformWindow.Show();
   window.platformWindow.OnResize(
-    std::bind(&Window::Resize, &window, std::placeholders::_1));
-  window.platformWindow.OnClose(std::bind(&Window::Close, &window));
+    [&window](wsi::Extent2D const&) { window.resized = true; });
+  window.platformWindow.OnClose([]() { Terminate(); });
+  window.platformWindow.Show();
+
+  Ensures(window.surface != VK_NULL_HANDLE);
+  Ensures(window.swapchain != VK_NULL_HANDLE);
+  Ensures(!window.colorImages.empty());
+  Ensures(!window.colorImageViews.empty());
+  Ensures(window.depthStencilImage != VK_NULL_HANDLE);
+  Ensures(window.depthStencilImageAllocation != VK_NULL_HANDLE);
+  Ensures(window.depthStencilImageView != VK_NULL_HANDLE);
+  Ensures(window.colorTarget != VK_NULL_HANDLE);
+  Ensures(window.colorTargetAllocation != VK_NULL_HANDLE);
+  Ensures(window.colorTargetView != VK_NULL_HANDLE);
+  Ensures(window.depthStencilTarget != VK_NULL_HANDLE);
+  Ensures(window.depthStencilTargetAllocation != VK_NULL_HANDLE);
+  Ensures(window.depthStencilTargetView != VK_NULL_HANDLE);
+  Ensures(!window.frames.empty());
 
   IRIS_LOG_LEAVE();
   return std::move(window);
 } // iris::Renderer::CreateWindow
 
+tl::expected<void, std::system_error>
+iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sPhysicalDevice != VK_NULL_HANDLE);
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  GetLogger()->debug("Resizing window to ({}x{})", newExtent.width,
+                     newExtent.height);
+
+  VkSurfaceCapabilities2KHR surfaceCapabilities = {};
+  surfaceCapabilities.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR;
+
+  VkPhysicalDeviceSurfaceInfo2KHR surfaceInfo = {};
+  surfaceInfo.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR;
+  surfaceInfo.surface = window.surface;
+
+  if (auto result = vkGetPhysicalDeviceSurfaceCapabilities2KHR(
+        sPhysicalDevice, &surfaceInfo, &surfaceCapabilities);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot get physical device surface capabilities"));
+  }
+
+  VkSurfaceCapabilitiesKHR caps = surfaceCapabilities.surfaceCapabilities;
+
+  newExtent.width = caps.currentExtent.width == UINT32_MAX
+                      ? glm::clamp(newExtent.width, caps.minImageExtent.width,
+                                   caps.maxImageExtent.width)
+                      : caps.currentExtent.width;
+
+  newExtent.height = caps.currentExtent.height == UINT32_MAX
+                      ? glm::clamp(newExtent.height, caps.minImageExtent.height,
+                                   caps.maxImageExtent.height)
+                      : caps.currentExtent.height;
+
+  VkViewport newViewport{
+    0.f,                                  // x
+    0.f,                                  // y
+    static_cast<float>(newExtent.width),  // width
+    static_cast<float>(newExtent.height), // height
+    0.f,                                  // minDepth
+    1.f,                                  // maxDepth
+  };
+
+  VkRect2D newScissor{{0, 0}, newExtent};
+
+  VkSwapchainCreateInfoKHR swapchainCI = {};
+  swapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swapchainCI.surface = window.surface;
+  swapchainCI.minImageCount = caps.minImageCount;
+  swapchainCI.imageFormat = sSurfaceColorFormat.format;
+  swapchainCI.imageColorSpace = sSurfaceColorFormat.colorSpace;
+  swapchainCI.imageExtent = newExtent;
+  swapchainCI.imageArrayLayers = 1;
+  swapchainCI.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  swapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  swapchainCI.queueFamilyIndexCount = 0;
+  swapchainCI.pQueueFamilyIndices = nullptr;
+  swapchainCI.preTransform = caps.currentTransform;
+  swapchainCI.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  swapchainCI.presentMode = sSurfacePresentMode;
+  swapchainCI.clipped = VK_TRUE;
+  swapchainCI.oldSwapchain = window.swapchain;
+
+  VkSwapchainKHR newSwapchain;
+  if (auto result =
+        vkCreateSwapchainKHR(sDevice, &swapchainCI, nullptr, &newSwapchain);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create swapchain"));
+  }
+
+  std::uint32_t numSwapchainImages;
+  if (auto result = vkGetSwapchainImagesKHR(sDevice, newSwapchain,
+                                            &numSwapchainImages, nullptr);
+      result != VK_SUCCESS) {
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot get swapchain images"));
+  }
+
+  if (numSwapchainImages != window.colorImages.size()) {
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kWindowResizeFailed,
+      "New number of swapchain images not equal to old number"));
+  }
+
+  if (numSwapchainImages != window.frames.size()) {
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kWindowResizeFailed,
+      "New number of swapchain images not equal to number of frames"));
+  }
+
+  absl::FixedArray<VkImage> newColorImages(numSwapchainImages);
+  if (auto result = vkGetSwapchainImagesKHR(
+        sDevice, newSwapchain, &numSwapchainImages, newColorImages.data());
+      result != VK_SUCCESS) {
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot get swapchain images"));
+  }
+
+  VkImageViewCreateInfo imageViewCI = {};
+  imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  imageViewCI.format = sSurfaceColorFormat.format;
+  imageViewCI.components = {
+    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+  imageViewCI.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+  absl::FixedArray<VkImageView> newColorImageViews(numSwapchainImages);
+  for (auto&& [i, view] : enumerate(newColorImageViews)) {
+    imageViewCI.image = newColorImages[i];
+    if (auto result = vkCreateImageView(sDevice, &imageViewCI, nullptr, &view);
+        result != VK_SUCCESS) {
+      vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot get swapchain image view"));
+    }
+  }
+
+  VkImage newDepthStencilImage;
+  VmaAllocation newDepthStencilImageAllocation;
+  VkImageView newDepthStencilImageView;
+
+  if (auto iav = AllocateImageAndView(
+        sDevice, sAllocator, sSurfaceDepthStencilFormat, newExtent, 1, 1,
+        VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
+        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    std::tie(newDepthStencilImage, newDepthStencilImageAllocation,
+             newDepthStencilImageView) = *iav;
+  } else {
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(iav.error());
+  }
+
+  VkImage newColorTarget;
+  VmaAllocation newColorTargetAllocation;
+  VkImageView newColorTargetView;
+
+  if (auto iav =
+        AllocateImageAndView(sDevice, sAllocator, sSurfaceColorFormat.format,
+                             newExtent, 1, 1, sSurfaceSampleCount,
+                             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                               VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                             VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
+                             {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    std::tie(newColorTarget, newColorTargetAllocation, newColorTargetView) =
+      *iav;
+  } else {
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage,
+                    newDepthStencilImageAllocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(iav.error());
+  }
+
+  VkImage newDepthStencilTarget;
+  VmaAllocation newDepthStencilTargetAllocation;
+  VkImageView newDepthStencilTargetView;
+
+  if (auto iav = AllocateImageAndView(
+        sDevice, sAllocator, sSurfaceDepthStencilFormat, newExtent, 1, 1,
+        sSurfaceSampleCount, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
+        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    std::tie(newDepthStencilTarget, newDepthStencilTargetAllocation,
+             newDepthStencilTargetView) = *iav;
+  } else {
+    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage,
+                    newDepthStencilImageAllocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(iav.error());
+  }
+
+  if (auto result =
+        TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+      !result) {
+    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage,
+                    newDepthStencilImageAllocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  if (auto result =
+        TransitionImage(newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+      !result) {
+    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage,
+                    newDepthStencilImageAllocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
+  attachments[sColorTargetAttachmentIndex] = newColorTargetView;
+  attachments[sDepthStencilTargetAttachmentIndex] = newDepthStencilTargetView;
+  attachments[sDepthStencilResolveAttachmentIndex] = newDepthStencilImageView;
+
+  VkFramebufferCreateInfo framebufferCI = {};
+  framebufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebufferCI.renderPass = sRenderPass;
+  framebufferCI.attachmentCount = attachments.size();
+  framebufferCI.width = newExtent.width;
+  framebufferCI.height = newExtent.height;
+  framebufferCI.layers = 1;
+
+  absl::FixedArray<VkFramebuffer> newFramebuffers(numSwapchainImages);
+
+  for (auto&& [i, framebuffer] : enumerate(newFramebuffers)) {
+    attachments[sColorResolveAttachmentIndex] = newColorImageViews[i];
+    framebufferCI.pAttachments = attachments.data();
+
+    if (auto result =
+          vkCreateFramebuffer(sDevice, &framebufferCI, nullptr, &framebuffer);
+        result != VK_SUCCESS) {
+      vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+      vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+      vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+      vmaDestroyImage(sAllocator, newDepthStencilImage,
+                      newDepthStencilImageAllocation);
+      for (auto&& v : newColorImageViews)
+        vkDestroyImageView(sDevice, v, nullptr);
+      vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(make_error_code(result),
+                                              "Cannot create framebuffer"));
+    }
+  }
+
+  if (window.swapchain != VK_NULL_HANDLE) {
+    GetLogger()->trace("ResizeWindow: releasing old resources");
+    for (auto&& frame : window.frames) {
+      vkDestroyFramebuffer(sDevice, frame.framebuffer, nullptr);
+    }
+    vkDestroyImageView(sDevice, window.colorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, window.colorTarget,
+                    window.colorTargetAllocation);
+    vkDestroyImageView(sDevice, window.depthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, window.depthStencilImage,
+                    window.depthStencilImageAllocation);
+    for (auto&& view : window.colorImageViews) {
+      vkDestroyImageView(sDevice, view, nullptr);
+    }
+    vkDestroySwapchainKHR(sDevice, window.swapchain, nullptr);
+  }
+
+  window.extent = newExtent;
+  window.viewport = newViewport;
+  window.scissor = newScissor;
+
+  window.swapchain = newSwapchain;
+  NameObject(sDevice, VK_OBJECT_TYPE_SWAPCHAIN_KHR, window.swapchain,
+             fmt::format("{}.swapchain", window.title).c_str());
+
+  std::copy_n(newColorImages.begin(), numSwapchainImages,
+              window.colorImages.begin());
+  for (auto&& [i, image] : enumerate(window.colorImages)) {
+    NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, image,
+               fmt::format("{}.colorImages[{}]", window.title, i).c_str());
+  }
+
+  std::copy_n(newColorImageViews.begin(), numSwapchainImages,
+              window.colorImageViews.begin());
+  for (auto&& [i, view] : enumerate(window.colorImageViews)) {
+    NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, view,
+               fmt::format("{}.colorImageViews[{}]", window.title, i).c_str());
+  }
+
+  window.depthStencilImage = newDepthStencilImage;
+  window.depthStencilImageAllocation = newDepthStencilImageAllocation;
+  window.depthStencilImageView = newDepthStencilImageView;
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.depthStencilImage,
+             fmt::format("{}.depthStencilImage", window.title).c_str());
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilImageView,
+             fmt::format("{}.depthStencilImageView", window.title).c_str());
+
+  window.colorTarget = newColorTarget;
+  window.colorTargetAllocation = newColorTargetAllocation;
+  window.colorTargetView = newColorTargetView;
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.colorTarget,
+             fmt::format("{}.colorTarget", window.title).c_str());
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.colorTargetView,
+             fmt::format("{}.colorTargetView", window.title).c_str());
+
+  window.depthStencilTarget = newDepthStencilTarget;
+  window.depthStencilTargetAllocation = newDepthStencilTargetAllocation;
+  window.depthStencilTargetView = newDepthStencilTargetView;
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.depthStencilTarget,
+             fmt::format("{}.depthStencilTarget", window.title).c_str());
+  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilTargetView,
+             fmt::format("{}.depthStencilTargetView", window.title).c_str());
+
+  for (auto&& [i, frame] : enumerate(window.frames)) {
+    frame.framebuffer = newFramebuffers[i];
+    NameObject(sDevice, VK_OBJECT_TYPE_FRAMEBUFFER, frame.framebuffer,
+               fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::ResizeWindow
+
+tl::expected<VkCommandBuffer, std::system_error>
+iris::Renderer::BeginOneTimeSubmit() noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sOneTimeSubmitCommandPool;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffer"));
+  }
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot begin command buffer"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffer;
+} // iris::Renderer::BeginOneTimeSubmit
+
+tl::expected<void, std::system_error>
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
+  IRIS_LOG_ENTER();
+
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.commandBufferCount = 1;
+  submitI.pCommandBuffers = &commandBuffer;
+
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot end command buffer"));
+  }
+
+  if (auto result =
+        vkQueueSubmit(sGraphicsCommandQueue, 1, &submitI, sOneTimeSubmitFence);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot submit command buffer"));
+  }
+
+  if (auto result =
+        vkWaitForFences(sDevice, 1, &sOneTimeSubmitFence, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot wait on one-time submit fence"));
+  }
+
+  if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmitFence);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot reset one-time submit fence"));
+  }
+
+  vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::EndOneTimeSubmit
+
+tl::expected<void, std::system_error>
+iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
+                                VkImageLayout newLayout, std::uint32_t mipLevels,
+                                std::uint32_t arrayLayers) noexcept {
+  IRIS_LOG_ENTER();
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = oldLayout;
+  barrier.newLayout = newLayout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = mipLevels;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = arrayLayers;
+
+  if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    // FIXME: handle stencil
+  } else {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  VkPipelineStageFlagBits srcStage;
+  VkPipelineStageFlagBits dstStage;
+
+  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(Error::kImageTransitionFailed,
+                          "Not implemented"));
+  }
+
+  VkCommandBuffer commandBuffer;
+  if (auto cb = BeginOneTimeSubmit()) {
+    commandBuffer = *cb;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
+  }
+
+  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+
+  if (auto result = EndOneTimeSubmit(commandBuffer); !result) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::TransitionImage
+
 void iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
 
-  auto currentTime = std::chrono::steady_clock::now();
+  // auto currentTime = std::chrono::steady_clock::now();
   // auto const frameDelta =
   // std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
   // sPreviousFrameTime = currentTime;
@@ -1066,64 +1388,14 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   }
 
   switch (controlMessage.type()) {
-
-    //
-    // FIXME: DRY
-    //
-
   case iris::Control::Control_Type_DISPLAYS:
-#if 0
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
-      auto&& windowMessage = controlMessage.displays().windows(i);
-      auto const& bg = windowMessage.background_color();
-
-      Window::Options options = Window::Options::kNone;
-      if (windowMessage.show_system_decoration()) {
-        options |= Window::Options::kDecorated;
-      }
-      if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-      if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
-
-      if (auto win = Window::Create(
-            windowMessage.name().c_str(),
-            wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
-                          static_cast<std::int16_t>(windowMessage.y())},
-            wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
-                          static_cast<std::uint16_t>(windowMessage.height())},
-            {bg.r(), bg.g(), bg.b(), bg.a()}, options,
-            windowMessage.display())) {
-        Windows().emplace(windowMessage.name(), std::move(*win));
-      } else {
-        GetLogger()->warn("Createing window failed: {}", win.error().what());
-      }
+      CreateWindow(controlMessage.displays().windows(i));
     }
-#endif
     break;
-  case iris::Control::Control_Type_WINDOW: {
-#if 0
-    auto&& windowMessage = controlMessage.window();
-    auto const& bg = windowMessage.background_color();
-
-    Window::Options options = Window::Options::kNone;
-    if (windowMessage.show_system_decoration()) {
-      options |= Window::Options::kDecorated;
-    }
-    if (windowMessage.is_stereo()) options |= Window::Options::kStereo;
-    if (windowMessage.show_ui()) options |= Window::Options::kShowUI;
-
-    if (auto win = Window::Create(
-          windowMessage.name().c_str(),
-          wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
-                        static_cast<std::int16_t>(windowMessage.y())},
-          wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
-                        static_cast<std::uint16_t>(windowMessage.height())},
-          {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display())) {
-      Windows().emplace(windowMessage.name(), std::move(*win));
-    } else {
-      GetLogger()->warn("Creating window failed: {}", win.error().what());
-    }
-#endif
-  } break;
+  case iris::Control::Control_Type_WINDOW:
+    CreateWindow(controlMessage.window());
+    break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",
                        controlMessage.type());

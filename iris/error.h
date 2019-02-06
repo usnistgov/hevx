@@ -19,6 +19,9 @@ enum class Error {
   kFileParseFailed,       //!< Parsing a file failed.
   kControlMessageInvalid, //!< Control message invalid.
   kControlMessageFailed,  //!< Control message failed.
+  kSurfaceNotSupported,   //<! Surface not supported by physical device.
+  kWindowResizeFailed,    //<! Resizing a window failed.
+  kImageTransitionFailed, //<! Image transition failed.
   kShaderCompileFailed,   //!< Shader compilation failed.
 };
 
@@ -44,6 +47,9 @@ public:
     case Error::kFileParseFailed: return "file parse failed"s;
     case Error::kControlMessageInvalid: return "control message invalid"s;
     case Error::kControlMessageFailed: return "control message failed"s;
+    case Error::kSurfaceNotSupported: return "surface not supported"s;
+    case Error::kWindowResizeFailed: return "surface resize failed"s;
+    case Error::kImageTransitionFailed: return "image transition failed"s;
     case Error::kShaderCompileFailed: return "shader compile failed"s;
     }
     return "unknown"s;

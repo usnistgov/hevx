@@ -4,7 +4,7 @@
 #include "absl/container/fixed_array.h"
 #include "expected.hpp"
 #include "glm/vec4.hpp"
-#include "iris/vulkan_support.h"
+#include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
 #include "imgui.h"
 #include <cstddef>
@@ -19,20 +19,14 @@ namespace iris {
 struct Window {
   //! \brief Options for window creation.
   enum class Options {
+    kNone = (0),           //!< No options.
     kDecorated = (1 << 0), //!< The window has decorations (title bar, borders).
     kSizeable = (1 << 1),  //!< The window is sizeable.
     kStereo = (1 << 2),    //!< The window has stereo output.
     kShowUI = (1 << 3),    //!< The window has UI shown.
   };
 
-  [[nodiscard]] std::system_error Resize(wsi::Extent2D const& newExtent) noexcept;
-
-  void Close() noexcept;
-
-  void BeginFrame(float frameDelta);
-
-  [[nodiscard]] tl::expected<VkCommandBuffer, std::system_error> EndFrame() noexcept;
-
+  std::string title;
   bool resized{false};
   bool showUI{false};
 
@@ -60,12 +54,12 @@ struct Window {
   VkImageView depthStencilTargetView;
 
   struct Frame {
-    VkFramebuffer framebuffer{VK_NULL_HANDLE};
     VkSemaphore imageAvailable{VK_NULL_HANDLE};
     VkSemaphore renderFinished{VK_NULL_HANDLE};
     VkCommandPool commandPool{VK_NULL_HANDLE};
     VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
     VkFence fence{VK_NULL_HANDLE};
+    VkFramebuffer framebuffer{VK_NULL_HANDLE};
   };
 
   absl::FixedArray<Frame> frames;
@@ -78,16 +72,17 @@ struct Window {
     return frames[(frameIndex - 1) % frames.size()];
   }
 
-  Window(std::size_t numFrames)
-    : colorImages(numFrames)
+  Window(std::string windowTitle, std::size_t numFrames)
+    : title(std::move(windowTitle))
+    , colorImages(numFrames)
     , colorImageViews(numFrames)
     , frames(numFrames)
     , uiContext(nullptr, &ImGui::DestroyContext) {}
 
   Window(Window const&) = delete;
-  Window(Window&& other) noexcept;
+  Window(Window&&) noexcept;
   Window& operator=(Window const&) = delete;
-  Window& operator=(Window&& rhs) noexcept;
+  Window& operator=(Window&&) noexcept;
   ~Window() noexcept = default;
 }; // struct Window
 
@@ -120,6 +115,31 @@ inline Window::Options operator&=(Window::Options& lhs,
   lhs = lhs & rhs;
   return lhs;
 }
+
+inline Window::Window(Window&& other) noexcept
+  : title(std::move(other.title))
+  , resized(other.resized)
+  , showUI(other.showUI)
+  , platformWindow(std::move(other.platformWindow))
+  , surface(other.surface)
+  , extent(other.extent)
+  , viewport(other.viewport)
+  , scissor(other.scissor)
+  , swapchain(other.swapchain)
+  , colorImages(std::move(other.colorImages))
+  , colorImageViews(std::move(other.colorImageViews))
+  , depthStencilImage(other.depthStencilImage)
+  , depthStencilImageAllocation(other.depthStencilImageAllocation)
+  , depthStencilImageView(other.depthStencilImageView)
+  , colorTarget(other.colorTarget)
+  , colorTargetAllocation(other.colorTargetAllocation)
+  , colorTargetView(other.colorTargetView)
+  , depthStencilTarget(other.depthStencilTarget)
+  , depthStencilTargetAllocation(other.depthStencilTargetAllocation)
+  , depthStencilTargetView(other.depthStencilTargetView)
+  , frames(std::move(other.frames))
+  , frameIndex(other.frameIndex)
+  , uiContext(std::move(other.uiContext)) {} // Window::Window
 
 } // namespace iris
 

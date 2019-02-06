@@ -104,7 +104,7 @@ set(SOURCES
   io/json.cc
   io/read_file.cc
   renderer.cc
-  window.cc
+  vulkan_util.cc
   wsi/platform_window.cc
 )
 
