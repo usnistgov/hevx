@@ -7,6 +7,12 @@
 #include "iris/vulkan_support.h"
 #include "iris/wsi/platform_window.h"
 #include "imgui.h"
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <memory>
+#include <system_error>
+#include <type_traits>
 
 namespace iris {
 
@@ -41,9 +47,17 @@ struct Window {
   absl::FixedArray<VkImage> colorImages;
   absl::FixedArray<VkImageView> colorImageViews;
 
-  Renderer::Image depthStencilImage;
-  Renderer::Image colorTarget;
-  Renderer::Image depthStencilTarget;
+  VkImage depthStencilImage;
+  VmaAllocation depthStencilImageAllocation;
+  VkImageView depthStencilImageView;
+
+  VkImage colorTarget;
+  VmaAllocation colorTargetAllocation;
+  VkImageView colorTargetView;
+
+  VkImage depthStencilTarget;
+  VmaAllocation depthStencilTargetAllocation;
+  VkImageView depthStencilTargetView;
 
   struct Frame {
     VkFramebuffer framebuffer{VK_NULL_HANDLE};

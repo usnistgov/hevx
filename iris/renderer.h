@@ -10,15 +10,16 @@ namespace filesystem = std::experimental::filesystem;
 namespace filesystem = std::filesystem;
 #endif
 #include "gsl/gsl"
+#include "iris/config.h"
+#include "iris/flextVk.h"
 #include "iris/window.h"
 #include "spdlog/sinks/sink.h"
+#include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <string>
 #include <system_error>
 #include <type_traits>
-
-#if PLATFORM_WINDOWS
-#undef CreateWindow
-#endif
 
 namespace iris {
 
@@ -116,6 +117,7 @@ inline Options operator&=(Options& lhs, Options const& rhs) noexcept {
 }
 
 } // namespace Renderer
+
 } // namespace iris
 
 #endif // HEV_IRIS_RENDERER_H_

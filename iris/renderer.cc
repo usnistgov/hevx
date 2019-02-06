@@ -4,6 +4,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "config.h"
+#include "enumerate.h"
 #include "error.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -93,7 +94,6 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 namespace iris::Renderer {
 
-static bool sInitialized{false};
 static bool sRunning{false};
 
 static VkInstance sInstance{VK_NULL_HANDLE};
@@ -105,6 +105,7 @@ static VmaAllocator sAllocator{VK_NULL_HANDLE};
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
 
+static bool sInFrame{false};
 static std::uint32_t sFrameNum{0};
 
 static tbb::task_scheduler_init sTaskSchedulerInit{
@@ -120,6 +121,571 @@ void NameObject(VkObjectType objectType, T objectHandle,
     reinterpret_cast<std::uint64_t>(objectHandle), objectName};
   vkSetDebugUtilsObjectNameEXT(sDevice, &objectNameInfo);
 } // NameObject
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+  VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
+  using namespace std::string_literals;
+
+  fmt::memory_buffer buf;
+  fmt::format_to(
+    buf, "{}: {}",
+    to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(messageTypes)),
+    pCallbackData->pMessage);
+  std::string const msg(buf.data(), buf.size());
+
+  buf.clear();
+  for (uint32_t i = 0; i < pCallbackData->objectCount; ++i) {
+    if (pCallbackData->pObjects[i].pObjectName) {
+      fmt::format_to(buf, "{}, ", pCallbackData->pObjects[i].pObjectName);
+    }
+  }
+  std::string const objNames(buf.data(), buf.size() == 0 ? 0 : buf.size() - 2);
+
+  switch (messageSeverity) {
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->trace(msg);
+    } else {
+      GetLogger()->trace("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->info(msg);
+    } else {
+      GetLogger()->info("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->warn(msg);
+    } else {
+      GetLogger()->warn("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+    if (objNames.empty()) {
+      GetLogger()->error(msg);
+    } else {
+      GetLogger()->error("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  default:
+    GetLogger()->error("Unhandled VkDebugUtilsMessengerSeverityFlagBitsEXT: {}",
+                       messageSeverity);
+    if (objNames.empty()) {
+      GetLogger()->error(msg);
+    } else {
+      GetLogger()->error("{} Objects: ({})", msg, objNames);
+    }
+    break;
+  }
+
+  GetLogger()->flush();
+  return VK_FALSE;
+} // DebugUtilsMessengerCallback
+
+/*! \brief Create a Vulkan Instance.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#initialization-instances
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extended-functionality-extensions
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extensions
+ * \see
+ * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
+ */
+[[nodiscard]] tl::expected<VkInstance, std::system_error>
+CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion,
+               gsl::span<gsl::czstring<>> extensionNames,
+               gsl::span<gsl::czstring<>> layerNames,
+               bool reportDebug) noexcept {
+  IRIS_LOG_ENTER();
+
+  std::uint32_t instanceVersion;
+  vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
+
+  GetLogger()->debug(
+    "Vulkan Instance Version: {}.{}.{}", VK_VERSION_MAJOR(instanceVersion),
+    VK_VERSION_MINOR(instanceVersion), VK_VERSION_PATCH(instanceVersion));
+
+  // Get the number of instance extension properties.
+  std::uint32_t numExtensionProperties;
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot enumerate instance extension properties"));
+  }
+
+  // Get the instance extension properties.
+  absl::FixedArray<VkExtensionProperties> extensionProperties(
+    numExtensionProperties);
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, extensionProperties.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot enumerate instance extension properties"));
+  }
+
+  VkApplicationInfo ai = {};
+  ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  ai.pApplicationName = appName;
+  ai.applicationVersion = appVersion;
+  ai.pEngineName = "iris";
+  ai.engineVersion =
+    VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch);
+
+  VkInstanceCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  ci.pApplicationInfo = &ai;
+  ci.enabledLayerCount = gsl::narrow_cast<std::uint32_t>(layerNames.size());
+  ci.ppEnabledLayerNames = layerNames.data();
+  ci.enabledExtensionCount =
+    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
+  ci.ppEnabledExtensionNames = extensionNames.data();
+
+  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
+  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
+
+  if (reportDebug) ci.pNext = &dumci;
+
+  VkInstance instance;
+  if (auto result = vkCreateInstance(&ci, nullptr, &instance);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create instance"));
+  }
+
+  Ensures(instance != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return instance;
+} // CreateInstance
+
+[[nodiscard]] tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
+CreateDebugUtilsMessenger(VkInstance instance) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(instance != VK_NULL_HANDLE);
+
+  VkDebugUtilsMessengerCreateInfoEXT dumci = {};
+  dumci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  dumci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+  dumci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+  dumci.pfnUserCallback = &DebugUtilsMessengerCallback;
+
+  VkDebugUtilsMessengerEXT messenger;
+  if (auto result =
+        vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &messenger);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create debug utils messenger"));
+  }
+
+  Ensures(messenger != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return messenger;
+} // CreateDebugUtilsMessenger
+
+/*! \brief Compare two VkPhysicalDeviceFeatures2 structures.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
+ */
+[[nodiscard]] bool
+ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
+                              VkPhysicalDeviceFeatures2 b) noexcept {
+  bool result = false;
+  result |= (a.features.robustBufferAccess == b.features.robustBufferAccess);
+  result |= (a.features.fullDrawIndexUint32 == b.features.fullDrawIndexUint32);
+  result |= (a.features.imageCubeArray == b.features.imageCubeArray);
+  result |= (a.features.independentBlend == b.features.independentBlend);
+  result |= (a.features.geometryShader == b.features.geometryShader);
+  result |= (a.features.tessellationShader == b.features.tessellationShader);
+  result |= (a.features.sampleRateShading == b.features.sampleRateShading);
+  result |= (a.features.dualSrcBlend == b.features.dualSrcBlend);
+  result |= (a.features.logicOp == b.features.logicOp);
+  result |= (a.features.multiDrawIndirect == b.features.multiDrawIndirect);
+  result |= (a.features.drawIndirectFirstInstance ==
+             b.features.drawIndirectFirstInstance);
+  result |= (a.features.depthClamp == b.features.depthClamp);
+  result |= (a.features.depthBiasClamp == b.features.depthBiasClamp);
+  result |= (a.features.fillModeNonSolid == b.features.fillModeNonSolid);
+  result |= (a.features.depthBounds == b.features.depthBounds);
+  result |= (a.features.wideLines == b.features.wideLines);
+  result |= (a.features.largePoints == b.features.largePoints);
+  result |= (a.features.alphaToOne == b.features.alphaToOne);
+  result |= (a.features.multiViewport == b.features.multiViewport);
+  result |= (a.features.samplerAnisotropy == b.features.samplerAnisotropy);
+  result |=
+    (a.features.textureCompressionETC2 == b.features.textureCompressionETC2);
+  result |= (a.features.textureCompressionASTC_LDR ==
+             b.features.textureCompressionASTC_LDR);
+  result |=
+    (a.features.textureCompressionBC == b.features.textureCompressionBC);
+  result |=
+    (a.features.occlusionQueryPrecise == b.features.occlusionQueryPrecise);
+  result |=
+    (a.features.pipelineStatisticsQuery == b.features.pipelineStatisticsQuery);
+  result |= (a.features.vertexPipelineStoresAndAtomics ==
+             b.features.vertexPipelineStoresAndAtomics);
+  result |= (a.features.fragmentStoresAndAtomics ==
+             b.features.fragmentStoresAndAtomics);
+  result |= (a.features.shaderTessellationAndGeometryPointSize ==
+             b.features.shaderTessellationAndGeometryPointSize);
+  result |= (a.features.shaderImageGatherExtended ==
+             b.features.shaderImageGatherExtended);
+  result |= (a.features.shaderStorageImageExtendedFormats ==
+             b.features.shaderStorageImageExtendedFormats);
+  result |= (a.features.shaderStorageImageMultisample ==
+             b.features.shaderStorageImageMultisample);
+  result |= (a.features.shaderStorageImageReadWithoutFormat ==
+             b.features.shaderStorageImageReadWithoutFormat);
+  result |= (a.features.shaderStorageImageWriteWithoutFormat ==
+             b.features.shaderStorageImageWriteWithoutFormat);
+  result |= (a.features.shaderUniformBufferArrayDynamicIndexing ==
+             b.features.shaderUniformBufferArrayDynamicIndexing);
+  result |= (a.features.shaderSampledImageArrayDynamicIndexing ==
+             b.features.shaderSampledImageArrayDynamicIndexing);
+  result |= (a.features.shaderStorageBufferArrayDynamicIndexing ==
+             b.features.shaderStorageBufferArrayDynamicIndexing);
+  result |= (a.features.shaderStorageImageArrayDynamicIndexing ==
+             b.features.shaderStorageImageArrayDynamicIndexing);
+  result |= (a.features.shaderClipDistance == b.features.shaderClipDistance);
+  result |= (a.features.shaderCullDistance == b.features.shaderCullDistance);
+  result |= (a.features.shaderFloat64 == b.features.shaderFloat64);
+  result |= (a.features.shaderInt64 == b.features.shaderInt64);
+  result |= (a.features.shaderInt16 == b.features.shaderInt16);
+  result |=
+    (a.features.shaderResourceResidency == b.features.shaderResourceResidency);
+  result |=
+    (a.features.shaderResourceMinLod == b.features.shaderResourceMinLod);
+  result |= (a.features.sparseBinding == b.features.sparseBinding);
+  result |=
+    (a.features.sparseResidencyBuffer == b.features.sparseResidencyBuffer);
+  result |=
+    (a.features.sparseResidencyImage2D == b.features.sparseResidencyImage2D);
+  result |=
+    (a.features.sparseResidencyImage3D == b.features.sparseResidencyImage3D);
+  result |=
+    (a.features.sparseResidency2Samples == b.features.sparseResidency2Samples);
+  result |=
+    (a.features.sparseResidency4Samples == b.features.sparseResidency4Samples);
+  result |=
+    (a.features.sparseResidency8Samples == b.features.sparseResidency8Samples);
+  result |= (a.features.sparseResidency16Samples ==
+             b.features.sparseResidency16Samples);
+  result |=
+    (a.features.sparseResidencyAliased == b.features.sparseResidencyAliased);
+  result |=
+    (a.features.variableMultisampleRate == b.features.variableMultisampleRate);
+  result |= (a.features.inheritedQueries == b.features.inheritedQueries);
+  return result;
+} // ComparePhysicalDeviceFeatures
+
+[[nodiscard]] tl::expected<std::uint32_t, std::system_error>
+GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
+                    VkQueueFlags queueFlags) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(physicalDevice != VK_NULL_HANDLE);
+
+  // Get the number of physical device queue family properties
+  std::uint32_t numQueueFamilyProperties;
+  vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice,
+                                            &numQueueFamilyProperties, nullptr);
+
+  // Get the physical device queue family properties
+  absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties(
+    numQueueFamilyProperties);
+  for (auto& property : queueFamilyProperties) {
+    property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    property.pNext = nullptr;
+  }
+
+  vkGetPhysicalDeviceQueueFamilyProperties2(
+    physicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
+
+  for (auto [i, props] : enumerate(queueFamilyProperties)) {
+    auto&& qfProps = props.queueFamilyProperties;
+    if (qfProps.queueCount == 0) continue;
+
+    if (qfProps.queueFlags & queueFlags) {
+      IRIS_LOG_LEAVE();
+      return i;
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return UINT32_MAX;
+} // GetQueueFamilyIndex
+
+/*! \brief Check if a specific physical device meets specified requirements.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
+ */
+[[nodiscard]] tl::expected<bool, std::system_error> IsPhysicalDeviceGood(
+  VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
+  gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(physicalDevice != VK_NULL_HANDLE);
+
+  //
+  // Get the properties.
+  //
+
+  VkPhysicalDeviceMultiviewProperties multiviewProps = {};
+  multiviewProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES;
+
+  VkPhysicalDeviceMaintenance3Properties maint3Props = {};
+  maint3Props.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES;
+  maint3Props.pNext = &multiviewProps;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &maint3Props;
+
+  vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
+
+  //
+  // Get the features.
+  //
+
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
+  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+
+  vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
+
+  //
+  // Get the extension properties.
+  //
+
+  // Get the number of physical device extension properties.
+  std::uint32_t numExtensionProperties;
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        physicalDevice, nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  // Get the physical device extension properties.
+  absl::FixedArray<VkExtensionProperties> extensionProperties(
+    numExtensionProperties);
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        physicalDevice, nullptr, &numExtensionProperties,
+        extensionProperties.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  std::uint32_t queueFamilyIndex;
+  if (auto result = GetQueueFamilyIndex(physicalDevice, queueFlags)) {
+    queueFamilyIndex = std::move(*result);
+  } else {
+    return tl::unexpected(result.error());
+  }
+
+  //
+  // Check all queried data to see if this device is good.
+  //
+
+  // Check for any required features
+  if (!ComparePhysicalDeviceFeatures(physicalDeviceFeatures, features)) {
+    IRIS_LOG_LEAVE();
+    return false;
+  }
+
+  // Check for each required extension
+  for (auto&& required : extensionNames) {
+    bool found = false;
+
+    for (auto&& property : extensionProperties) {
+      if (std::strcmp(required, property.extensionName) == 0) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      IRIS_LOG_LEAVE();
+      return false;
+    }
+  }
+
+  // Check for the queue
+  if (queueFamilyIndex == UINT32_MAX) {
+    IRIS_LOG_LEAVE();
+    return false;
+  }
+
+  IRIS_LOG_LEAVE();
+  return true;
+} // IsPhysicalDeviceGood
+
+/*! \brief Choose the Vulkan physical device.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
+ */
+[[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
+ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
+                     gsl::span<gsl::czstring<>> extensionNames,
+                     VkQueueFlags queueFlags) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(instance != VK_NULL_HANDLE);
+
+  // Get the number of physical devices present on the system
+  std::uint32_t numPhysicalDevices;
+  if (auto result =
+        vkEnumeratePhysicalDevices(instance, &numPhysicalDevices, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot enumerate physical devices"));
+  }
+
+  // Get the physical devices present on the system
+  absl::FixedArray<VkPhysicalDevice> physicalDevices(numPhysicalDevices);
+  if (auto result = vkEnumeratePhysicalDevices(instance, &numPhysicalDevices,
+                                               physicalDevices.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot enumerate physical devices"));
+  }
+
+  // Iterate through each physical device to find one that we can use.
+  for (auto&& physicalDevice : physicalDevices) {
+    if (auto good = IsPhysicalDeviceGood(physicalDevice, features,
+                                         extensionNames, queueFlags)) {
+      Ensures(physicalDevice != VK_NULL_HANDLE);
+      IRIS_LOG_LEAVE();
+      return physicalDevice;
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return tl::unexpected(std::system_error(Error::kNoPhysicalDevice,
+                                          "No suitable physical device found"));
+} // ChoosePhysicalDevice
+
+/*! \brief Create the Vulkan logical device.
+ *
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
+ * \see
+ * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
+ */
+[[nodiscard]] tl::expected<VkDevice, std::system_error>
+CreateDevice(VkPhysicalDevice physicalDevice,
+             VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
+             gsl::span<gsl::czstring<>> extensionNames,
+             std::uint32_t queueFamilyIndex) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(physicalDevice != VK_NULL_HANDLE);
+
+  // Get all of the queue families again, so that we can get the number of
+  // queues to create.
+
+  std::uint32_t numQueueFamilyProperties;
+  vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice,
+                                            &numQueueFamilyProperties, nullptr);
+
+  absl::FixedArray<VkQueueFamilyProperties2> queueFamilyProperties(
+    numQueueFamilyProperties);
+  for (auto& property : queueFamilyProperties) {
+    property.sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+    property.pNext = nullptr;
+  }
+
+  vkGetPhysicalDeviceQueueFamilyProperties2(
+    physicalDevice, &numQueueFamilyProperties, queueFamilyProperties.data());
+
+  absl::FixedArray<float> priorities(
+    queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount);
+  std::fill_n(std::begin(priorities), priorities.size(), 1.f);
+
+  VkDeviceQueueCreateInfo qci = {};
+  qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  qci.queueFamilyIndex = queueFamilyIndex;
+  qci.queueCount =
+    queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount;
+  qci.pQueuePriorities = priorities.data();
+
+  VkDeviceCreateInfo ci = {};
+  ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  ci.pNext = &physicalDeviceFeatures;
+  ci.queueCreateInfoCount = 1;
+  ci.pQueueCreateInfos = &qci;
+  ci.enabledExtensionCount =
+    gsl::narrow_cast<std::uint32_t>(extensionNames.size());
+  ci.ppEnabledExtensionNames = extensionNames.data();
+
+  VkDevice device;
+  if (auto result = vkCreateDevice(physicalDevice, &ci, nullptr, &device);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create device"));
+  }
+
+  Ensures(device != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return device;
+} // CreateDevice
+
+[[nodiscard]] tl::expected<VmaAllocator, std::system_error>
+CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(physicalDevice != VK_NULL_HANDLE);
+  Expects(device != VK_NULL_HANDLE);
+
+  VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.flags = VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
+  allocatorInfo.physicalDevice = physicalDevice;
+  allocatorInfo.device = device;
+
+  VmaAllocator allocator;
+  if (auto result = vmaCreateAllocator(&allocatorInfo, &allocator);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create allocator"));
+  }
+
+  Ensures(allocator != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return allocator;
+} // CreateAllocator
 
 } // namespace iris::Renderer
 
@@ -414,7 +980,8 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
 } // iris::Renderer::CreateWindow
 
 void iris::Renderer::BeginFrame() noexcept {
-  Expects(sRunning == true);
+  Expects(sRunning);
+  Expects(!sInFrame);
 
   auto currentTime = std::chrono::steady_clock::now();
   // auto const frameDelta =
@@ -427,12 +994,16 @@ void iris::Renderer::BeginFrame() noexcept {
       GetLogger()->error(error.what());
     }
   }
+
+  sInFrame = true;
 } // iris::Renderer::BeginFrame()
 
 void iris::Renderer::EndFrame() noexcept {
-  Expects(sRunning == true);
+  Expects(sRunning);
+  Expects(sInFrame);
 
   sFrameNum += 1;
+  sInFrame = false;
 } // iris::Renderer::EndFrame
 
 tl::expected<void, std::system_error>

@@ -46,113 +46,11 @@ using PFN_vkCmdCopyBuffer = decltype(vkCmdCopyBuffer);
 #endif
 #endif // PLATFORM_COMPILER_MSVC
 
+#if PLATFORM_COMPILER_MSVC
+#undef CreateWindow
+#endif
+
 namespace iris::Renderer {
-
-struct Image {
-  VkImage image{VK_NULL_HANDLE};
-  VmaAllocation allocation{VK_NULL_HANDLE};
-  VkImageView view{VK_NULL_HANDLE};
-
-  constexpr Image() noexcept = default;
-  Image(Image const&) = delete;
-  Image& operator=(Image const&) = delete;
-  ~Image() noexcept = default;
-
-  Image(Image&& other) noexcept
-    : image(other.image)
-    , allocation(other.allocation)
-    , view(other.view) {
-    other.image = VK_NULL_HANDLE;
-    other.allocation = VK_NULL_HANDLE;
-    other.view = VK_NULL_HANDLE;
-  }
-
-  Image& operator=(Image&& rhs) noexcept {
-    if (this == &rhs) return *this;
-    image = rhs.image;
-    allocation = rhs.allocation;
-    view = rhs.view;
-    rhs.image = VK_NULL_HANDLE;
-    rhs.allocation = VK_NULL_HANDLE;
-    rhs.view = VK_NULL_HANDLE;
-    return *this;
-  }
-}; // struct Image
-
-/*! \brief Create a Vulkan Instance.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#initialization-instances
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extended-functionality-extensions
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extensions
- * \see
- * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
- */
-[[nodiscard]] tl::expected<VkInstance, std::system_error>
-CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion,
-               gsl::span<gsl::czstring<>> extensionNames,
-               gsl::span<gsl::czstring<>> layerNames,
-               bool reportDebug) noexcept;
-
-[[nodiscard]] tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
-CreateDebugUtilsMessenger(VkInstance instance) noexcept;
-
-[[nodiscard]] tl::expected<std::uint32_t, std::system_error>
-GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
-                    VkQueueFlags queueFlags) noexcept;
-
-/*! \brief Check if a specific physical device meets specified requirements.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
-[[nodiscard]] tl::expected<bool, std::system_error> IsPhysicalDeviceGood(
-  VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
-  gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept;
-
-/*! \brief Choose the Vulkan physical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
-[[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
-ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
-                     gsl::span<gsl::czstring<>> extensionNames,
-                     VkQueueFlags queueFlags) noexcept;
-
-/*! \brief Create the Vulkan logical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
- */
-[[nodiscard]] tl::expected<VkDevice, std::system_error>
-CreateDevice(VkPhysicalDevice physicalDevice,
-             VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
-             gsl::span<gsl::czstring<>> extensionNames,
-             std::uint32_t queueFamilyIndex) noexcept;
-
-[[nodiscard]] tl::expected<VmaAllocator, std::system_error>
-CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
-
-void DumpPhysicalDevice(VkPhysicalDevice device, std::size_t index,
-                        int indentAmount = 0) noexcept;
-
-/*! \brief Compare two VkPhysicalDeviceFeatures2 structures.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
- */
-[[nodiscard]] bool
-ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
-                              VkPhysicalDeviceFeatures2 b) noexcept;
-
-} // namespace iris::Renderer
-
-namespace iris {
 
 //! \brief Vulkan result codes.
 enum class VulkanResult {
@@ -271,16 +169,16 @@ inline std::error_code make_error_code(VkResult r) noexcept {
   return std::error_code(static_cast<int>(r), GetVulkanResultCategory());
 }
 
-} // namespace iris
+} // namespace iris::Renderer
 
 namespace std {
 
 template <>
-struct is_error_code_enum<iris::VulkanResult> : public true_type {};
+struct is_error_code_enum<iris::Renderer::VulkanResult> : public true_type {};
 
 } // namespace std
 
-namespace iris {
+namespace iris::Renderer {
 
 //! \brief Convert a VkPhysicalDeviceType to a std::string
 inline std::string to_string(VkPhysicalDeviceType type) noexcept {
@@ -326,6 +224,6 @@ to_string(VkDebugUtilsMessageTypeFlagBitsEXT types) noexcept {
   return "{" + result.substr(0, result.size() - 3) + "}";
 }
 
-} // namespace iris
+} // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_VULKAN_H_
