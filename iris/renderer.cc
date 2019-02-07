@@ -1,9 +1,16 @@
 /*! \file
  * \brief \ref iris::Renderer definition.
  */
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/inlined_vector.h"
 #include "config.h"
+#include "absl/container/flat_hash_map.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+#include "absl/container/inlined_vector.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"
@@ -116,12 +123,26 @@ static constexpr VkSampleCountFlagBits const sSurfaceSampleCount{
   VK_SAMPLE_COUNT_4_BIT};
 static constexpr VkPresentModeKHR const sSurfacePresentMode{
   VK_PRESENT_MODE_FIFO_KHR};
-static constexpr std::uint32_t const sNumWindowFramesBuffered{2};
 
 static absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
   return sWindows;
 } // Windows
+
+static bool sInFrame{false};
+static std::uint32_t sFrameNum{0};
+static std::chrono::steady_clock::time_point sPreviousFrameTime{};
+
+static constexpr std::uint32_t const sNumWindowFramesBuffered{2};
+static absl::FixedArray<VkFence> sFrameFinishedFences(sNumWindowFramesBuffered);
+
+static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
+static std::uint32_t sFrameIndex{0};
+
+static tbb::task_scheduler_init sTaskSchedulerInit{
+  tbb::task_scheduler_init::deferred};
+static tbb::concurrent_queue<std::function<std::system_error(void)>>
+  sIOContinuations{};
 
 static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
@@ -146,14 +167,6 @@ static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
     GetLogger()->warn("Createing window failed: {}", win.error().what());
   }
 } // CreateWindow
-
-static bool sInFrame{false};
-static std::uint32_t sFrameNum{0};
-
-static tbb::task_scheduler_init sTaskSchedulerInit{
-  tbb::task_scheduler_init::deferred};
-static tbb::concurrent_queue<std::function<std::system_error(void)>>
-  sIOContinuations{};
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -519,6 +532,26 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       make_error_code(result), "Cannot create one-time submit fence"));
   }
 
+  for (auto&& fence : sFrameFinishedFences) {
+    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &fence);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create frame finished fence"));
+    }
+  }
+
+  VkSemaphoreCreateInfo semaphoreCI = {};
+  semaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  if (auto result = vkCreateSemaphore(sDevice, &semaphoreCI, nullptr,
+                                      &sImagesReadyForPresent);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create images ready semaphore"));
+  }
+
 #if 0
   if (auto error = CreateCommandPools(); error.code()) {
     IRIS_LOG_LEAVE();
@@ -526,11 +559,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   if (auto error = CreateDescriptorPools(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = CreateFencesAndSemaphores(); error.code()) {
     IRIS_LOG_LEAVE();
     return {error};
   }
@@ -683,10 +711,6 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAI.commandBufferCount = 1;
 
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
   for (auto&& [i, frame] : enumerate(window.frames)) {
     if (auto result = vkCreateSemaphore(sDevice, &semaphoreCI, nullptr,
                                         &frame.imageAvailable);
@@ -698,17 +722,6 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
 
     NameObject(sDevice, VK_OBJECT_TYPE_SEMAPHORE, frame.imageAvailable,
                fmt::format("{}.frames[{}].imageAvailable", title, i).c_str());
-
-    if (auto result = vkCreateSemaphore(sDevice, &semaphoreCI, nullptr,
-                                        &frame.renderFinished);
-        result != VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot create render finished semaphore"));
-    }
-
-    NameObject(sDevice, VK_OBJECT_TYPE_SEMAPHORE, frame.renderFinished,
-               fmt::format("{}.frames[{}].renderFinished", title, i).c_str());
 
     if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
                                           &frame.commandPool);
@@ -733,16 +746,6 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
 
     NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, frame.commandBuffer,
                fmt::format("{}.frames[{}].commandBuffer", title, i).c_str());
-
-    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &frame.fence);
-        result != VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(
-        std::system_error(make_error_code(result), "Cannot create fence"));
-    }
-
-    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, frame.fence,
-               fmt::format("{}.frames[{}].fence", title, i).c_str());
   }
 
   if (auto result = ResizeWindow(window, {extent.width, extent.height});
@@ -756,6 +759,19 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   ImGui::StyleColorsDark();
 
   ImGuiIO& io = ImGui::GetIO();
+
+  io.BackendRendererName = "hevx::iris";
+  io.BackendRendererName = "";
+
+  using namespace std::string_literals;
+  io.Fonts->AddFontFromFileTTF(
+    (kIRISContentDirectory + "/assets/fonts/SourceSansPro-Regular.ttf"s)
+      .c_str(),
+    16.f);
+
+  unsigned char* pixels;
+  int width, height, bytes_per_pixel;
+  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytes_per_pixel);
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
@@ -1305,10 +1321,7 @@ void iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
 
-  // auto currentTime = std::chrono::steady_clock::now();
-  // auto const frameDelta =
-  // std::chrono::duration<float>(currentTime - sPreviousFrameTime).count();
-  // sPreviousFrameTime = currentTime;
+  auto currentTime = std::chrono::steady_clock::now();
 
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
@@ -1317,6 +1330,65 @@ void iris::Renderer::BeginFrame() noexcept {
     }
   }
 
+  auto&& windows = Windows();
+
+  for (auto&& [title, window] : windows) {
+    ImGui::SetCurrentContext(window.uiContext.get());
+    window.platformWindow.PollEvents();
+    if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
+
+    if (window.resized) {
+      auto const newExtent = window.platformWindow.Extent();
+      if (auto result =
+            ResizeWindow(window, {newExtent.width, newExtent.height});
+          !result) {
+        GetLogger()->error("Error resizing window {}: {}", title,
+                           result.error().what());
+      } else {
+        window.resized = false;
+      }
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    io.DisplaySize = {static_cast<float>(window.extent.width),
+                      static_cast<float>(window.extent.height)};
+    io.DeltaTime =
+      static_cast<float>((currentTime - sPreviousFrameTime).count());
+
+    io.KeyCtrl = ImGui::IsKeyDown(wsi::Keys::kLeftControl) |
+                 ImGui::IsKeyDown(wsi::Keys::kRightControl);
+    io.KeyShift = ImGui::IsKeyDown(wsi::Keys::kLeftShift) |
+                  ImGui::IsKeyDown(wsi::Keys::kRightShift);
+    io.KeyAlt = ImGui::IsKeyDown(wsi::Keys::kLeftAlt) |
+                ImGui::IsKeyDown(wsi::Keys::kRightAlt);
+    io.KeySuper = ImGui::IsKeyDown(wsi::Keys::kLeftSuper) |
+                  ImGui::IsKeyDown(wsi::Keys::kRightSuper);
+
+    io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+
+    ImGui::NewFrame();
+  }
+
+  if (sFrameNum != 0) {
+    VkFence frameFinishedFence =
+      sFrameFinishedFences[(sFrameIndex - 1) % sNumWindowFramesBuffered];
+
+    if (auto result =
+          vkWaitForFences(sDevice, 1, &frameFinishedFence, VK_TRUE, UINT64_MAX);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error waiting for frame finished fence: {}",
+                        make_error_code(result).message());
+    }
+
+    if (auto result = vkResetFences(sDevice, 1, &frameFinishedFence);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error resetting frame finished fence: {}",
+                        make_error_code(result).message());
+    }
+  }
+
+  sPreviousFrameTime = currentTime;
   sInFrame = true;
 } // iris::Renderer::BeginFrame()
 
@@ -1324,7 +1396,151 @@ void iris::Renderer::EndFrame() noexcept {
   Expects(sRunning);
   Expects(sInFrame);
 
+  auto&& windows = Windows();
+  std::size_t const numWindows = windows.size();
+
+  VkResult result;
+
+  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
+  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
+  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
+  absl::FixedArray<VkCommandBuffer> commandBuffers(numWindows);
+
+  absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
+  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  VkRenderPassBeginInfo renderPassBI = {};
+  renderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassBI.renderPass = sRenderPass;
+  renderPassBI.clearValueCount = clearValues.size();
+
+  for (auto&& [i, iter] : enumerate(windows)) {
+    auto&& [title, window] = iter;
+    ImGui::SetCurrentContext(window.uiContext.get());
+    ImGui::EndFrame();
+
+    // currentFrame is still the previous frame, use that imageAvailable
+    // semaphore.
+    // vkAcquireNextImageKHR will update frameIndex thereby updating
+    // currentFrame (via frameIndex).
+    window.imageAcquired = window.currentFrame().imageAvailable;
+
+    if (result = vkAcquireNextImageKHR(sDevice, window.swapchain,
+                                            UINT64_MAX, window.imageAcquired,
+                                            VK_NULL_HANDLE, &window.frameIndex);
+        result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
+      GetLogger()->warn("Window {} swapchain out of date: resizing", title);
+      auto const newExtent = window.platformWindow.Extent();
+
+      if (auto r = ResizeWindow(window, {newExtent.width, newExtent.height});
+          !r) {
+        GetLogger()->error("Error resizing window {}: {}", title,
+                           r.error().what());
+      }
+    }
+
+    result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
+                                   window.imageAcquired, VK_NULL_HANDLE,
+                                   &window.frameIndex);
+    if (result != VK_SUCCESS) {
+      GetLogger()->error("Error acquiring next image for window {}: {}", title,
+                         make_error_code(result).message());
+    }
+
+    Window::Frame& frame = window.currentFrame();
+
+    if (result = vkResetCommandPool(sDevice, frame.commandPool, 0);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error resetting window {} frame {} command pool: {}",
+                         title, window.frameIndex,
+                         make_error_code(result).message());
+    }
+
+    if (result = vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBI);
+        result != VK_SUCCESS) {
+      GetLogger()->error(
+        "Error beginning window {} frame {} command buffer: {}", title,
+        window.frameIndex, make_error_code(result).message());
+    }
+
+    clearValues[sColorTargetAttachmentIndex].color = {0.f, 0.f, 0.f, 1.f};
+    //window.clearColor;
+
+    renderPassBI.framebuffer = frame.framebuffer;
+    renderPassBI.renderArea.extent = window.extent;
+    renderPassBI.pClearValues = clearValues.data();
+
+    vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
+    vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
+
+    vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    /////
+    //
+    // render stuff here ??
+    //
+    /////
+
+    vkCmdEndRenderPass(frame.commandBuffer);
+    if (result = vkEndCommandBuffer(frame.commandBuffer);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error ending window {} frame {} command buffer: {}",
+                         title, window.frameIndex,
+                         make_error_code(result).message());
+    }
+
+    waitSemaphores[i] = frame.imageAvailable;
+    swapchains[i] = window.swapchain;
+    imageIndices[i] = window.frameIndex;
+    commandBuffers[i] = frame.commandBuffer;
+  }
+
+  absl::FixedArray<VkPipelineStageFlags> waitDstStages(
+    numWindows, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.waitSemaphoreCount = gsl::narrow_cast<std::uint32_t>(numWindows);
+  submitI.pWaitSemaphores = waitSemaphores.data();
+  submitI.pWaitDstStageMask = waitDstStages.data();
+  submitI.commandBufferCount =
+    gsl::narrow_cast<std::uint32_t>(commandBuffers.size());
+  submitI.pCommandBuffers = commandBuffers.data();
+  submitI.signalSemaphoreCount = 1;
+  submitI.pSignalSemaphores = &sImagesReadyForPresent;
+
+  VkFence frameFinishedFence = sFrameFinishedFences[sFrameIndex];
+
+  if (result =
+        vkQueueSubmit(sGraphicsCommandQueue, 1, &submitI, frameFinishedFence);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error submitting command buffer: {}",
+                       to_string(result));
+  }
+
+  absl::FixedArray<VkResult> presentResults(numWindows);
+
+  VkPresentInfoKHR presentI = {};
+  presentI.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  presentI.waitSemaphoreCount = 1;
+  presentI.pWaitSemaphores = &sImagesReadyForPresent;
+  presentI.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
+  presentI.pSwapchains = swapchains.data();
+  presentI.pImageIndices = imageIndices.data();
+  presentI.pResults = presentResults.data();
+
+  if (result = vkQueuePresentKHR(sGraphicsCommandQueue, &presentI);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error presenting swapchains: {}", to_string(result));
+  }
+
   sFrameNum += 1;
+  sFrameIndex = sFrameNum % sNumWindowFramesBuffered;
   sInFrame = false;
 } // iris::Renderer::EndFrame
 

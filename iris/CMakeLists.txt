@@ -10,8 +10,8 @@ if(UNIX)
   pkg_check_modules(XCB_ICCCM REQUIRED xcb-icccm)
 endif()
 
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4)
-find_package(PythonInterp 3 REQUIRED)
+#set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4)
+#find_package(PythonInterp 3 REQUIRED)
 
 set(protos_PROTOS
   protos/color.proto

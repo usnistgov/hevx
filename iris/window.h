@@ -55,15 +55,14 @@ struct Window {
 
   struct Frame {
     VkSemaphore imageAvailable{VK_NULL_HANDLE};
-    VkSemaphore renderFinished{VK_NULL_HANDLE};
     VkCommandPool commandPool{VK_NULL_HANDLE};
     VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
-    VkFence fence{VK_NULL_HANDLE};
     VkFramebuffer framebuffer{VK_NULL_HANDLE};
   };
 
   absl::FixedArray<Frame> frames;
   std::uint32_t frameIndex{0};
+  VkSemaphore imageAcquired{VK_NULL_HANDLE};
 
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext;
 
@@ -139,6 +138,7 @@ inline Window::Window(Window&& other) noexcept
   , depthStencilTargetView(other.depthStencilTargetView)
   , frames(std::move(other.frames))
   , frameIndex(other.frameIndex)
+  , imageAcquired(other.imageAcquired)
   , uiContext(std::move(other.uiContext)) {} // Window::Window
 
 } // namespace iris

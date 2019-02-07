@@ -1,0 +1,322 @@
+[2019-02-07 15:04:24.194] [iris-viewer] [info] Logging initialized
+[2019-02-07 15:04:24.194] [020107] [iris] [trace] ENTER: Initialize (../iris/renderer.cc:237)
+[2019-02-07 15:04:24.194] [020107] [iris] [debug] Default number of task threads: 32
+[2019-02-07 15:04:24.194] [020107] [iris] [trace] ENTER: CreateInstance (../iris/vulkan_util.cc:11)
+[2019-02-07 15:04:24.195] [020107] [iris] [debug] Vulkan Instance Version: 1.1.0
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: ReadDataFilesInSearchPaths: Searching the following paths for manifest files: /etc/xdg/vulkan/implicit_layer.d:/home/wng2/nobackup/local/VulkanSDK/1.1.97.0/etc/vulkan/implicit_layer.d:/etc/vulkan/implicit_layer.d:/home/wng2/.local/share/flatpak/exports/share/vulkan/implicit_layer.d:/var/lib/flatpak/exports/share/vulkan/implicit_layer.d:/usr/local/share/vulkan/implicit_layer.d:/usr/share/vulkan/implicit_layer.d:/home/wng2/.local/share/vulkan/implicit_layer.d
+
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Found manifest file /home/wng2/.local/share/vulkan/implicit_layer.d/VK_LAYER_NV_nomad.json, version "1.1.0"
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Layer "VK_LAYER_NV_nomad" using deprecated 'vkGetInstanceProcAddr' tag which was deprecated starting with JSON file version 1.1.0. The new vkNegotiateLayerInterfaceVersion function is preferred, though for compatibility reasons it may be desirable to continue using the deprecated tag.
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Layer "VK_LAYER_NV_nomad" using deprecated 'vkGetDeviceProcAddr' tag which was deprecated starting with JSON file version 1.1.0. The new vkNegotiateLayerInterfaceVersion function is preferred, though for compatibility reasons it may be desirable to continue using the deprecated tag.
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: ReadDataFilesInSearchPaths: Searching the following paths for manifest files: /home/wng2/local/VulkanSDK/1.1.97.0/etc/explicit_layer.d
+
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Adding VK_LAYER_LUNARG_standard_validation using the loader legacy path.  This is not an error.
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Meta-layer VK_LAYER_LUNARG_standard_validation all 0 component layers appear to be valid.
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: ReadDataFilesInSearchPaths: Searching the following paths for manifest files: /etc/xdg/vulkan/icd.d:/home/wng2/nobackup/local/VulkanSDK/1.1.97.0/etc/vulkan/icd.d:/etc/vulkan/icd.d:/home/wng2/.local/share/flatpak/exports/share/vulkan/icd.d:/var/lib/flatpak/exports/share/vulkan/icd.d:/usr/local/share/vulkan/icd.d:/usr/share/vulkan/icd.d:/home/wng2/.local/share/vulkan/icd.d
+
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Found ICD manifest file /etc/vulkan/icd.d/nvidia_icd.json, version "1.0.0"
+[2019-02-07 15:04:24.258] [020107] [iris] [info] {General}: Searching for ICD drivers named libGLX_nvidia.so.0
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Build ICD instance extension list
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_device_group_creation (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_display (libGLX_nvidia.so.0) version 0.0.21
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_fence_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_memory_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_semaphore_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_display_properties2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_physical_device_properties2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_surface_capabilities2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_surface (libGLX_nvidia.so.0) version 0.0.25
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_xcb_surface (libGLX_nvidia.so.0) version 0.0.6
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_xlib_surface (libGLX_nvidia.so.0) version 0.0.6
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_acquire_xlib_display (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_debug_report (libGLX_nvidia.so.0) version 0.0.9
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_direct_mode_display (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_display_surface_counter (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Build ICD instance extension list
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_device_group_creation (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_display (libGLX_nvidia.so.0) version 0.0.21
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_fence_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_memory_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_external_semaphore_capabilities (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_display_properties2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_physical_device_properties2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_get_surface_capabilities2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_surface (libGLX_nvidia.so.0) version 0.0.25
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_xcb_surface (libGLX_nvidia.so.0) version 0.0.6
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_KHR_xlib_surface (libGLX_nvidia.so.0) version 0.0.6
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_acquire_xlib_display (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_debug_report (libGLX_nvidia.so.0) version 0.0.9
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_direct_mode_display (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.286] [020107] [iris] [info] {General}: Instance Extension: VK_EXT_display_surface_counter (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.312] [020107] [iris] [trace] LEAVE: CreateInstance (../iris/vulkan_util.cc:82)
+[2019-02-07 15:04:24.312] [020107] [iris] [trace] ENTER: CreateDebugUtilsMessenger (../iris/vulkan_util.cc:90)
+[2019-02-07 15:04:24.312] [020107] [iris] [trace] LEAVE: CreateDebugUtilsMessenger (../iris/vulkan_util.cc:114)
+[2019-02-07 15:04:24.312] [020107] [iris] [trace] ENTER: ChoosePhysicalDevice (../iris/vulkan_util.cc:355)
+[2019-02-07 15:04:24.313] [020107] [iris] [trace] ENTER: IsPhysicalDeviceGood (../iris/vulkan_util.cc:247)
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_8bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_16bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_bind_memory2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_create_renderpass2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_descriptor_update_template (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_device_group (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_draw_indirect_count (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_get_memory_requirements2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_image_format_list (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance1 (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance3 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_multiview (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_push_descriptor (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_relaxed_block_layout (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_mirror_clamp_to_edge (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_ycbcr_conversion (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_shader_draw_parameters (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_storage_buffer_storage_class (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_swapchain (libGLX_nvidia.so.0) version 0.0.70
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_KHR_variable_pointers (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_blend_operation_advanced (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_conservative_rasterization (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_depth_range_unrestricted (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_descriptor_indexing (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_discard_rectangles (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_display_control (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_global_priority (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_post_depth_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sample_locations (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sampler_filter_minmax (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_ballot (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_vote (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_viewport_index_layer (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_EXT_vertex_attribute_divisor (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_NV_clip_space_w_scaling (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_NV_compute_shader_derivatives (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_NV_corner_sampled_image (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_NV_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.313] [020107] [iris] [info] {General}: Device Extension: VK_NV_device_diagnostic_checkpoints (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_fill_rectangle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_coverage_to_color (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_shader_barycentric (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_framebuffer_mixed_samples (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_geometry_shader_passthrough (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_mesh_shader (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NVX_raytracing (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_sample_mask_override_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_representative_fragment_test (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_scissor_exclusive (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_image_footprint (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_subgroup_partitioned (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_shading_rate_image (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_array2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_swizzle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NVX_device_generated_commands (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_NVX_multiview_per_view_attributes (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] ENTER: GetQueueFamilyIndex (../iris/vulkan_util.cc:211)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] LEAVE: GetQueueFamilyIndex (../iris/vulkan_util.cc:235)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] LEAVE: IsPhysicalDeviceGood (../iris/vulkan_util.cc:346)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] LEAVE: ChoosePhysicalDevice (../iris/vulkan_util.cc:383)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] ENTER: GetQueueFamilyIndex (../iris/vulkan_util.cc:211)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] LEAVE: GetQueueFamilyIndex (../iris/vulkan_util.cc:235)
+[2019-02-07 15:04:24.314] [020107] [iris] [trace] ENTER: CreateDevice (../iris/vulkan_util.cc:398)
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_8bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_16bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_bind_memory2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_create_renderpass2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_descriptor_update_template (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_device_group (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_draw_indirect_count (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_get_memory_requirements2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_image_format_list (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance1 (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance3 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_multiview (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_push_descriptor (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_relaxed_block_layout (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_mirror_clamp_to_edge (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_ycbcr_conversion (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_shader_draw_parameters (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_storage_buffer_storage_class (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_swapchain (libGLX_nvidia.so.0) version 0.0.70
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_KHR_variable_pointers (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_EXT_blend_operation_advanced (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_EXT_conservative_rasterization (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.314] [020107] [iris] [info] {General}: Device Extension: VK_EXT_depth_range_unrestricted (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_descriptor_indexing (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_discard_rectangles (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_display_control (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_global_priority (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_post_depth_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sample_locations (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sampler_filter_minmax (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_ballot (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_vote (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_viewport_index_layer (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.318] [020107] [iris] [info] {General}: Device Extension: VK_EXT_vertex_attribute_divisor (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_clip_space_w_scaling (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_compute_shader_derivatives (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_corner_sampled_image (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_device_diagnostic_checkpoints (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_fill_rectangle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_coverage_to_color (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_shader_barycentric (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_framebuffer_mixed_samples (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_geometry_shader_passthrough (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_mesh_shader (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NVX_raytracing (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_sample_mask_override_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_representative_fragment_test (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_scissor_exclusive (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_image_footprint (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_subgroup_partitioned (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_shading_rate_image (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_array2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_swizzle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NVX_device_generated_commands (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NVX_multiview_per_view_attributes (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_8bit_storage (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_16bit_storage (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_bind_memory2 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_create_renderpass2 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_dedicated_allocation (Unknown) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_descriptor_update_template (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_device_group (Unknown) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_draw_indirect_count (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence_fd (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory_fd (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore_fd (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_get_memory_requirements2 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_image_format_list (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance1 (Unknown) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance2 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance3 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_multiview (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_push_descriptor (Unknown) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_relaxed_block_layout (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_mirror_clamp_to_edge (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_ycbcr_conversion (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_shader_draw_parameters (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_storage_buffer_storage_class (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_swapchain (Unknown) version 0.0.70
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_KHR_variable_pointers (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_blend_operation_advanced (Unknown) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_conservative_rasterization (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_depth_range_unrestricted (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_descriptor_indexing (Unknown) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_discard_rectangles (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_display_control (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_global_priority (Unknown) version 0.0.2
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_post_depth_coverage (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sample_locations (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sampler_filter_minmax (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_ballot (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_vote (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_viewport_index_layer (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_EXT_vertex_attribute_divisor (Unknown) version 0.0.3
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_clip_space_w_scaling (Unknown) version 0.0.1
+[2019-02-07 15:04:24.319] [020107] [iris] [info] {General}: Device Extension: VK_NV_compute_shader_derivatives (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_corner_sampled_image (Unknown) version 0.0.2
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_dedicated_allocation (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_device_diagnostic_checkpoints (Unknown) version 0.0.2
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_fill_rectangle (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_coverage_to_color (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_shader_barycentric (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_framebuffer_mixed_samples (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_geometry_shader_passthrough (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_mesh_shader (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NVX_raytracing (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_sample_mask_override_coverage (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_representative_fragment_test (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_scissor_exclusive (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_image_footprint (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_subgroup_partitioned (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_shading_rate_image (Unknown) version 0.0.3
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_array2 (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_swizzle (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NVX_device_generated_commands (Unknown) version 0.0.3
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_NVX_multiview_per_view_attributes (Unknown) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_8bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_16bit_storage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_bind_memory2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_create_renderpass2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_descriptor_update_template (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_device_group (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.320] [020107] [iris] [info] {General}: Device Extension: VK_KHR_draw_indirect_count (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.325] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.325] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_fence_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.325] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_memory_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_external_semaphore_fd (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_get_memory_requirements2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_image_format_list (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance1 (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_maintenance3 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_multiview (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_push_descriptor (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_relaxed_block_layout (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_mirror_clamp_to_edge (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_sampler_ycbcr_conversion (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_shader_draw_parameters (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_storage_buffer_storage_class (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_swapchain (libGLX_nvidia.so.0) version 0.0.70
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_KHR_variable_pointers (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_blend_operation_advanced (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_conservative_rasterization (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_depth_range_unrestricted (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_descriptor_indexing (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_discard_rectangles (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_display_control (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_global_priority (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_post_depth_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sample_locations (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_sampler_filter_minmax (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_ballot (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_subgroup_vote (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_shader_viewport_index_layer (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_EXT_vertex_attribute_divisor (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_clip_space_w_scaling (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_compute_shader_derivatives (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_corner_sampled_image (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_dedicated_allocation (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_device_diagnostic_checkpoints (libGLX_nvidia.so.0) version 0.0.2
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_fill_rectangle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_coverage_to_color (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_fragment_shader_barycentric (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_framebuffer_mixed_samples (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_geometry_shader_passthrough (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_mesh_shader (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NVX_raytracing (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_sample_mask_override_coverage (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_representative_fragment_test (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_scissor_exclusive (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_image_footprint (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_shader_subgroup_partitioned (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_shading_rate_image (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_array2 (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NV_viewport_swizzle (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NVX_device_generated_commands (libGLX_nvidia.so.0) version 0.0.3
+[2019-02-07 15:04:24.326] [020107] [iris] [info] {General}: Device Extension: VK_NVX_multiview_per_view_attributes (libGLX_nvidia.so.0) version 0.0.1
+[2019-02-07 15:04:24.586] [020107] [iris] [trace] LEAVE: CreateDevice (../iris/vulkan_util.cc:447)
+[2019-02-07 15:04:24.586] [020107] [iris] [trace] ENTER: CreateAllocator (../iris/vulkan_util.cc:454)
+[2019-02-07 15:04:24.586] [020107] [iris] [trace] LEAVE: CreateAllocator (../iris/vulkan_util.cc:472)
+[2019-02-07 15:04:24.586] [020107] [iris] [trace] LEAVE: Initialize (../iris/renderer.cc:576)
