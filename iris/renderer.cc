@@ -590,7 +590,9 @@ bool iris::Renderer::IsRunning() noexcept {
 } // iris::Renderer::IsRunning
 
 void iris::Renderer::Terminate() noexcept {
+  IRIS_LOG_ENTER();
   sRunning = false;
+  IRIS_LOG_LEAVE();
 } // iris::Renderer::Terminate
 
 tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
@@ -1318,11 +1320,9 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
 } // iris::Renderer::TransitionImage
 
 void iris::Renderer::BeginFrame() noexcept {
-  IRIS_LOG_ENTER();
   Expects(sRunning);
   Expects(!sInFrame);
 
-  GetLogger()->trace("BeginFrame: {}", sFrameNum);
   auto currentTime = std::chrono::steady_clock::now();
 
   decltype(sIOContinuations)::value_type ioContinuation;
@@ -1392,12 +1392,9 @@ void iris::Renderer::BeginFrame() noexcept {
 
   sPreviousFrameTime = currentTime;
   sInFrame = true;
-  IRIS_LOG_LEAVE();
 } // iris::Renderer::BeginFrame()
 
 void iris::Renderer::EndFrame() noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sRunning);
   Expects(sInFrame);
 
   auto&& windows = Windows();
@@ -1498,7 +1495,7 @@ void iris::Renderer::EndFrame() noexcept {
                          make_error_code(result).message());
     }
 
-    waitSemaphores[i] = frame.imageAvailable;
+    waitSemaphores[i] = window.imageAcquired;
     swapchains[i] = window.swapchain;
     imageIndices[i] = window.frameIndex;
     commandBuffers[i] = frame.commandBuffer;
@@ -1551,7 +1548,6 @@ void iris::Renderer::EndFrame() noexcept {
   sFrameNum += 1;
   sFrameIndex = sFrameNum % sNumWindowFramesBuffered;
   sInFrame = false;
-  IRIS_LOG_LEAVE();
 } // iris::Renderer::EndFrame
 
 tl::expected<void, std::system_error>
