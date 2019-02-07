@@ -1318,9 +1318,11 @@ iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
 } // iris::Renderer::TransitionImage
 
 void iris::Renderer::BeginFrame() noexcept {
+  IRIS_LOG_ENTER();
   Expects(sRunning);
   Expects(!sInFrame);
 
+  GetLogger()->trace("BeginFrame: {}", sFrameNum);
   auto currentTime = std::chrono::steady_clock::now();
 
   decltype(sIOContinuations)::value_type ioContinuation;
@@ -1390,9 +1392,11 @@ void iris::Renderer::BeginFrame() noexcept {
 
   sPreviousFrameTime = currentTime;
   sInFrame = true;
+  IRIS_LOG_LEAVE();
 } // iris::Renderer::BeginFrame()
 
 void iris::Renderer::EndFrame() noexcept {
+  IRIS_LOG_ENTER();
   Expects(sRunning);
   Expects(sInFrame);
 
@@ -1424,8 +1428,7 @@ void iris::Renderer::EndFrame() noexcept {
     ImGui::EndFrame();
 
     // currentFrame is still the previous frame, use that imageAvailable
-    // semaphore.
-    // vkAcquireNextImageKHR will update frameIndex thereby updating
+    // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
     // currentFrame (via frameIndex).
     window.imageAcquired = window.currentFrame().imageAvailable;
 
@@ -1441,11 +1444,12 @@ void iris::Renderer::EndFrame() noexcept {
         GetLogger()->error("Error resizing window {}: {}", title,
                            r.error().what());
       }
+
+      result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
+                                     window.imageAcquired, VK_NULL_HANDLE,
+                                     &window.frameIndex);
     }
 
-    result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
-                                   window.imageAcquired, VK_NULL_HANDLE,
-                                   &window.frameIndex);
     if (result != VK_SUCCESS) {
       GetLogger()->error("Error acquiring next image for window {}: {}", title,
                          make_error_code(result).message());
@@ -1511,8 +1515,11 @@ void iris::Renderer::EndFrame() noexcept {
   submitI.commandBufferCount =
     gsl::narrow_cast<std::uint32_t>(commandBuffers.size());
   submitI.pCommandBuffers = commandBuffers.data();
-  submitI.signalSemaphoreCount = 1;
-  submitI.pSignalSemaphores = &sImagesReadyForPresent;
+
+  if (!swapchains.empty()) {
+    submitI.signalSemaphoreCount = 1;
+    submitI.pSignalSemaphores = &sImagesReadyForPresent;
+  }
 
   VkFence frameFinishedFence = sFrameFinishedFences[sFrameIndex];
 
@@ -1523,25 +1530,28 @@ void iris::Renderer::EndFrame() noexcept {
                        to_string(result));
   }
 
-  absl::FixedArray<VkResult> presentResults(numWindows);
+  if (!swapchains.empty()) {
+    absl::FixedArray<VkResult> presentResults(numWindows);
 
-  VkPresentInfoKHR presentI = {};
-  presentI.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  presentI.waitSemaphoreCount = 1;
-  presentI.pWaitSemaphores = &sImagesReadyForPresent;
-  presentI.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
-  presentI.pSwapchains = swapchains.data();
-  presentI.pImageIndices = imageIndices.data();
-  presentI.pResults = presentResults.data();
+    VkPresentInfoKHR presentI = {};
+    presentI.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentI.waitSemaphoreCount = 1;
+    presentI.pWaitSemaphores = &sImagesReadyForPresent;
+    presentI.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
+    presentI.pSwapchains = swapchains.data();
+    presentI.pImageIndices = imageIndices.data();
+    presentI.pResults = presentResults.data();
 
-  if (result = vkQueuePresentKHR(sGraphicsCommandQueue, &presentI);
-      result != VK_SUCCESS) {
-    GetLogger()->error("Error presenting swapchains: {}", to_string(result));
+    if (result = vkQueuePresentKHR(sGraphicsCommandQueue, &presentI);
+        result != VK_SUCCESS) {
+      GetLogger()->error("Error presenting swapchains: {}", to_string(result));
+    }
   }
 
   sFrameNum += 1;
   sFrameIndex = sFrameNum % sNumWindowFramesBuffered;
   sInFrame = false;
+  IRIS_LOG_LEAVE();
 } // iris::Renderer::EndFrame
 
 tl::expected<void, std::system_error>
