@@ -53,6 +53,8 @@
 #include <string>
 #include <utility>
 
+using namespace std::string_literals;
+
 /////
 //
 // The logging must be directly defined here instead of including "logging.h".
