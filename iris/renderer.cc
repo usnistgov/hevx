@@ -314,8 +314,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #if PLATFORM_LINUX
   ::setenv(
     "VK_LAYER_PATH",
-    absl::StrCat(iris::kVulkanSDKDirectory, "/etc/explicit_layer.d").c_str(),
-    0);
+    (iris::kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
 #endif
 
   flextVkInit();
@@ -763,7 +762,6 @@ tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
   io.BackendRendererName = "hevx::iris";
   io.BackendRendererName = "";
 
-  using namespace std::string_literals;
   io.Fonts->AddFontFromFileTTF(
     (kIRISContentDirectory + "/assets/fonts/SourceSansPro-Regular.ttf"s)
       .c_str(),
