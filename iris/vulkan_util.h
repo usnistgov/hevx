@@ -75,7 +75,8 @@ ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
  * \see
  * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
  */
-[[nodiscard]] tl::expected<VkDevice, std::system_error>
+[[nodiscard]] tl::expected<std::pair<VkDevice, std::uint32_t>,
+                           std::system_error>
 CreateDevice(VkPhysicalDevice physicalDevice,
              VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
              gsl::span<gsl::czstring<>> extensionNames,

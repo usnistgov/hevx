@@ -27,6 +27,7 @@ struct Window {
   };
 
   std::string title;
+  VkClearColorValue clearColor;
   bool resized{false};
   bool showUI{false};
 
@@ -71,8 +72,9 @@ struct Window {
     return frames[(frameIndex - 1) % frames.size()];
   }
 
-  Window(std::string windowTitle, std::size_t numFrames)
+  Window(std::string windowTitle, VkClearColorValue cc, std::size_t numFrames)
     : title(std::move(windowTitle))
+    , clearColor(cc)
     , colorImages(numFrames)
     , colorImageViews(numFrames)
     , frames(numFrames)
@@ -117,6 +119,7 @@ inline Window::Options operator&=(Window::Options& lhs,
 
 inline Window::Window(Window&& other) noexcept
   : title(std::move(other.title))
+  , clearColor(other.clearColor)
   , resized(other.resized)
   , showUI(other.showUI)
   , platformWindow(std::move(other.platformWindow))

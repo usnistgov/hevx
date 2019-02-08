@@ -105,7 +105,10 @@ static VkDevice sDevice{VK_NULL_HANDLE};
 static VmaAllocator sAllocator{VK_NULL_HANDLE};
 
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-static VkQueue sGraphicsCommandQueue{VK_NULL_HANDLE};
+static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
+// sGraphicsCommandQueue[0] is reserved for direct use by the renderer.
+// Other queues must be "checked out: need to write that function.
+
 static VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
 static VkCommandPool sOneTimeSubmitCommandPool{VK_NULL_HANDLE};
@@ -346,8 +349,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
-  // FindDeviceGroup();
-
   if (auto physicalDevice = ChoosePhysicalDevice(
         sInstance, physicalDeviceFeatures, physicalDeviceExtensionNames,
         VK_QUEUE_GRAPHICS_BIT)) {
@@ -364,13 +365,14 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(qfi.error());
   }
 
-  if (auto device =
+  std::uint32_t numQueues;
+  if (auto dn =
         CreateDevice(sPhysicalDevice, physicalDeviceFeatures,
                      physicalDeviceExtensionNames, sGraphicsQueueFamilyIndex)) {
-    sDevice = std::move(*device);
+    std::tie(sDevice, numQueues) = *dn;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(device.error());
+    return tl::unexpected(dn.error());
   }
 
   NameObject(sDevice, VK_OBJECT_TYPE_INSTANCE, sInstance, "sInstance");
@@ -378,11 +380,14 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
              "sPhysicalDevice");
   NameObject(sDevice, VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
 
-  vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, 0,
-                   &sGraphicsCommandQueue);
+  sGraphicsCommandQueues.resize(numQueues);
+  for (std::uint32_t i = 0; i < numQueues; ++i) {
+    vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, i,
+                     &sGraphicsCommandQueues[i]);
 
-  NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sGraphicsCommandQueue,
-             "sGraphicsCommandQueue");
+    NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sGraphicsCommandQueues[i],
+               fmt::format("sGraphicsCommandQueue[{}]", i).c_str());
+  }
 
   if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
     sAllocator = std::move(*allocator);
@@ -595,16 +600,18 @@ void iris::Renderer::Terminate() noexcept {
   IRIS_LOG_LEAVE();
 } // iris::Renderer::Terminate
 
-tl::expected<iris::Window, std::exception> iris::Renderer::CreateWindow(
-  gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
-  glm::vec4 const& clearColor [[maybe_unused]], Window::Options const& options,
-  int display, std::uint32_t numFrames) noexcept {
+tl::expected<iris::Window, std::exception>
+iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
+                             wsi::Extent2D extent, glm::vec4 const& clearColor,
+                             Window::Options const& options, int display,
+                             std::uint32_t numFrames) noexcept {
   IRIS_LOG_ENTER();
   Expects(sInstance != VK_NULL_HANDLE);
   Expects(sPhysicalDevice != VK_NULL_HANDLE);
   Expects(sDevice != VK_NULL_HANDLE);
 
-  Window window(title, numFrames);
+  Window window(title, {clearColor.r, clearColor.g, clearColor.b, clearColor.a},
+                numFrames);
   window.showUI =
     (options & Window::Options::kShowUI) == Window::Options::kShowUI;
 
@@ -1208,8 +1215,8 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
       std::system_error(make_error_code(result), "Cannot end command buffer"));
   }
 
-  if (auto result =
-        vkQueueSubmit(sGraphicsCommandQueue, 1, &submitI, sOneTimeSubmitFence);
+  if (auto result = vkQueueSubmit(sGraphicsCommandQueues[0], 1, &submitI,
+                                  sOneTimeSubmitFence);
       result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
@@ -1468,8 +1475,7 @@ void iris::Renderer::EndFrame() noexcept {
         window.frameIndex, make_error_code(result).message());
     }
 
-    clearValues[sColorTargetAttachmentIndex].color = {0.f, 0.f, 0.f, 1.f};
-    //window.clearColor;
+    clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
 
     renderPassBI.framebuffer = frame.framebuffer;
     renderPassBI.renderArea.extent = window.extent;
@@ -1520,8 +1526,8 @@ void iris::Renderer::EndFrame() noexcept {
 
   VkFence frameFinishedFence = sFrameFinishedFences[sFrameIndex];
 
-  if (result =
-        vkQueueSubmit(sGraphicsCommandQueue, 1, &submitI, frameFinishedFence);
+  if (result = vkQueueSubmit(sGraphicsCommandQueues[0], 1, &submitI,
+                             frameFinishedFence);
       result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
@@ -1539,7 +1545,7 @@ void iris::Renderer::EndFrame() noexcept {
     presentI.pImageIndices = imageIndices.data();
     presentI.pResults = presentResults.data();
 
-    if (result = vkQueuePresentKHR(sGraphicsCommandQueue, &presentI);
+    if (result = vkQueuePresentKHR(sGraphicsCommandQueues[0], &presentI);
         result != VK_SUCCESS) {
       GetLogger()->error("Error presenting swapchains: {}", to_string(result));
     }
