@@ -105,8 +105,18 @@ LoadFile(filesystem::path const& path) noexcept;
 tl::expected<void, std::system_error>
 Control(iris::Control::Control const& control) noexcept;
 
-std::uint32_t AcquireCommandQueuePoolFence() noexcept;
-void ReleaseCommandQueuePoolFence(std::uint32_t id) noexcept;
+struct CommandQueuePoolFence {
+  std::uint32_t id{0};
+  VkQueue queue{VK_NULL_HANDLE};
+  VkCommandPool commandPool{VK_NULL_HANDLE};
+  VkFence fence{VK_NULL_HANDLE};
+}; // struct CommandQueuePoolFence
+
+tl::expected<CommandQueuePoolFence, std::system_error>
+AcquireCommandQueuePoolFence() noexcept;
+
+void ReleaseCommandQueuePoolFence(
+  CommandQueuePoolFence const& commandQueuePoolFence) noexcept;
 
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {

@@ -1647,22 +1647,27 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   return {};
 } // iris::Renderer::Control
 
-std::uint32_t iris::Renderer::AcquireCommandQueuePoolFence() noexcept {
+tl::expected<iris::Renderer::CommandQueuePoolFence, std::system_error>
+iris::Renderer::AcquireCommandQueuePoolFence() noexcept {
   IRIS_LOG_ENTER();
   Expects(!sGraphicsCommandQueues.empty());
   Expects(!sGraphicsCommandPools.empty());
   Expects(!sGraphicsCommandFences.empty());
 
   IRIS_LOG_LEAVE();
-  return sNextCommandQueuePoolFenceIndex;
+  std::uint32_t const id = sNextCommandQueuePoolFenceIndex;
+  return CommandQueuePoolFence{id, sGraphicsCommandQueues[id],
+                               sGraphicsCommandPools[id],
+                               sGraphicsCommandFences[id]};
 } // iris::Renderer::AcquireCommandQueuePoolFence
 
-void iris::Renderer::ReleaseCommandQueuePoolFence(std::uint32_t id) noexcept {
+void iris::Renderer::ReleaseCommandQueuePoolFence(
+  CommandQueuePoolFence const& commandQueuePoolFence) noexcept {
   IRIS_LOG_ENTER();
   Expects(!sGraphicsCommandQueues.empty());
   Expects(!sGraphicsCommandPools.empty());
   Expects(!sGraphicsCommandFences.empty());
-  Expects(id > 0);
+  Expects(commandQueuePoolFence.id > 0);
 
   IRIS_LOG_LEAVE();
 } // iris::Renderer::ReleaseCommandQueuePoolFence
