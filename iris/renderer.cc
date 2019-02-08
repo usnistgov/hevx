@@ -105,14 +105,13 @@ static VkDevice sDevice{VK_NULL_HANDLE};
 static VmaAllocator sAllocator{VK_NULL_HANDLE};
 
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
+// sGraphicsCommand{Queues,Pools}[0] is reserved for direct use by the
+// renderer. Other queues must be "checked out: need to write that function.
 static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
-// sGraphicsCommandQueue[0] is reserved for direct use by the renderer.
-// Other queues must be "checked out: need to write that function.
+static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
+static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
 
 static VkRenderPass sRenderPass{VK_NULL_HANDLE};
-
-static VkCommandPool sOneTimeSubmitCommandPool{VK_NULL_HANDLE};
-static VkFence sOneTimeSubmitFence{VK_NULL_HANDLE};
 
 static constexpr std::uint32_t const sNumRenderPassAttachments{4};
 static constexpr std::uint32_t const sColorTargetAttachmentIndex{0};
@@ -381,12 +380,44 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   NameObject(sDevice, VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
 
   sGraphicsCommandQueues.resize(numQueues);
+  sGraphicsCommandPools.resize(numQueues);
+
+  VkCommandPoolCreateInfo commandPoolCI = {};
+  commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
   for (std::uint32_t i = 0; i < numQueues; ++i) {
     vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, i,
                      &sGraphicsCommandQueues[i]);
 
     NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sGraphicsCommandQueues[i],
                fmt::format("sGraphicsCommandQueue[{}]", i).c_str());
+
+    if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
+                                          &sGraphicsCommandPools[i]);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create graphics command pool"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, &sGraphicsCommandPools[i],
+               fmt::format("sGraphicsCommandPools[{}]", i).c_str());
+
+    if (auto result =
+          vkCreateFence(sDevice, &fenceCI, nullptr, &sGraphicsCommandFences[i]);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create graphics submit fence"));
+    }
+
+    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, &sGraphicsCommandFences[i],
+               fmt::format("sGraphicsCommandFences[{}]", i).c_str());
   }
 
   if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
@@ -513,30 +544,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   NameObject(sDevice, VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
-
-  VkCommandPoolCreateInfo commandPoolCI = {};
-  commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
-
-  if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
-                                        &sOneTimeSubmitCommandPool);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create one-time submit command pool"));
-  }
-
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-  if (auto result =
-        vkCreateFence(sDevice, &fenceCI, nullptr, &sOneTimeSubmitFence);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create one-time submit fence"));
-  }
 
   for (auto&& fence : sFrameFinishedFences) {
     if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &fence);
@@ -1170,7 +1177,7 @@ iris::Renderer::BeginOneTimeSubmit() noexcept {
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sOneTimeSubmitCommandPool;
+  commandBufferAI.commandPool = sGraphicsCommandPools[0];
   commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAI.commandBufferCount = 1;
 
@@ -1189,7 +1196,7 @@ iris::Renderer::BeginOneTimeSubmit() noexcept {
 
   if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot begin command buffer"));
@@ -1209,39 +1216,39 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
   submitI.pCommandBuffers = &commandBuffer;
 
   if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot end command buffer"));
   }
 
   if (auto result = vkQueueSubmit(sGraphicsCommandQueues[0], 1, &submitI,
-                                  sOneTimeSubmitFence);
+                                  sGraphicsCommandFences[0]);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot submit command buffer"));
   }
 
-  if (auto result =
-        vkWaitForFences(sDevice, 1, &sOneTimeSubmitFence, VK_TRUE, UINT64_MAX);
+  if (auto result = vkWaitForFences(sDevice, 1, &sGraphicsCommandFences[0],
+                                    VK_TRUE, UINT64_MAX);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot wait on one-time submit fence"));
   }
 
-  if (auto result = vkResetFences(sDevice, 1, &sOneTimeSubmitFence);
+  if (auto result = vkResetFences(sDevice, 1, &sGraphicsCommandFences[0]);
       result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot reset one-time submit fence"));
   }
 
-  vkFreeCommandBuffers(sDevice, sOneTimeSubmitCommandPool, 1, &commandBuffer);
+  vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::EndOneTimeSubmit
