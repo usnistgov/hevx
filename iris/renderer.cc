@@ -105,11 +105,12 @@ static VkDevice sDevice{VK_NULL_HANDLE};
 static VmaAllocator sAllocator{VK_NULL_HANDLE};
 
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-// sGraphicsCommand{Queues,Pools}[0] is reserved for direct use by the
-// renderer. Other queues must be "checked out: need to write that function.
 static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
 static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
 static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
+// sGraphicsCommand{Queues,Pools}[0] is reserved for direct use by the
+// renderer. Other queues must be "checked out: need to write that function.
+static std::atomic_uint32_t sNextCommandQueuePoolFenceIndex{1};
 
 static VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
@@ -1645,3 +1646,23 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Control
+
+std::uint32_t iris::Renderer::AcquireCommandQueuePoolFence() noexcept {
+  IRIS_LOG_ENTER();
+  Expects(!sGraphicsCommandQueues.empty());
+  Expects(!sGraphicsCommandPools.empty());
+  Expects(!sGraphicsCommandFences.empty());
+
+  IRIS_LOG_LEAVE();
+  return sNextCommandQueuePoolFenceIndex;
+} // iris::Renderer::AcquireCommandQueuePoolFence
+
+void iris::Renderer::ReleaseCommandQueuePoolFence(std::uint32_t id) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(!sGraphicsCommandQueues.empty());
+  Expects(!sGraphicsCommandPools.empty());
+  Expects(!sGraphicsCommandFences.empty());
+  Expects(id > 0);
+
+  IRIS_LOG_LEAVE();
+} // iris::Renderer::ReleaseCommandQueuePoolFence

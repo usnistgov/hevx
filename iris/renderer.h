@@ -105,6 +105,9 @@ LoadFile(filesystem::path const& path) noexcept;
 tl::expected<void, std::system_error>
 Control(iris::Control::Control const& control) noexcept;
 
+std::uint32_t AcquireCommandQueuePoolFence() noexcept;
+void ReleaseCommandQueuePoolFence(std::uint32_t id) noexcept;
+
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {
   using U = std::underlying_type_t<Options>;
