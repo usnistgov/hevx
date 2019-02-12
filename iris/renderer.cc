@@ -383,6 +383,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   sGraphicsCommandQueues.resize(numQueues);
   sGraphicsCommandPools.resize(numQueues);
+  sGraphicsCommandFences.resize(numQueues);
 
   VkCommandPoolCreateInfo commandPoolCI = {};
   commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1412,7 +1413,7 @@ void iris::Renderer::BeginFrame() noexcept {
 
 [[nodiscard]] static absl::FixedArray<VkCommandBuffer>
 RenderAllRenderables(VkRenderPass renderPass) noexcept {
-  std::uint32_t const numRenderables = 0;
+  std::uint32_t const numRenderables = 1;
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1428,17 +1429,26 @@ RenderAllRenderables(VkRenderPass renderPass) noexcept {
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
   commandBufferII.renderPass = renderPass;
   commandBufferII.subpass = 0;
-  commandBufferII.framebuffer = VkFramebuffer; // FIXME: can this be compatible?
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
 
-  for (std::uint32_t i = 0; i < numRenderables; ++i) {
-    VkCommandBufferBeginInfo commandBufferBI = {};
-    commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBI.pInheritanceInfo = &commandBufferII;
-    commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-    if (auto result = vkBeginCommandBuffer(commandBuffers[0], &commandBufferBI);
+  for (auto&& commandBuffer : commandBuffers) {
+    if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
         result != VK_SUCCESS) {
       iris::GetLogger()->error("Cannot begin command buffer: {}",
+                               iris::Renderer::to_string(result));
+    }
+
+    // Bind renderable data items
+    //vkCmdDraw(commandBuffer, 3, 1, 0, 1);
+
+    if (auto result = vkEndCommandBuffer(commandBuffer);
+        result != VK_SUCCESS) {
+      iris::GetLogger()->error("Cannot end command buffer: {}",
                                iris::Renderer::to_string(result));
     }
   }
