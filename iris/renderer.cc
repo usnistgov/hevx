@@ -22,6 +22,7 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
+#include "gsl/gsl"
 #include "io/json.h"
 #include "protos.h"
 #include "renderer.h"
@@ -109,7 +110,7 @@ static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
 static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
 static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
 // sGraphicsCommand{Queues,Pools}[0] is reserved for direct use by the
-// renderer. Other queues must be "checked out: need to write that function.
+// renderer. Other queues must be "checked out: FIXME: implement.
 static std::atomic_uint32_t sNextCommandQueuePoolFenceIndex{1};
 
 static VkRenderPass sRenderPass{VK_NULL_HANDLE};
@@ -1409,8 +1410,47 @@ void iris::Renderer::BeginFrame() noexcept {
   sInFrame = true;
 } // iris::Renderer::BeginFrame()
 
+[[nodiscard]] static absl::FixedArray<VkCommandBuffer>
+RenderAllRenderables(VkRenderPass renderPass) noexcept {
+  std::uint32_t const numRenderables = 0;
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = iris::Renderer::sGraphicsCommandPools[0];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+  commandBufferAI.commandBufferCount = numRenderables;
+
+  absl::FixedArray<VkCommandBuffer> commandBuffers(numRenderables);
+  vkAllocateCommandBuffers(iris::Renderer::sDevice, &commandBufferAI,
+                           commandBuffers.data());
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = renderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VkFramebuffer; // FIXME: can this be compatible?
+
+  for (std::uint32_t i = 0; i < numRenderables; ++i) {
+    VkCommandBufferBeginInfo commandBufferBI = {};
+    commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBI.pInheritanceInfo = &commandBufferII;
+    commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+    if (auto result = vkBeginCommandBuffer(commandBuffers[0], &commandBufferBI);
+        result != VK_SUCCESS) {
+      iris::GetLogger()->error("Cannot begin command buffer: {}",
+                               iris::Renderer::to_string(result));
+    }
+  }
+
+  return commandBuffers;
+} // RenderAllRenderables
+
 void iris::Renderer::EndFrame() noexcept {
   Expects(sInFrame);
+
+  absl::FixedArray<VkCommandBuffer> renderableCBs =
+    RenderAllRenderables(sRenderPass);
 
   auto&& windows = Windows();
   std::size_t const numWindows = windows.size();
@@ -1493,13 +1533,11 @@ void iris::Renderer::EndFrame() noexcept {
     vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
-                         VK_SUBPASS_CONTENTS_INLINE);
+                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-    /////
-    //
-    // render stuff here ??
-    //
-    /////
+    vkCmdExecuteCommands(frame.commandBuffer,
+                         gsl::narrow_cast<std::uint32_t>(renderableCBs.size()),
+                         renderableCBs.data());
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);
