@@ -479,7 +479,7 @@ int main(int argc, char** argv) {
 
   PushConstants pushConstants;
   pushConstants.iMouse = {0.f, 0.f, 0.f, 0.f};
-  pushConstants.iResolution = {680.f, 680.f, 1.f};
+  pushConstants.iResolution = {1920.f, 1027.f, 1920.f / 1027.f};
   pushConstants.iFrame = 0;
 
   auto start = std::chrono::steady_clock::now();
