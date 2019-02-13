@@ -1,11 +1,11 @@
 /*! \file
  * \brief main rendering application
  */
+#include "iris/config.h"
 
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
 #include "fmt/format.h"
-#include "iris/config.h"
 #include "iris/renderer.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)

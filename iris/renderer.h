@@ -1,6 +1,8 @@
 #ifndef HEV_IRIS_RENDERER_H_
 #define HEV_IRIS_RENDERER_H_
 
+#include "iris/config.h"
+
 #include "expected.hpp"
 #if STD_FS_IS_EXPERIMENTAL
 #include <experimental/filesystem>
@@ -10,7 +12,7 @@ namespace filesystem = std::experimental::filesystem;
 namespace filesystem = std::filesystem;
 #endif
 #include "gsl/gsl"
-#include "iris/config.h"
+#include "iris/components/renderable.h"
 #include "iris/vulkan.h"
 #include "iris/window.h"
 #include "spdlog/sinks/sink.h"
@@ -66,14 +68,14 @@ ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
  * This must be called each time through the rendering loop after calling \ref
  * EndFrame.
  */
-void BeginFrame() noexcept;
+VkRenderPass BeginFrame() noexcept;
 
 /*! \brief End the next rendering frame.
  *
  * This must be called each time through the rendering loop after calling \ref
  * BeginFrame.
  */
-void EndFrame() noexcept;
+void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs) noexcept;
 
 /*! \brief Load a file into the rendering system.
  *
@@ -94,6 +96,45 @@ LoadFile(filesystem::path const& path) noexcept;
  */
 tl::expected<void, std::system_error>
 Control(iris::Control::Control const& control) noexcept;
+
+/////
+//
+// FIXME: MUST re-work this once I've got it working
+//
+/////
+
+tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
+AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
+
+struct Shader {
+  VkShaderModule handle;
+  VkShaderStageFlagBits stage;
+}; // struct Shader
+
+tl::expected<VkShaderModule, std::system_error>
+CompileShaderFromSource(std::string_view source, VkShaderStageFlagBits stage,
+                        std::string name = {}) noexcept;
+
+tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
+CreateGraphicsPipeline(
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+  gsl::span<const VkPushConstantRange> pushConstantRanges,
+  gsl::span<const Shader> shaders,
+  gsl::span<const VkVertexInputBindingDescription>
+    vertexInputBindingDescriptions,
+  gsl::span<const VkVertexInputAttributeDescription>
+    vertexInputAttributeDescriptions,
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
+  VkPipelineViewportStateCreateInfo viewportStateCI,
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI,
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
+  gsl::span<const VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates,
+  gsl::span<const VkDynamicState> dynamicStates,
+  std::uint32_t renderPassSubpass, std::string name = {}) noexcept;
+
+void AddRenderable(Components::Renderable renderable) noexcept;
 
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {

@@ -1,7 +1,6 @@
 /*! \file
  * \brief \ref iris::Renderer definition.
  */
-#include "config.h"
 #include "absl/container/flat_hash_map.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -11,7 +10,6 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
-#include "components/renderable.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"
@@ -52,6 +50,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -149,15 +148,29 @@ static tbb::task_scheduler_init sTaskSchedulerInit{
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
   sIOContinuations{};
 
-static std::vector<iris::Renderer::Components::Renderable>& Renderables() {
-  static std::vector<iris::Renderer::Components::Renderable> sRenderables;
-  return sRenderables;
-} // Renderables
+class Renderables {
+public:
+  std::vector<Components::Renderable> operator()() {
+    std::lock_guard<std::mutex> lock{mutex_};
+    return renderables_;
+  }
+
+  void push_back(Components::Renderable renderable) {
+    std::lock_guard<std::mutex> lock{mutex_};
+    renderables_.push_back(std::move(renderable));
+  }
+
+private:
+  std::mutex mutex_{};
+  std::vector<Components::Renderable> renderables_{};
+}; // class Renderables
+
+static Renderables sRenderables;
 
 [[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
                                   std::system_error>
-RenderAllRenderables(VkRenderPass renderPass) noexcept {
-  auto&& renderables = Renderables();
+Render(std::vector<Components::Renderable> const& renderables,
+       VkRenderPass renderPass) noexcept {
   std::uint32_t const numRenderables = renderables.size();
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
@@ -228,7 +241,7 @@ RenderAllRenderables(VkRenderPass renderPass) noexcept {
     });
 
   return std::move(commandBuffers);
-} // RenderAllRenderables
+} // Render
 
 static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
@@ -1256,7 +1269,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   return {};
 } // iris::Renderer::ResizeWindow
 
-void iris::Renderer::BeginFrame() noexcept {
+VkRenderPass iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
 
@@ -1329,12 +1342,16 @@ void iris::Renderer::BeginFrame() noexcept {
 
   sPreviousFrameTime = currentTime;
   sInFrame = true;
+  return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
-void iris::Renderer::EndFrame() noexcept {
+void iris::Renderer::EndFrame(
+  gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
 
-  auto renderableCBs = RenderAllRenderables(sRenderPass);
+  std::vector<Components::Renderable> renderables = sRenderables();
+
+  auto renderableCBs = Render(renderables, sRenderPass);
   if (!renderableCBs) {
     GetLogger()->critical("Error rendering renderables: {}",
                           renderableCBs.error().what());
@@ -1427,6 +1444,10 @@ void iris::Renderer::EndFrame() noexcept {
     vkCmdExecuteCommands(frame.commandBuffer,
                          gsl::narrow_cast<std::uint32_t>(renderableCBs->size()),
                          renderableCBs->data());
+
+    vkCmdExecuteCommands(frame.commandBuffer,
+                         gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
+                         secondaryCBs.data());
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);
@@ -1573,3 +1594,377 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Control
+
+tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
+iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
+                                       std::uint32_t count) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(count > 0);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sGraphicsCommandPools[0];
+  commandBufferAI.level = level;
+  commandBufferAI.commandBufferCount = count;
+
+  absl::FixedArray<VkCommandBuffer> commandBuffers(count);
+  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
+                                             commandBuffers.data());
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffers"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffers;
+} // iris::Renderer::AllocateCommandBuffers
+
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "glslang/Public/ShaderLang.h"
+#include "SPIRV/GlslangToSpv.h"
+#include "SPIRV/GLSL.std.450.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
+
+namespace iris::Renderer {
+
+const TBuiltInResource DefaultTBuiltInResource = {
+  /* .MaxLights = */ 32,
+  /* .MaxClipPlanes = */ 6,
+  /* .MaxTextureUnits = */ 32,
+  /* .MaxTextureCoords = */ 32,
+  /* .MaxVertexAttribs = */ 64,
+  /* .MaxVertexUniformComponents = */ 4096,
+  /* .MaxVaryingFloats = */ 64,
+  /* .MaxVertexTextureImageUnits = */ 32,
+  /* .MaxCombinedTextureImageUnits = */ 80,
+  /* .MaxTextureImageUnits = */ 32,
+  /* .MaxFragmentUniformComponents = */ 4096,
+  /* .MaxDrawBuffers = */ 32,
+  /* .MaxVertexUniformVectors = */ 128,
+  /* .MaxVaryingVectors = */ 8,
+  /* .MaxFragmentUniformVectors = */ 16,
+  /* .MaxVertexOutputVectors = */ 16,
+  /* .MaxFragmentInputVectors = */ 15,
+  /* .MinProgramTexelOffset = */ -8,
+  /* .MaxProgramTexelOffset = */ 7,
+  /* .MaxClipDistances = */ 8,
+  /* .MaxComputeWorkGroupCountX = */ 65535,
+  /* .MaxComputeWorkGroupCountY = */ 65535,
+  /* .MaxComputeWorkGroupCountZ = */ 65535,
+  /* .MaxComputeWorkGroupSizeX = */ 1024,
+  /* .MaxComputeWorkGroupSizeY = */ 1024,
+  /* .MaxComputeWorkGroupSizeZ = */ 64,
+  /* .MaxComputeUniformComponents = */ 1024,
+  /* .MaxComputeTextureImageUnits = */ 16,
+  /* .MaxComputeImageUniforms = */ 8,
+  /* .MaxComputeAtomicCounters = */ 8,
+  /* .MaxComputeAtomicCounterBuffers = */ 1,
+  /* .MaxVaryingComponents = */ 60,
+  /* .MaxVertexOutputComponents = */ 64,
+  /* .MaxGeometryInputComponents = */ 64,
+  /* .MaxGeometryOutputComponents = */ 128,
+  /* .MaxFragmentInputComponents = */ 128,
+  /* .MaxImageUnits = */ 8,
+  /* .MaxCombinedImageUnitsAndFragmentOutputs = */ 8,
+  /* .MaxCombinedShaderOutputResources = */ 8,
+  /* .MaxImageSamples = */ 0,
+  /* .MaxVertexImageUniforms = */ 0,
+  /* .MaxTessControlImageUniforms = */ 0,
+  /* .MaxTessEvaluationImageUniforms = */ 0,
+  /* .MaxGeometryImageUniforms = */ 0,
+  /* .MaxFragmentImageUniforms = */ 8,
+  /* .MaxCombinedImageUniforms = */ 8,
+  /* .MaxGeometryTextureImageUnits = */ 16,
+  /* .MaxGeometryOutputVertices = */ 256,
+  /* .MaxGeometryTotalOutputComponents = */ 1024,
+  /* .MaxGeometryUniformComponents = */ 1024,
+  /* .MaxGeometryVaryingComponents = */ 64,
+  /* .MaxTessControlInputComponents = */ 128,
+  /* .MaxTessControlOutputComponents = */ 128,
+  /* .MaxTessControlTextureImageUnits = */ 16,
+  /* .MaxTessControlUniformComponents = */ 1024,
+  /* .MaxTessControlTotalOutputComponents = */ 4096,
+  /* .MaxTessEvaluationInputComponents = */ 128,
+  /* .MaxTessEvaluationOutputComponents = */ 128,
+  /* .MaxTessEvaluationTextureImageUnits = */ 16,
+  /* .MaxTessEvaluationUniformComponents = */ 1024,
+  /* .MaxTessPatchComponents = */ 120,
+  /* .MaxPatchVertices = */ 32,
+  /* .MaxTessGenLevel = */ 64,
+  /* .MaxViewports = */ 16,
+  /* .MaxVertexAtomicCounters = */ 0,
+  /* .MaxTessControlAtomicCounters = */ 0,
+  /* .MaxTessEvaluationAtomicCounters = */ 0,
+  /* .MaxGeometryAtomicCounters = */ 0,
+  /* .MaxFragmentAtomicCounters = */ 8,
+  /* .MaxCombinedAtomicCounters = */ 8,
+  /* .MaxAtomicCounterBindings = */ 1,
+  /* .MaxVertexAtomicCounterBuffers = */ 0,
+  /* .MaxTessControlAtomicCounterBuffers = */ 0,
+  /* .MaxTessEvaluationAtomicCounterBuffers = */ 0,
+  /* .MaxGeometryAtomicCounterBuffers = */ 0,
+  /* .MaxFragmentAtomicCounterBuffers = */ 1,
+  /* .MaxCombinedAtomicCounterBuffers = */ 1,
+  /* .MaxAtomicCounterBufferSize = */ 16384,
+  /* .MaxTransformFeedbackBuffers = */ 4,
+  /* .MaxTransformFeedbackInterleavedComponents = */ 64,
+  /* .MaxCullDistances = */ 8,
+  /* .MaxCombinedClipAndCullDistances = */ 8,
+  /* .MaxSamples = */ 4,
+  /* .maxMeshOutputVerticesNV = */ 256,
+  /* .maxMeshOutputPrimitivesNV = */ 512,
+  /* .maxMeshWorkGroupSizeX_NV = */ 32,
+  /* .maxMeshWorkGroupSizeY_NV = */ 1,
+  /* .maxMeshWorkGroupSizeZ_NV = */ 1,
+  /* .maxTaskWorkGroupSizeX_NV = */ 32,
+  /* .maxTaskWorkGroupSizeY_NV = */ 1,
+  /* .maxTaskWorkGroupSizeZ_NV = */ 1,
+  /* .maxMeshViewCountNV = */ 4,
+
+  /* .limits = */
+  {
+    /* .nonInductiveForLoops = */ true,
+    /* .whileLoops = */ true,
+    /* .doWhileLoops = */ true,
+    /* .generalUniformIndexing = */ true,
+    /* .generalAttributeMatrixVectorIndexing = */ true,
+    /* .generalVaryingIndexing = */ true,
+    /* .generalSamplerIndexing = */ true,
+    /* .generalVariableIndexing = */ true,
+    /* .generalConstantMatrixVectorIndexing = */ true,
+  }};
+
+[[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
+CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
+              filesystem::path const& path,
+              gsl::span<std::string> macroDefinitions [[maybe_unused]],
+              std::string const& entryPoint) {
+  IRIS_LOG_ENTER();
+  Expects(source.size() > 0);
+
+  auto const lang = [&shaderStage]() {
+    if ((shaderStage & VK_SHADER_STAGE_VERTEX_BIT)) {
+      return EShLanguage::EShLangVertex;
+    } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
+      return EShLanguage::EShLangFragment;
+    } else {
+      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
+      std::terminate();
+    }
+  }();
+
+  char const* strings[] = {source.data()};
+  int lengths[] = {static_cast<int>(source.size())};
+  char const* names[] = {path.string().c_str()};
+
+  glslang::TShader shader(lang);
+  shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
+  shader.setEntryPoint(entryPoint.c_str());
+  shader.setEnvInput(glslang::EShSource::EShSourceGlsl, lang,
+                     glslang::EShClient::EShClientVulkan, 101);
+  shader.setEnvClient(glslang::EShClient::EShClientVulkan,
+                      glslang::EShTargetClientVersion::EShTargetVulkan_1_1);
+  shader.setEnvTarget(glslang::EShTargetLanguage::EShTargetSpv,
+                      glslang::EShTargetLanguageVersion::EShTargetSpv_1_0);
+
+  if (!shader.parse(&DefaultTBuiltInResource, 1, false,
+                    EShMessages::EShMsgDefault)) {
+    return tl::unexpected(std::string(shader.getInfoLog()));
+  }
+
+  glslang::TProgram program;
+  program.addShader(&shader);
+
+  if (!program.link(EShMessages::EShMsgDefault)) {
+    return tl::unexpected(std::string(program.getInfoLog()));
+  }
+
+  if (auto glsl = program.getIntermediate(lang)) {
+    glslang::SpvOptions options;
+    options.validate = true;
+#ifndef NDEBUG
+    options.generateDebugInfo = true;
+#endif
+
+    spv::SpvBuildLogger logger;
+    std::vector<std::uint32_t> code;
+    glslang::GlslangToSpv(*glsl, code, &logger, &options);
+
+    Ensures(code.size() > 0);
+    IRIS_LOG_LEAVE();
+    return code;
+  } else {
+    return tl::unexpected(std::string(
+      "cannot get glsl intermediate representation of compiled shader"));
+  }
+} // CompileShader
+
+} // namespace iris::Renderer
+
+tl::expected<VkShaderModule, std::system_error>
+iris::Renderer::CompileShaderFromSource(std::string_view source,
+                                        VkShaderStageFlagBits stage,
+                                        std::string name) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(source.size() > 0);
+
+  VkShaderModule module{VK_NULL_HANDLE};
+
+  auto code = CompileShader(source, stage, "<inline>", {}, "main");
+  if (!code) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, code.error()));
+  }
+
+  VkShaderModuleCreateInfo shaderModuleCI = {};
+  shaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  // codeSize is count of bytes, not count of words (which is what size() is)
+  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size()) * 4u;
+  shaderModuleCI.pCode = code->data();
+
+  if (auto result =
+        vkCreateShaderModule(sDevice, &shaderModuleCI, nullptr, &module);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create shader module"));
+  }
+
+  if (!name.empty()) {
+    NameObject(sDevice, VK_OBJECT_TYPE_SHADER_MODULE, module, name.c_str());
+  }
+
+  Ensures(module != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return module;
+} // iris::Renderer::CompileShaderFromSource
+
+tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
+iris::Renderer::CreateGraphicsPipeline(
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+  gsl::span<const VkPushConstantRange> pushConstantRanges,
+  gsl::span<const Shader> shaders,
+  gsl::span<const VkVertexInputBindingDescription>
+    vertexInputBindingDescriptions,
+  gsl::span<const VkVertexInputAttributeDescription>
+    vertexInputAttributeDescriptions,
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
+  VkPipelineViewportStateCreateInfo viewportStateCI,
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI,
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
+  gsl::span<const VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates,
+  gsl::span<const VkDynamicState> dynamicStates,
+  std::uint32_t renderPassSubpass, std::string name) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sRenderPass != VK_NULL_HANDLE);
+
+  VkPipelineLayout layout{VK_NULL_HANDLE};
+  VkPipeline pipeline{VK_NULL_HANDLE};
+
+  VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
+  pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutCI.setLayoutCount =
+    gsl::narrow_cast<std::uint32_t>(descriptorSetLayouts.size());
+  pipelineLayoutCI.pSetLayouts = descriptorSetLayouts.data();
+  pipelineLayoutCI.pushConstantRangeCount =
+    gsl::narrow_cast<std::uint32_t>(pushConstantRanges.size());
+  pipelineLayoutCI.pPushConstantRanges = pushConstantRanges.data();
+
+  if (auto result =
+        vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr, &layout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create pipeline layout"));
+  }
+
+  absl::FixedArray<VkPipelineShaderStageCreateInfo> shaderStageCIs(
+    shaders.size());
+  std::transform(shaders.begin(), shaders.end(), shaderStageCIs.begin(),
+                 [](Shader const& shader) {
+                   return VkPipelineShaderStageCreateInfo{
+                     VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     shader.stage,
+                     shader.handle,
+                     "main",
+                     nullptr};
+                 });
+
+  VkPipelineVertexInputStateCreateInfo vertexInputStateCI = {};
+  vertexInputStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInputStateCI.vertexBindingDescriptionCount =
+    gsl::narrow_cast<std::uint32_t>(vertexInputBindingDescriptions.size());
+  vertexInputStateCI.pVertexBindingDescriptions =
+    vertexInputBindingDescriptions.data();
+  vertexInputStateCI.vertexAttributeDescriptionCount =
+    gsl::narrow_cast<std::uint32_t>(vertexInputAttributeDescriptions.size());
+  vertexInputStateCI.pVertexAttributeDescriptions =
+    vertexInputAttributeDescriptions.data();
+
+  VkPipelineColorBlendStateCreateInfo colorBlendStateCI = {};
+  colorBlendStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlendStateCI.attachmentCount =
+    gsl::narrow_cast<std::uint32_t>(colorBlendAttachmentStates.size());
+  colorBlendStateCI.pAttachments = colorBlendAttachmentStates.data();
+
+  VkPipelineDynamicStateCreateInfo dynamicStateCI = {};
+  dynamicStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamicStateCI.dynamicStateCount =
+    gsl::narrow_cast<uint32_t>(dynamicStates.size());
+  dynamicStateCI.pDynamicStates = dynamicStates.data();
+
+  VkGraphicsPipelineCreateInfo graphicsPipelineCI = {};
+  graphicsPipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  graphicsPipelineCI.stageCount = static_cast<uint32_t>(shaderStageCIs.size());
+  graphicsPipelineCI.pStages = shaderStageCIs.data();
+  graphicsPipelineCI.pVertexInputState = &vertexInputStateCI;
+  graphicsPipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
+  graphicsPipelineCI.pViewportState = &viewportStateCI;
+  graphicsPipelineCI.pRasterizationState = &rasterizationStateCI;
+  graphicsPipelineCI.pMultisampleState = &multisampleStateCI;
+  graphicsPipelineCI.pDepthStencilState = &depthStencilStateCI;
+  graphicsPipelineCI.pColorBlendState = &colorBlendStateCI;
+  graphicsPipelineCI.pDynamicState = &dynamicStateCI;
+  graphicsPipelineCI.layout = layout;
+  graphicsPipelineCI.renderPass = sRenderPass;
+  graphicsPipelineCI.subpass = renderPassSubpass;
+
+  if (auto result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1,
+                                              &graphicsPipelineCI, nullptr,
+                                              &pipeline);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create graphics pipeline"));
+  }
+
+  if (!name.empty()) {
+    NameObject(sDevice, VK_OBJECT_TYPE_PIPELINE_LAYOUT, layout,
+               (name + ".layout").c_str());
+    NameObject(sDevice, VK_OBJECT_TYPE_PIPELINE, pipeline, name.c_str());
+  }
+
+  Ensures(layout != VK_NULL_HANDLE);
+  Ensures(pipeline != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return std::make_pair(layout, pipeline);
+  } // iris::Renderer::CreateGraphicsPipeline
+
+void iris::Renderer::AddRenderable(Components::Renderable renderable) noexcept {
+  sRenderables.push_back(std::move(renderable));
+} // AddRenderable

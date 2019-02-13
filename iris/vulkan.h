@@ -1,9 +1,10 @@
 #ifndef HEV_IRIS_VULKAN_SUPPORT_H_
 #define HEV_IRIS_VULKAN_SUPPORT_H_
 
+#include "iris/config.h"
+
 #include "expected.hpp"
 #include "gsl/gsl"
-#include "iris/config.h"
 #include "iris/flextVk.h"
 #include <cstddef>
 #include <cstdint>
