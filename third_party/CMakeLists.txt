@@ -7,6 +7,7 @@ include(GLM.cmake)
 
 # These packages can be included in any order
 include(Abseil.cmake)
+include(Cpprestsdk.cmake)
 include(Expected.cmake)
 include(Flags.cmake)
 include(FlextGL.cmake)

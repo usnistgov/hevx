@@ -156,6 +156,7 @@ public:
 
   void push_back(Component::Renderable renderable) {
     std::lock_guard<std::mutex> lock{mutex_};
+    renderables_.clear();
     renderables_.push_back(std::move(renderable));
   }
 

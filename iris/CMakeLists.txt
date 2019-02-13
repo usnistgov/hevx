@@ -125,7 +125,7 @@ target_link_libraries(iris
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}
-    protobuf::libprotobuf
+    protobuf::libprotobuf cpprest
     TBB::tbb Threads::Threads
     $<$<PLATFORM_ID:Linux>:-ldl>
 )

@@ -3,8 +3,44 @@
  */
 #include "iris/config.h"
 
+/*
+Good URLs:
+
+https://www.shadertoy.com/view/MsfGRr
+https://www.shadertoy.com/view/XdBGzd
+https://www.shadertoy.com/view/lsX3W4
+https://www.shadertoy.com/view/ldf3DN
+https://www.shadertoy.com/view/4ds3zn
+https://www.shadertoy.com/view/lsfGDB
+https://www.shadertoy.com/view/llXGR4
+https://www.shadertoy.com/view/XsjXR1
+https://www.shadertoy.com/view/MdB3Dw
+https://www.shadertoy.com/view/4df3Rn
+https://www.shadertoy.com/view/XttSz2
+https://www.shadertoy.com/view/MsSSWV
+https://www.shadertoy.com/view/XslXW2 (outputs sound - how do I do that?)
+https://www.shadertoy.com/view/MslGD8
+https://www.shadertoy.com/view/lsKcDD
+https://www.shadertoy.com/view/Mss3R8
+https://www.shadertoy.com/view/4sXXRN
+https://www.shadertoy.com/view/4ssSRl
+https://www.shadertoy.com/view/4dl3Wl
+https://www.shadertoy.com/view/4d2XWV
+https://www.shadertoy.com/view/XsXGzn
+https://www.shadertoy.com/view/MdB3Rc
+https://www.shadertoy.com/view/4lGSDw
+
+*/
+
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
+#include "absl/strings/str_split.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor" // wow!
+#endif
+#include "cpprest/filestream.h"
+#include "cpprest/http_client.h"
 #include "fmt/format.h"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
@@ -24,6 +60,7 @@
 #include "flags.h"
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -84,7 +121,7 @@ struct PushConstants {
 
 tl::expected<iris::Renderer::Component::Renderable, std::system_error>
 CreateRenderable(spdlog::logger& logger [[maybe_unused]],
-                 std::string_view shader [[maybe_unused]]) {
+                 std::string_view code) {
   iris::Renderer::Component::Renderable renderable;
 
   auto vs = iris::Renderer::CompileShaderFromSource(
@@ -93,9 +130,7 @@ CreateRenderable(spdlog::logger& logger [[maybe_unused]],
   if (!vs) return tl::unexpected(vs.error());
 
   std::ostringstream fragmentShaderSource;
-  fragmentShaderSource << sFragmentShaderHeader << R"(
-#include ")" << shader
-                       << R"("
+  fragmentShaderSource << sFragmentShaderHeader << code << R"(
 
 void main() {
     mainImage(fragColor, fragCoord);
@@ -208,8 +243,10 @@ int main(int argc, char** argv) {
   absl::InstallFailureSignalHandler({});
 
   flags::args const args(argc, argv);
-  auto const shader = args.get("shader", "assets/shaders/shadertoy/default.frag"s);
-  auto const& files = args.positional();
+  auto const shader = args.get<std::string>("shader");
+  auto const url = args.get<std::string>("url");
+  auto const playlist = args.get<std::string>("playlist");
+  auto&& files = args.positional();
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
     "iris-shadertoy.log", true);
@@ -242,11 +279,100 @@ int main(int argc, char** argv) {
     }
   }
 
-  auto renderable = CreateRenderable(logger, shader);
-  if (renderable) {
-    iris::Renderer::AddRenderable(*renderable);
-  } else {
-    logger.error("Error creating renderable: {}", renderable.error().what());
+  if (url && shader) {
+    logger.warn("Both a file and a url were specified, using the file");
+  }
+
+  auto getCode = [&](web::http::uri const& uri) {
+    std::string code;
+
+    web::http::client::http_client client(uri.to_string());
+    client.request(web::http::methods::GET)
+      .then(
+        [&](web::http::http_response response) -> pplx::task<web::json::value> {
+          logger.debug("response status_code: {}", response.status_code());
+          return response.extract_json();
+        })
+      .then([&](web::json::value json) {
+        auto&& renderpass = json.at("Shader").at("renderpass").at(0);
+        if (renderpass.at("inputs").size() > 0) {
+          throw std::runtime_error("inputs are not yet implemented");
+        } else if (renderpass.at("type").as_string() != "image") {
+          throw std::runtime_error("non-image outputs are not yet implemented");
+        }
+        code = renderpass.at("code").as_string();
+      })
+      .wait();
+
+      return code;
+  };
+
+  int currentRenderableIndex = 0;
+  std::vector<iris::Renderer::Component::Renderable> renderables;
+
+  if (playlist) {
+    std::vector<std::string> const splits = absl::StrSplit(*playlist, ',');
+    for (auto&& split : splits) {
+      web::http::uri_builder uri;
+      uri.set_scheme(U("https"));
+      uri.set_host(U("www.shadertoy.com"));
+      uri.set_path(U("api/v1/shaders"));
+      uri.append_path(split);
+      uri.append_query(U("key=BtHKWW"));
+
+      std::string const code = getCode(uri.to_uri());
+      if (auto r = CreateRenderable(logger, code)) {
+        renderables.push_back(std::move(*r));
+        iris::Renderer::AddRenderable(renderables[0]);
+      } else {
+        logger.error("Error creating renderable: {}", r.error().what());
+      }
+    }
+
+  } else if (url) {
+    web::http::uri const viewURI(*url);
+
+    // grab the last component of the uri path: that's the shaderID
+    auto const path = viewURI.path();
+    auto const id = path.find_last_of('/');
+
+    if (id == path.npos) {
+      logger.error("Bad URL: {}", *url);
+      std::exit(EXIT_FAILURE);
+    }
+
+    web::http::uri_builder apiURI;
+    apiURI.set_scheme(viewURI.scheme());
+    apiURI.set_host(viewURI.host());
+    apiURI.set_path(U("api/v1/shaders"));
+    apiURI.append_path(path.substr(id));
+    apiURI.append_query(U("key=BtHKWW"));
+    logger.debug("api URI: {}", apiURI.to_string());
+
+    std::string const code = getCode(apiURI.to_uri());
+    if (auto r = CreateRenderable(logger, code)) {
+      renderables.push_back(std::move(*r));
+      iris::Renderer::AddRenderable(renderables[0]);
+    } else {
+      logger.error("Error creating renderable: {}", r.error().what());
+    }
+  } else if (shader) {
+    std::ifstream ifs(*shader, std::ios_base::binary | std::ios_base::ate);
+    if (!ifs) {
+      logger.error("Error loading {}: file not found", *shader);
+      std::exit(EXIT_FAILURE);
+    }
+
+    std::vector<char> bytes(ifs.tellg());
+    ifs.seekg(0, ifs.beg);
+    ifs.read(bytes.data(), bytes.size());
+
+    if (auto r = CreateRenderable(logger, bytes.data())) {
+      renderables.push_back(std::move(*r));
+      iris::Renderer::AddRenderable(renderables[0]);
+    } else {
+      logger.error("Error creating renderable: {}", r.error().what());
+    }
   }
 
   int currentCommandBufferIndex = 0;
@@ -305,7 +431,7 @@ int main(int argc, char** argv) {
     VkCommandBuffer cb = (*commandBuffers)[currentCommandBufferIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
 
-    vkCmdPushConstants(cb, renderable->pipelineLayout,
+    vkCmdPushConstants(cb, renderables[currentRenderableIndex].pipelineLayout,
                        VK_SHADER_STAGE_VERTEX_BIT |
                          VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(PushConstants), &pushConstants);
@@ -316,6 +442,12 @@ int main(int argc, char** argv) {
     currentCommandBufferIndex =
       (currentCommandBufferIndex + 1) % commandBuffers->size();
     pushConstants.iFrame += 1.f;
+
+    if (static_cast<int>(pushConstants.iFrame) % 1000 == 0) {
+      currentRenderableIndex = (currentRenderableIndex + 1) % renderables.size();
+      iris::Renderer::AddRenderable(renderables[currentRenderableIndex]);
+    }
+
   }
 
   logger.info("exiting");
