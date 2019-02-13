@@ -11,6 +11,7 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
+#include "components/renderable.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"
@@ -53,6 +54,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace std::string_literals;
 
@@ -109,9 +111,6 @@ static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
 static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
 static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
-// sGraphicsCommand{Queues,Pools}[0] is reserved for direct use by the
-// renderer. Other queues must be "checked out: FIXME: implement.
-static std::atomic_uint32_t sNextCommandQueuePoolFenceIndex{1};
 
 static VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
@@ -149,6 +148,87 @@ static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
   sIOContinuations{};
+
+static std::vector<iris::Renderer::Components::Renderable>& Renderables() {
+  static std::vector<iris::Renderer::Components::Renderable> sRenderables;
+  return sRenderables;
+} // Renderables
+
+[[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
+                                  std::system_error>
+RenderAllRenderables(VkRenderPass renderPass) noexcept {
+  auto&& renderables = Renderables();
+  std::uint32_t const numRenderables = renderables.size();
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sGraphicsCommandPools[0];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+  commandBufferAI.commandBufferCount = numRenderables;
+
+  absl::FixedArray<VkCommandBuffer> commandBuffers(numRenderables);
+  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
+                                             commandBuffers.data());
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffers"));
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = renderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+  std::transform(
+    renderables.begin(), renderables.end(), commandBuffers.begin(),
+    commandBuffers.begin(),
+    [&commandBufferBI](Components::Renderable const& renderable,
+                       VkCommandBuffer cb) -> VkCommandBuffer {
+      Expects(renderable.pipeline != VK_NULL_HANDLE);
+      Expects(renderable.pipelineLayout != VK_NULL_HANDLE);
+
+      vkBeginCommandBuffer(cb, &commandBufferBI);
+      vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        renderable.pipeline);
+
+      if (renderable.descriptorSet != VK_NULL_HANDLE) {
+        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                renderable.pipelineLayout, 0, 1,
+                                &renderable.descriptorSet, 0, nullptr);
+      }
+
+      if (renderable.vertexBuffer != VK_NULL_HANDLE) {
+        vkCmdBindVertexBuffers(cb, 0, 1, &renderable.vertexBuffer,
+                               &renderable.vertexBufferBindingOffset);
+      }
+
+      if (renderable.indexBuffer != VK_NULL_HANDLE) {
+        vkCmdBindIndexBuffer(cb, renderable.indexBuffer,
+                             renderable.indexBufferBindingOffset,
+                             renderable.indexType);
+      }
+
+      if (renderable.numIndices > 0) {
+        vkCmdDrawIndexed(cb, renderable.numIndices, renderable.instanceCount,
+                         renderable.firstIndex, renderable.vertexOffset,
+                         renderable.firstInstance);
+      } else {
+        vkCmdDraw(cb, renderable.numVertices, renderable.instanceCount,
+                  renderable.firstVertex, renderable.firstInstance);
+      }
+
+      vkEndCommandBuffer(cb);
+      return cb;
+    });
+
+  return std::move(commandBuffers);
+} // RenderAllRenderables
 
 static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
@@ -1034,9 +1114,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     return tl::unexpected(iav.error());
   }
 
-  if (auto result =
-        TransitionImage(newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+  if (auto result = TransitionImage(
+        sDevice, sGraphicsCommandPools[0], sGraphicsCommandQueues[0],
+        sGraphicsCommandFences[0], newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
     vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
@@ -1050,7 +1131,9 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   }
 
   if (auto result =
-        TransitionImage(newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+        TransitionImage(sDevice, sGraphicsCommandPools[0],
+                        sGraphicsCommandQueues[0], sGraphicsCommandFences[0],
+                        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
                         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
@@ -1173,169 +1256,6 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   return {};
 } // iris::Renderer::ResizeWindow
 
-tl::expected<VkCommandBuffer, std::system_error>
-iris::Renderer::BeginOneTimeSubmit() noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sDevice != VK_NULL_HANDLE);
-
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPools[0];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  commandBufferAI.commandBufferCount = 1;
-
-  VkCommandBuffer commandBuffer;
-  if (auto result =
-        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate command buffer"));
-  }
-
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-      result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot begin command buffer"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return commandBuffer;
-} // iris::Renderer::BeginOneTimeSubmit
-
-tl::expected<void, std::system_error>
-iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept {
-  IRIS_LOG_ENTER();
-
-  VkSubmitInfo submitI = {};
-  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitI.commandBufferCount = 1;
-  submitI.pCommandBuffers = &commandBuffer;
-
-  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot end command buffer"));
-  }
-
-  if (auto result = vkQueueSubmit(sGraphicsCommandQueues[0], 1, &submitI,
-                                  sGraphicsCommandFences[0]);
-      result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot submit command buffer"));
-  }
-
-  if (auto result = vkWaitForFences(sDevice, 1, &sGraphicsCommandFences[0],
-                                    VK_TRUE, UINT64_MAX);
-      result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot wait on one-time submit fence"));
-  }
-
-  if (auto result = vkResetFences(sDevice, 1, &sGraphicsCommandFences[0]);
-      result != VK_SUCCESS) {
-    vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot reset one-time submit fence"));
-  }
-
-  vkFreeCommandBuffers(sDevice, sGraphicsCommandPools[0], 1, &commandBuffer);
-  IRIS_LOG_LEAVE();
-  return {};
-} // iris::Renderer::EndOneTimeSubmit
-
-tl::expected<void, std::system_error>
-iris::Renderer::TransitionImage(VkImage image, VkImageLayout oldLayout,
-                                VkImageLayout newLayout, std::uint32_t mipLevels,
-                                std::uint32_t arrayLayers) noexcept {
-  IRIS_LOG_ENTER();
-
-  VkImageMemoryBarrier barrier = {};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.oldLayout = oldLayout;
-  barrier.newLayout = newLayout;
-  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = image;
-  barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount = mipLevels;
-  barrier.subresourceRange.baseArrayLayer = 0;
-  barrier.subresourceRange.layerCount = arrayLayers;
-
-  if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    // FIXME: handle stencil
-  } else {
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  }
-
-  VkPipelineStageFlagBits srcStage;
-  VkPipelineStageFlagBits dstStage;
-
-  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-             newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kImageTransitionFailed,
-                          "Not implemented"));
-  }
-
-  VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit()) {
-    commandBuffer = *cb;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
-  }
-
-  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
-                       nullptr, 1, &barrier);
-
-  if (auto result = EndOneTimeSubmit(commandBuffer); !result) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // iris::Renderer::TransitionImage
-
 void iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
@@ -1410,59 +1330,6 @@ void iris::Renderer::BeginFrame() noexcept {
   sPreviousFrameTime = currentTime;
   sInFrame = true;
 } // iris::Renderer::BeginFrame()
-
-[[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
-                                  std::system_error>
-RenderAllRenderables(VkRenderPass renderPass) noexcept {
-  std::uint32_t const numRenderables = 1;
-
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = iris::Renderer::sGraphicsCommandPools[0];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-  commandBufferAI.commandBufferCount = numRenderables;
-
-  absl::FixedArray<VkCommandBuffer> commandBuffers(numRenderables);
-  if (auto result = vkAllocateCommandBuffers(iris::Renderer::sDevice, &commandBufferAI,
-                           commandBuffers.data());
-    result != VK_SUCCESS) {
-      return tl::unexpected(
-        std::system_error(iris::Renderer::make_error_code(result),
-                          "Cannot allocate command buffers"));
-  }
-
-  VkCommandBufferInheritanceInfo commandBufferII = {};
-  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  commandBufferII.renderPass = renderPass;
-  commandBufferII.subpass = 0;
-  commandBufferII.framebuffer = VK_NULL_HANDLE;
-
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.pInheritanceInfo = &commandBufferII;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-
-  for (auto&& commandBuffer : commandBuffers) {
-    if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-        result != VK_SUCCESS) {
-      return tl::unexpected(
-        std::system_error(iris::Renderer::make_error_code(result),
-                          "Cannot begin command buffer"));
-    }
-
-    // Bind renderable data items
-    //vkCmdDraw(commandBuffer, 3, 1, 0, 1);
-
-    if (auto result = vkEndCommandBuffer(commandBuffer);
-        result != VK_SUCCESS) {
-      return tl::unexpected(
-        std::system_error(iris::Renderer::make_error_code(result),
-                          "Cannot end command buffer"));
-    }
-  }
-
-  return std::move(commandBuffers);
-} // RenderAllRenderables
 
 void iris::Renderer::EndFrame() noexcept {
   Expects(sInFrame);
@@ -1706,28 +1573,3 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Control
-
-tl::expected<iris::Renderer::CommandQueuePoolFence, std::system_error>
-iris::Renderer::AcquireCommandQueuePoolFence() noexcept {
-  IRIS_LOG_ENTER();
-  Expects(!sGraphicsCommandQueues.empty());
-  Expects(!sGraphicsCommandPools.empty());
-  Expects(!sGraphicsCommandFences.empty());
-
-  IRIS_LOG_LEAVE();
-  std::uint32_t const id = sNextCommandQueuePoolFenceIndex;
-  return CommandQueuePoolFence{id, sGraphicsCommandQueues[id],
-                               sGraphicsCommandPools[id],
-                               sGraphicsCommandFences[id]};
-} // iris::Renderer::AcquireCommandQueuePoolFence
-
-void iris::Renderer::ReleaseCommandQueuePoolFence(
-  CommandQueuePoolFence const& commandQueuePoolFence) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(!sGraphicsCommandQueues.empty());
-  Expects(!sGraphicsCommandPools.empty());
-  Expects(!sGraphicsCommandFences.empty());
-  Expects(commandQueuePoolFence.id > 0);
-
-  IRIS_LOG_LEAVE();
-} // iris::Renderer::ReleaseCommandQueuePoolFence

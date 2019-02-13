@@ -90,6 +90,20 @@ CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);
 
+[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
+BeginOneTimeSubmit(VkDevice device, VkCommandPool commandPool) noexcept;
+
+tl::expected<void, std::system_error>
+EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkDevice device,
+                 VkCommandPool commandPool, VkQueue queue,
+                 VkFence fence) noexcept;
+
+tl::expected<void, std::system_error>
+TransitionImage(VkDevice device, VkCommandPool commandPool, VkQueue queue,
+                VkFence fence, VkImage image, VkImageLayout oldLayout,
+                VkImageLayout newLayout, std::uint32_t mipLevels,
+                std::uint32_t arrayLayers) noexcept;
+
 [[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>,
                            std::system_error>
 AllocateImageAndView(VkDevice device, VmaAllocator allocator, VkFormat format,

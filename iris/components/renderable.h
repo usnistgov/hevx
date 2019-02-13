@@ -1,0 +1,32 @@
+#ifndef HEV_IRIS_COMPONENTS_RENDERABLE_H_
+#define HEV_IRIS_COMPONENTS_RENDERABLE_H_
+
+#include "iris/vulkan.h"
+#include <cstdint>
+
+namespace iris::Renderer::Components {
+
+struct Renderable {
+  VkPipeline pipeline{VK_NULL_HANDLE};
+  VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+  VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
+  VkBuffer uniformBuffer{VK_NULL_HANDLE};
+  VkDeviceSize vertexBufferBindingOffset{0};
+  VkBuffer vertexBuffer{VK_NULL_HANDLE};
+  VkDeviceSize indexBufferBindingOffset{0};
+  VkBuffer indexBuffer{VK_NULL_HANDLE};
+
+  VkIndexType indexType{VK_INDEX_TYPE_UINT32};
+  std::uint32_t numIndices{0};
+  std::uint32_t instanceCount{1};
+  std::uint32_t firstIndex{0};
+  std::uint32_t vertexOffset{0};
+  std::uint32_t firstInstance{0};
+
+  std::uint32_t numVertices{0};
+  std::uint32_t firstVertex{0};
+}; // struct Renderable
+
+} // namespace iris::Renderer::Components
+
+#endif // HEV_IRIS_COMPONENTS_RENDERABLE_H_

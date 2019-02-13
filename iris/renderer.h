@@ -61,16 +61,6 @@ CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
 tl::expected<void, std::system_error>
 ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
 
-[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
-BeginOneTimeSubmit() noexcept;
-
-tl::expected<void, std::system_error>
-EndOneTimeSubmit(VkCommandBuffer commandBuffer) noexcept;
-
-tl::expected<void, std::system_error>
-TransitionImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
-                std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept;
-
 /*! \brief Begin the next rendering frame.
  *
  * This must be called each time through the rendering loop after calling \ref
@@ -104,19 +94,6 @@ LoadFile(filesystem::path const& path) noexcept;
  */
 tl::expected<void, std::system_error>
 Control(iris::Control::Control const& control) noexcept;
-
-struct CommandQueuePoolFence {
-  std::uint32_t id{0};
-  VkQueue queue{VK_NULL_HANDLE};
-  VkCommandPool commandPool{VK_NULL_HANDLE};
-  VkFence fence{VK_NULL_HANDLE};
-}; // struct CommandQueuePoolFence
-
-tl::expected<CommandQueuePoolFence, std::system_error>
-AcquireCommandQueuePoolFence() noexcept;
-
-void ReleaseCommandQueuePoolFence(
-  CommandQueuePoolFence const& commandQueuePoolFence) noexcept;
 
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {

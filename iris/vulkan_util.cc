@@ -495,6 +495,177 @@ iris::Renderer::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
   return surfaceFormats;
 } // iris::Renderer::GetPhysicalDeviceSurfaceFormats
 
+tl::expected<VkCommandBuffer, std::system_error>
+iris::Renderer::BeginOneTimeSubmit(VkDevice device, VkCommandPool commandPool) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(device != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = commandPool;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(device, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffer"));
+  }
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot begin command buffer"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffer;
+} // iris::Renderer::BeginOneTimeSubmit
+
+tl::expected<void, std::system_error>
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkDevice device,
+                                 VkCommandPool commandPool, VkQueue queue,
+                                 VkFence fence) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(commandBuffer != VK_NULL_HANDLE);
+  Expects(device != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+  Expects(queue != VK_NULL_HANDLE);
+  Expects(fence != VK_NULL_HANDLE);
+
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.commandBufferCount = 1;
+  submitI.pCommandBuffers = &commandBuffer;
+
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot end command buffer"));
+  }
+
+  if (auto result = vkQueueSubmit(queue, 1, &submitI, fence);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot submit command buffer"));
+  }
+
+  if (auto result = vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot wait on one-time submit fence"));
+  }
+
+  if (auto result = vkResetFences(device, 1, &fence); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot reset one-time submit fence"));
+  }
+
+  vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::EndOneTimeSubmit
+
+tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
+  VkDevice device, VkCommandPool commandPool, VkQueue queue, VkFence fence,
+  VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
+  std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(image != VK_NULL_HANDLE);
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = oldLayout;
+  barrier.newLayout = newLayout;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = mipLevels;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = arrayLayers;
+
+  if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    // FIXME: handle stencil
+  } else {
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  VkPipelineStageFlagBits srcStage;
+  VkPipelineStageFlagBits dstStage;
+
+  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(Error::kImageTransitionFailed,
+                          "Not implemented"));
+  }
+
+  VkCommandBuffer commandBuffer;
+  if (auto cb = BeginOneTimeSubmit(device, commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
+  }
+
+  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+
+  if (auto result =
+        EndOneTimeSubmit(commandBuffer, device, commandPool, queue, fence);
+      !result) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::TransitionImage
+
 tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::system_error>
 iris::Renderer::AllocateImageAndView(
   VkDevice device, VmaAllocator allocator, VkFormat format, VkExtent2D extent,
