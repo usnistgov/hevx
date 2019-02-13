@@ -4,7 +4,7 @@
 #include "iris/vulkan.h"
 #include <cstdint>
 
-namespace iris::Renderer::Components {
+namespace iris::Renderer::Component {
 
 struct Renderable {
   VkPipeline pipeline{VK_NULL_HANDLE};
@@ -27,6 +27,6 @@ struct Renderable {
   std::uint32_t firstVertex{0};
 }; // struct Renderable
 
-} // namespace iris::Renderer::Components
+} // namespace iris::Renderer::Component
 
 #endif // HEV_IRIS_COMPONENTS_RENDERABLE_H_

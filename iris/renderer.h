@@ -75,7 +75,7 @@ VkRenderPass BeginFrame() noexcept;
  * This must be called each time through the rendering loop after calling \ref
  * BeginFrame.
  */
-void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs) noexcept;
+void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
 /*! \brief Load a file into the rendering system.
  *
@@ -134,7 +134,7 @@ CreateGraphicsPipeline(
   gsl::span<const VkDynamicState> dynamicStates,
   std::uint32_t renderPassSubpass, std::string name = {}) noexcept;
 
-void AddRenderable(Components::Renderable renderable) noexcept;
+void AddRenderable(Component::Renderable renderable) noexcept;
 
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {

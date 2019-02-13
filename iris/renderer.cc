@@ -1,6 +1,8 @@
 /*! \file
  * \brief \ref iris::Renderer definition.
  */
+#include "config.h"
+
 #include "absl/container/flat_hash_map.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -14,13 +16,9 @@
 #include "error.h"
 #include "glm/common.hpp"
 #if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 #include "glslang/Public/ShaderLang.h"
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic pop
-#endif
 #include "gsl/gsl"
 #include "io/json.h"
 #include "protos.h"
@@ -48,6 +46,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -150,23 +149,90 @@ static tbb::concurrent_queue<std::function<std::system_error(void)>>
 
 class Renderables {
 public:
-  std::vector<Components::Renderable> operator()() {
+  std::vector<Component::Renderable> operator()() {
     std::lock_guard<std::mutex> lock{mutex_};
     return renderables_;
   }
 
-  void push_back(Components::Renderable renderable) {
+  void push_back(Component::Renderable renderable) {
     std::lock_guard<std::mutex> lock{mutex_};
     renderables_.push_back(std::move(renderable));
   }
 
 private:
   std::mutex mutex_{};
-  std::vector<Components::Renderable> renderables_{};
+  std::vector<Component::Renderable> renderables_{};
 }; // class Renderables
 
 static Renderables sRenderables;
 
+static VkCommandBuffer
+Render(iris::Renderer::Component::Renderable const& renderable,
+       VkViewport* pViewport, VkRect2D* pScissor) noexcept {
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sGraphicsCommandPools[0];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Cannot allocate command buffer: {}", to_string(result));
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = sRenderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+
+  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    renderable.pipeline);
+
+  vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
+  vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
+
+  if (renderable.descriptorSet != VK_NULL_HANDLE) {
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            renderable.pipelineLayout, 0, 1,
+                            &renderable.descriptorSet, 0, nullptr);
+  }
+
+  if (renderable.vertexBuffer != VK_NULL_HANDLE) {
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &renderable.vertexBuffer,
+                           &renderable.vertexBufferBindingOffset);
+  }
+
+  if (renderable.indexBuffer != VK_NULL_HANDLE) {
+    vkCmdBindIndexBuffer(commandBuffer, renderable.indexBuffer,
+                         renderable.indexBufferBindingOffset,
+                         renderable.indexType);
+  }
+
+  if (renderable.numIndices > 0) {
+    vkCmdDrawIndexed(commandBuffer, renderable.numIndices,
+                     renderable.instanceCount, renderable.firstIndex,
+                     renderable.vertexOffset, renderable.firstInstance);
+  } else {
+    vkCmdDraw(commandBuffer, renderable.numVertices, renderable.instanceCount,
+              renderable.firstVertex, renderable.firstInstance);
+  }
+
+  vkEndCommandBuffer(commandBuffer);
+  return commandBuffer;
+} // Render
+
+#if 0
 [[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
                                   std::system_error>
 Render(std::vector<Components::Renderable> const& renderables,
@@ -195,8 +261,9 @@ Render(std::vector<Components::Renderable> const& renderables,
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
   commandBufferBI.pInheritanceInfo = &commandBufferII;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
   std::transform(
     renderables.begin(), renderables.end(), commandBuffers.begin(),
@@ -242,6 +309,7 @@ Render(std::vector<Components::Renderable> const& renderables,
 
   return std::move(commandBuffers);
 } // Render
+#endif
 
 static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
@@ -1273,7 +1341,9 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
 
-  auto currentTime = std::chrono::steady_clock::now();
+  auto const currentTime = std::chrono::steady_clock::now();
+  std::chrono::duration<float> const delta = currentTime - sPreviousFrameTime;
+  sPreviousFrameTime = currentTime;
 
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
@@ -1305,8 +1375,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 
     io.DisplaySize = {static_cast<float>(window.extent.width),
                       static_cast<float>(window.extent.height)};
-    io.DeltaTime =
-      static_cast<float>((currentTime - sPreviousFrameTime).count());
+    io.DeltaTime = delta.count();
 
     io.KeyCtrl = ImGui::IsKeyDown(wsi::Keys::kLeftControl) |
                  ImGui::IsKeyDown(wsi::Keys::kRightControl);
@@ -1340,7 +1409,6 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
     }
   }
 
-  sPreviousFrameTime = currentTime;
   sInFrame = true;
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
@@ -1348,15 +1416,6 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 void iris::Renderer::EndFrame(
   gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
-
-  std::vector<Components::Renderable> renderables = sRenderables();
-
-  auto renderableCBs = Render(renderables, sRenderPass);
-  if (!renderableCBs) {
-    GetLogger()->critical("Error rendering renderables: {}",
-                          renderableCBs.error().what());
-    return;
-  }
 
   auto&& windows = Windows();
   std::size_t const numWindows = windows.size();
@@ -1441,9 +1500,12 @@ void iris::Renderer::EndFrame(
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-    vkCmdExecuteCommands(frame.commandBuffer,
-                         gsl::narrow_cast<std::uint32_t>(renderableCBs->size()),
-                         renderableCBs->data());
+    std::vector<Component::Renderable> renderables = sRenderables();
+    for (auto&& renderable : renderables) {
+      VkCommandBuffer commandBuffer =
+        Render(renderable, &window.viewport, &window.scissor);
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+    }
 
     vkCmdExecuteCommands(frame.commandBuffer,
                          gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
@@ -1740,6 +1802,81 @@ const TBuiltInResource DefaultTBuiltInResource = {
     /* .generalConstantMatrixVectorIndexing = */ true,
   }};
 
+class DirStackIncluder : public glslang::TShader::Includer {
+public:
+  DirStackIncluder() noexcept = default;
+
+  virtual IncludeResult* includeLocal(char const* headerName,
+                                      char const* includerName,
+                                      std::size_t inclusionDepth) override {
+    return readLocalPath(headerName, includerName, inclusionDepth);
+  }
+
+  virtual IncludeResult* includeSystem(char const* headerName,
+                                       char const* includerName
+                                       [[maybe_unused]],
+                                       std::size_t inclusionDepth
+                                       [[maybe_unused]]) override {
+    return readSystemPath(headerName);
+  }
+
+  virtual void releaseInclude(IncludeResult* result) override {
+    if (result) {
+      delete[] static_cast<char*>(result->userData);
+      delete result;
+    }
+  }
+
+  virtual void pushExternalLocalDirectory(std::string const& dir) {
+    dirStack_.push_back(dir);
+    numExternalLocalDirs_ = dirStack_.size();
+  }
+
+private:
+  std::vector<filesystem::path> dirStack_{};
+  int numExternalLocalDirs_{0};
+
+  virtual IncludeResult* readLocalPath(filesystem::path const& headerName,
+                                       filesystem::path const& includerName,
+                                       int depth) {
+    // Discard popped include directories, and
+    // initialize when at parse-time first level.
+    dirStack_.resize(depth + numExternalLocalDirs_);
+
+    if (depth == 1) {
+      dirStack_.back() =
+        (includerName.has_parent_path() ? includerName.parent_path() : ".");
+    }
+
+    // Find a directory that works, using a reverse search of the include stack.
+    for (auto& dir : dirStack_) {
+      auto const path = dir / headerName;
+      std::ifstream ifs(path.c_str(),
+                        std::ios_base::binary | std::ios_base::ate);
+      if (ifs) {
+        dirStack_.push_back(path.parent_path());
+        return newIncludeResult(path, ifs, ifs.tellg());
+      }
+    }
+
+    return nullptr;
+  }
+
+  virtual IncludeResult* readSystemPath(char const*) const {
+    GetLogger()->error("including system headers not implemented");
+    return nullptr;
+  }
+
+  virtual IncludeResult* newIncludeResult(filesystem::path const& path,
+                                          std::ifstream& ifs,
+                                          int length) const {
+    char* content = new char[length];
+    ifs.seekg(0, ifs.beg);
+    ifs.read(content, length);
+    return new IncludeResult(path.c_str(), content, length, content);
+  }
+}; // class DirStackIncluder
+
 [[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
 CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
               filesystem::path const& path,
@@ -1773,8 +1910,11 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
   shader.setEnvTarget(glslang::EShTargetLanguage::EShTargetSpv,
                       glslang::EShTargetLanguageVersion::EShTargetSpv_1_0);
 
+  DirStackIncluder includer;
+  includer.pushExternalLocalDirectory(kIRISContentDirectory);
+
   if (!shader.parse(&DefaultTBuiltInResource, 1, false,
-                    EShMessages::EShMsgDefault)) {
+                    EShMessages::EShMsgDefault, includer)) {
     return tl::unexpected(std::string(shader.getInfoLog()));
   }
 
@@ -1965,6 +2105,6 @@ iris::Renderer::CreateGraphicsPipeline(
   return std::make_pair(layout, pipeline);
   } // iris::Renderer::CreateGraphicsPipeline
 
-void iris::Renderer::AddRenderable(Components::Renderable renderable) noexcept {
+void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   sRenderables.push_back(std::move(renderable));
 } // AddRenderable
