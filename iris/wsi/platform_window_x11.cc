@@ -430,17 +430,16 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
 
 void iris::wsi::PlatformWindow::Impl::Dispatch(
   gsl::not_null<::xcb_generic_event_t*> event) noexcept {
-  ImGuiIO& io = ImGui::GetIO();
 
   switch (event->response_type & ~0x80) {
   case XCB_KEY_PRESS: {
     auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
-    io.KeysDown[keyLUT_[ev->detail]] = 1;
+    ImGui::GetIO().KeysDown[keyLUT_[ev->detail]] = 1;
   } break;
 
   case XCB_KEY_RELEASE: {
     auto ev = reinterpret_cast<::xcb_key_press_event_t*>(event.get());
-    io.KeysDown[keyLUT_[ev->detail]] = 0;
+    ImGui::GetIO().KeysDown[keyLUT_[ev->detail]] = 0;
   } break;
 
   case XCB_BUTTON_PRESS: {
@@ -457,7 +456,7 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
       // case 5: scroll_.y -= 1.f; break;
     }
 
-    io.MouseDown[button] = true;
+    ImGui::GetIO().MouseDown[button] = true;
     // FIXME: need to handle capture
   } break;
 
@@ -472,7 +471,7 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
     }
 
     // FIXME: need to handle capture
-    io.MouseDown[button] = false;
+    ImGui::GetIO().MouseDown[button] = false;
   } break;
 
   case XCB_CLIENT_MESSAGE: {

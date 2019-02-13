@@ -235,7 +235,6 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
 ::LRESULT CALLBACK iris::wsi::PlatformWindow::Impl::Dispatch(
   ::UINT uMsg, ::WPARAM wParam, ::LPARAM lParam) noexcept {
   ::LRESULT res = 0;
-  ImGuiIO& io = ImGui::GetIO();
 
   switch (uMsg) {
   case WM_ACTIVATE: focused_ = (LOWORD(wParam) == WA_ACTIVE); break;
@@ -243,10 +242,10 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
   case WM_CHAR: break;
 
   case WM_KEYDOWN:
-  case WM_SYSKEYDOWN: io.KeysDown[keyLUT_[wParam]] = 1; break;
+  case WM_SYSKEYDOWN: ImGui::GetIO().KeysDown[keyLUT_[wParam]] = 1; break;
 
   case WM_KEYUP:
-  case WM_SYSKEYUP: io.KeysDown[keyLUT_[wParam]] = 0; break;
+  case WM_SYSKEYUP: ImGui::GetIO().KeysDown[keyLUT_[wParam]] = 0; break;
 
   case WM_LBUTTONDOWN:
   case WM_LBUTTONDBLCLK:
@@ -270,7 +269,7 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
     if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL) {
       ::SetCapture(handle_.hWnd);
     }
-    io.MouseDown[button] = true;
+    ImGui::GetIO().MouseDown[button] = true;
   } break;
 
   case WM_LBUTTONUP:
@@ -288,20 +287,22 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
       }
     }
 
-    io.MouseDown[button] = false;
+    ImGui::GetIO().MouseDown[button] = false;
     if (!ImGui::IsAnyMouseDown() && ::GetCapture() == handle_.hWnd) {
       ::ReleaseCapture();
     }
   } break;
 
   case WM_MOUSEWHEEL:
-    io.MouseWheel += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
-                     static_cast<float>(WHEEL_DELTA);
+    ImGui::GetIO().MouseWheel +=
+      static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+      static_cast<float>(WHEEL_DELTA);
     break;
 
   case WM_MOUSEHWHEEL:
-    io.MouseWheelH += static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
-                      static_cast<float>(WHEEL_DELTA);
+    ImGui::GetIO().MouseWheelH +=
+      static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+      static_cast<float>(WHEEL_DELTA);
     break;
 
   case WM_MOVE:

@@ -1411,7 +1411,8 @@ void iris::Renderer::BeginFrame() noexcept {
   sInFrame = true;
 } // iris::Renderer::BeginFrame()
 
-[[nodiscard]] static absl::FixedArray<VkCommandBuffer>
+[[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
+                                  std::system_error>
 RenderAllRenderables(VkRenderPass renderPass) noexcept {
   std::uint32_t const numRenderables = 1;
 
@@ -1422,8 +1423,13 @@ RenderAllRenderables(VkRenderPass renderPass) noexcept {
   commandBufferAI.commandBufferCount = numRenderables;
 
   absl::FixedArray<VkCommandBuffer> commandBuffers(numRenderables);
-  vkAllocateCommandBuffers(iris::Renderer::sDevice, &commandBufferAI,
+  if (auto result = vkAllocateCommandBuffers(iris::Renderer::sDevice, &commandBufferAI,
                            commandBuffers.data());
+    result != VK_SUCCESS) {
+      return tl::unexpected(
+        std::system_error(iris::Renderer::make_error_code(result),
+                          "Cannot allocate command buffers"));
+  }
 
   VkCommandBufferInheritanceInfo commandBufferII = {};
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -1439,8 +1445,9 @@ RenderAllRenderables(VkRenderPass renderPass) noexcept {
   for (auto&& commandBuffer : commandBuffers) {
     if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
         result != VK_SUCCESS) {
-      iris::GetLogger()->error("Cannot begin command buffer: {}",
-                               iris::Renderer::to_string(result));
+      return tl::unexpected(
+        std::system_error(iris::Renderer::make_error_code(result),
+                          "Cannot begin command buffer"));
     }
 
     // Bind renderable data items
@@ -1448,19 +1455,24 @@ RenderAllRenderables(VkRenderPass renderPass) noexcept {
 
     if (auto result = vkEndCommandBuffer(commandBuffer);
         result != VK_SUCCESS) {
-      iris::GetLogger()->error("Cannot end command buffer: {}",
-                               iris::Renderer::to_string(result));
+      return tl::unexpected(
+        std::system_error(iris::Renderer::make_error_code(result),
+                          "Cannot end command buffer"));
     }
   }
 
-  return commandBuffers;
+  return std::move(commandBuffers);
 } // RenderAllRenderables
 
 void iris::Renderer::EndFrame() noexcept {
   Expects(sInFrame);
 
-  absl::FixedArray<VkCommandBuffer> renderableCBs =
-    RenderAllRenderables(sRenderPass);
+  auto renderableCBs = RenderAllRenderables(sRenderPass);
+  if (!renderableCBs) {
+    GetLogger()->critical("Error rendering renderables: {}",
+                          renderableCBs.error().what());
+    return;
+  }
 
   auto&& windows = Windows();
   std::size_t const numWindows = windows.size();
@@ -1546,8 +1558,8 @@ void iris::Renderer::EndFrame() noexcept {
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
     vkCmdExecuteCommands(frame.commandBuffer,
-                         gsl::narrow_cast<std::uint32_t>(renderableCBs.size()),
-                         renderableCBs.data());
+                         gsl::narrow_cast<std::uint32_t>(renderableCBs->size()),
+                         renderableCBs->data());
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);
