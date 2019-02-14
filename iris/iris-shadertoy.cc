@@ -39,7 +39,6 @@ https://www.shadertoy.com/view/4lGSDw
 #pragma GCC diagnostic ignored "-Wshadow"
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor" // wow!
 #endif
-#include "cpprest/filestream.h"
 #include "cpprest/http_client.h"
 #include "fmt/format.h"
 #include "glm/vec3.hpp"
@@ -219,6 +218,35 @@ _declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #include <Windows.h>
 #include <shellapi.h>
 
+std::wstring string_to_wstring(std::string const& str) {
+  if (str.empty()) return {};
+
+  int const size = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+  if (size == 0) return {};
+
+  std::vector<wchar_t> bytes(size);
+  int const count = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1,
+                                          bytes.data(), bytes.size());
+  if (count == 0) throw std::runtime_error("string_to_wstring");
+
+  return bytes.data();
+} // string_to_wstring
+
+std::string wstring_to_string(std::wstring const& wstr) {
+  if (wstr.empty()) return {};
+
+  int const size =
+    ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
+  if (size == 0) return {};
+
+  std::vector<char> bytes(size);
+  int const count = ::WideCharToMultiByte(
+    CP_UTF8, 0, wstr.c_str(), -1, bytes.data(), bytes.size(), NULL, NULL);
+  if (count == 0) throw std::runtime_error("wstring_to_string");
+
+  return bytes.data();
+} // wstring_to_string
+
 int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
   // Oh my goodness
   char* cmdLine = ::GetCommandLineA();
@@ -294,13 +322,19 @@ int main(int argc, char** argv) {
           return response.extract_json();
         })
       .then([&](web::json::value json) {
-        auto&& renderpass = json.at("Shader").at("renderpass").at(0);
-        if (renderpass.at("inputs").size() > 0) {
+        auto&& renderpass = json.at(U("Shader")).at(U("renderpass")).at(0);
+
+        if (renderpass.at(U("inputs")).size() > 0) {
           throw std::runtime_error("inputs are not yet implemented");
-        } else if (renderpass.at("type").as_string() != "image") {
+        } else if (renderpass.at(U("type")).as_string() != U("image")) {
           throw std::runtime_error("non-image outputs are not yet implemented");
         }
-        code = renderpass.at("code").as_string();
+
+#if PLATFORM_WINDOWS
+        code = wstring_to_string(renderpass.at(U("code")).as_string());
+#else
+        code = renderpass.at(U("code")).as_string();
+#endif
       })
       .wait();
 
@@ -312,12 +346,17 @@ int main(int argc, char** argv) {
 
   if (playlist) {
     std::vector<std::string> const splits = absl::StrSplit(*playlist, ',');
+
     for (auto&& split : splits) {
       web::http::uri_builder uri;
       uri.set_scheme(U("https"));
       uri.set_host(U("www.shadertoy.com"));
       uri.set_path(U("api/v1/shaders"));
+#if PLATFORM_WINDOWS
+      uri.append_path(string_to_wstring(split));
+#else
       uri.append_path(split);
+#endif
       uri.append_query(U("key=BtHKWW"));
 
       std::string const code = getCode(uri.to_uri());
@@ -330,13 +369,17 @@ int main(int argc, char** argv) {
     }
 
   } else if (url) {
+#if PLATFORM_WINDOWS
+    web::http::uri const viewURI(string_to_wstring(*url));
+#else
     web::http::uri const viewURI(*url);
+#endif
 
     // grab the last component of the uri path: that's the shaderID
     auto const path = viewURI.path();
     auto const id = path.find_last_of('/');
 
-    if (id == path.npos) {
+    if (id == std::string::npos) {
       logger.error("Bad URL: {}", *url);
       std::exit(EXIT_FAILURE);
     }
@@ -347,7 +390,11 @@ int main(int argc, char** argv) {
     apiURI.set_path(U("api/v1/shaders"));
     apiURI.append_path(path.substr(id));
     apiURI.append_query(U("key=BtHKWW"));
+#if PLATFORM_WINDOWS
+    logger.debug("api URI: {}", wstring_to_string(apiURI.to_string()));
+#else
     logger.debug("api URI: {}", apiURI.to_string());
+#endif
 
     std::string const code = getCode(apiURI.to_uri());
     if (auto r = CreateRenderable(logger, code)) {

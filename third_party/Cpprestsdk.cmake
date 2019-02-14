@@ -1,3 +1,5 @@
+if(NOT WIN32)
+
 set(BUILD_TESTS OFF)
 set(BUILD_SAMPLES OFF)
 
@@ -12,3 +14,4 @@ FetchContent_Populate(cpprestsdk
 
 add_subdirectory(${cpprestsdk_SOURCE_DIR} ${cpprestsdk_BINARY_DIR})
 
+endif()

@@ -1,8 +1,9 @@
 option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
 
-find_package(Filesystem REQUIRED)
+#find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
+find_package(cpprestsdk REQUIRED)
 
 if(UNIX)
   find_package(PkgConfig REQUIRED)
@@ -119,14 +120,16 @@ add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
 target_link_libraries(iris
   PUBLIC
     flags imgui vma
-    GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
+    GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
     mikktspace stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}
-    protobuf::libprotobuf cpprest
+    protobuf::libprotobuf cpprestsdk::cpprest
     TBB::tbb Threads::Threads
+    $<$<CXX_COMPILER_ID:GNU>:-lstdc++fs>
+    $<$<CXX_COMPILER_ID:Clang>:-lc++fs>
     $<$<PLATFORM_ID:Linux>:-ldl>
 )
 

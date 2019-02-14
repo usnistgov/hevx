@@ -1834,28 +1834,26 @@ public:
   }
 
 private:
-  std::vector<filesystem::path> dirStack_{};
+  std::vector<std::string> dirStack_{};
   int numExternalLocalDirs_{0};
 
-  virtual IncludeResult* readLocalPath(filesystem::path const& headerName,
-                                       filesystem::path const& includerName,
+  virtual IncludeResult* readLocalPath(std::string const& headerName,
+                                       std::string const& includerName,
                                        int depth) {
     // Discard popped include directories, and
     // initialize when at parse-time first level.
     dirStack_.resize(depth + numExternalLocalDirs_);
 
-    if (depth == 1) {
-      dirStack_.back() =
-        (includerName.has_parent_path() ? includerName.parent_path() : ".");
-    }
+    if (depth == 1) dirStack_.back() = getDirectory(includerName);
 
     // Find a directory that works, using a reverse search of the include stack.
     for (auto& dir : dirStack_) {
-      auto const path = dir / headerName;
+      std::string path = dir + "/"s + headerName;
+      std::replace(path.begin(), path.end(), '\\', '/');
       std::ifstream ifs(path.c_str(),
                         std::ios_base::binary | std::ios_base::ate);
       if (ifs) {
-        dirStack_.push_back(path.parent_path());
+        dirStack_.push_back(getDirectory(path));
         return newIncludeResult(path, ifs, ifs.tellg());
       }
     }
@@ -1868,13 +1866,20 @@ private:
     return nullptr;
   }
 
-  virtual IncludeResult* newIncludeResult(filesystem::path const& path,
+  virtual IncludeResult* newIncludeResult(std::string const& path,
                                           std::ifstream& ifs,
                                           int length) const {
     char* content = new char[length];
     ifs.seekg(0, ifs.beg);
     ifs.read(content, length);
     return new IncludeResult(path.c_str(), content, length, content);
+  }
+
+  // If no path markers, return current working directory.
+  // Otherwise, strip file name and return path leading up to it.
+  virtual std::string getDirectory(const std::string path) const {
+    size_t last = path.find_last_of("/\\");
+    return last == std::string::npos ? "." : path.substr(0, last);
   }
 }; // class DirStackIncluder
 

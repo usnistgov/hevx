@@ -29,6 +29,13 @@ string(CONFIGURE [[
 
 check_cxx_source_compiles("${code}" CAN_COMPILE_FS_WITHOUT_LINK)
 
+message(STATUS "have_fs: ${have_fs}")
+message(STATUS "HAVE_STD_FILESYSTEM: ${HAVE_STD_FILESYSTEM}")
+message(STATUS "HAVE_STD_EXPERIMENTAL_FILESYSTEM: ${HAVE_STD_EXPERIMENTAL_FILESYSTEM}")
+message(STATUS "header: ${header}")
+message(STATUS "namespace: ${namespace}")
+message(STATUS "CAN_COMPILE_FS_WITHOUT_LINK: ${CAN_COMPILE_FS_WITHOUT_LINK}")
+
 if(NOT CAN_COMPILE_FS_WITHOUT_LINK)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_REQUIRED_LIBRARIES -lstdc++fs)

@@ -18,7 +18,9 @@ Currently this code is under active development and in a pre-release state.
   - Wheezy Template: `pip install --user wheezy.template`
 - GCC >= 7
 - X11 XCB development libraries
+- Boost development libraries
 - Vulkan SDK
+- cpprestsdk (Windows only)
 
 ### Installation ###
 
