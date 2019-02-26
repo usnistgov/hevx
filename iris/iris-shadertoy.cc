@@ -44,6 +44,7 @@ https://www.shadertoy.com/view/4lGSDw
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
 #include "iris/renderer.h"
+#include "iris/renderer_util.h"
 #include "iris/string_util.h"
 #include "iris/wsi/input.h"
 #if PLATFORM_COMPILER_MSVC

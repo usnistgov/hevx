@@ -3,7 +3,10 @@ option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
 #find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
-find_package(cpprestsdk REQUIRED)
+
+if(WIN32)
+  find_package(cpprestsdk REQUIRED)
+endif()
 
 if(UNIX)
   find_package(PkgConfig REQUIRED)
@@ -102,7 +105,9 @@ set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   io/json.cc
   io/read_file.cc
+  io/shadertoy.cc
   renderer.cc
+  renderer_util.cc
   string_util.cc
   vulkan_util.cc
   wsi/platform_window.cc
@@ -114,7 +119,7 @@ elseif(UNIX)
   list(APPEND SOURCES wsi/platform_window_x11.cc)
 endif()
 
-add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
+add_library(iris STATIC ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC

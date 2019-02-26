@@ -97,45 +97,6 @@ LoadFile(filesystem::path const& path) noexcept;
 tl::expected<void, std::system_error>
 Control(iris::Control::Control const& control) noexcept;
 
-/////
-//
-// FIXME: MUST re-work this once I've got it working
-//
-/////
-
-tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
-AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
-
-struct Shader {
-  VkShaderModule handle;
-  VkShaderStageFlagBits stage;
-}; // struct Shader
-
-tl::expected<VkShaderModule, std::system_error>
-CompileShaderFromSource(std::string_view source, VkShaderStageFlagBits stage,
-                        std::string name = {}) noexcept;
-
-tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
-CreateGraphicsPipeline(
-  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
-  gsl::span<const VkPushConstantRange> pushConstantRanges,
-  gsl::span<const Shader> shaders,
-  gsl::span<const VkVertexInputBindingDescription>
-    vertexInputBindingDescriptions,
-  gsl::span<const VkVertexInputAttributeDescription>
-    vertexInputAttributeDescriptions,
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
-  VkPipelineViewportStateCreateInfo viewportStateCI,
-  VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
-  VkPipelineMultisampleStateCreateInfo multisampleStateCI,
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
-  gsl::span<const VkPipelineColorBlendAttachmentState>
-    colorBlendAttachmentStates,
-  gsl::span<const VkDynamicState> dynamicStates,
-  std::uint32_t renderPassSubpass, std::string name = {}) noexcept;
-
-void AddRenderable(Component::Renderable renderable) noexcept;
-
 //! \brief bit-wise or of \ref Renderer::Options.
 inline Options operator|(Options const& lhs, Options const& rhs) noexcept {
   using U = std::underlying_type_t<Options>;

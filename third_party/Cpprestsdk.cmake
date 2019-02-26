@@ -13,5 +13,6 @@ FetchContent_Populate(cpprestsdk
 )
 
 add_subdirectory(${cpprestsdk_SOURCE_DIR} ${cpprestsdk_BINARY_DIR})
+add_library(cpprestsdk::cpprest ALIAS cpprest)
 
 endif()
