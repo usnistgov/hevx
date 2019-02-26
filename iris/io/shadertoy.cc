@@ -8,8 +8,10 @@
 #pragma GCC diagnostic ignored "-Wshadow"
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor" // wow!
 #endif
+#define _TURN_OFF_PLATFORM_STRING
 #include "cpprest/http_client.h"
 #include "glm/vec3.hpp"
+#include "io/read_file.h"
 #include "renderer_util.h"
 #include "string_util.h"
 #include "tbb/task.h"
@@ -149,36 +151,154 @@ void main() {
 
 // this throws
 std::string GetCode(web::http::uri const& uri) {
+  IRIS_LOG_ENTER();
+  using namespace web;
   std::string code;
 
-  web::http::client::http_client client(uri.to_string());
-  client.request(web::http::methods::GET)
-    .then(
-      [&](web::http::http_response response) -> pplx::task<web::json::value> {
-        GetLogger()->debug(
-          "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
-          response.status_code());
-        return response.extract_json();
-      })
-    .then([&](web::json::value json) {
-      auto&& renderpass = json.at(U("Shader")).at(U("renderpass")).at(0);
+  http::client::http_client client(uri.to_string());
+  client.request(http::methods::GET)
+    .then([&](http::http_response response) -> pplx::task<json::value> {
+      GetLogger()->trace(
+        "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
+        response.status_code());
+      return response.extract_json();
+    })
+    .then([&](json::value json) {
+      GetLogger()->trace("parsing code");
 
-      if (renderpass.at(U("inputs")).size() > 0) {
-        throw std::runtime_error("inputs are not yet implemented");
-      } else if (renderpass.at(U("type")).as_string() != U("image")) {
-        throw std::runtime_error("non-image outputs are not yet implemented");
+      json::value shader;
+      try {
+        shader = json.at(_XPLATSTR("Shader"));
+      } catch (std::exception const& e) {
+        GetLogger()->error("Cannot find Shader in code: {}", e.what());
+        IRIS_LOG_LEAVE();
+        return;
       }
 
+      json::value renderpasses;
+      try {
+        renderpasses = shader.at(_XPLATSTR("renderpass"));
+      } catch (std::exception const& e) {
+        GetLogger()->error("Cannot find renderpass in code: {}", e.what());
+        IRIS_LOG_LEAVE();
+        return;
+      }
+
+      if (!renderpasses.is_array()) {
+        GetLogger()->error("Renderpasses is not an array");
+        IRIS_LOG_LEAVE();
+        return;
+      }
+
+      json::value renderpass;
+      try {
+        renderpass = renderpasses.at(0);
+      } catch (std::exception const& e) {
+        GetLogger()->error("No renderpass in renderpasses array: {}", e.what());
+        IRIS_LOG_LEAVE();
+        return;
+      }
+
+      if (renderpass.has_field(_XPLATSTR("inputs")) &&
+          renderpass.at(_XPLATSTR("inputs")).size() > 0) {
+        GetLogger()->error("inputs are not yet implemented");
+        IRIS_LOG_LEAVE();
+        return;
+      }
+
+      if (renderpass.has_field(_XPLATSTR("type")) &&
+          renderpass.at(_XPLATSTR("type")).is_string() &&
+          renderpass.at(_XPLATSTR("type")).as_string() != _XPLATSTR("image")) {
+        GetLogger()->error("non-image outputs are not yet implemented");
+        IRIS_LOG_LEAVE();
+        return;
+      }
+
+      try {
+        GetLogger()->trace("converting code");
 #if PLATFORM_WINDOWS
-      code = wstring_to_string(renderpass.at(U("code")).as_string());
+        code = wstring_to_string(renderpass.at(_XPLATSTR("code")).as_string());
 #else
-      code = renderpass.at(U("code")).as_string();
+        code = renderpass.at(_XPLATSTR("code")).as_string();
 #endif
+      } catch (std::exception const& e) {
+        GetLogger()->error("Error converting code: {}", e.what());
+      }
+
+      GetLogger()->trace("done parsing code");
     })
     .wait();
 
+  IRIS_LOG_LEAVE();
   return code;
 } // GetCode
+
+static void LoadFile(web::http::uri const& uri) {
+#if PLATFORM_WINDOWS
+  filesystem::path const path = wstring_to_string(uri.path());
+#else
+  filesystem::path const path = uri.path();
+#endif
+
+  std::string code;
+  if (auto bytes = ReadFile(path)) {
+    code = std::string(reinterpret_cast<char*>(bytes->data()), bytes->size());
+  } else {
+    GetLogger()->error("Error reading file {}: {}", uri.path(),
+                       bytes.error().what());
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  GetLogger()->trace("creating renderable");
+  if (auto r = CreateRenderable(code)) {
+    iris::Renderer::AddRenderable(std::move(*r));
+  } else {
+    GetLogger()->error("Error creating renderable: {}", r.error().what());
+  }
+} // LoadFile
+
+static void LoadWeb(web::http::uri const& uri) {
+  IRIS_LOG_ENTER();
+
+  // grab the last component of the uri path: that's the shaderID
+  auto const path = uri.path();
+  auto const id = path.find_last_of('/');
+
+#if PLATFORM_WINDOWS
+  if (id == std::wstring::npos) {
+    GetLogger()->error("Bad URI: {}", wstring_to_string(uri.to_string()));
+#else
+  if (id == std::string::npos) {
+    GetLogger()->error("Bad URI: {}", uri.to_string());
+#endif
+    IRIS_LOG_LEAVE();
+    return;
+  }
+
+  web::http::uri_builder apiURI;
+  apiURI.set_scheme(uri.scheme());
+  apiURI.set_host(uri.host());
+  apiURI.set_path(_XPLATSTR("api/v1/shaders"));
+  apiURI.append_path(path.substr(id));
+  apiURI.append_query(_XPLATSTR("key=BtHKWW"));
+#if PLATFORM_WINDOWS
+  GetLogger()->debug("api URI: {}", wstring_to_string(apiURI.to_string()));
+#else
+  GetLogger()->debug("api URI: {}", apiURI.to_string());
+#endif
+
+  std::string const code = GetCode(apiURI.to_uri());
+
+  GetLogger()->trace("creating renderable");
+  if (auto r = CreateRenderable(code)) {
+    iris::Renderer::AddRenderable(std::move(*r));
+  } else {
+    GetLogger()->error("Error creating renderable: {}", r.error().what());
+  }
+
+  IRIS_LOG_LEAVE();
+} // LoadWeb
 
 class LoadTask : public tbb::task {
 public:
@@ -188,41 +308,53 @@ public:
   tbb::task* execute() override {
     IRIS_LOG_ENTER();
 #if PLATFORM_WINDOWS
-    web::http::uri const viewURI(string_to_wstring(url_));
+    web::http::uri const uri(string_to_wstring(url_));
 #else
-    web::http::uri const viewURI(url_);
+    web::http::uri const uri(url_);
 #endif
-
-    // grab the last component of the uri path: that's the shaderID
-    auto const path = viewURI.path();
-    auto const id = path.find_last_of('/');
 
 #if PLATFORM_WINDOWS
-    if (id == std::wstring::npos) {
+    GetLogger()->debug("Loading scheme: {}", wstring_to_string(uri.scheme()));
 #else
-    if (id == std::string::npos) {
+    GetLogger()->debug("Loading scheme: {}", uri.scheme());
 #endif
-      GetLogger()->error("Bad URL: {}", url_);
-      IRIS_LOG_LEAVE();
-      return nullptr;
+
+    if (uri.scheme() == _XPLATSTR("file")) {
+      LoadFile(uri);
+    } else if (uri.scheme() == _XPLATSTR("http") ||
+               uri.scheme() == _XPLATSTR("https")) {
+      LoadWeb(uri);
+    } else {
+#if PLATFORM_WINDOWS
+      GetLogger()->error("Unknown scheme: {}", wstring_to_string(uri.scheme()));
+#else
+      GetLogger()->error("Unknown scheme: {}", uri.scheme());
+#endif
     }
 
-    web::http::uri_builder apiURI;
-    apiURI.set_scheme(viewURI.scheme());
-    apiURI.set_host(viewURI.host());
-    apiURI.set_path(U("api/v1/shaders"));
-    apiURI.append_path(path.substr(id));
-    apiURI.append_query(U("key=BtHKWW"));
-#if PLATFORM_WINDOWS
-    GetLogger()->debug("api URI: {}", wstring_to_string(apiURI.to_string()));
-#else
-    GetLogger()->debug("api URI: {}", apiURI.to_string());
-#endif
+    IRIS_LOG_LEAVE();
+    return nullptr;
+  } // execute
 
-    std::string const code = GetCode(apiURI.to_uri());
+private:
+  std::string url_;
+}; // class LoadTask
 
-    if (auto r = CreateRenderable(code)) {
-        iris::Renderer::AddRenderable(std::move(*r));
+class CreateTask : public tbb::task {
+public:
+  CreateTask(Control::ShaderToy::Source const& source) {
+    for (int i = 0; i < source.source_size(); ++i) {
+      code_ += source.source(i);
+      code_ += "\n";
+    }
+  }
+
+  tbb::task* execute() override {
+    IRIS_LOG_ENTER();
+
+    GetLogger()->trace("creating renderable");
+    if (auto r = CreateRenderable(code_)) {
+      iris::Renderer::AddRenderable(std::move(*r));
     } else {
       GetLogger()->error("Error creating renderable: {}", r.error().what());
     }
@@ -232,20 +364,37 @@ public:
   } // execute
 
 private:
-  std::string url_;
-};   // class LoadTask
+  std::string code_;
+}; // class CreateTask
 
 } // namespace iris::io
 
 std::function<std::system_error(void)>
-iris::io::LoadShaderToy(std::string const& url) noexcept {
+iris::io::LoadShaderToy(Control::ShaderToy const& message) noexcept {
   IRIS_LOG_ENTER();
 
-  try {
-    LoadTask* task = new (tbb::task::allocate_root()) LoadTask(url);
-    tbb::task::enqueue(*task);
-  } catch (std::exception const& e) {
-    GetLogger()->warn("Loading shadertoy failed: {}", e.what());
+  switch (message.type_case()) {
+  case Control::ShaderToy::TypeCase::kUrl:
+    try {
+      LoadTask* task = new (tbb::task::allocate_root()) LoadTask(message.url());
+      tbb::task::enqueue(*task);
+    } catch (std::exception const& e) {
+      GetLogger()->warn("Loading shadertoy failed: {}", e.what());
+    }
+    break;
+  case Control::ShaderToy::TypeCase::kCode:
+    try {
+      CreateTask* task =
+        new (tbb::task::allocate_root()) CreateTask(message.code());
+      tbb::task::enqueue(*task);
+    } catch (std::exception const& e) {
+      GetLogger()->warn("Loading shadertoy failed: {}", e.what());
+    }
+    break;
+  default:
+    GetLogger()->error("Unsupported controlMessage message type {}",
+                       message.type_case());
+    break;
   }
 
   IRIS_LOG_LEAVE();

@@ -1450,37 +1450,26 @@ tl::expected<void, std::system_error>
 iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_ENTER();
 
-  if (!iris::Control::Control::Type_IsValid(controlMessage.type())) {
-    GetLogger()->error("Invalid controlMessage message type {}",
-                       controlMessage.type());
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kControlMessageInvalid,
-      fmt::format("Invalid controlMessage type {}", controlMessage.type())));
-  }
-
-  switch (controlMessage.type()) {
-  case iris::Control::Control_Type_DISPLAYS:
+  switch (controlMessage.type_case()) {
+  case iris::Control::Control::TypeCase::kDisplays:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       CreateEmplaceWindow(controlMessage.displays().windows(i));
     }
     break;
-  case iris::Control::Control_Type_WINDOW:
+  case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());
     break;
-  case iris::Control::Control_Type_SHADERTOY:
-    for (int i = 0; i < controlMessage.shadertoy().url_size(); ++i) {
-      sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy().url(i)));
-    }
+  case iris::Control::Control::TypeCase::kShaderToy:
+    sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy()));
     break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",
-                       controlMessage.type());
+                       controlMessage.type_case());
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(Error::kControlMessageInvalid,
                         fmt::format("Unsupported controlMessage type {}",
-                                    controlMessage.type())));
+                                    controlMessage.type_case())));
     break;
   }
 

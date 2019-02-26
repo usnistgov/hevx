@@ -2,5 +2,12 @@ syntax = "proto3";
 package iris.Control;
 
 message ShaderToy {
-  repeated string url = 1;
+  message Source {
+    repeated string source = 1;
+  }
+
+  oneof type {
+    string url = 1;
+    Source code = 2;
+  }
 }

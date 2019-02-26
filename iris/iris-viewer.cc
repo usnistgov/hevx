@@ -7,6 +7,7 @@
 #include "absl/debugging/symbolize.h"
 #include "fmt/format.h"
 #include "iris/renderer.h"
+#include "iris/protos.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -59,6 +60,7 @@ int main(int argc, char** argv) {
   absl::InstallFailureSignalHandler({});
 
   flags::args const args(argc, argv);
+  auto const shadertoy_url = args.get<std::string>("shadertoy-url");
   auto const& files = args.positional();
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
@@ -91,6 +93,12 @@ int main(int argc, char** argv) {
     if (auto result = iris::Renderer::LoadFile(file); !result) {
       logger.error("Error loading {}: {}", file, result.error().what());
     }
+  }
+
+  if (shadertoy_url) {
+    iris::Control::Control message;
+    message.mutable_shadertoy()->set_url(*shadertoy_url);
+    iris::Renderer::Control(message);
   }
 
   while (iris::Renderer::IsRunning()) {
