@@ -553,33 +553,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       make_error_code(result), "Cannot create images ready semaphore"));
   }
 
-#if 0
-  if (auto error = CreateCommandPools(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = CreateDescriptorPools(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = AllocateCommandBuffers(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = CreateUniformBuffers(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-
-  if (auto error = CreateDescriptorSets(); error.code()) {
-    IRIS_LOG_LEAVE();
-    return {error};
-  }
-#endif
-
   sRunning = true;
   IRIS_LOG_LEAVE();
   return {};
