@@ -44,6 +44,7 @@ https://www.shadertoy.com/view/4lGSDw
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
 #include "iris/renderer.h"
+#include "iris/string_util.h"
 #include "iris/wsi/input.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -218,35 +219,6 @@ _declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #include <Windows.h>
 #include <shellapi.h>
 
-std::wstring string_to_wstring(std::string const& str) {
-  if (str.empty()) return {};
-
-  int const size = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
-  if (size == 0) return {};
-
-  std::vector<wchar_t> bytes(size);
-  int const count = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1,
-                                          bytes.data(), bytes.size());
-  if (count == 0) throw std::runtime_error("string_to_wstring");
-
-  return bytes.data();
-} // string_to_wstring
-
-std::string wstring_to_string(std::wstring const& wstr) {
-  if (wstr.empty()) return {};
-
-  int const size =
-    ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, NULL, 0, NULL, NULL);
-  if (size == 0) return {};
-
-  std::vector<char> bytes(size);
-  int const count = ::WideCharToMultiByte(
-    CP_UTF8, 0, wstr.c_str(), -1, bytes.data(), bytes.size(), NULL, NULL);
-  if (count == 0) throw std::runtime_error("wstring_to_string");
-
-  return bytes.data();
-} // wstring_to_string
-
 int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
   // Oh my goodness
   char* cmdLine = ::GetCommandLineA();
@@ -331,7 +303,7 @@ int main(int argc, char** argv) {
         }
 
 #if PLATFORM_WINDOWS
-        code = wstring_to_string(renderpass.at(U("code")).as_string());
+        code = iris::wstring_to_string(renderpass.at(U("code")).as_string());
 #else
         code = renderpass.at(U("code")).as_string();
 #endif
@@ -353,7 +325,7 @@ int main(int argc, char** argv) {
       uri.set_host(U("www.shadertoy.com"));
       uri.set_path(U("api/v1/shaders"));
 #if PLATFORM_WINDOWS
-      uri.append_path(string_to_wstring(split));
+      uri.append_path(iris::string_to_wstring(split));
 #else
       uri.append_path(split);
 #endif
@@ -370,7 +342,7 @@ int main(int argc, char** argv) {
 
   } else if (url) {
 #if PLATFORM_WINDOWS
-    web::http::uri const viewURI(string_to_wstring(*url));
+    web::http::uri const viewURI(iris::string_to_wstring(*url));
 #else
     web::http::uri const viewURI(*url);
 #endif
@@ -391,7 +363,7 @@ int main(int argc, char** argv) {
     apiURI.append_path(path.substr(id));
     apiURI.append_query(U("key=BtHKWW"));
 #if PLATFORM_WINDOWS
-    logger.debug("api URI: {}", wstring_to_string(apiURI.to_string()));
+    logger.debug("api URI: {}", iris::wstring_to_string(apiURI.to_string()));
 #else
     logger.debug("api URI: {}", apiURI.to_string());
 #endif

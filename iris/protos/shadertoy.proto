@@ -1,0 +1,6 @@
+syntax = "proto3";
+package iris.Control;
+
+message ShaderToy {
+  repeated string url = 1;
+}

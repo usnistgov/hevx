@@ -12,6 +12,8 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
+#define _TURN_OFF_PLATFORM_STRING // disable U macro in cpprest
+#include "cpprest/http_client.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"
@@ -23,6 +25,7 @@
 #include "io/json.h"
 #include "protos.h"
 #include "renderer.h"
+#include "string_util.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -32,8 +35,8 @@
 #pragma warning(pop)
 #endif
 #include "tbb/concurrent_queue.h"
-#include "tbb/task_scheduler_init.h"
 #include "tbb/task.h"
+#include "tbb/task_scheduler_init.h"
 #include "vulkan.h"
 #include "vulkan_util.h"
 #include "wsi/input.h"
@@ -233,86 +236,8 @@ Render(iris::Renderer::Component::Renderable const& renderable,
   return commandBuffer;
 } // Render
 
-#if 0
-[[nodiscard]] static tl::expected<absl::FixedArray<VkCommandBuffer>,
-                                  std::system_error>
-Render(std::vector<Components::Renderable> const& renderables,
-       VkRenderPass renderPass) noexcept {
-  std::uint32_t const numRenderables = renderables.size();
-
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPools[0];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-  commandBufferAI.commandBufferCount = numRenderables;
-
-  absl::FixedArray<VkCommandBuffer> commandBuffers(numRenderables);
-  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
-                                             commandBuffers.data());
-      result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate command buffers"));
-  }
-
-  VkCommandBufferInheritanceInfo commandBufferII = {};
-  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  commandBufferII.renderPass = renderPass;
-  commandBufferII.subpass = 0;
-  commandBufferII.framebuffer = VK_NULL_HANDLE;
-
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-  commandBufferBI.pInheritanceInfo = &commandBufferII;
-
-  std::transform(
-    renderables.begin(), renderables.end(), commandBuffers.begin(),
-    commandBuffers.begin(),
-    [&commandBufferBI](Components::Renderable const& renderable,
-                       VkCommandBuffer cb) -> VkCommandBuffer {
-      Expects(renderable.pipeline != VK_NULL_HANDLE);
-      Expects(renderable.pipelineLayout != VK_NULL_HANDLE);
-
-      vkBeginCommandBuffer(cb, &commandBufferBI);
-      vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        renderable.pipeline);
-
-      if (renderable.descriptorSet != VK_NULL_HANDLE) {
-        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                renderable.pipelineLayout, 0, 1,
-                                &renderable.descriptorSet, 0, nullptr);
-      }
-
-      if (renderable.vertexBuffer != VK_NULL_HANDLE) {
-        vkCmdBindVertexBuffers(cb, 0, 1, &renderable.vertexBuffer,
-                               &renderable.vertexBufferBindingOffset);
-      }
-
-      if (renderable.indexBuffer != VK_NULL_HANDLE) {
-        vkCmdBindIndexBuffer(cb, renderable.indexBuffer,
-                             renderable.indexBufferBindingOffset,
-                             renderable.indexType);
-      }
-
-      if (renderable.numIndices > 0) {
-        vkCmdDrawIndexed(cb, renderable.numIndices, renderable.instanceCount,
-                         renderable.firstIndex, renderable.vertexOffset,
-                         renderable.firstInstance);
-      } else {
-        vkCmdDraw(cb, renderable.numVertices, renderable.instanceCount,
-                  renderable.firstVertex, renderable.firstInstance);
-      }
-
-      vkEndCommandBuffer(cb);
-      return cb;
-    });
-
-  return std::move(commandBuffers);
-} // Render
-#endif
-
-static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
+static void
+CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
 
   Window::Options options = Window::Options::kNone;
@@ -332,74 +257,328 @@ static void CreateWindow(iris::Control::Window const& windowMessage) noexcept {
         sNumWindowFramesBuffered)) {
     Windows().emplace(windowMessage.name(), std::move(*win));
   } else {
-    GetLogger()->warn("Createing window failed: {}", win.error().what());
+    GetLogger()->warn("Creating window failed: {}", win.error().what());
   }
-} // CreateWindow
+} // CreateEmplaceWindow
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
-  VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-  VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
-  using namespace std::string_literals;
+static void LoadShaderToy(iris::Control::ShaderToy const& shaderToy) noexcept {
+  IRIS_LOG_ENTER();
 
-  fmt::memory_buffer buf;
-  fmt::format_to(
-    buf, "{}: {}",
-    to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(messageTypes)),
-    pCallbackData->pMessage);
-  std::string const msg(buf.data(), buf.size());
-
-  buf.clear();
-  for (uint32_t i = 0; i < pCallbackData->objectCount; ++i) {
-    if (pCallbackData->pObjects[i].pObjectName) {
-      fmt::format_to(buf, "{}, ", pCallbackData->pObjects[i].pObjectName);
+  class LoadTask : public tbb::task {
+  public:
+    LoadTask(iris::Control::ShaderToy const& st) {
+      for (int i = 0; i < st.url_size(); ++i) { urls_.push_back(st.url(i)); }
     }
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+      if (urls_.empty()) {
+        GetLogger()->debug("No ShaderToy URLs in message");
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+      if (urls_.size() > 1) {
+        GetLogger()->error("Multiple ShaderToy URLs not implemented");
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+#if PLATFORM_WINDOWS
+      web::http::uri const viewURI(string_to_wstring(urls_[0]));
+#else
+      web::http::uri const viewURI(urls_[0]);
+#endif
+
+      // grab the last component of the uri path: that's the shaderID
+      auto const path = viewURI.path();
+      auto const id = path.find_last_of('/');
+
+#if PLATFORM_WINDOWS
+      if (id == std::wstring::npos) {
+#else
+      if (id == std::string::npos) {
+#endif
+        GetLogger()->error("Bad URL: {}", urls_[0]);
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+      web::http::uri_builder apiURI;
+      apiURI.set_scheme(viewURI.scheme());
+      apiURI.set_host(viewURI.host());
+      apiURI.set_path(_XPLATSTR("api/v1/shaders"));
+      apiURI.append_path(path.substr(id));
+      apiURI.append_query(_XPLATSTR("key=BtHKWW"));
+#if PLATFORM_WINDOWS
+      GetLogger()->debug("api URI: {}", wstring_to_string(apiURI.to_string()));
+#else
+      GetLogger()->debug("api URI: {}", apiURI.to_string());
+#endif
+
+      std::string const code = GetCode(apiURI.to_uri());
+  
+      Component::Renderable renderable;
+
+      auto vs = iris::Renderer::CompileShaderFromSource(
+        R"(#version 450
+layout(push_constant) uniform uPC {
+    vec4 iMouse;
+    float iTime;
+    float iTimeDelta;
+    float iFrameRate;
+    float iFrame;
+    vec3 iResolution;
+    float padding0;
+};
+
+layout(location = 0) out vec2 fragCoord;
+
+void main() {
+    fragCoord = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
+    gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
+    // flip to match shadertoy
+    fragCoord.y *= -1;
+    fragCoord.y += 1;
+
+    // multiple by resolution to match shadertoy
+    fragCoord *= iResolution.xy;
+})",
+        VK_SHADER_STAGE_VERTEX_BIT, "Renderable::ShaderToyVertexShader");
+      if (!vs) {
+        GetLogger()->error("Cannot create ShaderToy vertex shader: {}",
+                           vs.error().what());
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+      std::ostringstream fragmentShaderSource;
+      fragmentShaderSource <<
+        R"(#version 450
+#extension GL_GOOGLE_include_directive : require
+layout(push_constant) uniform uPC {
+    vec4 iMouse;
+    float iTime;
+    float iTimeDelta;
+    float iFrameRate;
+    float iFrame;
+    vec3 iResolution;
+    float padding0;
+};
+
+layout(location = 0) in vec2 fragCoord;
+layout(location = 0) out vec4 fragColor;
+)" << code << R"(
+
+void main() {
+    mainImage(fragColor, fragCoord);
+})";
+
+  auto fs = iris::Renderer::CompileShaderFromSource(
+        fragmentShaderSource.str(), VK_SHADER_STAGE_FRAGMENT_BIT,
+        "iris-shadertoy::Renderable::FragmentShader");
+      if (!fs) {
+        GetLogger()->error("Cannot create ShaderToy fragment shader: {}",
+                           vs.error().what());
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+      absl::FixedArray<iris::Renderer::Shader> shaders{
+        iris::Renderer::Shader{*vs, VK_SHADER_STAGE_VERTEX_BIT},
+        iris::Renderer::Shader{*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
+      };
+
+      absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
+      pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT |
+                                 VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(PushConstants)};
+
+      VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+      inputAssemblyStateCI.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+      inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+      // The viewport and scissor are specified later as dynamic states
+      VkPipelineViewportStateCreateInfo viewportStateCI = {};
+      viewportStateCI.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+      viewportStateCI.viewportCount = 1;
+      viewportStateCI.scissorCount = 1;
+
+      VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+      rasterizationStateCI.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+      rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+      rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+      rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+      rasterizationStateCI.lineWidth = 1.f;
+
+      VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+      multisampleStateCI.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+      multisampleStateCI.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT;
+      multisampleStateCI.minSampleShading = 1.f;
+
+      VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+      depthStencilStateCI.sType =
+        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+      absl::FixedArray<VkPipelineColorBlendAttachmentState>
+        colorBlendAttachmentStates(1);
+      colorBlendAttachmentStates[0] = {
+        VK_FALSE,                            // blendEnable
+        VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+        VK_BLEND_OP_ADD,                     // colorBlendOp
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+        VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+        VK_BLEND_OP_ADD,                     // alphaBlendOp
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+      };
+
+      absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                     VK_DYNAMIC_STATE_SCISSOR};
+
+      if (auto pl = iris::Renderer::CreateGraphicsPipeline(
+            {}, pushConstantRanges, shaders, {}, {}, inputAssemblyStateCI,
+            viewportStateCI, rasterizationStateCI, multisampleStateCI,
+            depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
+            "iris-shadertoy::Renderable::Pipeline")) {
+        std::tie(renderable.pipelineLayout, renderable.pipeline) = *pl;
+      } else {
+        GetLogger()->error("Cannot create ShaderToy pipeline: {}",
+                           pl.error().what());
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+      renderable.numVertices = 3;
+      iris::Renderer::AddRenderable(renderable);
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    } // execute
+
+  private:
+    std::vector<std::string> urls_;
+
+    // this throws
+    std::string GetCode(web::http::uri const& uri) {
+      std::string code;
+
+      web::http::client::http_client client(uri.to_string());
+      client.request(web::http::methods::GET)
+        .then([&](web::http::http_response response)
+                -> pplx::task<web::json::value> {
+          GetLogger()->debug(
+            "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
+            response.status_code());
+          return response.extract_json();
+        })
+        .then([&](web::json::value json) {
+          auto&& renderpass =
+            json.at(_XPLATSTR("Shader")).at(_XPLATSTR("renderpass")).at(0);
+
+          if (renderpass.at(_XPLATSTR("inputs")).size() > 0) {
+            throw std::runtime_error("inputs are not yet implemented");
+          } else if (renderpass.at(_XPLATSTR("type")).as_string() !=
+                     _XPLATSTR("image")) {
+            throw std::runtime_error(
+              "non-image outputs are not yet implemented");
+          }
+
+#if PLATFORM_WINDOWS
+          code =
+            wstring_to_string(renderpass.at(_XPLATSTR("code")).as_string());
+#else
+          code = renderpass.at(_XPLATSTR("code")).as_string();
+#endif
+        })
+        .wait();
+
+      return code;
+    }; // GetCode
+  }; // class LoadTask
+
+  try {
+    LoadTask* task = new (tbb::task::allocate_root()) LoadTask(shaderToy);
+    tbb::task::enqueue(*task);
+  } catch (std::exception const& e) {
+    GetLogger()->warn("Loading shadertoy failed: {}", e.what());
   }
-  std::string const objNames(buf.data(), buf.size() == 0 ? 0 : buf.size() - 2);
 
-  switch (messageSeverity) {
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-    if (objNames.empty()) {
-      GetLogger()->trace(msg);
-    } else {
-      GetLogger()->trace("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-    if (objNames.empty()) {
-      GetLogger()->info(msg);
-    } else {
-      GetLogger()->info("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-    if (objNames.empty()) {
-      GetLogger()->warn(msg);
-    } else {
-      GetLogger()->warn("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-    if (objNames.empty()) {
-      GetLogger()->error(msg);
-    } else {
-      GetLogger()->error("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  default:
-    GetLogger()->error("Unhandled VkDebugUtilsMessengerSeverityFlagBitsEXT: {}",
-                       messageSeverity);
-    if (objNames.empty()) {
-      GetLogger()->error(msg);
-    } else {
-      GetLogger()->error("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  }
+  IRIS_LOG_LEAVE();
+} // LoadShaderToy
 
-  GetLogger()->flush();
-  return VK_FALSE;
-} // DebugUtilsMessengerCallback
+  static VKAPI_ATTR VkBool32 VKAPI_CALL
+  DebugUtilsMessengerCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+    VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
+    using namespace std::string_literals;
+
+    fmt::memory_buffer buf;
+    fmt::format_to(
+      buf, "{}: {}",
+      to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(messageTypes)),
+      pCallbackData->pMessage);
+    std::string const msg(buf.data(), buf.size());
+
+    buf.clear();
+    for (uint32_t i = 0; i < pCallbackData->objectCount; ++i) {
+      if (pCallbackData->pObjects[i].pObjectName) {
+        fmt::format_to(buf, "{}, ", pCallbackData->pObjects[i].pObjectName);
+      }
+    }
+    std::string const objNames(buf.data(),
+                               buf.size() == 0 ? 0 : buf.size() - 2);
+
+    switch (messageSeverity) {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+      if (objNames.empty()) {
+        GetLogger()->trace(msg);
+      } else {
+        GetLogger()->trace("{} Objects: ({})", msg, objNames);
+      }
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+      if (objNames.empty()) {
+        GetLogger()->info(msg);
+      } else {
+        GetLogger()->info("{} Objects: ({})", msg, objNames);
+      }
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+      if (objNames.empty()) {
+        GetLogger()->warn(msg);
+      } else {
+        GetLogger()->warn("{} Objects: ({})", msg, objNames);
+      }
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+      if (objNames.empty()) {
+        GetLogger()->error(msg);
+      } else {
+        GetLogger()->error("{} Objects: ({})", msg, objNames);
+      }
+      break;
+    default:
+      GetLogger()->error(
+        "Unhandled VkDebugUtilsMessengerSeverityFlagBitsEXT: {}",
+        messageSeverity);
+      if (objNames.empty()) {
+        GetLogger()->error(msg);
+      } else {
+        GetLogger()->error("{} Objects: ({})", msg, objNames);
+      }
+      break;
+    }
+
+    GetLogger()->flush();
+    return VK_FALSE;
+  } // DebugUtilsMessengerCallback
 
 } // namespace iris::Renderer
 
@@ -627,7 +806,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   attachments[sDepthStencilTargetAttachmentIndex] = VkAttachmentDescription{
     0,                                // flags
     sSurfaceDepthStencilFormat,       // format
-    sSurfaceSampleCount,                     // samples
+    sSurfaceSampleCount,              // samples
     VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp (color and depth)
     VK_ATTACHMENT_STORE_OP_DONT_CARE, // storeOp (color and depth)
     VK_ATTACHMENT_LOAD_OP_CLEAR,      // stencilLoadOp
@@ -638,7 +817,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   attachments[sDepthStencilResolveAttachmentIndex] = VkAttachmentDescription{
     0,                               // flags
-    sSurfaceDepthStencilFormat,       // format
+    sSurfaceDepthStencilFormat,      // format
     VK_SAMPLE_COUNT_1_BIT,           // samples
     VK_ATTACHMENT_LOAD_OP_DONT_CARE, // loadOp (color and depth)
     VK_ATTACHMENT_STORE_OP_STORE,    // storeOp (color and depth)
@@ -1032,10 +1211,11 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
                                    caps.maxImageExtent.width)
                       : caps.currentExtent.width;
 
-  newExtent.height = caps.currentExtent.height == UINT32_MAX
-                      ? glm::clamp(newExtent.height, caps.minImageExtent.height,
-                                   caps.maxImageExtent.height)
-                      : caps.currentExtent.height;
+  newExtent.height =
+    caps.currentExtent.height == UINT32_MAX
+      ? glm::clamp(newExtent.height, caps.minImageExtent.height,
+                   caps.maxImageExtent.height)
+      : caps.currentExtent.height;
 
   VkViewport newViewport{
     0.f,                                  // x
@@ -1330,8 +1510,9 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
 
   for (auto&& [i, frame] : enumerate(window.frames)) {
     frame.framebuffer = newFramebuffers[i];
-    NameObject(sDevice, VK_OBJECT_TYPE_FRAMEBUFFER, frame.framebuffer,
-               fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
+    NameObject(
+      sDevice, VK_OBJECT_TYPE_FRAMEBUFFER, frame.framebuffer,
+      fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
   }
 
   IRIS_LOG_LEAVE();
@@ -1400,13 +1581,13 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
           vkWaitForFences(sDevice, 1, &frameFinishedFence, VK_TRUE, UINT64_MAX);
         result != VK_SUCCESS) {
       GetLogger()->error("Error waiting for frame finished fence: {}",
-                        make_error_code(result).message());
+                         make_error_code(result).message());
     }
 
     if (auto result = vkResetFences(sDevice, 1, &frameFinishedFence);
         result != VK_SUCCESS) {
       GetLogger()->error("Error resetting frame finished fence: {}",
-                        make_error_code(result).message());
+                         make_error_code(result).message());
     }
   }
 
@@ -1450,9 +1631,9 @@ void iris::Renderer::EndFrame(
     // currentFrame (via frameIndex).
     window.imageAcquired = window.currentFrame().imageAvailable;
 
-    if (result = vkAcquireNextImageKHR(sDevice, window.swapchain,
-                                            UINT64_MAX, window.imageAcquired,
-                                            VK_NULL_HANDLE, &window.frameIndex);
+    if (result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
+                                       window.imageAcquired, VK_NULL_HANDLE,
+                                       &window.frameIndex);
         result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
       GetLogger()->warn("Window {} swapchain out of date: resizing", title);
       auto const newExtent = window.platformWindow.Extent();
@@ -1608,8 +1789,8 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
   }; // struct IOTask
 
   try {
-    IOTask* ioTask = new (tbb::task::allocate_root()) IOTask(path);
-    tbb::task::enqueue(*ioTask);
+    IOTask* task = new (tbb::task::allocate_root()) IOTask(path);
+    tbb::task::enqueue(*task);
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
@@ -1637,11 +1818,14 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   switch (controlMessage.type()) {
   case iris::Control::Control_Type_DISPLAYS:
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
-      CreateWindow(controlMessage.displays().windows(i));
+      CreateEmplaceWindow(controlMessage.displays().windows(i));
     }
     break;
   case iris::Control::Control_Type_WINDOW:
-    CreateWindow(controlMessage.window());
+    CreateEmplaceWindow(controlMessage.window());
+    break;
+  case iris::Control::Control_Type_SHADERTOY:
+    LoadShaderToy(controlMessage.shadertoy());
     break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",
@@ -1687,9 +1871,9 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
-#include "glslang/Public/ShaderLang.h"
-#include "SPIRV/GlslangToSpv.h"
 #include "SPIRV/GLSL.std.450.h"
+#include "SPIRV/GlslangToSpv.h"
+#include "glslang/Public/ShaderLang.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
@@ -2090,9 +2274,8 @@ iris::Renderer::CreateGraphicsPipeline(
   graphicsPipelineCI.renderPass = sRenderPass;
   graphicsPipelineCI.subpass = renderPassSubpass;
 
-  if (auto result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1,
-                                              &graphicsPipelineCI, nullptr,
-                                              &pipeline);
+  if (auto result = vkCreateGraphicsPipelines(
+        sDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCI, nullptr, &pipeline);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
@@ -2109,7 +2292,7 @@ iris::Renderer::CreateGraphicsPipeline(
   Ensures(pipeline != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::make_pair(layout, pipeline);
-  } // iris::Renderer::CreateGraphicsPipeline
+} // iris::Renderer::CreateGraphicsPipeline
 
 void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   sRenderables.push_back(std::move(renderable));

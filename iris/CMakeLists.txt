@@ -15,6 +15,7 @@ set(protos_PROTOS
   protos/color.proto
   protos/control.proto
   protos/displays.proto
+  protos/shadertoy.proto
   protos/window.proto
 )
 
@@ -102,6 +103,7 @@ set(SOURCES
   io/json.cc
   io/read_file.cc
   renderer.cc
+  string_util.cc
   vulkan_util.cc
   wsi/platform_window.cc
 )

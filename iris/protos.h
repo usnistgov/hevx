@@ -14,6 +14,7 @@
 
 #include "iris/protos/control.pb.h"
 #include "iris/protos/displays.pb.h"
+#include "iris/protos/shadertoy.pb.h"
 #include "iris/protos/window.pb.h"
 
 #if PLATFORM_COMPILER_MSVC
