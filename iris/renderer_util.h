@@ -1,11 +1,9 @@
 #ifndef HEV_IRIS_RENDERER_UTIL_H_
 #define HEV_IRIS_RENDERER_UTIL_H_
 
-#include "absl/container/flat_hash_map.h"
 #include "glm/vec3.hpp"
-#include "iris/renderer.h"
-#include <mutex>
-#include <vector>
+#include "glm/vec4.hpp"
+#include "iris/vulkan_util.h"
 
 namespace iris::Renderer {
 
@@ -16,28 +14,6 @@ extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
 extern VkRenderPass sRenderPass;
 
-absl::flat_hash_map<std::string, iris::Window>& Windows();
-
-class Renderables {
-public:
-  std::vector<Component::Renderable> operator()() {
-    std::lock_guard<std::mutex> lock{mutex_};
-    return renderables_;
-  }
-
-  void push_back(Component::Renderable renderable) {
-    std::lock_guard<std::mutex> lock{mutex_};
-    renderables_.clear();
-    renderables_.push_back(std::move(renderable));
-  }
-
-private:
-  std::mutex mutex_{};
-  std::vector<Component::Renderable> renderables_{};
-}; // class Renderables
-
-extern Renderables sRenderables;
-
 struct ShaderToyPushConstants {
     glm::vec4 iMouse;
     float iTime;
@@ -47,21 +23,6 @@ struct ShaderToyPushConstants {
     glm::vec3 iResolution;
     float padding0;
 }; // struct ShaderToyPushConstants
-
-/////
-//
-// FIXME: MUST re-work this once I've got it working
-//
-/////
-
-struct Shader {
-  VkShaderModule handle;
-  VkShaderStageFlagBits stage;
-}; // struct Shader
-
-tl::expected<VkShaderModule, std::system_error>
-CompileShaderFromSource(std::string_view source, VkShaderStageFlagBits stage,
-                        std::string name = {}) noexcept;
 
 tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
 CreateGraphicsPipeline(
@@ -81,12 +42,6 @@ CreateGraphicsPipeline(
     colorBlendAttachmentStates,
   gsl::span<const VkDynamicState> dynamicStates,
   std::uint32_t renderPassSubpass, std::string name = {}) noexcept;
-
-void AddRenderable(Component::Renderable renderable) noexcept;
-
-VkCommandBuffer
-RenderRenderable(iris::Renderer::Component::Renderable const& renderable,
-                 VkViewport* pViewport, VkRect2D* pScissor) noexcept;
 
 } // namespace iris::Renderer
 

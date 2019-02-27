@@ -12,6 +12,7 @@
 #include "cpprest/http_client.h"
 #include "glm/vec3.hpp"
 #include "io/read_file.h"
+#include "renderer.h"
 #include "renderer_util.h"
 #include "string_util.h"
 #include "tbb/task.h"
@@ -63,7 +64,7 @@ CreateRenderable(std::string_view code) {
   IRIS_LOG_ENTER();
   Renderer::Component::Renderable renderable;
 
-  auto vs = Renderer::CompileShaderFromSource(
+  auto vs = Renderer::CompileShaderFromSource(Renderer::sDevice,
     sVertexShaderSource, VK_SHADER_STAGE_VERTEX_BIT,
     "iris-shadertoy::Renderable::VertexShader");
   if (!vs) {
@@ -78,7 +79,7 @@ void main() {
     mainImage(fragColor, fragCoord);
 })";
 
-  auto fs = Renderer::CompileShaderFromSource(
+  auto fs = Renderer::CompileShaderFromSource(Renderer::sDevice,
     fragmentShaderSource.str(), VK_SHADER_STAGE_FRAGMENT_BIT,
     "iris-shadertoy::Renderable::FragmentShader");
   if (!fs) {

@@ -3,6 +3,8 @@
  */
 #include "config.h"
 
+#include "renderer.h"
+#include "absl/container/flat_hash_map.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -46,8 +48,10 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace std::string_literals;
 
@@ -104,8 +108,6 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
   return sWindows;
 } // Windows
 
-Renderables sRenderables;
-
 static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
 static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
 static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
@@ -122,6 +124,26 @@ static VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
 static VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
 static VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 static VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
+
+class Renderables {
+public:
+  std::vector<Component::Renderable> operator()() {
+    std::lock_guard<std::mutex> lock{mutex_};
+    return renderables_;
+  }
+
+  void push_back(Component::Renderable renderable) {
+    std::lock_guard<std::mutex> lock{mutex_};
+    renderables_.clear();
+    renderables_.push_back(std::move(renderable));
+  }
+
+private:
+  std::mutex mutex_{};
+  std::vector<Component::Renderable> renderables_{};
+}; // class Renderables
+
+static Renderables sRenderables;
 
 static bool sRunning{false};
 static bool sInFrame{false};
@@ -163,6 +185,96 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
     GetLogger()->warn("Creating window failed: {}", win.error().what());
   }
 } // CreateEmplaceWindow
+
+static VkCommandBuffer
+RenderRenderable(iris::Renderer::Component::Renderable const& renderable,
+                 VkViewport* pViewport, VkRect2D* pScissor) noexcept {
+  VkCommandBuffer commandBuffer;
+  if (auto cb = AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)) {
+    commandBuffer = (*cb)[0];
+  } else {
+    GetLogger()->error("Cannot allocate command buffer: {}", cb.error().what());
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = sRenderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+
+  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    renderable.pipeline);
+
+  ShaderToyPushConstants pushConstants;
+  pushConstants.iMouse = {0.f, 0.f, 0.f, 0.f};
+
+#if 0
+  if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
+    pushConstants.iMouse.x = ImGui::GetCursorPosX();
+    pushConstants.iMouse.y = ImGui::GetCursorPosY();
+    logger.debug("Left down: {} {}", pushConstants.iMouse.x,
+                 pushConstants.iMouse.y);
+  } else if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+    pushConstants.iMouse.z = ImGui::GetCursorPosX();
+    pushConstants.iMouse.w = ImGui::GetCursorPosY();
+    logger.debug("Left released: {} {}", pushConstants.iMouse.z,
+                 pushConstants.iMouse.w);
+  }
+#endif
+
+  pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
+  pushConstants.iTime = ImGui::GetTime();
+  pushConstants.iFrame = ImGui::GetFrameCount();
+  pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
+  pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
+  pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
+  pushConstants.iResolution.z =
+    pushConstants.iResolution.x / pushConstants.iResolution.y;
+
+  vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, sizeof(ShaderToyPushConstants), &pushConstants);
+
+  vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
+  vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
+
+  if (renderable.descriptorSet != VK_NULL_HANDLE) {
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            renderable.pipelineLayout, 0, 1,
+                            &renderable.descriptorSet, 0, nullptr);
+  }
+
+  if (renderable.vertexBuffer != VK_NULL_HANDLE) {
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &renderable.vertexBuffer,
+                           &renderable.vertexBufferBindingOffset);
+  }
+
+  if (renderable.indexBuffer != VK_NULL_HANDLE) {
+    vkCmdBindIndexBuffer(commandBuffer, renderable.indexBuffer,
+                         renderable.indexBufferBindingOffset,
+                         renderable.indexType);
+  }
+
+  if (renderable.numIndices > 0) {
+    vkCmdDrawIndexed(commandBuffer, renderable.numIndices,
+                     renderable.instanceCount, renderable.firstIndex,
+                     renderable.vertexOffset, renderable.firstInstance);
+  } else {
+    vkCmdDraw(commandBuffer, renderable.numVertices, renderable.instanceCount,
+              renderable.firstVertex, renderable.firstInstance);
+  }
+
+  vkEndCommandBuffer(commandBuffer);
+  return commandBuffer;
+} // RenderRenderable
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -1400,6 +1512,10 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
 
   return commandBuffers;
 } // iris::Renderer::AllocateCommandBuffers
+
+void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
+  sRenderables.push_back(std::move(renderable));
+} // AddRenderable
 
 tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(filesystem::path const& path) noexcept {

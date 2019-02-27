@@ -1,7 +1,16 @@
 #ifndef HEV_IRIS_VULKAN_UTIL_H_
 #define HEV_IRIS_VULKAN_UTIL_H_
 
+#include "iris/config.h"
+
 #include "absl/container/fixed_array.h"
+#if STD_FS_IS_EXPERIMENTAL
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 #include "expected.hpp"
 #include "gsl/gsl"
 #include "iris/vulkan.h"
@@ -113,6 +122,16 @@ AllocateImageAndView(VkDevice device, VmaAllocator allocator, VkFormat format,
                      VkImageUsageFlags imageUsage, VkImageTiling imageTiling,
                      VmaMemoryUsage memoryUsage,
                      VkImageSubresourceRange subresourceRange) noexcept;
+
+struct Shader {
+  VkShaderModule handle;
+  VkShaderStageFlagBits stage;
+}; // struct Shader
+
+tl::expected<VkShaderModule, std::system_error>
+CompileShaderFromSource(VkDevice device, std::string_view source,
+                        VkShaderStageFlagBits stage,
+                        std::string name = {}) noexcept;
 
 template <class T>
 void NameObject(VkDevice device, VkObjectType objectType, T objectHandle,

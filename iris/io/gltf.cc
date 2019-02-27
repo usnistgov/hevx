@@ -10,6 +10,7 @@
 #include "io/read_file.h"
 #include "logging.h"
 #include "nlohmann/json.hpp"
+#include "renderer.h"
 #include "renderer_util.h"
 #include "stb_image.h"
 #include <map>
@@ -1212,6 +1213,8 @@ ReadGLTF(filesystem::path const& path) noexcept {
 
   //
   // Parse the scene graph
+  // FIXME: this removes the hierarchy: need to maintain those relationships
+  // FIXME: implement Animatable(?) component to support animations
   //
 
   if (auto renderables = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
