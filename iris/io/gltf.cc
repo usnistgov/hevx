@@ -507,9 +507,10 @@ struct GLTF {
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
 
-  //tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
-  //ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
-            //std::vector<std::vector<std::byte>> const& buffersBytes);
+  tl::expected<std::vector<iris::Renderer::Component::Renderable>,
+               std::system_error>
+  ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
+            std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -805,13 +806,14 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
-#if 0
-tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
+tl::expected<std::vector<iris::Renderer::Component::Renderable>,
+             std::system_error>
 GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
                 filesystem::path const& path,
-                std::vector<std::vector<std::byte>> const& buffersBytes) {
+                std::vector<std::vector<std::byte>> const& buffersBytes
+                [[maybe_unused]]) {
   IRIS_LOG_ENTER();
-  std::vector<iris::Renderer::MeshData> primitiveData;
+  std::vector<iris::Renderer::Component::Renderable> renderables;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
     return tl::unexpected(
@@ -849,17 +851,17 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
   for (auto&& child : children) {
-    if (auto d = ParseNode(child, nodeMat, path, buffersBytes)) {
-      primitiveData.insert(primitiveData.end(), d->begin(), d->end());
+    if (auto r = ParseNode(child, nodeMat, path, buffersBytes)) {
+      renderables.insert(renderables.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(d.error());
+      return tl::unexpected(r.error());
     }
   }
 
   if (!node.mesh) {
     IRIS_LOG_ENTER();
-    return primitiveData;
+    return renderables;
   }
 
   if (!meshes || meshes->empty()) {
@@ -880,6 +882,16 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   // std::vector<Primitive> primitives;
 
   iris::GetLogger()->trace("mesh: {}", json(mesh).dump());
+
+  IRIS_LOG_LEAVE();
+  return renderables;
+} // GLTF::ParseNode
+
+#if 0
+tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
+GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
+                filesystem::path const& path,
+                std::vector<std::vector<std::byte>> const& buffersBytes) {
 
   for (std::size_t primIdx = 0; primIdx < mesh.primitives.size(); ++primIdx) {
     auto&& primitive = mesh.primitives[primIdx];
@@ -1085,7 +1097,8 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
 
 namespace iris::io {
 
-tl::expected<iris::Renderer::Component::Renderable, std::system_error>
+tl::expected<std::vector<iris::Renderer::Component::Renderable>,
+             std::system_error>
 ReadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
@@ -1197,14 +1210,17 @@ ReadGLTF(filesystem::path const& path) noexcept {
     g.scene = 0;
   }
 
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(
-    std::system_error(Error::kFileParseFailed, "Not implemented"));
+  //
+  // Parse the scene graph
+  //
 
-  Renderer::Component::Renderable renderable;
-
-  IRIS_LOG_LEAVE();
-  return renderable;
+  if (auto renderables = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
+    IRIS_LOG_LEAVE();
+    return *renderables;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(renderables.error());
+  }
 
 #if 0
   std::vector<Image> images;
@@ -1329,10 +1345,11 @@ std::function<std::system_error(void)>
 iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
-  if (auto r = ReadGLTF(path)) {
-    iris::Renderer::AddRenderable(std::move(*r));
+  if (auto renderables = ReadGLTF(path)) {
+    for (auto&& r : *renderables) iris::Renderer::AddRenderable(r);
   } else {
-    GetLogger()->error("Error creating renderable: {}", r.error().what());
+    GetLogger()->error("Error creating renderable: {}",
+                       renderables.error().what());
   }
 
   IRIS_LOG_LEAVE();

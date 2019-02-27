@@ -63,7 +63,7 @@ CreateRenderable(std::string_view code) {
   IRIS_LOG_ENTER();
   Renderer::Component::Renderable renderable;
 
-  auto vs = iris::Renderer::CompileShaderFromSource(
+  auto vs = Renderer::CompileShaderFromSource(
     sVertexShaderSource, VK_SHADER_STAGE_VERTEX_BIT,
     "iris-shadertoy::Renderable::VertexShader");
   if (!vs) {
@@ -78,7 +78,7 @@ void main() {
     mainImage(fragColor, fragCoord);
 })";
 
-  auto fs = iris::Renderer::CompileShaderFromSource(
+  auto fs = Renderer::CompileShaderFromSource(
     fragmentShaderSource.str(), VK_SHADER_STAGE_FRAGMENT_BIT,
     "iris-shadertoy::Renderable::FragmentShader");
   if (!fs) {
@@ -86,9 +86,9 @@ void main() {
     return tl::unexpected(fs.error());
   }
 
-  absl::FixedArray<iris::Renderer::Shader> shaders{
-    iris::Renderer::Shader{*vs, VK_SHADER_STAGE_VERTEX_BIT},
-    iris::Renderer::Shader{*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
+  absl::FixedArray<Renderer::Shader> shaders{
+    Renderer::Shader{*vs, VK_SHADER_STAGE_VERTEX_BIT},
+    Renderer::Shader{*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
   };
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
@@ -137,7 +137,7 @@ void main() {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
-  if (auto pl = iris::Renderer::CreateGraphicsPipeline(
+  if (auto pl = Renderer::CreateGraphicsPipeline(
         {}, {}, shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
@@ -250,8 +250,8 @@ static void LoadFile(web::http::uri const& uri) {
     code = std::string(reinterpret_cast<char*>(bytes->data()), bytes->size());
   } else {
 #if PLATFORM_WINDOWS
-    GetLogger()->error("Error reading file {}: {}", wstring_to_string(uri.path()),
-                       bytes.error().what());
+    GetLogger()->error("Error reading file {}: {}",
+                       wstring_to_string(uri.path()), bytes.error().what());
 #else
     GetLogger()->error("Error reading file {}: {}", uri.path(),
                        bytes.error().what());
@@ -262,7 +262,7 @@ static void LoadFile(web::http::uri const& uri) {
 
   GetLogger()->trace("creating renderable");
   if (auto r = CreateRenderable(code)) {
-    iris::Renderer::AddRenderable(std::move(*r));
+    Renderer::AddRenderable(std::move(*r));
   } else {
     GetLogger()->error("Error creating renderable: {}", r.error().what());
   }
@@ -302,7 +302,7 @@ static void LoadWeb(web::http::uri const& uri) {
 
   GetLogger()->trace("creating renderable");
   if (auto r = CreateRenderable(code)) {
-    iris::Renderer::AddRenderable(std::move(*r));
+    Renderer::AddRenderable(std::move(*r));
   } else {
     GetLogger()->error("Error creating renderable: {}", r.error().what());
   }
@@ -363,7 +363,7 @@ public:
     IRIS_LOG_ENTER();
 
     if (auto r = CreateRenderable(code_)) {
-      iris::Renderer::AddRenderable(std::move(*r));
+      Renderer::AddRenderable(std::move(*r));
     } else {
       GetLogger()->error("Error creating renderable: {}", r.error().what());
     }
@@ -412,5 +412,5 @@ iris::io::LoadShaderToy(Control::ShaderToy const& message) noexcept {
   }
 
   IRIS_LOG_LEAVE();
-  return [](){ return std::system_error(Error::kNone); };
+  return []() { return std::system_error(Error::kNone); };
 } // iris::io::LoadShaderToy
