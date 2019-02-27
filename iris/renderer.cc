@@ -1375,7 +1375,6 @@ void iris::Renderer::EndFrame(
 tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
 iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
                                        std::uint32_t count) noexcept {
-  IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(count > 0);
 
@@ -1393,7 +1392,6 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
                                             "Cannot allocate command buffers"));
   }
 
-  IRIS_LOG_LEAVE();
   return commandBuffers;
 } // iris::Renderer::AllocateCommandBuffers
 
