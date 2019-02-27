@@ -1176,7 +1176,7 @@ ReadGLTF(filesystem::path const& path) noexcept {
   //
   auto&& images =
     g.images.value_or<decltype(gltf::GLTF::images)::value_type>({});
-  std::vector<VkExtent3D> imagesExtents;
+  std::vector<VkExtent2D> imagesExtents;
   std::vector<std::vector<std::byte>> imagesBytes;
 
   for (auto&& image : images) {
@@ -1195,7 +1195,7 @@ ReadGLTF(filesystem::path const& path) noexcept {
                                  reinterpret_cast<std::byte*>(pixels) +
                                    x * y * 4);
         imagesExtents.push_back(
-          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), 1});
+          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)});
       }
     } else if (image.bufferView) {
       imagesBytes.push_back(buffersBytes[*image.bufferView]);
@@ -1206,48 +1206,33 @@ ReadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-  if (!g.scene) {
-    GetLogger()->warn("no default scene specified; using first node");
-    g.scene = 0;
-  }
-
-  //
-  // Parse the scene graph
-  // FIXME: this removes the hierarchy: need to maintain those relationships
-  // FIXME: implement Animatable(?) component to support animations
-  //
-
-  if (auto renderables = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
-    IRIS_LOG_LEAVE();
-    return *renderables;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(renderables.error());
-  }
-
+  // FIXME: This won't work as we're on a task thread currently.
 #if 0
-  std::vector<Image> images;
-  std::vector<Sampler> samplers;
+  std::vector<std::tuple<VkImage, VmaAllocation>> deviceImages;
+  std::vector<VkSampler> samplers;
 
   std::size_t const numTextures =
-    gltf.textures.value_or<std::vector<gltf::Texture>>({}).size();
+    g.textures.value_or<std::vector<gltf::Texture>>({}).size();
 
   for (std::size_t i = 0; i < numTextures; ++i) {
-    auto&& texture = (*gltf.textures)[i];
+    auto&& texture = (*g.textures)[i];
     auto&& bytes = imagesBytes[*texture.source];
 
     std::string const textureName =
       path.string() + (texture.name ? ":" + *texture.name : "");
 
-    if (auto image = Image::CreateFromMemory(
-          VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, imagesExtents[i],
-          VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-          gsl::not_null(bytes.data()), 4, textureName + ":image",
-          sCommandPool)) {
-      images.push_back(std::move(*image));
+    if (auto ia = Renderer::CreateImage(
+          Renderer::sDevice, Renderer::sAllocator, VK_FORMAT_R8G8B8A8_UNORM,
+          imagesExtents[i], VK_IMAGE_USAGE_SAMPLED_BIT,
+          VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(bytes.data()), 4)) {
+      deviceImages.push_back(std::move(*ia));
+
+      Renderer::NameObject(Renderer::sDevice, VK_OBJECT_TYPE_IMAGE,
+                           std::get<0>(deviceImages.back()),
+                           textureName.c_str());
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(image.error());
+      return tl::unexpected(ia.error());
     }
 
     VkSamplerCreateInfo samplerCI = {};
@@ -1269,7 +1254,7 @@ ReadGLTF(filesystem::path const& path) noexcept {
     samplerCI.unnormalizedCoordinates = VK_FALSE;
 
     if (texture.sampler) {
-      auto&& sampler = (*gltf.samplers)[*texture.sampler];
+      auto&& sampler = (*g.samplers)[*texture.sampler];
 
       switch (sampler.magFilter.value_or(9720)) {
       case 9728: samplerCI.magFilter = VK_FILTER_NEAREST; break;
@@ -1332,14 +1317,38 @@ ReadGLTF(filesystem::path const& path) noexcept {
       }
     }
 
-    if (auto s = Sampler::Create(samplerCI, textureName + ":sampler")) {
-      samplers.push_back(std::move(*s));
+    VkSampler sampler;
+    if (auto result =
+          vkCreateSampler(Renderer::sDevice, &samplerCI, nullptr, &sampler);
+        result != VK_SUCCESS) {
+      samplers.push_back(sampler);
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(s.error());
+      return tl::unexpected(std::system_error(make_error_code(result),
+                                              "Cannot create texture sampler"));
     }
   }
 #endif
+
+  if (!g.scene) {
+    GetLogger()->warn("no default scene specified; using first node");
+    g.scene = 0;
+  }
+
+  //
+  // Parse the scene graph
+  // FIXME: this removes the hierarchy: need to maintain those relationships
+  // FIXME: implement Animatable(?) component to support animations
+  //
+
+  if (auto renderables =
+        g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
+    IRIS_LOG_LEAVE();
+    return *renderables;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(renderables.error());
+  }
 } // ReadGLTF
 
 } // namespace iris::io
