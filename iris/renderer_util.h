@@ -22,24 +22,7 @@ extern VkDebugUtilsMessengerEXT sDebugUtilsMessenger;
 extern VkPhysicalDevice sPhysicalDevice;
 extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
-
-extern std::uint32_t sGraphicsQueueFamilyIndex;
-extern absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
-extern absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
-extern absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
-
 extern VkRenderPass sRenderPass;
-
-extern std::uint32_t const sNumRenderPassAttachments;
-extern std::uint32_t const sColorTargetAttachmentIndex;
-extern std::uint32_t const sColorResolveAttachmentIndex;
-extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
-extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
-
-extern VkSurfaceFormatKHR const sSurfaceColorFormat;
-extern VkFormat const sSurfaceDepthStencilFormat;
-extern VkSampleCountFlagBits const sSurfaceSampleCount;
-extern VkPresentModeKHR const sSurfacePresentMode;
 
 absl::flat_hash_map<std::string, iris::Window>& Windows();
 
@@ -78,9 +61,6 @@ struct ShaderToyPushConstants {
 // FIXME: MUST re-work this once I've got it working
 //
 /////
-
-tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
-AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
 
 struct Shader {
   VkShaderModule handle;

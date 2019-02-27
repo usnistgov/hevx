@@ -244,8 +244,13 @@ static void LoadFile(web::http::uri const& uri) {
   if (auto bytes = ReadFile(path)) {
     code = std::string(reinterpret_cast<char*>(bytes->data()), bytes->size());
   } else {
+#if PLATFORM_WINDOWS
+    GetLogger()->error("Error reading file {}: {}", wstring_to_string(uri.path()),
+                       bytes.error().what());
+#else
     GetLogger()->error("Error reading file {}: {}", uri.path(),
                        bytes.error().what());
+#endif
     IRIS_LOG_LEAVE();
     return;
   }

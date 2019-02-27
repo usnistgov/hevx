@@ -91,25 +91,7 @@ VkDebugUtilsMessengerEXT sDebugUtilsMessenger{VK_NULL_HANDLE};
 VkPhysicalDevice sPhysicalDevice{VK_NULL_HANDLE};
 VkDevice sDevice{VK_NULL_HANDLE};
 VmaAllocator sAllocator{VK_NULL_HANDLE};
-
-std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
-absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
-absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
-
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
-
-std::uint32_t const sNumRenderPassAttachments{4};
-std::uint32_t const sColorTargetAttachmentIndex{0};
-std::uint32_t const sColorResolveAttachmentIndex{1};
-std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
-std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
-
-VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
-                                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
-VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
-VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
@@ -117,6 +99,23 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
 } // Windows
 
 Renderables sRenderables;
+
+static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
+static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
+static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
+static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
+
+static std::uint32_t const sNumRenderPassAttachments{4};
+static std::uint32_t const sColorTargetAttachmentIndex{0};
+static std::uint32_t const sColorResolveAttachmentIndex{1};
+static std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
+static std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
+
+static VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
+                                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+static VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
+static VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
+static VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 static bool sRunning{false};
 static bool sInFrame{false};
@@ -1372,6 +1371,31 @@ void iris::Renderer::EndFrame(
   sFrameIndex = sFrameNum % sNumWindowFramesBuffered;
   sInFrame = false;
 } // iris::Renderer::EndFrame
+
+tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
+iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
+                                       std::uint32_t count) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(count > 0);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sGraphicsCommandPools[0];
+  commandBufferAI.level = level;
+  commandBufferAI.commandBufferCount = count;
+
+  absl::FixedArray<VkCommandBuffer> commandBuffers(count);
+  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
+                                             commandBuffers.data());
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffers"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffers;
+} // iris::Renderer::AllocateCommandBuffers
 
 tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(filesystem::path const& path) noexcept {

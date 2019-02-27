@@ -77,6 +77,9 @@ VkRenderPass BeginFrame() noexcept;
  */
 void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
+tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
+AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
+
 /*! \brief Load a file into the rendering system.
  *
  * This is an async load operation, so the only errors returned are if the

@@ -6,31 +6,6 @@
 
 using namespace std::string_literals;
 
-tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
-iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
-                                       std::uint32_t count) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sDevice != VK_NULL_HANDLE);
-  Expects(count > 0);
-
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPools[0];
-  commandBufferAI.level = level;
-  commandBufferAI.commandBufferCount = count;
-
-  absl::FixedArray<VkCommandBuffer> commandBuffers(count);
-  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
-                                             commandBuffers.data());
-      result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate command buffers"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return commandBuffers;
-} // iris::Renderer::AllocateCommandBuffers
-
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -465,17 +440,11 @@ void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
 VkCommandBuffer iris::Renderer::RenderRenderable(
   iris::Renderer::Component::Renderable const& renderable,
   VkViewport* pViewport, VkRect2D* pScissor) noexcept {
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPools[0];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-  commandBufferAI.commandBufferCount = 1;
-
   VkCommandBuffer commandBuffer;
-  if (auto result =
-        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
-      result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}", to_string(result));
+  if (auto cb = AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)) {
+    commandBuffer = (*cb)[0];
+  } else {
+    GetLogger()->error("Cannot allocate command buffer: {}", cb.error().what());
     return VK_NULL_HANDLE;
   }
 
