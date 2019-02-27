@@ -84,11 +84,6 @@ void main() {
     iris::Renderer::Shader{*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
   };
 
-  absl::FixedArray<VkPushConstantRange> pushConstantRanges(1);
-  pushConstantRanges[0] = {VK_SHADER_STAGE_VERTEX_BIT |
-                             VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(Renderer::ShaderToyPushConstants)};
-
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
     VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -136,9 +131,9 @@ void main() {
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
   if (auto pl = iris::Renderer::CreateGraphicsPipeline(
-        {}, pushConstantRanges, shaders, {}, {}, inputAssemblyStateCI,
-        viewportStateCI, rasterizationStateCI, multisampleStateCI,
-        depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
+        {}, {}, shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0,
         "iris-shadertoy::Renderable::Pipeline")) {
     std::tie(renderable.pipelineLayout, renderable.pipeline) = *pl;
   } else {

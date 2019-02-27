@@ -3,6 +3,11 @@
  */
 #include "config.h"
 
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+#include "absl/container/inlined_vector.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"

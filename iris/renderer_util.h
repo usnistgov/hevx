@@ -2,14 +2,6 @@
 #define HEV_IRIS_RENDERER_UTIL_H_
 
 #include "absl/container/flat_hash_map.h"
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-#include "absl/container/inlined_vector.h"
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic pop
-#endif
 #include "glm/vec3.hpp"
 #include "iris/renderer.h"
 #include <mutex>
