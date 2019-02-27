@@ -1,4 +1,5 @@
-#include "renderer/io/gltf.h"
+#include "io/gltf.h"
+
 #include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
@@ -6,11 +7,10 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "gsl/gsl"
+#include "io/read_file.h"
 #include "logging.h"
 #include "nlohmann/json.hpp"
-#include "renderer/impl.h"
-#include "renderer/io/read_file.h"
-#include "renderer/mesh.h"
+#include "renderer_util.h"
 #include "stb_image.h"
 #include <map>
 #include <optional>
@@ -507,9 +507,9 @@ struct GLTF {
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
 
-  tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
-  ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
-            std::vector<std::vector<std::byte>> const& buffersBytes);
+  //tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
+  //ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
+            //std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -805,6 +805,7 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
+#if 0
 tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
 GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
                 filesystem::path const& path,
@@ -1078,12 +1079,13 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   IRIS_LOG_LEAVE();
   return primitiveData;
 } // GLTF::ParseNode
+#endif
 
 } // namespace gltf
 
-namespace iris::Renderer::io {
+namespace iris::io {
 
-tl::expected<std::vector<MeshData>, std::system_error>
+tl::expected<iris::Renderer::Component::Renderable, std::system_error>
 ReadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
@@ -1195,19 +1197,14 @@ ReadGLTF(filesystem::path const& path) noexcept {
     g.scene = 0;
   }
 
-  //
-  // Parse the scene graph
-  //
-  std::vector<MeshData> meshData;
-  if (auto p = g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
-    meshData = std::move(*p);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(p.error());
-  }
+  IRIS_LOG_LEAVE();
+  return tl::unexpected(
+    std::system_error(Error::kFileParseFailed, "Not implemented"));
+
+  Renderer::Component::Renderable renderable;
 
   IRIS_LOG_LEAVE();
-  return meshData;
+  return renderable;
 
 #if 0
   std::vector<Image> images;
@@ -1326,21 +1323,19 @@ ReadGLTF(filesystem::path const& path) noexcept {
 #endif
 } // ReadGLTF
 
-} // namespace iris::Renderer::io
+} // namespace iris::io
 
 std::function<std::system_error(void)>
-iris::Renderer::io::LoadGLTF(filesystem::path const& path) noexcept {
+iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
-  std::vector<MeshData> meshData;
-  if (auto p = ReadGLTF(path)) {
-    meshData = std::move(*p);
+  if (auto r = ReadGLTF(path)) {
+    iris::Renderer::AddRenderable(std::move(*r));
   } else {
-    IRIS_LOG_LEAVE();
-    return [error = p.error()]() { return error; };
+    GetLogger()->error("Error creating renderable: {}", r.error().what());
   }
 
   IRIS_LOG_LEAVE();
-  return [meshData]() { return CreateMeshes(meshData); };
-} // iris::Renderer::io::LoadGLTF
+  return []() { return std::system_error(Error::kNone); };
+} // iris::io::LoadGLTF
 

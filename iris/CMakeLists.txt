@@ -103,6 +103,7 @@ configure_file(config.h.in config.h)
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
+  io/gltf.cc
   io/json.cc
   io/read_file.cc
   io/shadertoy.cc

@@ -16,6 +16,7 @@
 #endif
 #include "glslang/Public/ShaderLang.h"
 #include "gsl/gsl"
+#include "io/gltf.h"
 #include "io/json.h"
 #include "io/shadertoy.h"
 #include "protos.h"
@@ -1417,8 +1418,8 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
 
       if (ext.compare(".json") == 0) {
         sIOContinuations.push(io::LoadJSON(path_));
-        //} else if (ext.compare(".gltf") == 0) {
-        // sIOContinuations.push(io::LoadGLTF(path_));
+      } else if (ext.compare(".gltf") == 0) {
+        sIOContinuations.push(io::LoadGLTF(path_));
       } else {
         GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
                            path_.string());

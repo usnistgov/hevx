@@ -60,12 +60,16 @@ layout(location = 0) out vec4 fragColor;
 
 tl::expected<iris::Renderer::Component::Renderable, std::system_error>
 CreateRenderable(std::string_view code) {
-  iris::Renderer::Component::Renderable renderable;
+  IRIS_LOG_ENTER();
+  Renderer::Component::Renderable renderable;
 
   auto vs = iris::Renderer::CompileShaderFromSource(
     sVertexShaderSource, VK_SHADER_STAGE_VERTEX_BIT,
     "iris-shadertoy::Renderable::VertexShader");
-  if (!vs) return tl::unexpected(vs.error());
+  if (!vs) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
+  }
 
   std::ostringstream fragmentShaderSource;
   fragmentShaderSource << sFragmentShaderHeader << code << R"(
@@ -77,7 +81,10 @@ void main() {
   auto fs = iris::Renderer::CompileShaderFromSource(
     fragmentShaderSource.str(), VK_SHADER_STAGE_FRAGMENT_BIT,
     "iris-shadertoy::Renderable::FragmentShader");
-  if (!fs) return tl::unexpected(fs.error());
+  if (!fs) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
+  }
 
   absl::FixedArray<iris::Renderer::Shader> shaders{
     iris::Renderer::Shader{*vs, VK_SHADER_STAGE_VERTEX_BIT},
@@ -137,10 +144,13 @@ void main() {
         "iris-shadertoy::Renderable::Pipeline")) {
     std::tie(renderable.pipelineLayout, renderable.pipeline) = *pl;
   } else {
+    IRIS_LOG_LEAVE();
     return tl::unexpected(pl.error());
   }
 
   renderable.numVertices = 3;
+
+  IRIS_LOG_LEAVE();
   return renderable;
 } // CreateRenderable
 
@@ -352,7 +362,6 @@ public:
   tbb::task* execute() override {
     IRIS_LOG_ENTER();
 
-    GetLogger()->trace("creating renderable");
     if (auto r = CreateRenderable(code_)) {
       iris::Renderer::AddRenderable(std::move(*r));
     } else {
@@ -372,6 +381,11 @@ private:
 std::function<std::system_error(void)>
 iris::io::LoadShaderToy(Control::ShaderToy const& message) noexcept {
   IRIS_LOG_ENTER();
+
+  // NOTE: Unlike LoadJSON or LoadGLTF in json.cc / gltf.cc, this function gets
+  // called by the main Renderer thread while processing a Control message.
+  // Thus, we need to create a new task here to offload the actual loading
+  // so as to not tie up the main Renderer thread.
 
   switch (message.type_case()) {
   case Control::ShaderToy::TypeCase::kUrl:
