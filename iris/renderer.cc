@@ -186,9 +186,9 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   }
 } // CreateEmplaceWindow
 
-static VkCommandBuffer
-RenderRenderable(iris::Renderer::Component::Renderable const& renderable,
-                 VkViewport* pViewport, VkRect2D* pScissor) noexcept {
+static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
+                                        VkViewport* pViewport,
+                                        VkRect2D* pScissor) noexcept {
   VkCommandBuffer commandBuffer;
   if (auto cb = AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)) {
     commandBuffer = (*cb)[0];
@@ -213,35 +213,12 @@ RenderRenderable(iris::Renderer::Component::Renderable const& renderable,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     renderable.pipeline);
 
-  ShaderToyPushConstants pushConstants;
-  pushConstants.iMouse = {0.f, 0.f, 0.f, 0.f};
-
-#if 0
-  if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
-    pushConstants.iMouse.x = ImGui::GetCursorPosX();
-    pushConstants.iMouse.y = ImGui::GetCursorPosY();
-    logger.debug("Left down: {} {}", pushConstants.iMouse.x,
-                 pushConstants.iMouse.y);
-  } else if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
-    pushConstants.iMouse.z = ImGui::GetCursorPosX();
-    pushConstants.iMouse.w = ImGui::GetCursorPosY();
-    logger.debug("Left released: {} {}", pushConstants.iMouse.z,
-                 pushConstants.iMouse.w);
+  if (renderable.pushConstants) {
+    vkCmdPushConstants(
+      commandBuffer, renderable.pipelineLayout,
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+      renderable.pushConstantsSize, renderable.pushConstants);
   }
-#endif
-
-  pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
-  pushConstants.iTime = ImGui::GetTime();
-  pushConstants.iFrame = ImGui::GetFrameCount();
-  pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
-  pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
-  pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
-  pushConstants.iResolution.z =
-    pushConstants.iResolution.x / pushConstants.iResolution.y;
-
-  vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
-                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, sizeof(ShaderToyPushConstants), &pushConstants);
 
   vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
@@ -275,6 +252,72 @@ RenderRenderable(iris::Renderer::Component::Renderable const& renderable,
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
 } // RenderRenderable
+
+void UpdateUIRenderable(Component::Renderable& renderable, ImDrawData* drawData,
+                        std::string const& title) noexcept {
+  if (auto vb = CreateOrResizeBuffer(
+        sAllocator, renderable.vertexBuffer, renderable.vertexBufferAllocation,
+        renderable.vertexBufferSize,
+        drawData->TotalVtxCount * sizeof(ImDrawVert),
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
+             renderable.vertexBufferSize) = *vb;
+    NameObject(sDevice, VK_OBJECT_TYPE_BUFFER, renderable.vertexBuffer,
+               (title + "::uiRenderable.vertexBuffer").c_str());
+  } else {
+    GetLogger()->warn(
+      "Unable to create/resize ui vertex buffer for window {}: {}", title,
+      vb.error().what());
+    return;
+  }
+
+  if (auto ib = CreateOrResizeBuffer(
+        sAllocator, renderable.indexBuffer, renderable.indexBufferAllocation,
+        renderable.indexBufferSize, drawData->TotalIdxCount * sizeof(ImDrawIdx),
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
+             renderable.indexBufferSize) = *ib;
+    NameObject(sDevice, VK_OBJECT_TYPE_BUFFER, renderable.indexBuffer,
+               (title + "::uiRenderable.indexBuffer").c_str());
+  } else {
+    GetLogger()->warn(
+      "Unable to create/resize ui index buffer for window {}: {}", title,
+      ib.error().what());
+    return;
+  }
+
+  ImDrawVert* pVertices;
+  ImDrawIdx* pIndices;
+
+  if (auto result = vmaMapMemory(sAllocator, renderable.vertexBufferAllocation,
+                                 reinterpret_cast<void**>(&pVertices));
+      result != VK_SUCCESS) {
+    GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}", title,
+                      to_string(result));
+    return;
+  }
+
+  if (auto result = vmaMapMemory(sAllocator, renderable.indexBufferAllocation,
+                                 reinterpret_cast<void**>(&pIndices));
+      result != VK_SUCCESS) {
+    GetLogger()->warn("Unable to map ui index buffer for window {}: {}", title,
+                      to_string(result));
+    return;
+  }
+
+  for (int i = 0; i < drawData->CmdListsCount; ++i) {
+    ImDrawList const* cmdList = drawData->CmdLists[i];
+    std::memcpy(pVertices, cmdList->VtxBuffer.Data,
+                cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+    std::memcpy(pIndices, cmdList->IdxBuffer.Data,
+                cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+    pVertices += cmdList->VtxBuffer.Size;
+    pIndices += cmdList->IdxBuffer.Size;
+  }
+
+  vmaUnmapMemory(sAllocator, renderable.vertexBufferAllocation);
+  vmaUnmapMemory(sAllocator, renderable.indexBufferAllocation);
+} // UpdateUIRenderable
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -1416,11 +1459,93 @@ void iris::Renderer::EndFrame(
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
+    ShaderToyPushConstants pushConstants;
+    pushConstants.iMouse = {0.f, 0.f, 0.f, 0.f};
+
+#if 0
+    if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
+      pushConstants.iMouse.x = ImGui::GetCursorPosX();
+      pushConstants.iMouse.y = ImGui::GetCursorPosY();
+      logger.debug("Left down: {} {}", pushConstants.iMouse.x,
+                  pushConstants.iMouse.y);
+    } else if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+      pushConstants.iMouse.z = ImGui::GetCursorPosX();
+      pushConstants.iMouse.w = ImGui::GetCursorPosY();
+      logger.debug("Left released: {} {}", pushConstants.iMouse.z,
+                  pushConstants.iMouse.w);
+    }
+#endif
+
+    pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
+    pushConstants.iTime = ImGui::GetTime();
+    pushConstants.iFrame = ImGui::GetFrameCount();
+    pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
+    pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
+    pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
+    pushConstants.iResolution.z =
+      pushConstants.iResolution.x / pushConstants.iResolution.y;
+
     std::vector<Component::Renderable> renderables = sRenderables();
     for (auto&& renderable : renderables) {
+      renderable.pushConstants = reinterpret_cast<void*>(&pushConstants);
+      renderable.pushConstantsSize = sizeof(ShaderToyPushConstants);
+
       VkCommandBuffer commandBuffer =
         RenderRenderable(renderable, &window.viewport, &window.scissor);
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+    }
+
+    if (window.showUI) {
+      ImDrawData* drawData = ImGui::GetDrawData();
+      if (!drawData || drawData->TotalVtxCount == 0) break;
+
+      UpdateUIRenderable(window.uiRenderable, drawData, title);
+
+      glm::vec2 const displaySize = drawData->DisplaySize;
+      glm::vec2 const displayPos = drawData->DisplayPos;
+
+      absl::FixedArray<glm::vec2> pushConstants(2);
+      pushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
+      pushConstants[1] = glm::vec2(-1.f, -1.f) - displayPos * pushConstants[0];
+
+      VkViewport viewport = {0.f, 0.f, displaySize.x, displaySize.y, 0.f, 1.f};
+
+      for (int i = 0, iOff = 0, vOff = 0; i < drawData->CmdListsCount; ++i) {
+        ImDrawList* cmdList = drawData->CmdLists[i];
+
+        for (int j = 0; j < cmdList->CmdBuffer.size(); ++j) {
+          ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[j];
+
+          VkRect2D scissor;
+          scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
+                             ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
+                             : 0;
+          scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
+                               ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
+                               : 0;
+          scissor.extent.width =
+            (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+          scissor.extent.height =
+            (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
+          // TODO: why + 1 above?
+
+          Component::Renderable renderable = window.uiRenderable;
+          renderable.pushConstants = pushConstants.data();
+          renderable.pushConstantsSize =
+            pushConstants.size() * sizeof(glm::vec2);
+          renderable.numIndices = drawCmd->ElemCount;
+          renderable.firstIndex = iOff;
+          renderable.firstVertex = vOff;
+
+          VkCommandBuffer commandBuffer =
+            RenderRenderable(renderable, &viewport, &scissor);
+          vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+
+          iOff += drawCmd->ElemCount;
+        }
+
+        vOff += cmdList->VtxBuffer.Size;
+      }
     }
 
     vkCmdExecuteCommands(frame.commandBuffer,

@@ -823,6 +823,9 @@ iris::Renderer::CreateImage(VkDevice device, VmaAllocator allocator,
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
+  IRIS_LOG_LEAVE();
+  return tl::unexpected(std::system_error(Error::kNotImplemented));
+
 #if 0
   if (auto error = image.Transition(VK_IMAGE_LAYOUT_UNDEFINED,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1,
@@ -872,6 +875,49 @@ iris::Renderer::CreateImage(VkDevice device, VmaAllocator allocator,
   IRIS_LOG_LEAVE();
   return std::make_tuple(image, allocation);
 } // iris::Renderer::CreateImage
+
+tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
+             std::system_error>
+iris::Renderer::CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
+                                     VmaAllocation allocation,
+                                     VkDeviceSize oldSize, VkDeviceSize newSize,
+                                     VkBufferUsageFlags bufferUsage,
+                                     VmaMemoryUsage memoryUsage) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(allocator != VK_NULL_HANDLE);
+  Expects(newSize > 0);
+
+  if (buffer != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE &&
+      oldSize >= newSize) {
+    IRIS_LOG_LEAVE();
+    return std::make_tuple(buffer, allocation, oldSize);
+  }
+
+  VkBufferCreateInfo bufferCI = {};
+  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferCI.size = newSize;
+  bufferCI.usage = bufferUsage;
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = memoryUsage;
+
+  VkBuffer newBuffer;
+  VmaAllocation newAllocation;
+
+  if (auto result = vmaCreateBuffer(allocator, &bufferCI, &allocationCI,
+                                    &newBuffer, &newAllocation, nullptr);
+      result != VK_SUCCESS) {
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create buffer"));
+  }
+
+  if (buffer != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator, buffer, allocation);
+  }
+
+  IRIS_LOG_LEAVE();
+  return std::make_tuple(newBuffer, newAllocation, newSize);
+} // iris::Renderer::CreateOrResizeBuffer
 
 namespace iris::Renderer {
 

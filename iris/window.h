@@ -4,6 +4,7 @@
 #include "absl/container/fixed_array.h"
 #include "expected.hpp"
 #include "glm/vec4.hpp"
+#include "iris/components/renderable.h"
 #include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
 #include "imgui.h"
@@ -66,6 +67,7 @@ struct Window {
   VkSemaphore imageAcquired{VK_NULL_HANDLE};
 
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext;
+  Renderer::Component::Renderable uiRenderable;
 
   [[nodiscard]] Frame& currentFrame() noexcept { return frames[frameIndex]; }
   [[nodiscard]] Frame& previousFrame() noexcept {

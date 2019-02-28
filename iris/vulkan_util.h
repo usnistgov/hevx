@@ -131,6 +131,13 @@ CreateImage(VkDevice device, VmaAllocator allocator, VkFormat format,
             gsl::not_null<std::byte*> pixels,
             std::uint32_t bytesPerPixel) noexcept;
 
+[[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
+                           std::system_error>
+CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
+                     VmaAllocation allocation, VkDeviceSize oldSize,
+                     VkDeviceSize newSize, VkBufferUsageFlags bufferUsage,
+                     VmaMemoryUsage memoryUsage) noexcept;
+
 struct Shader {
   VkShaderModule handle;
   VkShaderStageFlagBits stage;

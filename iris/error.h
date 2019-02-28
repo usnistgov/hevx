@@ -23,6 +23,7 @@ enum class Error {
   kWindowResizeFailed,    //<! Resizing a window failed.
   kImageTransitionFailed, //<! Image transition failed.
   kShaderCompileFailed,   //!< Shader compilation failed.
+  kNotImplemented,        //!< Not implemented
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -51,6 +52,7 @@ public:
     case Error::kWindowResizeFailed: return "surface resize failed"s;
     case Error::kImageTransitionFailed: return "image transition failed"s;
     case Error::kShaderCompileFailed: return "shader compile failed"s;
+    case Error::kNotImplemented: return "not implemented";
     }
     return "unknown"s;
   }

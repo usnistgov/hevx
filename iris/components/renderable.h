@@ -10,11 +10,20 @@ struct Renderable {
   VkPipeline pipeline{VK_NULL_HANDLE};
   VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
+
+  void* pushConstants{nullptr};
+  std::uint32_t pushConstantsSize{0};
   VkBuffer uniformBuffer{VK_NULL_HANDLE};
+
+  VkDeviceSize vertexBufferSize{0};
   VkDeviceSize vertexBufferBindingOffset{0};
   VkBuffer vertexBuffer{VK_NULL_HANDLE};
+  VmaAllocation vertexBufferAllocation{VK_NULL_HANDLE};
+
+  VkDeviceSize indexBufferSize{0};
   VkDeviceSize indexBufferBindingOffset{0};
   VkBuffer indexBuffer{VK_NULL_HANDLE};
+  VmaAllocation indexBufferAllocation{VK_NULL_HANDLE};
 
   VkIndexType indexType{VK_INDEX_TYPE_UINT32};
   std::uint32_t numIndices{0};
