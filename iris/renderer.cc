@@ -452,7 +452,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
 
   // These are the extensions that we require from the physical device.
-  char const* physicalDeviceExtensionNames[] = {
+  absl::InlinedVector<char const*, 32> physicalDeviceExtensionNames{{
     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
     VK_KHR_MAINTENANCE2_EXTENSION_NAME,
@@ -460,7 +460,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #if 0 // FIXME: which GPUs support this?
     VK_KHR_MULTIVIEW_EXTENSION_NAME
 #endif
-  };
+  }};
+
+  if ((options & Options::kEnableRayTracing) == Options::kEnableRayTracing) {
+    physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
+  }
 
 #if PLATFORM_LINUX
   ::setenv(
@@ -483,6 +487,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
+  DumpPhysicalDevices(sInstance);
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
@@ -1495,6 +1500,7 @@ void iris::Renderer::EndFrame(
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
     }
 
+#if 0
     if (window.showUI) {
       ImDrawData* drawData = ImGui::GetDrawData();
       if (!drawData || drawData->TotalVtxCount == 0) break;
@@ -1547,10 +1553,13 @@ void iris::Renderer::EndFrame(
         vOff += cmdList->VtxBuffer.Size;
       }
     }
+  #endif
 
-    vkCmdExecuteCommands(frame.commandBuffer,
-                         gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
-                         secondaryCBs.data());
+    if (!secondaryCBs.empty()) {
+      vkCmdExecuteCommands(frame.commandBuffer,
+                          gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
+                          secondaryCBs.data());
+    }
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);

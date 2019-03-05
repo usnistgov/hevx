@@ -362,6 +362,117 @@ tl::expected<bool, std::system_error> iris::Renderer::IsPhysicalDeviceGood(
   return true;
 } // iris::Renderer::IsPhysicalDeviceGood
 
+tl::expected<void, std::system_error>
+iris::Renderer::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
+                                   char const* indent) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(physicalDevice != VK_NULL_HANDLE);
+
+  //
+  // Get the properties.
+  //
+
+  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProps = {};
+  rayTracingProps.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+
+  VkPhysicalDeviceMultiviewProperties multiviewProps = {};
+  multiviewProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES;
+  multiviewProps.pNext = &rayTracingProps;
+
+  VkPhysicalDeviceMaintenance3Properties maint3Props = {};
+  maint3Props.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES;
+  maint3Props.pNext = &multiviewProps;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &maint3Props;
+
+  vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
+
+  //
+  // Get the features.
+  //
+
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
+  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+
+  vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalDeviceFeatures);
+
+  //
+  // Get the extension properties.
+  //
+
+  // Get the number of physical device extension properties.
+  std::uint32_t numExtensionProperties;
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        physicalDevice, nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  // Get the physical device extension properties.
+  absl::FixedArray<VkExtensionProperties> extensionProperties(
+    numExtensionProperties);
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        physicalDevice, nullptr, &numExtensionProperties,
+        extensionProperties.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  GetLogger()->debug("{}{} Extensions:", indent, numExtensionProperties);
+  for (auto&& extensionProperty : extensionProperties) {
+    GetLogger()->debug("{}  {}", indent, extensionProperty.extensionName);
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::DumpPhysicalDevice
+
+tl::expected<void, std::system_error>
+iris::Renderer::DumpPhysicalDevices(VkInstance instance) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(instance != VK_NULL_HANDLE);
+
+  // Get the number of physical devices present on the system
+  std::uint32_t numPhysicalDevices;
+  if (auto result =
+        vkEnumeratePhysicalDevices(instance, &numPhysicalDevices, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot enumerate physical devices"));
+  }
+
+  // Get the physical devices present on the system
+  absl::FixedArray<VkPhysicalDevice> physicalDevices(numPhysicalDevices);
+  if (auto result = vkEnumeratePhysicalDevices(instance, &numPhysicalDevices,
+                                               physicalDevices.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot enumerate physical devices"));
+  }
+
+  // Iterate through each physical device to find one that we can use.
+  for (auto&& [i, physicalDevice] : enumerate(physicalDevices)) {
+    GetLogger()->debug("Physical device {}:", i);
+    DumpPhysicalDevice(physicalDevice, "  ");
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::DumpPhysicalDevices
+
 tl::expected<VkPhysicalDevice, std::system_error>
 iris::Renderer::ChoosePhysicalDevice(VkInstance instance,
                                      VkPhysicalDeviceFeatures2 features,
@@ -1121,6 +1232,24 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
       return EShLanguage::EShLangVertex;
     } else if ((shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)) {
       return EShLanguage::EShLangFragment;
+    } else if ((shaderStage & VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
+      return EShLanguage::EShLangRayGenNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_ANY_HIT_BIT_NV)) {
+      return EShLanguage::EShLangAnyHitNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+      return EShLanguage::EShLangClosestHitNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
+      return EShLanguage::EShLangIntersectNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_MISS_BIT_NV)) {
+      return EShLanguage::EShLangMissNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_CALLABLE_BIT_NV)) {
+      return EShLanguage::EShLangCallableNV;
+    } else if ((shaderStage & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) {
+      return EShLanguage::EShLangTessControl;
+    } else if ((shaderStage & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)) {
+      return EShLanguage::EShLangTessEvaluation;
+    } else if ((shaderStage & VK_SHADER_STAGE_GEOMETRY_BIT)) {
+      return EShLanguage::EShLangGeometry;
     } else {
       GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
       std::terminate();
@@ -1218,3 +1347,133 @@ iris::Renderer::CompileShaderFromSource(VkDevice device,
   IRIS_LOG_LEAVE();
   return module;
 } // iris::Renderer::CompileShaderFromSource
+
+namespace iris::Renderer {
+
+tl::expected<VkMemoryRequirements2, std::system_error>
+GetAccelerationStructureMemoryRequirements(
+  VkDevice device, VkAccelerationStructureNV accelerationStructure) noexcept {
+  VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
+  memoryRequirementsInfo.sType =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+  memoryRequirementsInfo.accelerationStructure = accelerationStructure;
+
+  VkMemoryRequirements2KHR objectMemoryRequirements = {};
+  objectMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
+
+  VkMemoryRequirements2KHR buildMemoryRequirements = {};
+  buildMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
+
+  VkMemoryRequirements2KHR updateMemoryRequirements = {};
+  updateMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
+
+  memoryRequirementsInfo.type =
+    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
+  vkGetAccelerationStructureMemoryRequirementsNV(
+    device, &memoryRequirementsInfo, &objectMemoryRequirements);
+
+  memoryRequirementsInfo.type =
+    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+  vkGetAccelerationStructureMemoryRequirementsNV(
+    device, &memoryRequirementsInfo, &buildMemoryRequirements);
+
+  memoryRequirementsInfo.type =
+    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV;
+  vkGetAccelerationStructureMemoryRequirementsNV(
+    device, &memoryRequirementsInfo, &updateMemoryRequirements);
+
+  if (objectMemoryRequirements.memoryRequirements.alignment !=
+        buildMemoryRequirements.memoryRequirements.alignment ||
+      buildMemoryRequirements.memoryRequirements.alignment !=
+        updateMemoryRequirements.memoryRequirements.alignment) {
+    return tl::unexpected(std::system_error(
+      make_error_code(Error::kNotImplemented), "Alignments don't match"));
+  }
+
+  if (objectMemoryRequirements.memoryRequirements.memoryTypeBits !=
+        buildMemoryRequirements.memoryRequirements.memoryTypeBits ||
+      buildMemoryRequirements.memoryRequirements.memoryTypeBits !=
+        updateMemoryRequirements.memoryRequirements.memoryTypeBits) {
+    return tl::unexpected(std::system_error(
+      make_error_code(Error::kNotImplemented), "Memory types don't match"));
+  }
+
+  VkMemoryRequirements2 memoryRequirements = {};
+  memoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
+  memoryRequirements.memoryRequirements.alignment =
+    objectMemoryRequirements.memoryRequirements.alignment;
+  memoryRequirements.memoryRequirements.memoryTypeBits =
+    objectMemoryRequirements.memoryRequirements.memoryTypeBits;
+  memoryRequirements.memoryRequirements.size =
+    objectMemoryRequirements.memoryRequirements.size +
+    buildMemoryRequirements.memoryRequirements.size +
+    updateMemoryRequirements.memoryRequirements.size;
+
+  return memoryRequirements;
+} // GetAccelerationStructureMemoryRequirements
+
+} // namespace iris::Renderer
+
+tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
+             std::system_error>
+iris::Renderer::CreateAccelerationStructure(
+  VkDevice device, VmaAllocator allocator,
+  VkAccelerationStructureCreateInfoNV*
+    pAccelerationStructureCreateInfo) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(device != VK_NULL_HANDLE);
+  Expects(pAccelerationStructureCreateInfo != nullptr);
+
+  VkAccelerationStructureNV structure{VK_NULL_HANDLE};
+  if (auto result = vkCreateAccelerationStructureNV(
+        device, pAccelerationStructureCreateInfo, nullptr, &structure);
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create acceleration structure"));
+  }
+
+  VkMemoryRequirements memoryRequirements;
+  if (auto mr = GetAccelerationStructureMemoryRequirements(device, structure)) {
+    memoryRequirements = mr->memoryRequirements;
+  } else {
+    return tl::unexpected(mr.error());
+  }
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.flags = VMA_MEMORY_USAGE_GPU_ONLY;
+  allocationCI.memoryTypeBits = memoryRequirements.memoryTypeBits;
+
+  VmaAllocation allocation;
+  if (auto result = vmaAllocateMemory(allocator, &memoryRequirements,
+                                      &allocationCI, &allocation, nullptr);
+      result != VK_SUCCESS) {
+    vkDestroyAccelerationStructureNV(device, structure, nullptr);
+    return tl::unexpected(std::system_error(
+      iris::Renderer::make_error_code(result), "Cannot allocate memory"));
+  }
+
+  VmaAllocationInfo allocationInfo;
+  vmaGetAllocationInfo(allocator, allocation, &allocationInfo);
+
+  VkBindAccelerationStructureMemoryInfoNV bindAccelerationStructureMemoryInfo =
+    {};
+  bindAccelerationStructureMemoryInfo.sType =
+    VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV;
+  bindAccelerationStructureMemoryInfo.accelerationStructure = structure;
+  bindAccelerationStructureMemoryInfo.memory = allocationInfo.deviceMemory;
+  bindAccelerationStructureMemoryInfo.memoryOffset = 0;
+
+  if (auto result = vkBindAccelerationStructureMemoryNV(
+        device, 1, &bindAccelerationStructureMemoryInfo);
+      result != VK_SUCCESS) {
+    vmaFreeMemory(allocator, allocation);
+    vkDestroyAccelerationStructureNV(device, structure, nullptr);
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot bind memory to acceleration structure"));
+  }
+
+  Ensures(structure != VK_NULL_HANDLE);
+  Ensures(allocation != VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return std::make_tuple(structure, allocation);
+} // iris::Renderer::CreateAccelerationStructure

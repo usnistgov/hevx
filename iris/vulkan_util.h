@@ -58,6 +58,13 @@ ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
 GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
                     VkQueueFlags queueFlags) noexcept;
 
+tl::expected<void, std::system_error>
+DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
+                   char const* indent = "") noexcept;
+
+tl::expected<void, std::system_error>
+DumpPhysicalDevices(VkInstance instance) noexcept;
+
 /*! \brief Check if a specific physical device meets specified requirements.
  *
  * \see
@@ -147,6 +154,12 @@ tl::expected<VkShaderModule, std::system_error>
 CompileShaderFromSource(VkDevice device, std::string_view source,
                         VkShaderStageFlagBits stage,
                         std::string name = {}) noexcept;
+
+tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
+             std::system_error>
+CreateAccelerationStructure(VkDevice device, VmaAllocator allocator,
+                            VkAccelerationStructureCreateInfoNV*
+                              pAccelerationStructureCreateInfo) noexcept;
 
 template <class T>
 void NameObject(VkDevice device, VkObjectType objectType, T objectHandle,
