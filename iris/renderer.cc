@@ -340,44 +340,30 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   }
   std::string const objNames(buf.data(), buf.size() == 0 ? 0 : buf.size() - 2);
 
-  switch (messageSeverity) {
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+  if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
     if (objNames.empty()) {
-      GetLogger()->trace(msg);
+      GetLogger()->error(msg);
     } else {
-      GetLogger()->trace("{} Objects: ({})", msg, objNames);
+      GetLogger()->error("{} Objects: ({})", msg, objNames);
     }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-    if (objNames.empty()) {
-      GetLogger()->info(msg);
-    } else {
-      GetLogger()->info("{} Objects: ({})", msg, objNames);
-    }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+  } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
     if (objNames.empty()) {
       GetLogger()->warn(msg);
     } else {
       GetLogger()->warn("{} Objects: ({})", msg, objNames);
     }
-    break;
-  case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+  } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
     if (objNames.empty()) {
-      GetLogger()->error(msg);
+      GetLogger()->info(msg);
     } else {
-      GetLogger()->error("{} Objects: ({})", msg, objNames);
+      GetLogger()->info("{} Objects: ({})", msg, objNames);
     }
-    break;
-  default:
-    GetLogger()->error("Unhandled VkDebugUtilsMessengerSeverityFlagBitsEXT: {}",
-                       messageSeverity);
+  } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
     if (objNames.empty()) {
-      GetLogger()->error(msg);
+      GetLogger()->trace(msg);
     } else {
-      GetLogger()->error("{} Objects: ({})", msg, objNames);
+      GetLogger()->trace("{} Objects: ({})", msg, objNames);
     }
-    break;
   }
 
   GetLogger()->flush();
