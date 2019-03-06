@@ -315,6 +315,8 @@ CreateAccelerationStructures() noexcept {
                                              as.error().what()));
   }
 
+  // TODO: actually build the structures
+
   return std::make_tuple(bottomLevelAS, topLevelAS);
 }
 
@@ -431,30 +433,24 @@ int main(int argc, char** argv) {
   if (auto iav = iris::Renderer::AllocateImageAndView(
         iris::Renderer::sDevice, iris::Renderer::sAllocator,
         VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_TILING_OPTIMAL,
-        VMA_MEMORY_USAGE_GPU_ONLY, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     std::tie(outputImage, outputImageAllocation, outputImageView) = *iav;
   } else {
     logger.critical("cannot create output image: {}", iav.error().what());
     std::exit(EXIT_FAILURE);
   }
 
-  //if (auto res = iris::Renderer::TransitionImage(
-        //iris::Renderer::sDevice, commandPool, queue, fence, outputImage,
-        //VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, 1);
-      //!res) {
-  // logger.critical("cannot transition output image: {}", res.error().what());
-  // std::exit(EXIT_FAILURE);
-  //}
+  absl::FixedArray<VkAccelerationStructureNV, 2> accelerationStructures{
+    bottomLeveAS, topLevelAS};
 
-  absl::FixedArray<VkAccelerationStructureNV, 2> ases{bottomLeveAS, topLevelAS};
-
-  VkWriteDescriptorSetAccelerationStructureNV asDescWrite = {};
-  asDescWrite.sType =
+  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
+  writeDescriptorSetAS.sType =
     VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
-  asDescWrite.accelerationStructureCount =
-    static_cast<std::uint32_t>(ases.size());
-  asDescWrite.pAccelerationStructures = ases.data();
+  writeDescriptorSetAS.accelerationStructureCount =
+    static_cast<std::uint32_t>(accelerationStructures.size());
+  writeDescriptorSetAS.pAccelerationStructures = accelerationStructures.data();
 
   VkDescriptorImageInfo imageInfo = {};
   imageInfo.imageView = outputImageView;
@@ -466,8 +462,9 @@ int main(int argc, char** argv) {
   bufferInfo.range = VK_WHOLE_SIZE;
 
   absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{{
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &asDescWrite, set, 0, 0, 1,
-     VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, nullptr, nullptr, nullptr},
+    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &writeDescriptorSetAS, set, 0, 0,
+     1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, nullptr, nullptr,
+     nullptr},
     {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, set, 1, 0, 1,
      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imageInfo, nullptr, nullptr},
     {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, set, 2, 0, 1,
@@ -477,6 +474,8 @@ int main(int argc, char** argv) {
   vkUpdateDescriptorSets(iris::Renderer::sDevice,
                          static_cast<std::uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(), 0, nullptr);
+
+  // TODO: create shader binding table
 
   for (auto&& file : files) {
     logger.info("Loading {}", file);
