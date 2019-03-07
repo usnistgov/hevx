@@ -1,5 +1,5 @@
 set(url https://github.com/KhronosGroup/glslang)
-set(commit 2898223375d57fb3974f24e1e944bb624f67cb73) # sdk-1.1.97.0
+set(commit 5432f0dd8f331f15182681664d7486681e8514e6) # sdk-1.1.101.0
 
 if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/glslang/CMakeLists.txt)
   execute_process(

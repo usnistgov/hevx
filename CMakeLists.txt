@@ -14,6 +14,7 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 ##
 # Build options
 ##
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BUILD_DOCS "Build the documentation" ON)
 CMAKE_DEPENDENT_OPTION(BUILD_DOCS_INTERNAL "Build developer documentation"
   ON "BUILD_DOCS" OFF)

@@ -162,12 +162,16 @@ CreateAccelerationStructure(VkDevice device, VmaAllocator allocator,
                               pAccelerationStructureCreateInfo) noexcept;
 
 template <class T>
-void NameObject(VkDevice device, VkObjectType objectType, T objectHandle,
-                gsl::czstring<> objectName) noexcept {
+void NameObject(VkDevice device [[maybe_unused]],
+                VkObjectType objectType [[maybe_unused]],
+                T objectHandle [[maybe_unused]],
+                gsl::czstring<> objectName [[maybe_unused]]) noexcept {
+#if 0
   VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
     VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
     reinterpret_cast<std::uint64_t>(objectHandle), objectName};
   vkSetDebugUtilsObjectNameEXT(device, &objectNameInfo);
+#endif
 } // NameObject
 
 //! \brief Convert a VkPhysicalDeviceType to a std::string

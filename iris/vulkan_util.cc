@@ -981,10 +981,10 @@ iris::Renderer::CreateImage(VkDevice device, VmaAllocator allocator,
     IRIS_LOG_LEAVE();
     return tl::unexpected(error);
   }
-#endif
 
   IRIS_LOG_LEAVE();
   return std::make_tuple(image, allocation);
+#endif
 } // iris::Renderer::CreateImage
 
 tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
