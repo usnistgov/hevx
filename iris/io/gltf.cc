@@ -1194,8 +1194,8 @@ ReadGLTF(filesystem::path const& path) noexcept {
         imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
                                  reinterpret_cast<std::byte*>(pixels) +
                                    x * y * 4);
-        imagesExtents.push_back(
-          {static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y)});
+        imagesExtents.push_back({gsl::narrow_cast<std::uint32_t>(x),
+                                 gsl::narrow_cast<std::uint32_t>(y)});
       }
     } else if (image.bufferView) {
       imagesBytes.push_back(buffersBytes[*image.bufferView]);

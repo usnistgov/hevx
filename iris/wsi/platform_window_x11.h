@@ -80,8 +80,8 @@ public:
    * \param[in] offset the new window offset in screen coordinates.
    */
   void Move(Offset2D const& offset) {
-    std::uint32_t values[2] = {static_cast<std::uint32_t>(offset.x),
-                               static_cast<std::uint32_t>(offset.y)};
+    std::uint32_t values[2] = {gsl::narrow_cast<std::uint32_t>(offset.x),
+                               gsl::narrow_cast<std::uint32_t>(offset.y)};
     ::xcb_configure_window(handle_.connection, handle_.window,
                            XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
     ::xcb_flush(handle_.connection);

@@ -101,7 +101,8 @@ iris::Renderer::CreateGraphicsPipeline(
 
   VkGraphicsPipelineCreateInfo graphicsPipelineCI = {};
   graphicsPipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  graphicsPipelineCI.stageCount = static_cast<uint32_t>(shaderStageCIs.size());
+  graphicsPipelineCI.stageCount =
+    gsl::narrow_cast<std::uint32_t>(shaderStageCIs.size());
   graphicsPipelineCI.pStages = shaderStageCIs.data();
   graphicsPipelineCI.pVertexInputState = &vertexInputStateCI;
   graphicsPipelineCI.pInputAssemblyState = &inputAssemblyStateCI;

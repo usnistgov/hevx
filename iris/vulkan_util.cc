@@ -905,7 +905,7 @@ iris::Renderer::CreateImage(VkDevice device, VmaAllocator allocator,
                                               bas.error().what()));
   }
 
-  if (auto p = MapMemory<unsigned char*>(allocator, stagingBufferAllocation)) {
+  if (auto p = MapMemory<std::byte*>(allocator, stagingBufferAllocation)) {
     std::memcpy(*p, pixels, imageSize);
   } else {
     using namespace std::string_literals;

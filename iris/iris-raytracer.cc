@@ -49,7 +49,7 @@ CreateDescriptor() noexcept {
   VkDescriptorPoolCreateInfo poolCI = {};
   poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolCI.maxSets = 32;
-  poolCI.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
+  poolCI.poolSizeCount = gsl::narrow_cast<std::uint32_t>(poolSizes.size());
   poolCI.pPoolSizes = poolSizes.data();
 
   VkDescriptorPool pool;
@@ -73,7 +73,7 @@ CreateDescriptor() noexcept {
 
   VkDescriptorSetLayoutCreateInfo layoutCI = {};
   layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutCI.bindingCount = static_cast<std::uint32_t>(bindings.size());
+  layoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(bindings.size());
   layoutCI.pBindings = bindings.data();
 
   VkDescriptorSetLayout layout = {};
@@ -449,7 +449,7 @@ int main(int argc, char** argv) {
   writeDescriptorSetAS.sType =
     VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
   writeDescriptorSetAS.accelerationStructureCount =
-    static_cast<std::uint32_t>(accelerationStructures.size());
+    gsl::narrow_cast<std::uint32_t>(accelerationStructures.size());
   writeDescriptorSetAS.pAccelerationStructures = accelerationStructures.data();
 
   VkDescriptorImageInfo imageInfo = {};
@@ -471,9 +471,10 @@ int main(int argc, char** argv) {
      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &bufferInfo, nullptr},
   }};
 
-  vkUpdateDescriptorSets(iris::Renderer::sDevice,
-                         static_cast<std::uint32_t>(descriptorWrites.size()),
-                         descriptorWrites.data(), 0, nullptr);
+  vkUpdateDescriptorSets(
+    iris::Renderer::sDevice,
+    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
+    descriptorWrites.data(), 0, nullptr);
 
   // TODO: create shader binding table
 

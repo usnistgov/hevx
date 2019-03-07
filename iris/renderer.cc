@@ -161,6 +161,37 @@ static tbb::task_scheduler_init sTaskSchedulerInit{
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
   sIOContinuations{};
 
+static char const* sUIVertexShaderSource = R"(
+#version 450 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+layout(location = 2) in vec4 aColor;
+layout(push_constant) uniform uPushConstant {
+  vec2 uScale;
+  vec2 uTranslate;
+};
+layout(location = 0) out vec4 Color;
+layout(location = 1) out vec2 UV;
+out gl_PerVertex {
+  vec4 gl_Position;
+};
+void main() {
+  Color = aColor;
+  UV = aUV;
+  gl_Position = vec4(aPos * uScale + uTranslate, 0.f, 1.f);
+})";
+
+static char const* sUIFragmentShaderSource = R"(
+#version 450 core
+layout(set = 0, binding = 0) uniform sampler sSampler;
+layout(set = 0, binding = 1) uniform texture2D sTexture;
+layout(location = 0) in vec4 Color;
+layout(location = 1) in vec2 UV;
+layout(location = 0) out vec4 fColor;
+void main() {
+  fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
+})";
+
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   auto const& bg = windowMessage.background_color();
@@ -174,10 +205,10 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
 
   if (auto win = CreateWindow(
         windowMessage.name().c_str(),
-        wsi::Offset2D{static_cast<std::int16_t>(windowMessage.x()),
-                      static_cast<std::int16_t>(windowMessage.y())},
-        wsi::Extent2D{static_cast<std::uint16_t>(windowMessage.width()),
-                      static_cast<std::uint16_t>(windowMessage.height())},
+        wsi::Offset2D{gsl::narrow_cast<std::int16_t>(windowMessage.x()),
+                      gsl::narrow_cast<std::int16_t>(windowMessage.y())},
+        wsi::Extent2D{gsl::narrow_cast<std::uint16_t>(windowMessage.width()),
+                      gsl::narrow_cast<std::uint16_t>(windowMessage.height())},
         {bg.r(), bg.g(), bg.b(), bg.a()}, options, windowMessage.display(),
         sNumWindowFramesBuffered)) {
     Windows().emplace(windowMessage.name(), std::move(*win));
@@ -900,10 +931,119 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     16.f);
 
   unsigned char* pixels;
-  int width, height, bytes_per_pixel;
-  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytes_per_pixel);
+  int width, height, bytesPerPixel;
+  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytesPerPixel);
 
-  // TODO: create font texture and sampler and window.uiRenderable
+  VkImage fontTexture;
+  VmaAllocation fontTextureAllocation;
+
+  if (auto ia =
+        CreateImage(sDevice, sAllocator, sGraphicsCommandPools[0],
+                    sGraphicsCommandQueues[0], sGraphicsCommandFences[0],
+                    VK_FORMAT_R8G8B8A8_UNORM,
+                    VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
+                               gsl::narrow_cast<std::uint32_t>(height)},
+                    VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+                    gsl::not_null(reinterpret_cast<std::byte*>(pixels)),
+                    gsl::narrow_cast<std::uint32_t>(bytesPerPixel))) {
+    std::tie(fontTexture, fontTextureAllocation) = *ia;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ia.error());
+  }
+
+  window.uiRenderable.images.push_back(fontTexture);
+  window.uiRenderable.allocations.push_back(fontTextureAllocation);
+
+  NameObject(
+    sDevice, VK_OBJECT_TYPE_IMAGE, window.uiRenderable.images[0],
+    fmt::format("{}.uiRenderable.images[0] (fontTexture)", title).c_str());
+
+  VkImageViewCreateInfo imageViewCI = {};
+  imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  imageViewCI.image = window.uiRenderable.images[0];
+  imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  imageViewCI.format = VK_FORMAT_R8G8B8A8_UNORM;
+  imageViewCI.components = {
+    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+  imageViewCI.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}; 
+
+  VkImageView fontTextureView;
+  if (auto result =
+        vkCreateImageView(sDevice, &imageViewCI, nullptr, &fontTextureView);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image view"));
+  }
+
+  window.uiRenderable.views.push_back(fontTextureView);
+
+  NameObject(
+    sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.views[0],
+    fmt::format("{}.uiRenderable.views[0] (fontTextureView)", title).c_str());
+
+  VkSamplerCreateInfo samplerCI = {};
+  samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerCI.magFilter = VK_FILTER_LINEAR;
+  samplerCI.minFilter = VK_FILTER_LINEAR;
+  samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  samplerCI.mipLodBias = 0.f;
+  samplerCI.anisotropyEnable = VK_FALSE;
+  samplerCI.maxAnisotropy = 1;
+  samplerCI.compareEnable = VK_FALSE;
+  samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+  samplerCI.minLod = -1000.f;
+  samplerCI.maxLod = 1000.f;
+  samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+  samplerCI.unnormalizedCoordinates = VK_FALSE;
+
+  VkSampler fontTextureSampler;
+  if (auto result =
+        vkCreateSampler(sDevice, &samplerCI, nullptr, &fontTextureSampler);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create sampler"));
+  }
+
+  window.uiRenderable.samplers.push_back(fontTextureSampler);
+
+  NameObject(
+    sDevice, VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.samplers[0],
+    fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
+      .c_str());
+
+  absl::FixedArray<VkShaderModule> shaderModules(2);
+
+  if (auto s = CompileShaderFromSource(sDevice, sUIVertexShaderSource,
+                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaderModules[0] = *s;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(s.error());
+  }
+
+  if (auto s = CompileShaderFromSource(sDevice, sUIFragmentShaderSource,
+                                       VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    shaderModules[1] = *s;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(s.error());
+  }
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
+  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
+                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+
+
+  // TODO: pipeline
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
