@@ -853,6 +853,145 @@ iris::Renderer::AllocateImageAndView(
   return std::make_tuple(image, allocation, imageView);
 } // iris::Renderer::AllocateImageAndView
 
+tl::expected<std::tuple<VkImage, VmaAllocation>, std::system_error>
+iris::Renderer::CreateImage(VkDevice device, VmaAllocator allocator,
+                            VkCommandPool commandPool, VkQueue queue,
+                            VkFence fence, VkFormat format, VkExtent2D extent,
+                            VkImageUsageFlags imageUsage,
+                            VmaMemoryUsage memoryUsage,
+                            gsl::not_null<std::byte*> pixels [[maybe_unused]],
+                            std::uint32_t bytesPerPixel) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(device != VK_NULL_HANDLE);
+  Expects(allocator != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+  Expects(queue != VK_NULL_HANDLE);
+  Expects(fence != VK_NULL_HANDLE);
+
+  VkDeviceSize imageSize [[maybe_unused]];
+
+  switch (format) {
+  case VK_FORMAT_R8G8B8A8_UNORM:
+    Expects(bytesPerPixel == sizeof(char) * 4);
+    imageSize = extent.width * extent.height * sizeof(char) * 4;
+    break;
+
+  case VK_FORMAT_R32_SFLOAT:
+    Expects(bytesPerPixel == sizeof(float));
+    imageSize = extent.width * extent.height * sizeof(float);
+    break;
+
+  default:
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(std::make_error_code(std::errc::invalid_argument),
+                        "Unsupported texture format"));
+  }
+
+  VkBuffer stagingBuffer = VK_NULL_HANDLE;
+  VmaAllocation stagingBufferAllocation = VK_NULL_HANDLE;
+  VkDeviceSize stagingBufferSize = 0;
+
+  if (auto bas = CreateOrResizeBuffer(
+        allocator, stagingBuffer, stagingBufferAllocation, stagingBufferSize,
+        imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(stagingBuffer, stagingBufferAllocation, stagingBufferSize) = *bas;
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(bas.error().code(), "Cannot create staging buffer: "s +
+                                              bas.error().what()));
+  }
+
+  if (auto p = MapMemory<unsigned char*>(allocator, stagingBufferAllocation)) {
+    std::memcpy(*p, pixels, imageSize);
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      p.error().code(), "Cannot map staging buffer: "s + p.error().what()));
+  }
+
+  vmaUnmapMemory(allocator, stagingBufferAllocation);
+
+  VkImageCreateInfo imageCI = {};
+  imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  imageCI.imageType = VK_IMAGE_TYPE_2D;
+  imageCI.format = format;
+  imageCI.extent = {extent.width, extent.height, 1};
+  imageCI.mipLevels = 1;
+  imageCI.arrayLayers = 1;
+  imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+  imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+  imageCI.usage = imageUsage | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = memoryUsage;
+
+  VkImage image;
+  VmaAllocation allocation;
+
+  if (auto result = vmaCreateImage(allocator, &imageCI, &allocationCI, &image,
+                                   &allocation, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image"));
+  }
+
+  if (auto result = TransitionImage(device, commandPool, queue, fence, image,
+                                    VK_IMAGE_LAYOUT_UNDEFINED,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+      !result) {
+    return tl::unexpected(result.error());
+  }
+
+  VkCommandBuffer commandBuffer;
+  if (auto cb = BeginOneTimeSubmit(device, commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
+  }
+
+  VkBufferImageCopy region = {};
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;
+  region.bufferImageHeight = 0;
+  region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  region.imageOffset = {0, 0, 0};
+  region.imageExtent = {extent.width, extent.height, 1};
+
+  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  if (auto result =
+        EndOneTimeSubmit(commandBuffer, device, commandPool, queue, fence);
+      !result) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  if (auto result =
+        TransitionImage(device, commandPool, queue, fence, image,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
+                           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                           : VK_IMAGE_LAYOUT_GENERAL),
+
+                        1, 1);
+      !result) {
+    return tl::unexpected(result.error());
+  }
+
+  IRIS_LOG_LEAVE();
+  return std::make_tuple(image, allocation);
+} // iris::Renderer::CreateImage
+
 tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
              std::system_error>
 iris::Renderer::CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,

@@ -130,6 +130,14 @@ AllocateImageAndView(VkDevice device, VmaAllocator allocator, VkFormat format,
                      VmaMemoryUsage memoryUsage,
                      VkImageSubresourceRange subresourceRange) noexcept;
 
+[[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation>,
+                           std::system_error>
+CreateImage(VkDevice device, VmaAllocator allocator, VkCommandPool commandPool,
+            VkQueue queue, VkFence fence, VkFormat format, VkExtent2D extent,
+            VkImageUsageFlags imageUsage, VmaMemoryUsage memoryUsage,
+            gsl::not_null<std::byte*> pixels,
+            std::uint32_t bytesPerPixel) noexcept;
+
 [[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
                            std::system_error>
 CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
