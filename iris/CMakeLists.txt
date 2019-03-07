@@ -73,7 +73,7 @@ add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  COMMAND ${PYTHON_EXECUTABLE} ${FLEXTGL_SOURCE_DIR}/flextGLgen.py
+  COMMAND ${Python3_EXECUTABLE} ${FLEXTGL_SOURCE_DIR}/flextGLgen.py
   ARGS
       -D.
       -t${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan

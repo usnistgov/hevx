@@ -1,9 +1,9 @@
-find_package(Git REQUIRED)
 include(FetchContent)
 
 # The following packages must be included first and in this order
 include(GoogleTest.cmake)
 include(GLM.cmake)
+include(Vulkan.cmake)
 
 # These packages can be included in any order
 include(Abseil.cmake)

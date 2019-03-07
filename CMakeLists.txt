@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.11)
-cmake_policy(VERSION 3.11)
+cmake_minimum_required(VERSION 3.12)
+cmake_policy(VERSION 3.12)
 
 set(CMAKE_USER_MAKE_RULES_OVERRIDE
     "${CMAKE_CURRENT_LIST_DIR}/cmake/HEVUserMakeRulesOverride.cmake")
@@ -37,6 +37,12 @@ include(HEVToolchain)
 include(GNUInstallDirs)
 
 ##
+# Packages we need in CMake
+##
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_package(Git REQUIRED)
+
+##
 # Unit testing
 ##
 if(BUILD_TESTING)
@@ -46,12 +52,6 @@ endif()
 ##
 # Required libraries
 ##
-find_package(PythonInterp 3 REQUIRED)
-set(Vulkan_VERSION 1.1.101.0)
-find_package(Vulkan ${Vulkan_VERSION} EXACT REQUIRED)
-get_filename_component(Vulkan_LIBRARY_DIR ${Vulkan_LIBRARY} DIRECTORY CACHE)
-get_filename_component(Vulkan_SDK_DIR ${Vulkan_LIBRARY_DIR}/.. ABSOLUTE CACHE)
-
 add_subdirectory(third_party)
 
 ##
