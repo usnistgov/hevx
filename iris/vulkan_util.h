@@ -130,14 +130,6 @@ AllocateImageAndView(VkDevice device, VmaAllocator allocator, VkFormat format,
                      VmaMemoryUsage memoryUsage,
                      VkImageSubresourceRange subresourceRange) noexcept;
 
-[[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation>,
-                           std::system_error>
-CreateImage(VkDevice device, VmaAllocator allocator, VkFormat format,
-            VkExtent2D extent, VkImageUsageFlags imageUsage,
-            VmaMemoryUsage memoryUsage,
-            gsl::not_null<std::byte*> pixels,
-            std::uint32_t bytesPerPixel) noexcept;
-
 [[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
                            std::system_error>
 CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
@@ -173,6 +165,18 @@ void NameObject(VkDevice device [[maybe_unused]],
   vkSetDebugUtilsObjectNameEXT(device, &objectNameInfo);
 #endif
 } // NameObject
+
+template <class T>
+tl::expected<T*, std::system_error>
+MapMemory(VmaAllocator allocator, VmaAllocation allocation) noexcept {
+  void* ptr;
+  if (auto result = vmaMapMemory(allocator, allocation, &ptr);
+      result != VK_SUCCESS) {
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot map memory"));
+  }
+  return reinterpret_cast<T*>(ptr);
+}
 
 //! \brief Convert a VkPhysicalDeviceType to a std::string
 inline std::string to_string(VkPhysicalDeviceType type) noexcept {

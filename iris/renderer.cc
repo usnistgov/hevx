@@ -3,8 +3,8 @@
  */
 #include "config.h"
 
-#include "renderer.h"
 #include "absl/container/flat_hash_map.h"
+#include "renderer.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -119,8 +119,8 @@ static std::uint32_t const sColorResolveAttachmentIndex{1};
 static std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
 static std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
 
-static VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
-                                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+static VkSurfaceFormatKHR const sSurfaceColorFormat{
+  VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 static VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
 static VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 static VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
@@ -346,7 +346,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
     } else {
       GetLogger()->error("{} Objects: ({})", msg, objNames);
     }
-  } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+  } else if (messageSeverity >=
+             VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
     if (objNames.empty()) {
       GetLogger()->warn(msg);
     } else {
@@ -358,7 +359,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
     } else {
       GetLogger()->info("{} Objects: ({})", msg, objNames);
     }
-  } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+  } else if (messageSeverity >=
+             VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
     if (objNames.empty()) {
       GetLogger()->trace(msg);
     } else {
@@ -900,6 +902,8 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   unsigned char* pixels;
   int width, height, bytes_per_pixel;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytes_per_pixel);
+
+  // TODO: create font texture and sampler and window.uiRenderable
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
@@ -1539,12 +1543,12 @@ void iris::Renderer::EndFrame(
         vOff += cmdList->VtxBuffer.Size;
       }
     }
-  #endif
+#endif
 
     if (!secondaryCBs.empty()) {
       vkCmdExecuteCommands(frame.commandBuffer,
-                          gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
-                          secondaryCBs.data());
+                           gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
+                           secondaryCBs.data());
     }
 
     vkCmdEndRenderPass(frame.commandBuffer);

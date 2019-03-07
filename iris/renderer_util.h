@@ -43,6 +43,12 @@ CreateGraphicsPipeline(
   gsl::span<const VkDynamicState> dynamicStates,
   std::uint32_t renderPassSubpass, std::string name = {}) noexcept;
 
+[[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation>,
+                           std::system_error>
+CreateImage(VkFormat format, VkExtent2D extent, VkImageUsageFlags imageUsage,
+            VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
+            std::uint32_t bytesPerPixel) noexcept;
+
 } // namespace iris::Renderer
 
 #endif // HEV_IRIS_RENDERER_UTIL_H_
