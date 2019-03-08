@@ -143,7 +143,8 @@ private:
   std::vector<Component::Renderable> renderables_{};
 }; // class Renderables
 
-static Renderables sRenderables;
+static Renderables sRenderables{};
+static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 
 static bool sRunning{false};
 static bool sInFrame{false};
@@ -191,6 +192,11 @@ layout(location = 0) out vec4 fColor;
 void main() {
   fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
 })";
+
+static VkPipelineLayout sUIPipelineLayout{VK_NULL_HANDLE};
+static VkPipeline sUIPipeline{VK_NULL_HANDLE};
+static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
+static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
 
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
@@ -241,41 +247,55 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+  GetLogger()->trace("Binding pipeline: {}", (void*)renderable.pipeline);
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     renderable.pipeline);
 
   if (renderable.pushConstants) {
-    vkCmdPushConstants(
-      commandBuffer, renderable.pipelineLayout,
-      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-      renderable.pushConstantsSize, renderable.pushConstants);
+    GetLogger()->trace("Pushing constants: {}",
+                       (void*)renderable.pushConstants);
+    vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
+                       renderable.pushConstantsStages, 0,
+                       renderable.pushConstantsSize, renderable.pushConstants);
   }
 
   vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
+    GetLogger()->trace("Binding descriptor set: {}",
+                       (void*)renderable.descriptorSet);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             renderable.pipelineLayout, 0, 1,
                             &renderable.descriptorSet, 0, nullptr);
   }
 
   if (renderable.vertexBuffer != VK_NULL_HANDLE) {
+    GetLogger()->trace("Binding vertex buffer: {}",
+                       (void*)renderable.vertexBuffer);
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &renderable.vertexBuffer,
                            &renderable.vertexBufferBindingOffset);
   }
 
   if (renderable.indexBuffer != VK_NULL_HANDLE) {
+    GetLogger()->trace("Binding index buffer: {}",
+                       (void*)renderable.indexBuffer);
     vkCmdBindIndexBuffer(commandBuffer, renderable.indexBuffer,
                          renderable.indexBufferBindingOffset,
                          renderable.indexType);
   }
 
   if (renderable.numIndices > 0) {
+    GetLogger()->trace("Drawing indexed: {} {} {} {} {}", renderable.numIndices,
+                       renderable.instanceCount, renderable.firstIndex,
+                       renderable.vertexOffset, renderable.firstInstance);
     vkCmdDrawIndexed(commandBuffer, renderable.numIndices,
                      renderable.instanceCount, renderable.firstIndex,
                      renderable.vertexOffset, renderable.firstInstance);
   } else {
+    GetLogger()->trace("Drawing: {} {} {} {}", renderable.numVertices,
+                       renderable.instanceCount, renderable.firstVertex,
+                       renderable.firstInstance);
     vkCmdDraw(commandBuffer, renderable.numVertices, renderable.instanceCount,
               renderable.firstVertex, renderable.firstInstance);
   }
@@ -737,6 +757,182 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       make_error_code(result), "Cannot create images ready semaphore"));
   }
 
+  absl::FixedArray<VkDescriptorPoolSize> poolSizes{
+    {VK_DESCRIPTOR_TYPE_SAMPLER, 128},
+    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 128},
+    {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 128},
+    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 128},
+    {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 128},
+    {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 128},
+    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 128},
+    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 128},
+    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 128},
+    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 128},
+    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 128},
+    {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 128},
+  };
+
+  VkDescriptorPoolCreateInfo descriptorPoolCI = {};
+  descriptorPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  descriptorPoolCI.maxSets = 128;
+  descriptorPoolCI.poolSizeCount =
+    gsl::narrow_cast<std::uint32_t>(poolSizes.size());
+  descriptorPoolCI.pPoolSizes = poolSizes.data();
+
+  if (auto result = vkCreateDescriptorPool(sDevice, &descriptorPoolCI, nullptr,
+                                           &sDescriptorPool);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create descriptor pool"));
+  }
+
+  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, sDescriptorPool,
+             "sDescriptorPool");
+
+  /////
+  //
+  // Create UI Pipeline and other shared state
+  //
+  /////
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(2);
+  descriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
+                                    VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  descriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
+                                    VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+
+  VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
+  descriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptorSetLayoutCI.bindingCount =
+    gsl::narrow_cast<std::uint32_t>(descriptorSetLayoutBindings.size());
+  descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
+
+  if (auto result = vkCreateDescriptorSetLayout(
+        sDevice, &descriptorSetLayoutCI, nullptr, &sUIDescriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create UI descriptor set layout"));
+  }
+
+  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+             sUIDescriptorSetLayout, "sUIDescriptorSetLayout");
+
+  VkDescriptorSetAllocateInfo descriptorSetAI = {};
+  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptorSetAI.descriptorPool = sDescriptorPool;
+  descriptorSetAI.descriptorSetCount = 1;
+  descriptorSetAI.pSetLayouts = &sUIDescriptorSetLayout;
+
+  if (auto result =
+        vkAllocateDescriptorSets(sDevice, &descriptorSetAI, &sUIDescriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot allocate UI descriptor set"));
+  }
+
+  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, sUIDescriptorSet,
+             "sUIDescriptorSet");
+
+  absl::FixedArray<Shader> shaders(2);
+
+  if (auto s = CompileShaderFromSource(sDevice, sUIVertexShaderSource,
+                                       VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders[0] = {*s, VK_SHADER_STAGE_VERTEX_BIT};
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(s.error());
+  }
+
+  if (auto s = CompileShaderFromSource(sDevice, sUIFragmentShaderSource,
+                                       VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    shaders[1] = {*s, VK_SHADER_STAGE_FRAGMENT_BIT};
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(s.error());
+  }
+
+  absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts{sUIDescriptorSetLayout};
+
+  absl::FixedArray<VkPushConstantRange> pushConstantRanges{
+    {VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2) * 2}};
+
+  absl::FixedArray<VkVertexInputBindingDescription>
+    vertexInputBindingDescriptions(1);
+  vertexInputBindingDescriptions[0] = {0, sizeof(ImDrawVert),
+                                       VK_VERTEX_INPUT_RATE_VERTEX};
+
+  absl::FixedArray<VkVertexInputAttributeDescription>
+    vertexInputAttributeDescriptions(3);
+  vertexInputAttributeDescriptions[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT,
+                                         offsetof(ImDrawVert, pos)};
+  vertexInputAttributeDescriptions[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,
+                                         offsetof(ImDrawVert, uv)};
+  vertexInputAttributeDescriptions[2] = {2, 0, VK_FORMAT_R8G8B8A8_UNORM,
+                                         offsetof(ImDrawVert, col)};
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+  inputAssemblyStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+  VkPipelineViewportStateCreateInfo viewportStateCI = {};
+  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportStateCI.viewportCount = 1;
+  viewportStateCI.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+  rasterizationStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationStateCI.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+  multisampleStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleStateCI.rasterizationSamples = sSurfaceSampleCount;
+  multisampleStateCI.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+  depthStencilStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_TRUE,                             // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
+
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+  if (auto lp = CreateGraphicsPipeline(
+        descriptorSetLayouts, pushConstantRanges, shaders,
+        vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+        inputAssemblyStateCI, viewportStateCI, rasterizationStateCI,
+        multisampleStateCI, depthStencilStateCI, colorBlendAttachmentStates,
+        dynamicStates, 0, "sUIPipeline")) {
+    std::tie(sUIPipelineLayout, sUIPipeline) = *lp;
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      lp.error().code(), "Cannot create UI pipeline: "s + lp.error().what()));
+  }
+
   sRunning = true;
   IRIS_LOG_LEAVE();
   return {};
@@ -1017,33 +1213,6 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     sDevice, VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.samplers[0],
     fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
       .c_str());
-
-  absl::FixedArray<VkShaderModule> shaderModules(2);
-
-  if (auto s = CompileShaderFromSource(sDevice, sUIVertexShaderSource,
-                                       VK_SHADER_STAGE_VERTEX_BIT)) {
-    shaderModules[0] = *s;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(s.error());
-  }
-
-  if (auto s = CompileShaderFromSource(sDevice, sUIFragmentShaderSource,
-                                       VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    shaderModules[1] = *s;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(s.error());
-  }
-
-  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBinding(2);
-  descriptorSetLayoutBinding[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
-                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-  descriptorSetLayoutBinding[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
-                                   VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-
-
-  // TODO: pipeline
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
@@ -1450,6 +1619,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 
   for (auto&& [title, window] : windows) {
     ImGui::SetCurrentContext(window.uiContext.get());
+
     window.platformWindow.PollEvents();
     if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
 
@@ -1536,6 +1706,16 @@ void iris::Renderer::EndFrame(
   for (auto&& [i, iter] : enumerate(windows)) {
     auto&& [title, window] = iter;
     ImGui::SetCurrentContext(window.uiContext.get());
+
+    // FIXME: how to handle this at application scope?
+    if (window.showUI) {
+      ImGui::Begin("Status");
+      ImGui::Text("Last Frame %.3f ms", ImGui::GetIO().DeltaTime);
+      ImGui::Text("Average %.3f ms/frame (%.1f FPS)",
+                  1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+      ImGui::End();
+    }
+
     ImGui::EndFrame();
 
     // currentFrame is still the previous frame, use that imageAvailable
@@ -1622,6 +1802,7 @@ void iris::Renderer::EndFrame(
 
     std::vector<Component::Renderable> renderables = sRenderables();
     for (auto&& renderable : renderables) {
+      // FIXME: this needs to work differently
       renderable.pushConstants = reinterpret_cast<void*>(&pushConstants);
       renderable.pushConstantsSize = sizeof(ShaderToyPushConstants);
 
@@ -1630,65 +1811,107 @@ void iris::Renderer::EndFrame(
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
     }
 
-#if 0
-    if (window.showUI) {
-      ImDrawData* drawData = ImGui::GetDrawData();
-      if (!drawData || drawData->TotalVtxCount == 0) break;
-
-      UpdateUIRenderable(window.uiRenderable, drawData, title);
-
-      glm::vec2 const displaySize = drawData->DisplaySize;
-      glm::vec2 const displayPos = drawData->DisplayPos;
-
-      absl::FixedArray<glm::vec2> pushConstants(2);
-      pushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
-      pushConstants[1] = glm::vec2(-1.f, -1.f) - displayPos * pushConstants[0];
-
-      VkViewport viewport = {0.f, 0.f, displaySize.x, displaySize.y, 0.f, 1.f};
-
-      for (int i = 0, iOff = 0, vOff = 0; i < drawData->CmdListsCount; ++i) {
-        ImDrawList* cmdList = drawData->CmdLists[i];
-
-        for (int j = 0; j < cmdList->CmdBuffer.size(); ++j) {
-          ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[j];
-
-          VkRect2D scissor;
-          scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
-                             ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
-                             : 0;
-          scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
-                               ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
-                               : 0;
-          scissor.extent.width =
-            (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
-          scissor.extent.height =
-            (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
-          // TODO: why + 1 above?
-
-          Component::Renderable renderable = window.uiRenderable;
-          renderable.pushConstants = pushConstants.data();
-          renderable.pushConstantsSize =
-            pushConstants.size() * sizeof(glm::vec2);
-          renderable.numIndices = drawCmd->ElemCount;
-          renderable.firstIndex = iOff;
-          renderable.firstVertex = vOff;
-
-          VkCommandBuffer commandBuffer =
-            RenderRenderable(renderable, &viewport, &scissor);
-          vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-
-          iOff += drawCmd->ElemCount;
-        }
-
-        vOff += cmdList->VtxBuffer.Size;
-      }
-    }
-#endif
-
     if (!secondaryCBs.empty()) {
       vkCmdExecuteCommands(frame.commandBuffer,
                            gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
                            secondaryCBs.data());
+    }
+
+    if (window.showUI) {
+      ImGui::Render();
+      ImDrawData* drawData = ImGui::GetDrawData();
+
+      if (drawData && drawData->TotalVtxCount > 0) {
+        UpdateUIRenderable(window.uiRenderable, drawData, title);
+
+        VkDescriptorImageInfo uiSamplerInfo = {};
+        uiSamplerInfo.sampler = window.uiRenderable.samplers[0];
+
+        VkDescriptorImageInfo uiTextureInfo = {};
+        uiTextureInfo.imageView = window.uiRenderable.views[0];
+        uiTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        absl::FixedArray<VkWriteDescriptorSet> uiWriteDescriptorSets(2);
+        uiWriteDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                    nullptr,
+                                    sUIDescriptorSet,
+                                    0,
+                                    0,
+                                    1,
+                                    VK_DESCRIPTOR_TYPE_SAMPLER,
+                                    &uiSamplerInfo,
+                                    nullptr,
+                                    nullptr};
+        uiWriteDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                    nullptr,
+                                    sUIDescriptorSet,
+                                    1,
+                                    0,
+                                    1,
+                                    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                    &uiTextureInfo,
+                                    nullptr,
+                                    nullptr};
+
+        vkUpdateDescriptorSets(
+          sDevice,
+          gsl::narrow_cast<std::uint32_t>(uiWriteDescriptorSets.size()),
+          uiWriteDescriptorSets.data(), 0, nullptr);
+
+        glm::vec2 const displaySize = drawData->DisplaySize;
+        glm::vec2 const displayPos = drawData->DisplayPos;
+
+        absl::FixedArray<glm::vec2> uiPushConstants(2);
+        uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
+        uiPushConstants[1] =
+          glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
+
+        VkViewport viewport = {0.f,           0.f, displaySize.x,
+                               displaySize.y, 0.f, 1.f};
+
+        for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount;
+             ++j) {
+          ImDrawList* cmdList = drawData->CmdLists[j];
+
+          for (int k = 0; k < cmdList->CmdBuffer.size(); ++k) {
+            ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[k];
+
+            VkRect2D scissor;
+            scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
+                                 ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
+                                 : 0;
+            scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
+                                 ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
+                                 : 0;
+            scissor.extent.width =
+              (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+            scissor.extent.height =
+              (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
+            // TODO: why + 1 above?
+
+            Component::Renderable renderable = window.uiRenderable;
+            renderable.pipelineLayout = sUIPipelineLayout;
+            renderable.pipeline = sUIPipeline;
+            renderable.descriptorSet = sUIDescriptorSet;
+            renderable.pushConstantsStages = VK_SHADER_STAGE_VERTEX_BIT;
+            renderable.pushConstants = uiPushConstants.data();
+            renderable.pushConstantsSize =
+              uiPushConstants.size() * sizeof(glm::vec2);
+            renderable.indexType = VK_INDEX_TYPE_UINT16;
+            renderable.numIndices = drawCmd->ElemCount;
+            renderable.firstIndex = idOff;
+            renderable.firstVertex = vtOff;
+
+            VkCommandBuffer commandBuffer =
+              RenderRenderable(renderable, &viewport, &scissor);
+            vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+
+            idOff += drawCmd->ElemCount;
+          }
+
+          vtOff += cmdList->VtxBuffer.Size;
+        }
+      }
     }
 
     vkCmdEndRenderPass(frame.commandBuffer);

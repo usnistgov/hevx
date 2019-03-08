@@ -10,8 +10,8 @@ namespace iris::Renderer::Component {
 struct Renderable {
   static constexpr std::size_t const kMaxTextures = 8;
 
-  VkPipeline pipeline{VK_NULL_HANDLE};
   VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+  VkPipeline pipeline{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
   absl::InlinedVector<VkImage, kMaxTextures> images;
@@ -19,6 +19,7 @@ struct Renderable {
   absl::InlinedVector<VkImageView, kMaxTextures> views;
   absl::InlinedVector<VkSampler, kMaxTextures> samplers;
 
+  VkShaderStageFlags pushConstantsStages{};
   void* pushConstants{nullptr};
   std::uint32_t pushConstantsSize{0};
   VkBuffer uniformBuffer{VK_NULL_HANDLE};

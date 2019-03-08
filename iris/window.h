@@ -144,7 +144,8 @@ inline Window::Window(Window&& other) noexcept
   , frames(std::move(other.frames))
   , frameIndex(other.frameIndex)
   , imageAcquired(other.imageAcquired)
-  , uiContext(std::move(other.uiContext)) {} // Window::Window
+  , uiContext(std::move(other.uiContext))
+  , uiRenderable(std::move(other.uiRenderable)) {} // Window::Window
 
 } // namespace iris
 

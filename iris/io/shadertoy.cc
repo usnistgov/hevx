@@ -88,9 +88,13 @@ void main() {
   }
 
   absl::FixedArray<Renderer::Shader> shaders{
-    Renderer::Shader{*vs, VK_SHADER_STAGE_VERTEX_BIT},
-    Renderer::Shader{*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
+    {*vs, VK_SHADER_STAGE_VERTEX_BIT},
+    {*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
   };
+
+  absl::FixedArray<VkPushConstantRange> pushConstantRanges{
+    {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+     sizeof(iris::Renderer::ShaderToyPushConstants)}};
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
@@ -138,17 +142,19 @@ void main() {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
-  if (auto pl = Renderer::CreateGraphicsPipeline(
-        {}, {}, shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
-        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
-        colorBlendAttachmentStates, dynamicStates, 0,
+  if (auto lp = Renderer::CreateGraphicsPipeline(
+        {}, pushConstantRanges, shaders, {}, {}, inputAssemblyStateCI,
+        viewportStateCI, rasterizationStateCI, multisampleStateCI,
+        depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
         "iris-shadertoy::Renderable::Pipeline")) {
-    std::tie(renderable.pipelineLayout, renderable.pipeline) = *pl;
+    std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(pl.error());
+    return tl::unexpected(lp.error());
   }
 
+  renderable.pushConstantsStages =
+    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   renderable.numVertices = 3;
 
   IRIS_LOG_LEAVE();

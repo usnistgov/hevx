@@ -31,15 +31,6 @@ iris::Renderer::CreateGraphicsPipeline(
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sRenderPass != VK_NULL_HANDLE);
 
-  absl::InlinedVector<VkPushConstantRange, 4> allPushConstantRanges;
-  allPushConstantRanges.push_back(
-    {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-     sizeof(ShaderToyPushConstants)});
-
-  for (auto&& range : pushConstantRanges) {
-    allPushConstantRanges.push_back(range);
-  }
-
   VkPipelineLayout layout{VK_NULL_HANDLE};
   VkPipeline pipeline{VK_NULL_HANDLE};
 
@@ -49,8 +40,8 @@ iris::Renderer::CreateGraphicsPipeline(
     gsl::narrow_cast<std::uint32_t>(descriptorSetLayouts.size());
   pipelineLayoutCI.pSetLayouts = descriptorSetLayouts.data();
   pipelineLayoutCI.pushConstantRangeCount =
-    gsl::narrow_cast<std::uint32_t>(allPushConstantRanges.size());
-  pipelineLayoutCI.pPushConstantRanges = allPushConstantRanges.data();
+    gsl::narrow_cast<std::uint32_t>(pushConstantRanges.size());
+  pipelineLayoutCI.pPushConstantRanges = pushConstantRanges.data();
 
   if (auto result =
         vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr, &layout);
