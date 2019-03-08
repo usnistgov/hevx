@@ -1652,6 +1652,8 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 
     io.MousePos = window.platformWindow.CursorPos();
 
+    // FIXME: update mouse cursor based on imgui request
+
     ImGui::NewFrame();
   }
 
