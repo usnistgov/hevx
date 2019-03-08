@@ -37,7 +37,7 @@ iris::wsi::Extent2D iris::wsi::PlatformWindow::Extent() const noexcept {
   return pImpl_->Extent();
 }
 
-glm::uvec2 iris::wsi::PlatformWindow::CursorPos() const noexcept {
+glm::vec2 iris::wsi::PlatformWindow::CursorPos() const noexcept {
   return pImpl_->CursorPos();
 }
 

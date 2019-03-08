@@ -83,10 +83,12 @@ public:
   Offset2D Offset() const noexcept;
   Extent2D Extent() const noexcept;
 
-  /*! \brief Get the current cursor position in screen coordinates.
-   *  \return the current cursor position in screen coordinates.
+  /*! \brief Get the current cursor position in screen coordinates if this
+   * window is the active window.
+   * \return the current cursor position in screen coordinates if this window is
+   * the active window, or (-FLT_MAX, -FLT_MAX)
    */
-  glm::uvec2 CursorPos() const noexcept;
+  glm::vec2 CursorPos() const noexcept;
 
   /*! \brief Change the title of this window.
    * \param[in] title the new title.

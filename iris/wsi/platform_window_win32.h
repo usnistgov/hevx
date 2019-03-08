@@ -54,7 +54,7 @@ public:
   /*! \brief Get the current cursor position in screen coordinates.
    *  \return the current cursor position in screen coordinates.
    */
-  glm::uvec2 CursorPos() const noexcept;
+  glm::vec2 CursorPos() const noexcept;
 
   /*! \brief Change the title of this window.
    * \param[in] title the new title.

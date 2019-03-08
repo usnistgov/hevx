@@ -1650,7 +1650,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
     io.KeySuper = ImGui::IsKeyDown(wsi::Keys::kLeftSuper) |
                   ImGui::IsKeyDown(wsi::Keys::kRightSuper);
 
-    io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+    io.MousePos = window.platformWindow.CursorPos();
 
     ImGui::NewFrame();
   }

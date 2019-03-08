@@ -211,20 +211,19 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   return std::move(pWin);
 } // iris::wsi::PlatformWindow::Impl::Create
 
-glm::uvec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
-  glm::uvec2 cursorPos{};
+glm::vec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
+  glm::vec2 cursorPos{-FLT_MAX, -FLT_MAX};
 
   POINT rawPos;
-  if (!::GetCursorPos(&rawPos)) {
-    GetLogger()->error("Cannot get cursor pos: {}", ::GetLastError());
-    return cursorPos;
+  if (auto active = ::GetForegroundWindow()) {
+    if (active == handle_.hWnd || ::IsChild(active, handle_.hWnd)) {
+      if (::GetCursorPos(&rawPos) && ::ScreenToClient(handle_.hWnd, &rawPos)) {
+        return {rawPos.x, rawPos.y};
+      }
+    }
   }
 
-  ::ScreenToClient(handle_.hWnd, &rawPos);
-
-  cursorPos.x = rawPos.x;
-  cursorPos.y = rawPos.y;
-  return cursorPos;
+  return {-FLT_MAX, -FLT_MAX};
 } // iris::wsi::PlatformWindow::Impl::CursorPos
 
 iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
