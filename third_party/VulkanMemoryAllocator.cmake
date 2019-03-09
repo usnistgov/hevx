@@ -18,7 +18,7 @@ target_include_directories(vma
     ${vulkanmemoryallocator_SOURCE_DIR}/src
     ${VulkanHeaders_INCLUDE_DIR}
 )
-target_link_libraries(vma PUBLIC vulkan)
+target_link_libraries(vma PUBLIC Vulkan::Vulkan)
 target_compile_definitions(vma
   PUBLIC
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>

@@ -1,23 +1,24 @@
-find_package(Filesystem REQUIRED)
+option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
+
+#find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
+
+if(WIN32)
+  find_package(cpprestsdk REQUIRED)
+endif()
 
 if(UNIX)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(X11_XCB REQUIRED x11-xcb)
   pkg_check_modules(XCB_ICCCM REQUIRED xcb-icccm)
-  #pkg_check_modules(XCB_XINPUT REQUIRED xcb-xinput)
-  #pkg_check_modules(XCB_RANDR REQUIRED xcb-randr)
-  #pkg_check_modules(XCB_CURSOR REQUIRED xcb-cursor)
 endif()
-
-set(Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4)
-find_package(PythonInterp 3 REQUIRED)
 
 set(protos_PROTOS
   protos/color.proto
   protos/control.proto
   protos/displays.proto
+  protos/shadertoy.proto
   protos/window.proto
 )
 
@@ -50,10 +51,17 @@ target_compile_options(protos
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wnon-virtual-dtor -Wno-unused-parameter -Wno-maybe-uninitialized -Wsuggest-final-types>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4125 /wd4127 /wd4201 /wd4996>
-    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4125 /wd4127 /wd4201 /wd4996 /Zc:__cplusplus>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
+
+if(ENABLE_INCLUDE_WHAT_YOU_USE)
+  find_program(IWYU_EXECUTABLE include-what-you-use)
+  if(IWYU_EXECUTABLE)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_EXECUTABLE})
+  endif()
+endif()
 
 if(WIN32)
   set(_flextvk_profile vk_win32_khr.txt)
@@ -65,7 +73,7 @@ add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
     ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  COMMAND ${PYTHON_EXECUTABLE} ${FLEXTGL_SOURCE_DIR}/flextGLgen.py
+  COMMAND ${Python3_EXECUTABLE} ${FLEXTGL_SOURCE_DIR}/flextGLgen.py
   ARGS
       -D.
       -t${CMAKE_CURRENT_SOURCE_DIR}/flext/vulkan
@@ -95,43 +103,38 @@ configure_file(config.h.in config.h)
 set(SOURCES
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
-  renderer/buffer.cc
-  renderer/command_buffers.cc
-  renderer/descriptor_sets.cc
-  renderer/image.cc
-  renderer/io/gltf.cc
-  renderer/io/json.cc
-  renderer/io/read_file.cc
-  renderer/mesh.cc
-  renderer/mikktspace.c
-  renderer/pipeline.cc
-  renderer/renderer.cc
-  renderer/surface.cc
-  renderer/shader.cc
-  renderer/ui.cc
-  renderer/window.cc
-  wsi/window.cc
+  io/gltf.cc
+  io/json.cc
+  io/read_file.cc
+  io/shadertoy.cc
+  renderer.cc
+  renderer_util.cc
+  string_util.cc
+  vulkan_util.cc
+  wsi/platform_window.cc
 )
 
 if(WIN32)
-  list(APPEND SOURCES wsi/window_win32.cc)
+  list(APPEND SOURCES wsi/platform_window_win32.cc)
 elseif(UNIX)
-  list(APPEND SOURCES wsi/window_x11.cc)
+  list(APPEND SOURCES wsi/platform_window_x11.cc)
 endif()
 
-add_library(iris ${SOURCES} $<TARGET_OBJECTS:protos>)
+add_library(iris STATIC ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC
     flags imgui vma
-    GSL glm expected CXX::Filesystem fmt spdlog nlohmann_json::nlohmann_json
+    GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
-    stb glslang SPIRV vulkan
+    mikktspace stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}
-    protobuf::libprotobuf nng
+    protobuf::libprotobuf cpprestsdk::cpprest
     TBB::tbb Threads::Threads
+    $<$<CXX_COMPILER_ID:GNU>:-lstdc++fs>
+    $<$<CXX_COMPILER_ID:Clang>:-lc++fs>
     $<$<PLATFORM_ID:Linux>:-ldl>
 )
 
@@ -139,7 +142,6 @@ target_include_directories(iris
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/..>
-    $<BUILD_INTERFACE:${NNG_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:${INCLUDE_DIR}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -150,11 +152,10 @@ target_include_directories(iris
 target_compile_definitions(iris
   PUBLIC
     GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_FORCE_EXPLICIT_CTOR GLM_FORCE_INLINE
-    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN NOMINMAX>
+    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
+    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR WIN32_LEAN_AND_MEAN NOMINMAX>
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
-    $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
-    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR>
 )
 
 target_compile_options(iris
@@ -162,9 +163,9 @@ target_compile_options(iris
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4127 /wd4201 /wd4996 /permissive->
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4127 /wd4201 /wd4996 /permissive- /Zc:__cplusplus>
     $<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324 /wd4309> # absl::container_internal mess
-    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/ZI /Od>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
 
@@ -175,6 +176,17 @@ if(WIN32)
   foreach(dll ${tbb_dlls})
     add_custom_command(TARGET iris-viewer POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:iris-viewer>)
+  endforeach()
+  unset(tbb_dlls)
+endif()
+
+add_executable(iris-raytracer WIN32 iris-raytracer.cc)
+target_link_libraries(iris-raytracer iris absl::failure_signal_handler)
+if(WIN32)
+  file(GLOB tbb_dlls ${TBB_BINARY_DIR}/*.dll)
+  foreach(dll ${tbb_dlls})
+    add_custom_command(TARGET iris-raytracer POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:iris-raytracer>)
   endforeach()
   unset(tbb_dlls)
 endif()

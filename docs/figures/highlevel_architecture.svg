@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000">
+  <rect width="900" height="150" x="50" y="50" stroke="black" fill="white" stroke-width="2" />
+  <text x="500" y="137.5" fill="black" font-family="sans-serif" font-size="50" text-anchor="middle">Demos</text>
+
+  <rect width="900" height="150" x="50" y="200" stroke="black" fill="white" stroke-width="2" />
+  <text x="500" y="282.5" fill="black" font-family="sans-serif" font-size="50" text-anchor="middle">IDEA</text>
+
+  <rect width="900" height="150" x="50" y="350" stroke="black" fill="white" stroke-width="2" />
+  <text x="500" y="437.5" fill="black" font-family="sans-serif" font-size="50" text-anchor="middle">IRIS API (Control Commands)</text>
+
+  <rect width="450" height="150" x="50" y="500" stroke="blue" fill="white" stroke-width="2" />
+  <text x="270" y="587.5" fill="blue" font-family="sans-serif" font-size="50" text-anchor="middle">IRISgl</text>
+
+  <rect width="450" height="150" x="50" y="650" stroke="blue" fill="white" stroke-width="2" />
+  <text x="270" y="737.5" fill="blue" font-family="sans-serif" font-size="50" text-anchor="middle">OpenSceneGraph</text>
+
+  <rect width="450" height="150" x="50" y="800" stroke="blue" fill="white" stroke-width="2" />
+  <text x="270" y="887.5" fill="blue" font-family="sans-serif" font-size="50" text-anchor="middle">OpenGL</text>
+
+  <rect width="450" height="300" x="500" y="500" stroke="red" fill="white" stroke-width="2" />
+  <text x="720" y="587.5" fill="red" font-family="sans-serif" font-size="50" text-anchor="middle">IRISvk</text>
+
+  <rect width="450" height="150" x="500" y="800" stroke="red" fill="white" stroke-width="2" />
+  <text x="720" y="887.5" fill="red" font-family="sans-serif" font-size="50" text-anchor="middle">Vulkan</text>
+</svg>

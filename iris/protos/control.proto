@@ -3,17 +3,12 @@ package iris.Control;
 
 import "displays.proto";
 import "window.proto";
+import "shadertoy.proto";
 
 message Control {
-  enum Type {
-    NOOP = 0;
-    DISPLAYS = 1;
-    WINDOW = 2;
-  }
-
-  Type type = 1;
-  oneof control_union {
+  oneof type {
     Displays displays = 2;
     Window window = 3;
+	  ShaderToy shaderToy = 20;
   }
 }

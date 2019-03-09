@@ -16,3 +16,4 @@ extension KHR_maintenance2 required
 extension KHR_multiview required
 extension KHR_swapchain required
 
+extension NV_ray_tracing optional

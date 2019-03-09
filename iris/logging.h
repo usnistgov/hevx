@@ -24,13 +24,11 @@ inline static spdlog::logger* GetLogger() noexcept {
   return sLogger.get();
 }
 
-} // namespace iris::Renderer
+} // namespace iris
 
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
-
-#ifndef NDEBUG
 
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
@@ -47,13 +45,6 @@ inline static spdlog::logger* GetLogger() noexcept {
                                __LINE__);                                      \
     ::iris::GetLogger()->flush();                                              \
   } while (false)
-
-#else
-
-#define IRIS_LOG_ENTER()
-#define IRIS_LOG_LEAVE()
-
-#endif
 
 #endif // HEV_IRIS_LOGGING_H_
 
