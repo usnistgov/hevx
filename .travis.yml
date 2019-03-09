@@ -26,7 +26,7 @@ matrix:
       env: PLATFORM=cosmic CTEST_CMD="ctest"
 
 before_install:
-  - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD" 
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
