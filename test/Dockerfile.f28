@@ -3,6 +3,7 @@ RUN dnf update -y
 RUN dnf install -y python git cmake gcc-c++ make glm-devel libpng-devel wayland-devel libpciaccess-devel \
 	libX11-devel libXpresent libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel xcb-util-keysyms-devel
 RUN pip3 install --user wheezy.template
+RUN mkdir cmake && curl -L "https://github.com/Kitware/CMake/releases/download/v3.12.4/cmake-3.12.4-Linux-x86_64.tar.gz" | tar --strip-components=1 -xz -C cmake
 
 RUN mkdir -p vulkan/src
 WORKDIR vulkan/src

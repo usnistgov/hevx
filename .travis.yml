@@ -8,14 +8,14 @@ services:
 env:
   global:
     - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo -- -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON"
+    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
 
 matrix:
   include:
     - name: "CentOS 7 (GCC 8.2.1)"
       env: PLATFORM=el7 CTEST_CMD="scl enable devtoolset-8 -- ctest3"
     - name: "Fedora 28 (GCC 8.2.1)"
-      env: PLATFORM=f28 CTEST_CMD="ctest"
+      env: PLATFORM=f28 CTEST_CMD="cmake/bin/ctest"
     - name: "Fedora 29 (GCC 8.2.1)"
       env: PLATFORM=f29 CTEST_CMD="ctest"
     - name: "Unbuntu 18.04 (GCC 7.3.0)"
