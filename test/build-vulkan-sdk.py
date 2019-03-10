@@ -164,7 +164,7 @@ def build(args):
     else:
       shutil.move(src_dir, dst_dir)
 
-  pkg_dir = os.path.join(dst_dir, 'pkgconfig')
+  pkg_dir = os.path.join(args.install_dir, 'lib64', 'pkgconfig')
   for name in os.listdir(pkg_dir):
     pkg_name = os.path.join(pkg_dir, name)
     print(pkg_name)
