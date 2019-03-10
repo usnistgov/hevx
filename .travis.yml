@@ -9,6 +9,7 @@ env:
   global:
     - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
     - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo -- -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON"
+	- VULKAN_SDK=/vulkan
 
 matrix:
   include:
