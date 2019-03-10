@@ -1,7 +1,8 @@
-FROM centos:7.5.1804
+FROM centos:7.6.1810
 RUN yum update -y
-RUN yum install -y centos-release-scl
-RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-RUN yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel
-RUN scl enable rh-python36 -- pip3 install --user wheezy.template
+RUN yum install -y centos-release-scl epel-release
+RUN yum install -y devtoolset-8\* python34 git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel boost-\*
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+RUN python3 get-pip.py
+RUN pip3 install --user wheezy.template
 

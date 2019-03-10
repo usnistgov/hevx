@@ -13,8 +13,8 @@ Currently this code is under active development and in a pre-release state.
 ## Building ##
 
 ### Requirements ###
-- CMake 3.11
-- Python 3.6
+- CMake 3.12
+- Python 3.4
   - Wheezy Template: `pip install --user wheezy.template`
 - GCC >= 7
 - X11 XCB development libraries
@@ -29,10 +29,11 @@ Ensure the VULKAN_SDK environment variable is set before building HEVx.
 
 #### CentOS 7 ####
 ~~~
-yum install -y centos-release-scl
-yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-yum install -y devtoolset-7\* rh-python36 git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel
-scl enable rh-python36 -- pip3 install --user wheezy.template
+yum install -y centos-release-scl epel-release
+yum install -y devtoolset-8\* git cmake3 xcb-util-wm-devel libxcb-devel libX11-devel boost-\*
+curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+python3 get-pip.py --user
+pip3 install --user wheezy.template
 ~~~
 
 #### Fedora 28 / 29 ####
