@@ -51,7 +51,7 @@ pip3 install --user wheezy.template
 ~~~
 apt install -y curl python3-pip cmake git pkg-config libx11-dev libx11-xcb-dev \
   libxcb1-dev libxkb-common-dev libxcb-icccm4-dev libwayland-dev libxrandr-dev \
-  libxcb-randr0-dev
+  libxcb-randr0-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev
 pip3 install --user wheezy.template
 ~~~
 
