@@ -30,9 +30,9 @@ Ensure the VULKAN_SDK environment variable is set before building HEVx.
 #### CentOS 7 ####
 ~~~
 yum install -y centos-release-scl epel-release
-yum install -y devtoolset-8\* python34 git cmake3 boost-\* glm-devel \
-  libpng-devel wayland-devel libpciaccess-devel libX11-devel libXpresent \
-  libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel \
+yum install -y devtoolset-8\* python34 git cmake3 boost-\* openssl-devel \
+  glm-devel libpng-devel wayland-devel libpciaccess-devel libX11-devel \
+  libXpresent libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel \
   xcb-util-keysyms-devel
 curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 python3 get-pip.py --user
@@ -41,17 +41,19 @@ pip3 install --user wheezy.template
 
 #### Fedora 28 / 29 ####
 ~~~
-dnf install -y git cmake gcc-c++ make glm-devel libpng-devel wayland-devel \
-  libpciaccess-devel libX11-devel libXpresent libxcb xcb-util libxcb-devel \
-  libXrandr-devel xcb-util-wm-devel xcb-util-keysyms-devel
+dnf install -y git cmake gcc-c++ make boost-\* openssl-devel glm-devel \
+  libpng-devel wayland-devel libpciaccess-devel libX11-devel libXpresent \
+  libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel \
+  xcb-util-keysyms-devel
 pip3 install --user wheezy.template
 ~~~
 
 #### Ubuntu 18.10 ####
 ~~~
-apt install -y curl python3-pip cmake git pkg-config libx11-dev libx11-xcb-dev \
-  libxcb1-dev libxkb-common-dev libxcb-icccm4-dev libwayland-dev libxrandr-dev \
-  libxcb-randr0-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev
+apt install -y curl python3-pip cmake git pkg-config boost-\* libx11-dev \
+  libx11-xcb-dev libxcb1-dev libxkb-common-dev libxcb-icccm4-dev \
+  libwayland-dev libxrandr-dev libxcb-randr0-dev libxcb-keysyms1 \
+  libxcb-keysyms1-dev libxcb-ewmh-dev
 pip3 install --user wheezy.template
 ~~~
 

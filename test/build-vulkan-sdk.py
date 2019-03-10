@@ -155,16 +155,16 @@ def build(args):
   #merge_trees(src_dir, dst_dir)
   #shutil.rmtree(src_dir)
 
-  src_dir = os.path.join(args.install_dir, 'lib')
+  src_dir = os.path.join(args.install_dir, 'lib64')
   if os.path.exists(src_dir):
-    dst_dir = os.path.join(args.install_dir, 'lib64')
+    dst_dir = os.path.join(args.install_dir, 'lib')
     if os.path.exists(dst_dir):
       merge_trees(src_dir, dst_dir)
       shutil.rmtree(src_dir)
     else:
       shutil.move(src_dir, dst_dir)
 
-  pkg_dir = os.path.join(args.install_dir, 'lib64', 'pkgconfig')
+  pkg_dir = os.path.join(args.install_dir, 'lib', 'pkgconfig')
   for name in os.listdir(pkg_dir):
     pkg_name = os.path.join(pkg_dir, name)
     print(pkg_name)
@@ -174,7 +174,7 @@ def build(args):
 
       with open(pkg_name, 'w') as fh:
         for line in lines:
-          fh.write(re.sub(r'prefix\}/lib$', r'prefix}/lib64', line))
+          fh.write(re.sub(r'prefix\}/lib64$', r'prefix}/lib', line))
 
 
 def parse_args():
