@@ -5,4 +5,5 @@ RUN yum install -y devtoolset-8\* python34 git cmake3 xcb-util-wm-devel libxcb-d
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 RUN python3 get-pip.py
 RUN pip3 install --user wheezy.template
-
+RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/update-docker/test/build-vulkan-sdk.py
+RUN python3 build-vulkan-sdk.py
