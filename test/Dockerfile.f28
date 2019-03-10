@@ -1,5 +1,10 @@
 FROM fedora:28
 RUN dnf update -y
-RUN dnf install -y git cmake gcc-c++ make xcb-util-wm-devel libxcb-devel libX11-devel
+RUN dnf install -y git cmake gcc-c++ make glm-devel libpng-devel wayland-devel libpciaccess-devel \
+	libX11-devel libXpresent libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel xcb-util-keysyms-devel
 RUN pip3 install --user wheezy.template
 
+RUN mkdir -p vulkan/src
+WORKDIR vulkan/src
+RUN curl -O https://raw.githubusercontent.com/usnistgov/hevx/update-docker/test/build-vulkan-sdk.py
+RUN python3 build-vulkan-sdk.py -G "Unix Makefiles" --install_dir /vulkan 1.1.101.0

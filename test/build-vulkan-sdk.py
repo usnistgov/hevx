@@ -156,9 +156,13 @@ def build(args):
   #shutil.rmtree(src_dir)
 
   src_dir = os.path.join(args.install_dir, 'lib')
-  dst_dir = os.path.join(args.install_dir, 'lib64')
-  merge_trees(src_dir, dst_dir)
-  shutil.rmtree(src_dir)
+  if os.path.exists(src_dir):
+    dst_dir = os.path.join(args.install_dir, 'lib64')
+    if os.path.exists(dst_dir):
+      merge_trees(src_dir, dst_dir)
+      shutil.rmtree(src_dir)
+    else:
+      shutil.move(src_dir, dst_dir)
 
   pkg_dir = os.path.join(dst_dir, 'pkgconfig')
   for name in os.listdir(pkg_dir):
