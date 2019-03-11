@@ -9,7 +9,6 @@ env:
   global:
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
     - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t $CONFIG_TYPE -S CTestScript.cmake"
-	- CONTAINER="wesleygriffin/hevx"
 
 matrix:
   include:
@@ -26,10 +25,10 @@ matrix:
 
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-  - docker pull $CONTAINER:$PLATFORM
-  - docker import /usnistgov/hevx/test/CTestScript.cmake $CONTAINER:$PLATFORM
+  - docker pull wesleygriffin/hevx:$PLATFORM
+  - docker import /usnistgov/hevx/test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
   - docker images
-  - docker images --filter "since=$CONTAINER:$PLATFORM"
+  - docker images --filter "since=wesleygriffin/hevx:$PLATFORM"
 
 script:
-  - docker run $CONTAINER:$PLATFORM /bin/sh -c "$CTEST_CMD $CTEST_ARGS"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "$CTEST_CMD $CTEST_ARGS"
