@@ -27,6 +27,8 @@ before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
   - docker pull wesleygriffin/hevx:$PLATFORM
   - ls /
+  - ls /home
+  - ls /tmp
   - docker import /usnistgov/hevx/test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
   - docker images
   - docker images --filter "since=wesleygriffin/hevx:$PLATFORM"
