@@ -7,9 +7,8 @@ services:
 
 env:
   global:
-    - CT="-DCTEST_CONFIGURATION_TYPE=Release"
-	- DR="-DCTEST_DASHBOARD_ROOT=/t"
-    - ARGS="-VV -S CTestScript.cmake"
+    - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
+	- CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
 
 matrix:
   include:
@@ -29,4 +28,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "$CTEST_CMD $CT $DR $ARGS"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI && $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"
