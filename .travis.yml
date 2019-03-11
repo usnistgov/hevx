@@ -7,9 +7,9 @@ services:
 
 env:
   global:
-	- TEST_ROOT="-DCTEST_DASHBOARD_ROOT=/b"
+	- DASHBOARD_ROOT="-DCTEST_DASHBOARD_ROOT=/b"
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
-    - CTEST_ARGS="-VV $TEST_ROOT $CONFIG_TYPE -S /s/test/CTestScript.cmake"
+    - CTEST_ARGS="-VV $DASHBOARD_ROOT $CONFIG_TYPE -S /s/test/CTestScript.cmake"
 
 matrix:
   include:
