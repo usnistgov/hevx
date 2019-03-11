@@ -26,7 +26,6 @@ matrix:
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
   - docker pull wesleygriffin/hevx:$PLATFORM
-  - docker import test/CTestScript.cmake /CTestScript.cmake
 
 script:
-  - docker run /bin/sh -c "$CTEST_CMD $CTEST_ARGS"
+  - docker run -v $(pwd):/b -w /b wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
