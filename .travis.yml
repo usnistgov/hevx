@@ -7,8 +7,13 @@ services:
 
 env:
   global:
+    - SRC_DIR="/s"
+    - BUILD_DIR="/b"
+    - DOCKER_IMAGE="wesleygriffin/hevx"
+    - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:$SRC_DIR -w $BUILD_DIR"
+    - TEST_ROOT="-DCTEST_DASHBOARD_ROOT=$BUILD_DIR"
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
-    - CTEST_ARGS="-VV $CONFIG_TYPE -S /s/test/CTestScript.cmake"
+    - CTEST_ARGS="-VV $TEST_ROOT $CONFIG_TYPE -S $SRC_DIR/test/CTestScript.cmake"
 
 matrix:
   include:
@@ -25,7 +30,7 @@ matrix:
 
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-  - docker pull wesleygriffin/hevx:$PLATFORM
+  - docker pull $DOCKER_IMAGE:$PLATFORM
 
 script:
-  - docker run -v $TRAVIS_BUILD_DIR:/s -w /b wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run $DOCKER_ARGS $DOCKER_IMAGE:$PLATFORM $CTEST_CMD $CTEST_ARGS
