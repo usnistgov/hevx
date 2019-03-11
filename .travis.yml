@@ -8,18 +8,18 @@ services:
 env:
   global:
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t $CONFIG_TYPE -S CTestScript.cmake"
+    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t $CONFIG_TYPE -S test/CTestScript.cmake"
 
 matrix:
   include:
     - name: "CentOS 7 (GCC 8.2.1)"
       env: PLATFORM=el7 CTEST_CMD="scl enable devtoolset-8 -- ctest3"
     - name: "Fedora 28 (GCC 8.2.1)"
-      env: PLATFORM=f28 CTEST_CMD="cmake/bin/ctest"
+      env: PLATFORM=f28 CTEST_CMD="/cmake/bin/ctest"
     - name: "Fedora 29 (GCC 8.2.1)"
       env: PLATFORM=f29 CTEST_CMD="ctest"
     - name: "Unbuntu 18.04 (GCC 7.3.0)"
-      env: PLATFORM=bionic CTEST_CMD="cmake/bin/ctest"
+      env: PLATFORM=bionic CTEST_CMD="/cmake/bin/ctest"
     - name: "Unbuntu 18.10 (GCC 8.2.0)"
       env: PLATFORM=cosmic CTEST_CMD="ctest"
 
@@ -28,4 +28,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run -v $(pwd):/b -w /b wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run -v $(pwd):/s -w /s wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
