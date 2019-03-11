@@ -4,10 +4,11 @@ ARG VULKAN_VER=1.1.101.0
 ARG BUILD_VULKAN_URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/build-vulkan-sdk.py
 
 RUN apt update -y
-RUN apt install -y curl python python3-pip cmake git libssl-dev pkg-config \
-  libboost1.65-dev libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
-  libxcb-icccm4-dev libwayland-dev libxrandr-dev libxcb-randr0-dev \
-  libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev ninja-build
+RUN apt install -y curl python python3-pip cmake git pkg-config libssl-dev \
+  zlib1g-dev libboost1.65-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+  libxkbcommon-dev libxcb-icccm4-dev libwayland-dev libxrandr-dev \
+  libxcb-randr0-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev \
+  ninja-build
 RUN pip3 install --user wheezy.template
 
 RUN mkdir -p vulkan/src

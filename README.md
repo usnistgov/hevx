@@ -50,7 +50,7 @@ pip3 install --user wheezy.template
 
 #### Ubuntu 18.10 ####
 ~~~
-apt install -y curl python3-pip cmake git libssl-dev pkg-config \
+apt install -y curl python3-pip cmake git pkg-config libssl-dev zlib1g-dev \
   libboost-1.65-dev libx11-dev libx11-xcb-dev libxcb1-dev libxkb-common-dev \
   libxcb-icccm4-dev libwayland-dev libxrandr-dev libxcb-randr0-dev \
   libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev

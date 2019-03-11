@@ -1,8 +1,8 @@
 if(NOT WIN32)
 
-set(BUILD_TESTS OFF)
-set(BUILD_SAMPLES OFF)
-set(BUILD_EXAMPLES OFF)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 message(STATUS "Populating cpprestsdk")
 FetchContent_Populate(cpprestsdk
