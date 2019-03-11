@@ -2,6 +2,7 @@ if(NOT WIN32)
 
 set(BUILD_TESTS OFF)
 set(BUILD_SAMPLES OFF)
+set(BUILD_EXAMPLES OFF)
 
 message(STATUS "Populating cpprestsdk")
 FetchContent_Populate(cpprestsdk

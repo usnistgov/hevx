@@ -1,7 +1,7 @@
 FROM centos:7.6.1810
 
 ARG VULKAN_VER=1.1.101.0
-ARG BUILD_VULKAN_URL=https://raw.githubusercontent.com/usnistgov/hevx/update-docker/test/build-vulkan-sdk.py
+ARG BUILD_VULKAN_URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/build-vulkan-sdk.py
 
 RUN yum update -y
 RUN yum install -y centos-release-scl epel-release

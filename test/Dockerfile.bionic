@@ -1,7 +1,7 @@
 FROM ubuntu:18.04
 
 ARG VULKAN_VER=1.1.101.0
-ARG BUILD_VULKAN_URL=https://raw.githubusercontent.com/usnistgov/hevx/update-docker/test/build-vulkan-sdk.py
+ARG BUILD_VULKAN_URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/build-vulkan-sdk.py
 
 ARG CMAKE_VER=3.12.4
 ARG CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v$CMAKE_VER/cmake-$CMAKE_VER-Linux-x86_64.tar.gz
