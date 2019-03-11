@@ -7,7 +7,7 @@ services:
 
 env:
   global:
-	- DOCKER_ARGS="-v $(pwd):/s -w /b"
+	- DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:/s -w /b"
     - CONFIGURATION_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
     - CTEST_ARGS="-VV $CONFIGURATION_TYPE -S /s/test/CTestScript.cmake"
 
