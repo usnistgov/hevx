@@ -7,7 +7,7 @@ services:
 
 env:
   global:
-    - CONTAINER="wesleygriffin/hevx"
+    - DOCKER_CONTAINER="wesleygriffin/hevx"
     - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:/s -w /b"
 	- TEST_ROOT="-DCTEST_DASHBOARD_ROOT=/b"
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
@@ -28,7 +28,7 @@ matrix:
 
 before_install:
   - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
-  - docker pull $CONTAINER:$PLATFORM
+  - docker pull $DOCKER_CONTAINER:$PLATFORM
 
 script:
-  - docker run $DOCKER_ARGS $CONTAINER:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run $DOCKER_ARGS $DOCKER_CONTAINER:$PLATFORM $CTEST_CMD $CTEST_ARGS
