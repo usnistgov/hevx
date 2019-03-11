@@ -29,7 +29,8 @@ before_install:
   - ls /
   - ls /home
   - ls /tmp
-  - docker import /usnistgov/hevx/test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
+  - echo $PWD
+  - docker import $PWD/test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
   - docker images
   - docker images --filter "since=wesleygriffin/hevx:$PLATFORM"
 
