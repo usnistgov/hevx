@@ -7,12 +7,9 @@ services:
 
 env:
   global:
-    - SRC="/s"
-    - BLD="/b"
-    - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:$SRC -w $BLD"
-	- TEST_ROOT="-DCTEST_DASHBOARD_ROOT=$BLD"
+	- TEST_ROOT="-DCTEST_DASHBOARD_ROOT=/b"
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
-    - CTEST_ARGS="-VV $TEST_ROOT $CONFIG_TYPE -S $SRC/test/CTestScript.cmake"
+    - CTEST_ARGS="-VV $TEST_ROOT $CONFIG_TYPE -S /s/test/CTestScript.cmake"
 
 matrix:
   include:
@@ -32,4 +29,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run $DOCKER_ARGS wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run -v $TRAVIS_BUILD_DIR:/s -w /b wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
