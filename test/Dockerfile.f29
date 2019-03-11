@@ -7,14 +7,13 @@ RUN dnf update -y
 RUN dnf install -y python git cmake gcc-c++ make boost-\* openssl-devel \
   glm-devel libpng-devel wayland-devel libpciaccess-devel libX11-devel \
   libXpresent libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel \
-  xcb-util-keysyms-devel
+  xcb-util-keysyms-devel ninja-build
 RUN pip3 install --user wheezy.template
 
 RUN mkdir -p vulkan/src
 WORKDIR vulkan/src
 RUN curl -O $BUILD_VULKAN_URL
-RUN python3 build-vulkan-sdk.py -G "Unix Makefiles" --cmake cmake \
-  --install_dir /vulkan $VULKAN_VER
+RUN python3 build-vulkan-sdk.py --cmake cmake --install_dir /vulkan $VULKAN_VER
 
 WORKDIR ../..
 ENV VULKAN_SDK=/vulkan

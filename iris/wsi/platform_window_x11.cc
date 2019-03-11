@@ -407,17 +407,17 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   return std::move(pWin);
 }
 
-glm::uvec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
+glm::vec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
   auto cookie = ::xcb_query_pointer(handle_.connection, handle_.window);
   ::xcb_generic_error_t* error;
   auto pointer = ::xcb_query_pointer_reply(handle_.connection, cookie, &error);
 
   if (error) {
     std::free(error);
-    return glm::uvec2(0, 0);
+    return glm::uvec2(-FLT_MAX, -FLT_MAX);
   }
 
-  glm::uvec2 pos(pointer->win_x, pointer->win_y);
+  glm::vec2 pos(pointer->win_x, pointer->win_y);
   std::free(pointer);
   return pos;
 } // iris::wsi::PlatformWindow::Impl::CursorPos

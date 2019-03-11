@@ -1,9 +1,6 @@
-include(ProcessorCount)
-ProcessorCount(N)
-
 set(CTEST_MODEL "Experimental")
 
-set(OPTION_CONFIGURE "-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON")
+set(OPTION_CONFIGURE "-DBUILD_DOCS=OFF -DBUILD_DEPENDENCY_TESTING=ON -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON -GNinja")
 set(EXCLUDE_RE "resolv|multistress|glslang-gtests|test-testsuites_all|test-testsuites_default|test-ubjson_all|test-regression_all|test-regression_default|test-msgpack_all|test-msgpack_default|test-json_patch_all|test-json_patch_default|test-json_patch_all|test-inspection_all|test-inspection_default|test-cbor_all|test-cbor_default|test-bson_all|test-unicode_all")
 
 # don't flag Python DeprecationWarning messages as errors
@@ -25,7 +22,7 @@ set(CTEST_UPDATE_COMMAND "git")
 set(_opts "${OPTION_CONFIGURE} -DCMAKE_BUILD_TYPE=${CTEST_CONFIGURATION_TYPE}")
 set(CTEST_CONFIGURE_COMMAND "${CMAKE_COMMAND} ${_opts} ${CTEST_SOURCE_DIRECTORY}")
 
-set(CTEST_BUILD_COMMAND "make -j${N}")
+set(CTEST_BUILD_COMMAND "ninja-build")
 
 message("-- Start dashboard ${CTEST_MODEL} - ${CTEST_CONFIGURATION_TYPE} --")
 ctest_start(${CTEST_MODEL} TRACK ${CTEST_MODEL})

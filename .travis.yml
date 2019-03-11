@@ -7,8 +7,10 @@ services:
 
 env:
   global:
-    - CTEST_SCRIPT_URI=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t -DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
+    - CONFIGURATION_TYPE=Release
+	- DASHBOARD_ROOT=/t
+    - CTEST_ARGS="-VV $DASHBOARD_ROOT $CONFIGURATION_TYPE -S CTestScript.cmake"
+    - CONTAINER="wesleygriffin/hevx"
 
 matrix:
   include:
@@ -24,8 +26,9 @@ matrix:
       env: PLATFORM=cosmic CTEST_CMD="ctest"
 
 before_install:
-  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
   - docker pull wesleygriffin/hevx:$PLATFORM
+  - docker cp test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "curl -O $CTEST_SCRIPT_URI && $CTEST_CMD $CTEST_ARGS -S CTestScript.cmake"
+  - docker run $CONTAINER:$PLATFORM /bin/sh -c "$CTEST_CMD $CTEST_ARGS"

@@ -8,7 +8,7 @@ RUN yum install -y centos-release-scl epel-release
 RUN yum install -y devtoolset-8\* python34 git cmake3 boost-\* glm-devel \
   openssl-devel libpng-devel wayland-devel libpciaccess-devel libX11-devel \
   libXpresent libxcb xcb-util libxcb-devel libXrandr-devel xcb-util-wm-devel \
-  xcb-util-keysyms-devel
+  xcb-util-keysyms-devel ninja-build
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 RUN python3 get-pip.py
 RUN pip3 install --user wheezy.template
@@ -16,8 +16,7 @@ RUN pip3 install --user wheezy.template
 RUN mkdir -p vulkan/src
 WORKDIR vulkan/src
 RUN curl -O $BUILD_VULKAN_URL
-RUN python3 build-vulkan-sdk.py -G "Unix Makefiles" --cmake cmake3 \
-  --install_dir /vulkan $VULKAN_VER
+RUN python3 build-vulkan-sdk.py --cmake cmake3 --install_dir /vulkan $VULKAN_VER
 
 WORKDIR ../..
 ENV VULKAN_SDK=/vulkan

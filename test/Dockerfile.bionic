@@ -7,18 +7,17 @@ ARG CMAKE_VER=3.12.4
 ARG CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v$CMAKE_VER/cmake-$CMAKE_VER-Linux-x86_64.tar.gz
 
 RUN apt update -y
-RUN apt install -y curl python python3-pip cmake git pkg-config boost-\* \
-  libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev libxcb-icccm4-dev \
-  libwayland-dev libxrandr-dev libxcb-randr0-dev libxcb-keysyms1 \
-  libxcb-keysyms1-dev libxcb-ewmh-dev
+RUN apt install -y curl python python3-pip cmake git libssl-dev pkg-config \
+  boost-\* libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
+  libxcb-icccm4-dev libwayland-dev libxrandr-dev libxcb-randr0-dev \
+  libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev ninja-build
 RUN pip3 install --user wheezy.template
 RUN mkdir cmake && curl -L $CMAKE_URL | tar --strip-components=1 -xz -C cmake
 
 RUN mkdir -p vulkan/src
 WORKDIR vulkan/src
 RUN curl -O $BUILD_VULKAN_URL
-RUN python3 build-vulkan-sdk.py -G "Unix Makefiles" --cmake cmake \
-  --install_dir /vulkan $VULKAN_VER
+RUN python3 build-vulkan-sdk.py --cmake cmake --install_dir /vulkan $VULKAN_VER
 
 WORKDIR ../..
 ENV VULKAN_SDK=/vulkan
