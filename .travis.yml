@@ -7,6 +7,7 @@ services:
 
 env:
   global:
+    - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:/s -w /b"
     - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
     - CTEST_ARGS="-VV $CONFIG_TYPE -S /s/test/CTestScript.cmake"
 
@@ -28,4 +29,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run -v $TRAVIS_BUILD_DIR:/s -w /b wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run $DOCKER_ARGS wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
