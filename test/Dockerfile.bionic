@@ -8,7 +8,7 @@ ARG CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v$CMAKE_VER/cma
 
 RUN apt update -y
 RUN apt install -y curl python python3-pip cmake git libssl-dev zlib1g-dev \
-  pkg-config libboost1.65-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+  pkg-config libboost1.65-all-dev libx11-dev libx11-xcb-dev libxcb1-dev \
   libxkbcommon-dev libxcb-icccm4-dev libwayland-dev libxrandr-dev \
   libxcb-randr0-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev \
   ninja-build

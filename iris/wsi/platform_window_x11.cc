@@ -414,7 +414,7 @@ glm::vec2 iris::wsi::PlatformWindow::Impl::CursorPos() const noexcept {
 
   if (error) {
     std::free(error);
-    return glm::uvec2(-FLT_MAX, -FLT_MAX);
+    return glm::vec2(-FLT_MAX, -FLT_MAX);
   }
 
   glm::vec2 pos(pointer->win_x, pointer->win_y);
