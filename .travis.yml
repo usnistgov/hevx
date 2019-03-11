@@ -7,8 +7,9 @@ services:
 
 env:
   global:
-    - CONFIG_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
-    - CTEST_ARGS="-VV -DCTEST_DASHBOARD_ROOT=/t $CONFIG_TYPE -S test/CTestScript.cmake"
+	- DOCKER_ARGS="-v $(pwd):/s -w /b"
+    - CONFIGURATION_TYPE="-DCTEST_CONFIGURATION_TYPE=RelWithDebInfo"
+    - CTEST_ARGS="-VV $CONFIGURATION_TYPE -S /s/test/CTestScript.cmake"
 
 matrix:
   include:
@@ -28,4 +29,4 @@ before_install:
   - docker pull wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run -v $(pwd):/s -w /s wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
+  - docker run $DOCKER_ARGS wesleygriffin/hevx:$PLATFORM $CTEST_CMD $CTEST_ARGS
