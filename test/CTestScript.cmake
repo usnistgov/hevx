@@ -14,7 +14,7 @@ set(CTEST_SOURCE_DIRECTORY "${CTEST_DASHBOARD_ROOT}/hevx")
 set(CTEST_BINARY_DIRECTORY "${CTEST_DASHBOARD_ROOT}/${CTEST_CONFIGURATION_TYPE}")
 
 if(NOT EXISTS ${CTEST_SOURCE_DIRECTORY})
-  set(CTEST_CHECKOUT_COMMAND "git clone https://github.com/usnistgov/hevx.git")
+  set(CTEST_CHECKOUT_COMMAND "git clone --depth=1 https://github.com/usnistgov/hevx.git")
 endif()
 
 set(CTEST_UPDATE_COMMAND "git")
