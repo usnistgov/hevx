@@ -7,10 +7,9 @@ services:
 
 env:
   global:
-    - CONFIGURATION_TYPE="Release"
+    - CONFIGURATION_TYPE=Release
 	- DASHBOARD_ROOT="/t"
     - CTEST_ARGS="-VV $DASHBOARD_ROOT $CONFIGURATION_TYPE -S CTestScript.cmake"
-    - CONTAINER="wesleygriffin/hevx"
 
 matrix:
   include:
@@ -31,4 +30,4 @@ before_install:
   - docker cp test/CTestScript.cmake wesleygriffin/hevx:$PLATFORM
 
 script:
-  - docker run $CONTAINER:$PLATFORM /bin/sh -c "$CTEST_CMD $CTEST_ARGS"
+  - docker run wesleygriffin/hevx:$PLATFORM /bin/sh -c "$CTEST_CMD $CTEST_ARGS"
