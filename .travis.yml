@@ -7,8 +7,8 @@ services:
 
 env:
   global:
-    - CONFIGURATION_TYPE=Release
-	- DASHBOARD_ROOT=/t
+    - CONFIGURATION_TYPE="Release"
+	- DASHBOARD_ROOT="/t"
     - CTEST_ARGS="-VV $DASHBOARD_ROOT $CONFIGURATION_TYPE -S CTestScript.cmake"
     - CONTAINER="wesleygriffin/hevx"
 
