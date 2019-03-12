@@ -485,6 +485,8 @@ int main(int argc, char** argv) {
     }
   }
 
+  // TODO: create and record command buffer for ray tracing
+
   while (iris::Renderer::IsRunning()) {
     iris::Renderer::BeginFrame();
 

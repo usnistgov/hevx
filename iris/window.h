@@ -68,6 +68,7 @@ struct Window {
 
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext;
   Renderer::Component::Renderable uiRenderable;
+  glm::vec2 lastMousePos{0.f, 0.f};
 
   [[nodiscard]] Frame& currentFrame() noexcept { return frames[frameIndex]; }
   [[nodiscard]] Frame& previousFrame() noexcept {
@@ -145,7 +146,8 @@ inline Window::Window(Window&& other) noexcept
   , frameIndex(other.frameIndex)
   , imageAcquired(other.imageAcquired)
   , uiContext(std::move(other.uiContext))
-  , uiRenderable(std::move(other.uiRenderable)) {} // Window::Window
+  , uiRenderable(std::move(other.uiRenderable))
+  , lastMousePos(std::move(other.lastMousePos)) {} // Window::Window
 
 } // namespace iris
 

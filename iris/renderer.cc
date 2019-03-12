@@ -1777,21 +1777,17 @@ void iris::Renderer::EndFrame(
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
     ShaderToyPushConstants pushConstants;
-    pushConstants.iMouse = {0.f, 0.f, 0.f, 0.f};
+    pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
+                            0.f};
 
-#if 0
     if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
-      pushConstants.iMouse.x = ImGui::GetCursorPosX();
-      pushConstants.iMouse.y = ImGui::GetCursorPosY();
-      logger.debug("Left down: {} {}", pushConstants.iMouse.x,
-                  pushConstants.iMouse.y);
-    } else if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
-      pushConstants.iMouse.z = ImGui::GetCursorPosX();
-      pushConstants.iMouse.w = ImGui::GetCursorPosY();
-      logger.debug("Left released: {} {}", pushConstants.iMouse.z,
-                  pushConstants.iMouse.w);
+      window.lastMousePos.x = ImGui::GetIO().MousePos.x;
+      window.lastMousePos.y = ImGui::GetIO().MousePos.y;
     }
-#endif
+    if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+      pushConstants.iMouse.z = ImGui::GetIO().MousePos.x;
+      pushConstants.iMouse.w = ImGui::GetIO().MousePos.y;
+    }
 
     pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
     pushConstants.iTime = ImGui::GetTime();
