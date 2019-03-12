@@ -7,14 +7,14 @@ services:
 
 env:
   global:
-    - CONFIGURATION_TYPE="RelWithDebInfo"
-    - SOURCE_DIR="/s"
-    - BUILD_DIR="/b"
-    - DOCKER_IMAGE="wesleygriffin/hevx"
-    - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:$SOURCE_DIR -w $BUILD_DIR"
-    - ROOT="-DCTEST_DASHBOARD_ROOT=$BUILD_DIR"
-    - TYPE="-DCTEST_CONFIGURATION_TYPE=$CONFIGURATION_TYPE"
-    - CTEST_ARGS="-VV $ROOT $TYPE -S $SOURCE_DIR/test/CTestScript.cmake"
+    - CONFIGURATION_TYPE=RelWithDebInfo
+    - SOURCE_DIR=/s
+    - BUILD_DIR=/b
+    - DOCKER_IMAGE=wesleygriffin/hevx
+    - DOCKER_ARGS=-v $TRAVIS_BUILD_DIR:$SOURCE_DIR -w $BUILD_DIR
+    - ROOT=-DCTEST_DASHBOARD_ROOT=$BUILD_DIR
+    - TYPE=-DCTEST_CONFIGURATION_TYPE=$CONFIGURATION_TYPE
+    - CTEST_ARGS=-VV $ROOT $TYPE -S $SOURCE_DIR/test/CTestScript.cmake
 
 matrix:
   include:
@@ -24,8 +24,6 @@ matrix:
       env: PLATFORM=f28 CTEST_CMD="/cmake/bin/ctest"
     - name: "Fedora 29 (GCC 8.2.1)"
       env: PLATFORM=f29 CTEST_CMD="ctest"
-    - name: "Unbuntu 18.04 (GCC 7.3.0)"
-      env: PLATFORM=bionic CTEST_CMD="/cmake/bin/ctest"
     - name: "Unbuntu 18.10 (GCC 8.2.0)"
       env: PLATFORM=cosmic CTEST_CMD="ctest"
 

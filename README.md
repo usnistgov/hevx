@@ -16,7 +16,7 @@ Currently this code is under active development and in a pre-release state.
 - CMake 3.12
 - Python 3.4
   - Wheezy Template: `pip install --user wheezy.template`
-- GCC >= 7
+- GCC >= 8
 - X11 XCB development libraries
 - Boost development libraries
 - Vulkan SDK
