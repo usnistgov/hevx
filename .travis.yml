@@ -7,14 +7,14 @@ services:
 
 env:
   global:
-    - CONFIGURATION_TYPE=RelWithDebInfo
-    - SOURCE_DIR=/s
-    - BUILD_DIR=/b
-    - DOCKER_IMAGE=wesleygriffin/hevx
-    - DOCKER_ARGS=-v $TRAVIS_BUILD_DIR:$SOURCE_DIR -w $BUILD_DIR
-    - ROOT=-DCTEST_DASHBOARD_ROOT=$BUILD_DIR
-    - TYPE=-DCTEST_CONFIGURATION_TYPE=$CONFIGURATION_TYPE
-    - CTEST_ARGS=-VV $ROOT $TYPE -S $SOURCE_DIR/test/CTestScript.cmake
+    - CONFIGURATION_TYPE="RelWithDebInfo"
+    - SOURCE_DIR="/s"
+    - BUILD_DIR="/b"
+    - DOCKER_IMAGE="wesleygriffin/hevx"
+    - DOCKER_ARGS="-v $TRAVIS_BUILD_DIR:$SOURCE_DIR -w $BUILD_DIR"
+    - ROOT="-DCTEST_DASHBOARD_ROOT=$BUILD_DIR"
+    - TYPE="-DCTEST_CONFIGURATION_TYPE=$CONFIGURATION_TYPE"
+    - CTEST_ARGS="-VV $ROOT $TYPE -S $SOURCE_DIR/test/CTestScript.cmake"
 
 matrix:
   include:
