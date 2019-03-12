@@ -703,12 +703,101 @@ int main(int argc, char** argv) {
     }
   }
 
-  // TODO: create and record command buffer for ray tracing
+  int currentCBIndex = 0;
+
+  auto commandBuffers = iris::Renderer::AllocateCommandBuffers(
+    VK_COMMAND_BUFFER_LEVEL_SECONDARY, 2);
+  if (!commandBuffers) {
+    logger.error("Error allocating command buffers: {}",
+                 commandBuffers.error().what());
+    std::abort();
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   while (iris::Renderer::IsRunning()) {
-    iris::Renderer::BeginFrame();
+    VkRenderPass renderPass = iris::Renderer::BeginFrame();
+    commandBufferII.renderPass = renderPass;
 
-    iris::Renderer::EndFrame();
+    VkCommandBuffer cb = (*commandBuffers)[currentCBIndex];
+    vkBeginCommandBuffer(cb, &commandBufferBI);
+
+    VkImageSubresourceRange sr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+    VkImageMemoryBarrier readyBarrier = {};
+    readyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    readyBarrier.srcAccessMask = 0;
+    readyBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    readyBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    readyBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    readyBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
+      VK_QUEUE_FAMILY_IGNORED;
+    readyBarrier.image = outputImage;
+    readyBarrier.subresourceRange = sr;
+
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &readyBarrier);
+
+    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline);
+    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, layout,
+                            0, 1, &set, 0, nullptr);
+
+    VkDeviceSize rayGenOffset = 0;
+    VkDeviceSize missOffset = rayTracingProperties.shaderGroupHandleSize;
+    VkDeviceSize missStride = rayTracingProperties.shaderGroupHandleSize;
+    VkDeviceSize hitGroupOffset = rayTracingProperties.shaderGroupHandleSize;
+    VkDeviceSize hitGroupStride = rayTracingProperties.shaderGroupHandleSize;
+
+    vkCmdTraceRaysNV(cb, sbtBuffer, rayGenOffset, sbtBuffer, missOffset,
+                     missStride, sbtBuffer, hitGroupOffset, hitGroupStride,
+                     VK_NULL_HANDLE, 0, 0, 1000, 1000, 1);
+
+    VkImageMemoryBarrier tracedBarrier = {};
+    tracedBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    tracedBarrier.srcAccessMask = 0;
+    tracedBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    tracedBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    tracedBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
+      VK_QUEUE_FAMILY_IGNORED;
+    tracedBarrier.image = outputImage;
+    tracedBarrier.subresourceRange = sr;
+
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &tracedBarrier);
+
+    VkImageMemoryBarrier copyableBarrier = {};
+    copyableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    copyableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    copyableBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    copyableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    copyableBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    copyableBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
+      VK_QUEUE_FAMILY_IGNORED;
+    copyableBarrier.image = outputImage;
+    copyableBarrier.subresourceRange = sr;
+
+    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &copyableBarrier);
+
+    // TODO: copy outputImage to framebuffer...
+
+    vkEndCommandBuffer(cb);
+    iris::Renderer::EndFrame(gsl::make_span(&cb, 1));
+
+    currentCBIndex = (currentCBIndex + 1) % 2;
   }
 
   logger.info("exiting");
