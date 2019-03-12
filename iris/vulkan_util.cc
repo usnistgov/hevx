@@ -1,4 +1,5 @@
 #include "vulkan_util.h"
+#include "absl/container/inlined_vector.h"
 #include "enumerate.h"
 #include "error.h"
 #include "logging.h"
@@ -516,7 +517,7 @@ iris::Renderer::ChoosePhysicalDevice(VkInstance instance,
                                           "No suitable physical device found"));
 } // iris::Renderer::ChoosePhysicalDevice
 
-tl::expected<std::pair<VkDevice, std::uint32_t>, std::system_error>
+tl::expected<std::tuple<VkDevice, std::uint32_t>, std::system_error>
 iris::Renderer::CreateDevice(VkPhysicalDevice physicalDevice,
                              VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                              gsl::span<gsl::czstring<>> extensionNames,
@@ -545,18 +546,18 @@ iris::Renderer::CreateDevice(VkPhysicalDevice physicalDevice,
     queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount);
   std::fill_n(std::begin(priorities), priorities.size(), 1.f);
 
-  VkDeviceQueueCreateInfo qci = {};
-  qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  qci.queueFamilyIndex = queueFamilyIndex;
-  qci.queueCount =
-    queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount;
-  qci.pQueuePriorities = priorities.data();
+  absl::InlinedVector<VkDeviceQueueCreateInfo, 1> queueCreateInfos;
+  queueCreateInfos.push_back(
+    {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, nullptr, 0, queueFamilyIndex,
+     queueFamilyProperties[queueFamilyIndex].queueFamilyProperties.queueCount,
+     priorities.data()});
 
   VkDeviceCreateInfo ci = {};
   ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   ci.pNext = &physicalDeviceFeatures;
-  ci.queueCreateInfoCount = 1;
-  ci.pQueueCreateInfos = &qci;
+  ci.queueCreateInfoCount =
+    gsl::narrow_cast<std::uint32_t>(queueCreateInfos.size());
+  ci.pQueueCreateInfos = queueCreateInfos.data();
   ci.enabledExtensionCount =
     gsl::narrow_cast<std::uint32_t>(extensionNames.size());
   ci.ppEnabledExtensionNames = extensionNames.data();
@@ -571,7 +572,7 @@ iris::Renderer::CreateDevice(VkPhysicalDevice physicalDevice,
 
   Ensures(device != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return std::make_pair(device, qci.queueCount);
+  return std::make_tuple(device, queueCreateInfos[0].queueCount);
 } // iris::Renderer::CreateDevice
 
 tl::expected<VmaAllocator, std::system_error>
@@ -1353,72 +1354,6 @@ iris::Renderer::CompileShaderFromSource(VkDevice device,
   return module;
 } // iris::Renderer::CompileShaderFromSource
 
-namespace iris::Renderer {
-
-tl::expected<VkMemoryRequirements2, std::system_error>
-GetAccelerationStructureMemoryRequirements(
-  VkDevice device, VkAccelerationStructureNV accelerationStructure) noexcept {
-  VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
-  memoryRequirementsInfo.sType =
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-  memoryRequirementsInfo.accelerationStructure = accelerationStructure;
-
-  VkMemoryRequirements2KHR objectMemoryRequirements = {};
-  objectMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-
-  VkMemoryRequirements2KHR buildMemoryRequirements = {};
-  buildMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-
-  VkMemoryRequirements2KHR updateMemoryRequirements = {};
-  updateMemoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-
-  memoryRequirementsInfo.type =
-    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-  vkGetAccelerationStructureMemoryRequirementsNV(
-    device, &memoryRequirementsInfo, &objectMemoryRequirements);
-
-  memoryRequirementsInfo.type =
-    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-  vkGetAccelerationStructureMemoryRequirementsNV(
-    device, &memoryRequirementsInfo, &buildMemoryRequirements);
-
-  memoryRequirementsInfo.type =
-    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV;
-  vkGetAccelerationStructureMemoryRequirementsNV(
-    device, &memoryRequirementsInfo, &updateMemoryRequirements);
-
-  if (objectMemoryRequirements.memoryRequirements.alignment !=
-        buildMemoryRequirements.memoryRequirements.alignment ||
-      buildMemoryRequirements.memoryRequirements.alignment !=
-        updateMemoryRequirements.memoryRequirements.alignment) {
-    return tl::unexpected(std::system_error(
-      make_error_code(Error::kNotImplemented), "Alignments don't match"));
-  }
-
-  if (objectMemoryRequirements.memoryRequirements.memoryTypeBits !=
-        buildMemoryRequirements.memoryRequirements.memoryTypeBits ||
-      buildMemoryRequirements.memoryRequirements.memoryTypeBits !=
-        updateMemoryRequirements.memoryRequirements.memoryTypeBits) {
-    return tl::unexpected(std::system_error(
-      make_error_code(Error::kNotImplemented), "Memory types don't match"));
-  }
-
-  VkMemoryRequirements2 memoryRequirements = {};
-  memoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-  memoryRequirements.memoryRequirements.alignment =
-    objectMemoryRequirements.memoryRequirements.alignment;
-  memoryRequirements.memoryRequirements.memoryTypeBits =
-    objectMemoryRequirements.memoryRequirements.memoryTypeBits;
-  memoryRequirements.memoryRequirements.size =
-    objectMemoryRequirements.memoryRequirements.size +
-    buildMemoryRequirements.memoryRequirements.size +
-    updateMemoryRequirements.memoryRequirements.size;
-
-  return memoryRequirements;
-} // GetAccelerationStructureMemoryRequirements
-
-} // namespace iris::Renderer
-
 tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
              std::system_error>
 iris::Renderer::CreateAccelerationStructure(
@@ -1437,20 +1372,27 @@ iris::Renderer::CreateAccelerationStructure(
       make_error_code(result), "Cannot create acceleration structure"));
   }
 
-  VkMemoryRequirements memoryRequirements;
-  if (auto mr = GetAccelerationStructureMemoryRequirements(device, structure)) {
-    memoryRequirements = mr->memoryRequirements;
-  } else {
-    return tl::unexpected(mr.error());
-  }
+  VkMemoryRequirements2KHR memoryRequirements = {};
+  memoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
+
+  VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
+  memoryRequirementsInfo.sType =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+  memoryRequirementsInfo.accelerationStructure = structure;
+  memoryRequirementsInfo.type =
+    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
+  vkGetAccelerationStructureMemoryRequirementsNV(
+    device, &memoryRequirementsInfo, &memoryRequirements);
 
   VmaAllocationCreateInfo allocationCI = {};
   allocationCI.flags = VMA_MEMORY_USAGE_GPU_ONLY;
-  allocationCI.memoryTypeBits = memoryRequirements.memoryTypeBits;
+  allocationCI.memoryTypeBits =
+    memoryRequirements.memoryRequirements.memoryTypeBits;
 
   VmaAllocation allocation;
-  if (auto result = vmaAllocateMemory(allocator, &memoryRequirements,
-                                      &allocationCI, &allocation, nullptr);
+  if (auto result =
+        vmaAllocateMemory(allocator, &memoryRequirements.memoryRequirements,
+                          &allocationCI, &allocation, nullptr);
       result != VK_SUCCESS) {
     vkDestroyAccelerationStructureNV(device, structure, nullptr);
     return tl::unexpected(std::system_error(

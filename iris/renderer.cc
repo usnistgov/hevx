@@ -108,10 +108,11 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
   return sWindows;
 } // Windows
 
-static std::uint32_t sGraphicsQueueFamilyIndex{UINT32_MAX};
-static absl::InlinedVector<VkQueue, 16> sGraphicsCommandQueues;
-static absl::InlinedVector<VkCommandPool, 16> sGraphicsCommandPools;
-static absl::InlinedVector<VkFence, 16> sGraphicsCommandFences;
+// FIXME: make these static
+std::uint32_t sQueueFamilyIndex{UINT32_MAX};
+absl::InlinedVector<VkQueue, 16> sCommandQueues;
+absl::InlinedVector<VkCommandPool, 16> sCommandPools;
+absl::InlinedVector<VkFence, 16> sCommandFences;
 
 static std::uint32_t const sNumRenderPassAttachments{4};
 static std::uint32_t const sColorTargetAttachmentIndex{0};
@@ -541,24 +542,24 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto physicalDevice = ChoosePhysicalDevice(
         sInstance, physicalDeviceFeatures, physicalDeviceExtensionNames,
-        VK_QUEUE_GRAPHICS_BIT)) {
+        VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
     sPhysicalDevice = std::move(*physicalDevice);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(physicalDevice.error());
   }
 
-  if (auto qfi = GetQueueFamilyIndex(sPhysicalDevice, VK_QUEUE_GRAPHICS_BIT)) {
-    sGraphicsQueueFamilyIndex = *qfi;
+  if (auto qfi = GetQueueFamilyIndex(sPhysicalDevice, VK_QUEUE_GRAPHICS_BIT |
+                                                        VK_QUEUE_COMPUTE_BIT)) {
+    sQueueFamilyIndex = *qfi;
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(qfi.error());
   }
 
   std::uint32_t numQueues;
-  if (auto dn =
-        CreateDevice(sPhysicalDevice, physicalDeviceFeatures,
-                     physicalDeviceExtensionNames, sGraphicsQueueFamilyIndex)) {
+  if (auto dn = CreateDevice(sPhysicalDevice, physicalDeviceFeatures,
+                             physicalDeviceExtensionNames, sQueueFamilyIndex)) {
     std::tie(sDevice, numQueues) = *dn;
   } else {
     IRIS_LOG_LEAVE();
@@ -570,46 +571,45 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
              "sPhysicalDevice");
   NameObject(sDevice, VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
 
-  sGraphicsCommandQueues.resize(numQueues);
-  sGraphicsCommandPools.resize(numQueues);
-  sGraphicsCommandFences.resize(numQueues);
+  sCommandQueues.resize(numQueues);
+  sCommandPools.resize(numQueues);
+  sCommandFences.resize(numQueues);
 
   VkCommandPoolCreateInfo commandPoolCI = {};
   commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+  commandPoolCI.queueFamilyIndex = sQueueFamilyIndex;
 
   VkFenceCreateInfo fenceCI = {};
   fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
   for (std::uint32_t i = 0; i < numQueues; ++i) {
-    vkGetDeviceQueue(sDevice, sGraphicsQueueFamilyIndex, i,
-                     &sGraphicsCommandQueues[i]);
+    vkGetDeviceQueue(sDevice, sQueueFamilyIndex, i, &sCommandQueues[i]);
 
-    NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sGraphicsCommandQueues[i],
-               fmt::format("sGraphicsCommandQueue[{}]", i).c_str());
+    NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sCommandQueues[i],
+               fmt::format("sCommandQueue[{}]", i).c_str());
 
     if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
-                                          &sGraphicsCommandPools[i]);
+                                          &sCommandPools[i]);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         make_error_code(result), "Cannot create graphics command pool"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, &sGraphicsCommandPools[i],
-               fmt::format("sGraphicsCommandPools[{}]", i).c_str());
+    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, &sCommandPools[i],
+               fmt::format("sCommandPools[{}]", i).c_str());
 
     if (auto result =
-          vkCreateFence(sDevice, &fenceCI, nullptr, &sGraphicsCommandFences[i]);
+          vkCreateFence(sDevice, &fenceCI, nullptr, &sCommandFences[i]);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         make_error_code(result), "Cannot create graphics submit fence"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, &sGraphicsCommandFences[i],
-               fmt::format("sGraphicsCommandFences[{}]", i).c_str());
+    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, &sCommandFences[i],
+               fmt::format("sCommandFences[{}]", i).c_str());
   }
 
   if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
@@ -1013,8 +1013,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
 
   VkBool32 surfaceSupported;
   if (auto result = vkGetPhysicalDeviceSurfaceSupportKHR(
-        sPhysicalDevice, sGraphicsQueueFamilyIndex, window.surface,
-        &surfaceSupported);
+        sPhysicalDevice, sQueueFamilyIndex, window.surface, &surfaceSupported);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
@@ -1062,7 +1061,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   VkCommandPoolCreateInfo commandPoolCI = {};
   commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  commandPoolCI.queueFamilyIndex = sGraphicsQueueFamilyIndex;
+  commandPoolCI.queueFamilyIndex = sQueueFamilyIndex;
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1134,9 +1133,8 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   VmaAllocation fontTextureAllocation;
 
   if (auto ia =
-        CreateImage(sDevice, sAllocator, sGraphicsCommandPools[0],
-                    sGraphicsCommandQueues[0], sGraphicsCommandFences[0],
-                    VK_FORMAT_R8G8B8A8_UNORM,
+        CreateImage(sDevice, sAllocator, sCommandPools[0], sCommandQueues[0],
+                    sCommandFences[0], VK_FORMAT_R8G8B8A8_UNORM,
                     VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
                                gsl::narrow_cast<std::uint32_t>(height)},
                     VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
@@ -1458,8 +1456,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   }
 
   if (auto result = TransitionImage(
-        sDevice, sGraphicsCommandPools[0], sGraphicsCommandQueues[0],
-        sGraphicsCommandFences[0], newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+        sDevice, sCommandPools[0], sCommandQueues[0], sCommandFences[0],
+        newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
@@ -1473,11 +1471,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     return tl::unexpected(result.error());
   }
 
-  if (auto result =
-        TransitionImage(sDevice, sGraphicsCommandPools[0],
-                        sGraphicsCommandQueues[0], sGraphicsCommandFences[0],
-                        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+  if (auto result = TransitionImage(
+        sDevice, sCommandPools[0], sCommandQueues[0], sCommandFences[0],
+        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
     vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
@@ -1945,8 +1942,8 @@ void iris::Renderer::EndFrame(
 
   VkFence frameFinishedFence = sFrameFinishedFences[sFrameIndex];
 
-  if (result = vkQueueSubmit(sGraphicsCommandQueues[0], 1, &submitI,
-                             frameFinishedFence);
+  if (result =
+        vkQueueSubmit(sCommandQueues[0], 1, &submitI, frameFinishedFence);
       result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
                        to_string(result));
@@ -1964,7 +1961,7 @@ void iris::Renderer::EndFrame(
     presentI.pImageIndices = imageIndices.data();
     presentI.pResults = presentResults.data();
 
-    if (result = vkQueuePresentKHR(sGraphicsCommandQueues[0], &presentI);
+    if (result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
         result != VK_SUCCESS) {
       GetLogger()->error("Error presenting swapchains: {}", to_string(result));
     }
@@ -1983,7 +1980,7 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
 
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sGraphicsCommandPools[0];
+  commandBufferAI.commandPool = sCommandPools[0];
   commandBufferAI.level = level;
   commandBufferAI.commandBufferCount = count;
 
