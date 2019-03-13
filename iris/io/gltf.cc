@@ -1171,6 +1171,12 @@ ReadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
+  Renderer::CommandQueue commandQueue;
+  if (auto q = Renderer::AcquireCommandQueue()) {
+  } else {
+  }
+
+#if 0
   //
   // Read all the images into memory
   //
@@ -1206,8 +1212,6 @@ ReadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-  // FIXME: This won't work as we're on a task thread currently.
-#if 0
   std::vector<std::tuple<VkImage, VmaAllocation>> deviceImages;
   std::vector<VkSampler> samplers;
 

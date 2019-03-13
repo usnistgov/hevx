@@ -114,6 +114,10 @@ absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
 
+static std::uint32_t sCommandQueueHead{1};
+static std::uint32_t sCommandQueueFree{UINT32_MAX};
+static std::timed_mutex sCommandQueueMutex;
+
 static std::uint32_t const sNumRenderPassAttachments{4};
 static std::uint32_t const sColorTargetAttachmentIndex{0};
 static std::uint32_t const sColorResolveAttachmentIndex{1};
@@ -1998,6 +2002,59 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
 void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   sRenderables.push_back(std::move(renderable));
 } // AddRenderable
+
+tl::expected<iris::Renderer::CommandQueue, std::system_error>
+iris::Renderer::AcquireCommandQueue(
+  std::chrono::milliseconds timeout) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  std::unique_lock<std::timed_mutex> lock(sCommandQueueMutex, timeout);
+  if (!lock) return tl::unexpected(std::system_error(Error::kTimeout));
+
+  if (sCommandQueueHead == sCommandQueues.size() &&
+      sCommandQueueFree > sCommandQueues.size()) {
+    return tl::unexpected(std::system_error(Error::kNoCommandQueuesFree,
+                                            "all command queues are in use"));
+  }
+
+  CommandQueue commandQueue;
+
+  if (sCommandQueueHead < sCommandQueues.size()) {
+    commandQueue.id = sCommandQueueHead++;
+  } else {
+    return tl::unexpected(std::system_error(Error::kNotImplemented));
+  }
+
+  commandQueue.queueFamilyIndex = sQueueFamilyIndex;
+  commandQueue.queue = sCommandQueues[commandQueue.id];
+  commandQueue.commandPool = sCommandPools[commandQueue.id];
+  commandQueue.submitFence = sCommandFences[commandQueue.id];
+
+  IRIS_LOG_LEAVE();
+  return commandQueue;
+} // iris::Renderer::AcquireCommandQueue
+
+tl::expected<void, std::system_error> iris::Renderer::ReleaseCommandQueue(
+  CommandQueue& queue, std::chrono::milliseconds timeout) noexcept {
+  IRIS_LOG_ENTER();
+  std::unique_lock<std::timed_mutex> lock(sCommandQueueMutex, timeout);
+  if (!lock) return tl::unexpected(std::system_error(Error::kTimeout));
+
+  if (queue.id == sCommandQueues.size() - 1) {
+    queue.id = UINT32_MAX;
+    queue.queueFamilyIndex = UINT32_MAX;
+    queue.queue = VK_NULL_HANDLE;
+    queue.commandPool = VK_NULL_HANDLE;
+    queue.submitFence = VK_NULL_HANDLE;
+    sCommandQueueHead--;
+  } else {
+    GetLogger()->critical("not implemented");
+    std::abort();
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::ReleaseCommandQueue
 
 tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(filesystem::path const& path) noexcept {

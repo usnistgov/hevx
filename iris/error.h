@@ -19,10 +19,12 @@ enum class Error {
   kFileParseFailed,       //!< Parsing a file failed.
   kControlMessageInvalid, //!< Control message invalid.
   kControlMessageFailed,  //!< Control message failed.
-  kSurfaceNotSupported,   //<! Surface not supported by physical device.
-  kWindowResizeFailed,    //<! Resizing a window failed.
-  kImageTransitionFailed, //<! Image transition failed.
+  kSurfaceNotSupported,   //!< Surface not supported by physical device.
+  kWindowResizeFailed,    //!< Resizing a window failed.
+  kImageTransitionFailed, //!< Image transition failed.
   kShaderCompileFailed,   //!< Shader compilation failed.
+  kNoCommandQueuesFree,   //!< All command queues are in use.
+  kTimeout,               //!< A timeout occured.
   kNotImplemented,        //!< Not implemented
 };
 
@@ -52,6 +54,8 @@ public:
     case Error::kWindowResizeFailed: return "surface resize failed"s;
     case Error::kImageTransitionFailed: return "image transition failed"s;
     case Error::kShaderCompileFailed: return "shader compile failed"s;
+    case Error::kNoCommandQueuesFree: return "no command queues free"s;
+    case Error::kTimeout: return "timed out"s;
     case Error::kNotImplemented: return "not implemented";
     }
     return "unknown"s;

@@ -16,6 +16,7 @@ namespace filesystem = std::filesystem;
 #include "iris/vulkan.h"
 #include "iris/window.h"
 #include "spdlog/sinks/sink.h"
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -82,6 +83,23 @@ tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
 AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
 
 void AddRenderable(Component::Renderable renderable) noexcept;
+
+struct CommandQueue {
+  std::uint32_t id{UINT32_MAX};
+  std::uint32_t queueFamilyIndex{UINT32_MAX};
+  VkQueue queue{VK_NULL_HANDLE};
+  VkCommandPool commandPool{VK_NULL_HANDLE};
+  VkFence submitFence{VK_NULL_HANDLE};
+}; // struct CommandQueue
+
+tl::expected<CommandQueue, std::system_error> AcquireCommandQueue(
+  std::chrono::milliseconds timeout = std::chrono::milliseconds{
+    INT64_MAX}) noexcept;
+
+tl::expected<void, std::system_error> ReleaseCommandQueue(
+  CommandQueue& queue,
+  std::chrono::milliseconds timeout = std::chrono::milliseconds{
+    INT64_MAX}) noexcept;
 
 /*! \brief Load a file into the rendering system.
  *
