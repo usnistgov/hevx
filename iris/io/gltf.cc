@@ -9,6 +9,7 @@
 #include "gsl/gsl"
 #include "io/read_file.h"
 #include "logging.h"
+#include "mikktspace.h"
 #include "nlohmann/json.hpp"
 #include "renderer.h"
 #include "renderer_util.h"
@@ -510,7 +511,8 @@ struct GLTF {
 
   tl::expected<std::vector<iris::Renderer::Component::Renderable>,
                std::system_error>
-  ParseNode(int nodeIdx, glm::mat4x4 parentMat, filesystem::path const& path,
+  ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
+            glm::mat4x4 parentMat, filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
 
@@ -807,12 +809,149 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
     std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
+static std::vector<glm::vec3>
+GenerateNormals(std::vector<glm::vec3> const& positions,
+                std::vector<unsigned int> const& indices) noexcept {
+  IRIS_LOG_ENTER();
+  std::vector<glm::vec3> normals(positions.size());
+
+  if (indices.empty()) {
+    std::size_t const num = positions.size();
+    for (std::size_t i = 0; i < num; i += 3) {
+      auto&& a = positions[i];
+      auto&& b = positions[i + 1];
+      auto&& c = positions[i + 2];
+      auto const n = glm::normalize(glm::cross(b - a, c - a));
+      normals[i] = n;
+      normals[i + 1] = n;
+      normals[i + 2] = n;
+    }
+  } else {
+    std::size_t const num = indices.size();
+    for (std::size_t i = 0; i < num; i += 3) {
+      auto&& a = positions[indices[i]];
+      auto&& b = positions[indices[i + 1]];
+      auto&& c = positions[indices[i + 2]];
+      auto const n = glm::normalize(glm::cross(b - a, c - a));
+      normals[indices[i]] = n;
+      normals[indices[i + 1]] = n;
+      normals[indices[i + 2]] = n;
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return normals;
+} // GenerateNormals
+
+struct TangentGenerator {
+  glm::vec3 const* positions{nullptr};
+  glm::vec3 const* normals{nullptr};
+  glm::vec2 const* texcoords{nullptr};
+  unsigned int const* indices{nullptr};
+  std::size_t count{0};
+  std::vector<glm::vec4> tangents;
+
+  TangentGenerator(glm::vec3 const* p, glm::vec3 const* n, glm::vec2 const* t,
+                   std::size_t c, unsigned int const* i = nullptr)
+    : positions(p)
+    , normals(n)
+    , texcoords(t)
+    , indices(i)
+    , count(c) {}
+
+  static int GetNumFaces(SMikkTSpaceContext const* pContext) {
+    auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
+    return pData->count / 3;
+  }
+
+  static int GetNumVerticesOfFace(SMikkTSpaceContext const*, int const) {
+    return 3;
+  }
+
+  static void GetPosition(SMikkTSpaceContext const* pContext, float fvPosOut[],
+                          int const iFace, int const iVert) {
+    auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
+
+    glm::vec3 pos;
+    if (pData->indices) {
+      pos = pData->positions[iFace * 3 + iVert];
+    } else {
+      pos = pData->positions[pData->indices[iFace * 3 + iVert]];
+    }
+
+    fvPosOut[0] = pos.x;
+    fvPosOut[1] = pos.y;
+    fvPosOut[2] = pos.z;
+  }
+
+  static void GetNormal(SMikkTSpaceContext const* pContext, float fvNormOut[],
+                        int const iFace, int const iVert) {
+    auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
+
+    glm::vec3 norm;
+    if (pData->indices) {
+      norm = pData->normals[iFace * 3 + iVert];
+    } else {
+      norm = pData->normals[pData->indices[iFace * 3 + iVert]];
+    }
+
+    fvNormOut[0] = norm.x;
+    fvNormOut[1] = norm.y;
+    fvNormOut[2] = norm.z;
+  }
+
+  static void GetTexCoord(SMikkTSpaceContext const* pContext, float fvTexcOut[],
+                        int const iFace, int const iVert) {
+    auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
+
+    glm::vec2 texc;
+    if (pData->indices) {
+      texc = pData->texcoords[iFace * 3 + iVert];
+    } else {
+      texc = pData->texcoords[pData->indices[iFace * 3 + iVert]];
+    }
+
+    fvTexcOut[0] = texc.x;
+    fvTexcOut[1] = texc.y;
+  }
+
+  static void SetTSpaceBasic(SMikkTSpaceContext const* pContext,
+                             float const fvTangent[], float const fSign,
+                             int const iFace, int const iVert) {
+    auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
+
+    glm::vec4 tangent{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
+
+    if (pData->indices) {
+      pData->tangents[iFace * 3 + iVert] = tangent;
+    } else {
+      pData->tangents[pData->indices[iFace * 3 + iVert]] = tangent;
+    }
+  }
+
+  bool operator()() noexcept {
+    std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
+    ifc->m_getNumFaces = &GetNumFaces;
+    ifc->m_getNumVerticesOfFace = &GetNumVerticesOfFace;
+    ifc->m_getPosition = &GetPosition;
+    ifc->m_getNormal = &GetNormal;
+    ifc->m_getTexCoord = &GetTexCoord;
+    ifc->m_setTSpaceBasic = &SetTSpaceBasic;
+    ifc->m_setTSpace = nullptr;
+
+    std::unique_ptr<SMikkTSpaceContext> ctx(new SMikkTSpaceContext);
+    ctx->m_pInterface = ifc.get();
+    ctx->m_pUserData = this;
+
+    return genTangSpaceDefault(ctx.get());
+  }
+}; // struct TangentGenerator
+
 tl::expected<std::vector<iris::Renderer::Component::Renderable>,
              std::system_error>
-GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
-                filesystem::path const& path,
-                std::vector<std::vector<std::byte>> const& buffersBytes
-                [[maybe_unused]]) {
+GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
+                glm::mat4x4 parentMat, filesystem::path const& path,
+                std::vector<std::vector<std::byte>> const& buffersBytes) {
   IRIS_LOG_ENTER();
   std::vector<iris::Renderer::Component::Renderable> renderables;
 
@@ -852,7 +991,7 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
   for (auto&& child : children) {
-    if (auto r = ParseNode(child, nodeMat, path, buffersBytes)) {
+    if (auto r = ParseNode(commandQueue, child, nodeMat, path, buffersBytes)) {
       renderables.insert(renderables.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
@@ -883,16 +1022,6 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
   // std::vector<Primitive> primitives;
 
   iris::GetLogger()->trace("mesh: {}", json(mesh).dump());
-
-  IRIS_LOG_LEAVE();
-  return renderables;
-} // GLTF::ParseNode
-
-#if 0
-tl::expected<std::vector<iris::Renderer::MeshData>, std::system_error>
-GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
-                filesystem::path const& path,
-                std::vector<std::vector<std::byte>> const& buffersBytes) {
 
   for (std::size_t primIdx = 0; primIdx < mesh.primitives.size(); ++primIdx) {
     auto&& primitive = mesh.primitives[primIdx];
@@ -937,35 +1066,19 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
     // the w component of the tangent: bitangent = cross(normal,
     // tangent.xyz) * tangent.w
 
-    iris::Renderer::MeshData meshData;
-    meshData.name =
+    std::string const meshName =
       nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
-    meshData.matrix = nodeMat;
 
+    VkPrimitiveTopology topology;
     if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-      meshData.topology = *t;
+      topology = *t;
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(t.error());
     }
 
-    // First get the indices if present. We're only getting the indices here
-    // to use them for possible normal/tangent generation. That way the
-    // original format of the indices can be used in the draw call.
-    if (primitive.indices) {
-      std::array<int, 3> componentTypes{5123, 5125};
-      if (auto i = gltf::GetAccessorData<unsigned int>(
-            *primitive.indices, "SCALAR", componentTypes, false, accessors,
-            bufferViews, buffersBytes)) {
-        meshData.indices = std::move(*i);
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(i.error());
-      }
-    }
-
     //
-    // Next get the positions
+    // First, get the positions
     //
     std::vector<glm::vec3> positions;
     for (auto&& [semantic, index] : primitive.attributes) {
@@ -983,6 +1096,22 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
 
     // primitives with no positions are "ignored"
     if (positions.empty()) continue;
+
+    // Next, get the indices if present. We're only getting the indices here
+    // to use them for possible normal/tangent generation. That way the
+    // original format of the indices can be used in the draw call.
+    std::vector<unsigned int> indices;
+    if (primitive.indices) {
+      std::array<int, 2> componentTypes{5123, 5125};
+      if (auto i = gltf::GetAccessorData<unsigned int>(
+            *primitive.indices, "SCALAR", componentTypes, false, accessors,
+            bufferViews, buffersBytes)) {
+        indices = std::move(*i);
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(i.error());
+      }
+    }
 
     //
     // Now get texcoords, normals, and tangents
@@ -1022,42 +1151,25 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
       }
     }
 
-    std::size_t const num = positions.size();
-    meshData.vertices.resize(num);
+    if (normals.empty()) normals = GenerateNormals(positions, indices);
 
-    for (std::size_t i = 0; i < num; ++i) {
-      meshData.vertices[i].position = positions[i];
-    }
+    if (tangents.empty()) {
+      TangentGenerator tg(positions.data(), normals.data(), texcoords.data(),
+                          indices.empty() ? positions.size() : indices.size(),
+                          indices.empty() ? nullptr : indices.data());
 
-    if (!texcoords.empty()) {
-      for (std::size_t i = 0; i < num; ++i) {
-        meshData.vertices[i].texcoord = texcoords[i];
-      }
-    }
-
-    if (!normals.empty()) {
-      for (std::size_t i = 0; i < num; ++i) {
-        meshData.vertices[i].normal = normals[i];
-      }
-    } else {
-      meshData.GenerateNormals();
-    }
-
-    if (!tangents.empty()) {
-      for (std::size_t i = 0; i < num; ++i) {
-        meshData.vertices[i].tangent = tangents[i];
-      }
-    } else {
-      if (!meshData.GenerateTangents()) {
+      if (tg()) {
+        tangents = std::move(tg.tangents);
+      } else {
         IRIS_LOG_LEAVE();
         return tl::unexpected(std::system_error(
-          iris::Error::kFileParseFailed, "Unable to generate tangent space"));
+          iris::Error::kFileLoadFailed, "unable to generate tangent space"));
       }
     }
 
-    iris::GetLogger()->debug("Primitive has {} vertices",
-                             meshData.vertices.size());
+    iris::Renderer::Component::Renderable renderable;
 
+#if 0
     meshData.bindingDescriptions.push_back(
       {0, sizeof(iris::Renderer::MeshData::Vertex),
        VK_VERTEX_INPUT_RATE_VERTEX});
@@ -1085,14 +1197,25 @@ GLTF::ParseNode(int nodeIdx, glm::mat4x4 parentMat,
         3, 0, VK_FORMAT_R32G32_SFLOAT,
         offsetof(iris::Renderer::MeshData::Vertex, texcoord)};
     }
+#endif
 
-    primitiveData.push_back(meshData);
+    if (auto lp = iris::Renderer::CreateGraphicsPipeline(...)) {
+      std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
+    } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(std::system_error(
+          iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
+    }
+
+    // TODO: fill in renderable
+
+    renderables.push_back(renderable);
+
   }
 
   IRIS_LOG_LEAVE();
-  return primitiveData;
+  return renderables;
 } // GLTF::ParseNode
-#endif
 
 } // namespace gltf
 
@@ -1169,11 +1292,6 @@ ReadGLTF(filesystem::path const& path) noexcept {
       return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                               "unexpected buffer with no uri"));
     }
-  }
-
-  Renderer::CommandQueue commandQueue;
-  if (auto q = Renderer::AcquireCommandQueue()) {
-  } else {
   }
 
 #if 0
@@ -1339,14 +1457,23 @@ ReadGLTF(filesystem::path const& path) noexcept {
     g.scene = 0;
   }
 
+  Renderer::CommandQueue commandQueue;
+  if (auto q = Renderer::AcquireCommandQueue()) {
+    commandQueue = std::move(*q);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(Error::kFileLoadFailed,
+                                            "could not acquire command queue"));
+  }
+
   //
   // Parse the scene graph
   // FIXME: this removes the hierarchy: need to maintain those relationships
   // FIXME: implement Animatable(?) component to support animations
   //
 
-  if (auto renderables =
-        g.ParseNode(*g.scene, glm::mat4x4(1.f), path, buffersBytes)) {
+  if (auto renderables = g.ParseNode(commandQueue, *g.scene, glm::mat4x4(1.f),
+                                     path, buffersBytes)) {
     IRIS_LOG_LEAVE();
     return *renderables;
   } else {

@@ -1036,6 +1036,84 @@ iris::Renderer::CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
   return std::make_tuple(newBuffer, newAllocation, newSize);
 } // iris::Renderer::CreateOrResizeBuffer
 
+tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
+             std::system_error>
+iris::Renderer::CreateBuffer(VkDevice device, VmaAllocator allocator,
+                             VkCommandPool commandPool, VkQueue queue,
+                             VkFence fence, VkBufferUsageFlags bufferUsage,
+                             VmaMemoryUsage memoryUsage, VkDeviceSize size,
+                             gsl::not_null<std::byte*> data) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(allocator != VK_NULL_HANDLE);
+  Expects(size > 0);
+
+  VkBuffer stagingBuffer{VK_NULL_HANDLE};
+  VmaAllocation stagingAllocation{VK_NULL_HANDLE};
+  VkDeviceSize stagingSize{0};
+
+  if (auto bas = CreateOrResizeBuffer(
+        allocator, stagingBuffer, stagingAllocation, stagingSize, size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
+  } else {
+    return tl::unexpected(
+      std::system_error(bas.error().code(), "Cannot create staging buffer: "s +
+                                              bas.error().what()));
+  }
+
+  if (auto ptr = MapMemory<std::byte>(allocator, stagingAllocation)) {
+    std::memcpy(*ptr, data, size);
+  } else {
+    return tl::unexpected(std::system_error(
+      ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
+  }
+
+  vmaUnmapMemory(allocator, stagingAllocation);
+
+  VkBufferCreateInfo bufferCI = {};
+  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferCI.size = size;
+  bufferCI.usage = bufferUsage;
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = memoryUsage;
+
+  VkBuffer buffer;
+  VmaAllocation allocation;
+
+  if (auto result = vmaCreateBuffer(allocator, &bufferCI, &allocationCI,
+                                    &buffer, &allocation, nullptr);
+      result != VK_SUCCESS) {
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create buffer"));
+  }
+
+  VkCommandBuffer commandBuffer;
+  if (auto cb = BeginOneTimeSubmit(device, commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    return tl::unexpected(cb.error());
+  }
+
+  VkBufferCopy region = {};
+  region.srcOffset = 0;
+  region.dstOffset = 0;
+  region.size = size;
+
+  vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &region);
+
+  if (auto result =
+        EndOneTimeSubmit(commandBuffer, device, commandPool, queue, fence);
+      !result) {
+    return tl::unexpected(result.error());
+  }
+
+  vmaDestroyBuffer(allocator, stagingBuffer, stagingAllocation);
+
+  IRIS_LOG_LEAVE();
+  return std::make_tuple(buffer, allocation, size);
+} // iris::Renderer::CreateBuffer
+
 namespace iris::Renderer {
 
 const TBuiltInResource DefaultTBuiltInResource = {

@@ -145,6 +145,13 @@ CreateOrResizeBuffer(VmaAllocator allocator, VkBuffer buffer,
                      VkDeviceSize newSize, VkBufferUsageFlags bufferUsage,
                      VmaMemoryUsage memoryUsage) noexcept;
 
+[[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
+                           std::system_error>
+CreateBuffer(VkDevice device, VmaAllocator allocator, VkCommandPool commandPool,
+             VkQueue queue, VkFence fence, VkBufferUsageFlags bufferUsage,
+             VmaMemoryUsage memoryUsage, VkDeviceSize size,
+             gsl::not_null<std::byte*> data) noexcept;
+
 struct Shader {
   VkShaderModule handle;
   VkShaderStageFlagBits stage;

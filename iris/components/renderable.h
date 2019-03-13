@@ -21,8 +21,11 @@ struct Renderable {
 
   VkShaderStageFlags pushConstantsStages{};
   void* pushConstants{nullptr};
-  std::uint32_t pushConstantsSize{0};
+  VkDeviceSize pushConstantsSize{0};
+
+  VkDeviceSize uniformBufferSize{0};
   VkBuffer uniformBuffer{VK_NULL_HANDLE};
+  VmaAllocation uniformBufferAllocation{VK_NULL_HANDLE};
 
   VkDeviceSize vertexBufferSize{0};
   VkDeviceSize vertexBufferBindingOffset{0};
@@ -34,8 +37,6 @@ struct Renderable {
   VkBuffer indexBuffer{VK_NULL_HANDLE};
   VmaAllocation indexBufferAllocation{VK_NULL_HANDLE};
 
-  std::uint32_t numTextures{0};
-
   VkIndexType indexType{VK_INDEX_TYPE_UINT32};
   std::uint32_t numIndices{0};
   std::uint32_t instanceCount{1};
@@ -45,6 +46,8 @@ struct Renderable {
 
   std::uint32_t numVertices{0};
   std::uint32_t firstVertex{0};
+
+  std::uint32_t numTextures{0};
 }; // struct Renderable
 
 } // namespace iris::Renderer::Component
