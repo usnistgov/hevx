@@ -28,14 +28,7 @@
 #include <system_error>
 #include <vector>
 
-namespace iris::Renderer {
-
-extern std::uint32_t sQueueFamilyIndex;
-extern absl::InlinedVector<VkQueue, 16> sCommandQueues;
-extern absl::InlinedVector<VkCommandPool, 16> sCommandPools;
-extern absl::InlinedVector<VkFence, 16> sCommandFences;
-
-} // namespace iris::Renderer
+static iris::Renderer::CommandQueue sCommandQueue;
 
 struct Matrices {
   glm::mat4 model;
@@ -281,7 +274,11 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
   geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
   geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+  geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
+  geometry.geometry.triangles.pNext = nullptr;
   geometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
+  geometry.geometry.aabbs.pNext = nullptr;
   geometry.geometry.aabbs.aabbData = aabbBuffer;
   geometry.geometry.aabbs.numAABBs = 1;
   geometry.geometry.aabbs.stride = 24; // 6 floats == 6 x 4 bytes == 24 bytes
@@ -339,8 +336,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   }
 
   VkCommandBuffer commandBuffer;
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(
-        iris::Renderer::sDevice, iris::Renderer::sCommandPools[1])) {
+  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
+                                                   sCommandQueue.commandPool)) {
     commandBuffer = *cb;
   } else {
     return tl::unexpected(std::system_error(cb.error()));
@@ -355,10 +352,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   logger.info("EndOneTimeSubmit bottomLevelAS");
   if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice,
-        iris::Renderer::sCommandPools[1],
-        iris::Renderer::sCommandQueues[1],
-        iris::Renderer::sCommandFences[1]);
+        commandBuffer, iris::Renderer::sDevice, sCommandQueue.commandPool,
+        sCommandQueue.queue, sCommandQueue.submitFence);
       !result) {
     return tl::unexpected(std::system_error(
       result.error().code(),
@@ -460,8 +455,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
                                               bas.error().what()));
   }
 
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(
-        iris::Renderer::sDevice, iris::Renderer::sCommandPools[1])) {
+  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
+                                                   sCommandQueue.commandPool)) {
     commandBuffer = *cb;
   } else {
     return tl::unexpected(std::system_error(cb.error()));
@@ -475,9 +470,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
     scratchBuffer, 0 /* scratchOffset */);
 
   if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice,
-        iris::Renderer::sCommandPools[1], iris::Renderer::sCommandQueues[1],
-        iris::Renderer::sCommandFences[1]);
+        commandBuffer, iris::Renderer::sDevice, sCommandQueue.commandPool,
+        sCommandQueue.queue, sCommandQueue.submitFence);
       !result) {
     return tl::unexpected(std::system_error(
       result.error().code(),
@@ -547,6 +541,13 @@ int main(int argc, char** argv) {
   logger.info("Renderer initialized. {} files specified on command line.",
               files.size());
 
+  if (auto cq = iris::Renderer::AcquireCommandQueue()) {
+    sCommandQueue = std::move(*cq);
+  } else {
+    logger.critical("cannot acquire command queue: {}", cq.error().what());
+    std::exit(EXIT_FAILURE);
+  }
+
   VkDescriptorPool descriptorPool;
   VkDescriptorSetLayout setLayout;
   VkDescriptorSet set;
@@ -585,7 +586,7 @@ int main(int argc, char** argv) {
   if (auto bas = iris::Renderer::CreateOrResizeBuffer(
         iris::Renderer::sAllocator, matricesBuffer, matricesBufferAllocation,
         matricesBufferSize, sizeof(Matrices),
-        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(matricesBuffer, matricesBufferAllocation, matricesBufferSize) =
       *bas;
   } else {
@@ -706,30 +707,51 @@ int main(int argc, char** argv) {
   int currentCBIndex = 0;
 
   auto commandBuffers = iris::Renderer::AllocateCommandBuffers(
-    VK_COMMAND_BUFFER_LEVEL_SECONDARY, 2);
+    VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2);
   if (!commandBuffers) {
     logger.error("Error allocating command buffers: {}",
                  commandBuffers.error().what());
-    std::abort();
+    std::exit(EXIT_FAILURE);
   }
 
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+#if 0
   VkCommandBufferInheritanceInfo commandBufferII = {};
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
   commandBufferII.subpass = 0;
   commandBufferII.framebuffer = VK_NULL_HANDLE;
 
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+  VkCommandBufferBeginInfo secondaryCommandBufferBI = {};
+  secondaryCommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  secondaryCommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
                           VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-  commandBufferBI.pInheritanceInfo = &commandBufferII;
+  secondaryCommandBufferBI.pInheritanceInfo = &commandBufferII;
+#endif
 
   while (iris::Renderer::IsRunning()) {
-    VkRenderPass renderPass = iris::Renderer::BeginFrame();
-    commandBufferII.renderPass = renderPass;
+    //
+    // Raytrace!
+    //
+
+    if (auto result =
+          vkGetFenceStatus(iris::Renderer::sDevice, sCommandQueue.submitFence);
+        result == VK_SUCCESS) {
+      vkWaitForFences(iris::Renderer::sDevice, 1, &sCommandQueue.submitFence,
+                      VK_TRUE, UINT64_MAX);
+      vkResetFences(iris::Renderer::sDevice, 1, &sCommandQueue.submitFence);
+    }
 
     VkCommandBuffer cb = (*commandBuffers)[currentCBIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
+
+    VkDebugUtilsLabelEXT cbLabel = {};
+    cbLabel.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+
+    cbLabel.pLabelName = "readyBarrier";
+    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
 
     VkImageSubresourceRange sr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
@@ -748,6 +770,9 @@ int main(int argc, char** argv) {
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &readyBarrier);
 
+    cbLabel.pLabelName = "trace";
+    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
+
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, layout,
                             0, 1, &set, 0, nullptr);
@@ -761,6 +786,9 @@ int main(int argc, char** argv) {
     vkCmdTraceRaysNV(cb, sbtBuffer, rayGenOffset, sbtBuffer, missOffset,
                      missStride, sbtBuffer, hitGroupOffset, hitGroupStride,
                      VK_NULL_HANDLE, 0, 0, 1000, 1000, 1);
+
+    cbLabel.pLabelName = "tracedBarrier";
+    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
 
     VkImageMemoryBarrier tracedBarrier = {};
     tracedBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -777,6 +805,9 @@ int main(int argc, char** argv) {
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &tracedBarrier);
 
+    cbLabel.pLabelName = "copyableBarrier";
+    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
+
     VkImageMemoryBarrier copyableBarrier = {};
     copyableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     copyableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -791,11 +822,30 @@ int main(int argc, char** argv) {
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &copyableBarrier);
+    vkEndCommandBuffer(cb);
+
+    VkSubmitInfo submitI = {};
+    submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitI.commandBufferCount = 1;
+    submitI.pCommandBuffers = &cb;
+
+    if (auto result = vkQueueSubmit(sCommandQueue.queue, 1, &submitI,
+                                    sCommandQueue.submitFence);
+        result != VK_SUCCESS) {
+      logger.error("Error submitting command buffer: {}",
+                   iris::Renderer::to_string(result));
+    }
+
+    //
+    // Begin a rendering frame
+    //
+
+    VkRenderPass renderPass[[maybe_unused]] = iris::Renderer::BeginFrame();
+    //commandBufferII.renderPass = renderPass;
 
     // TODO: copy outputImage to framebuffer...
 
-    vkEndCommandBuffer(cb);
-    iris::Renderer::EndFrame(gsl::make_span(&cb, 1));
+    iris::Renderer::EndFrame();//gsl::make_span(&cb, 1));
 
     currentCBIndex = (currentCBIndex + 1) % 2;
   }

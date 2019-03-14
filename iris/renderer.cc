@@ -108,11 +108,10 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
   return sWindows;
 } // Windows
 
-// FIXME: make these static
-std::uint32_t sQueueFamilyIndex{UINT32_MAX};
-absl::InlinedVector<VkQueue, 16> sCommandQueues;
-absl::InlinedVector<VkCommandPool, 16> sCommandPools;
-absl::InlinedVector<VkFence, 16> sCommandFences;
+static std::uint32_t sQueueFamilyIndex{UINT32_MAX};
+static absl::InlinedVector<VkQueue, 16> sCommandQueues;
+static absl::InlinedVector<VkCommandPool, 16> sCommandPools;
+static absl::InlinedVector<VkFence, 16> sCommandFences;
 
 static std::uint32_t sCommandQueueHead{1};
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
