@@ -514,6 +514,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   ::setenv(
     "VK_LAYER_PATH",
     (iris::kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
+  GetLogger()->debug("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
 #endif
 
   flextVkInit();

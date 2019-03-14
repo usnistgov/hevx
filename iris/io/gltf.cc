@@ -1069,7 +1069,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     std::string const meshName =
       nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
 
-    VkPrimitiveTopology topology;
+    VkPrimitiveTopology topology[[maybe_unused]];
     if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
       topology = *t;
     } else {
@@ -1199,13 +1199,13 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     }
 #endif
 
-    if (auto lp = iris::Renderer::CreateGraphicsPipeline(...)) {
-      std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
-    } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(std::system_error(
-          iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
-    }
+    //if (auto lp = iris::Renderer::CreateGraphicsPipeline(...)) {
+      //std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
+    //} else {
+        //IRIS_LOG_LEAVE();
+        //return tl::unexpected(std::system_error(
+          //iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
+    //}
 
     // TODO: fill in renderable
 

@@ -10,6 +10,8 @@ URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cma
 ## Nothing below here should have to be changed
 ##
 
+PATH=$PATH:$HOME/bin
+
 if [ -z $1 ]; then
   HTML_ROOT="$HOME/public_html/hevx/ci"
 else
