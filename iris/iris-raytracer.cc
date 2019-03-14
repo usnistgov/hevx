@@ -516,7 +516,7 @@ int main(int argc, char** argv) {
   auto const& files = args.positional();
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-    "iris-viewer.log", true);
+    "iris-raytracer.log", true);
   file_sink->set_level(spdlog::level::trace);
 
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -714,35 +714,34 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  absl::FixedArray<VkFence> traceCompleteFences(commandBuffers->size());
+  for (std::size_t i = 0; i < traceCompleteFences.size(); ++i) {
+    if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
+                                    &traceCompleteFences[i]);
+        result != VK_SUCCESS) {
+      logger.error("Error creating fence: {}",
+                   iris::Renderer::to_string(result));
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-#if 0
-  VkCommandBufferInheritanceInfo commandBufferII = {};
-  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  commandBufferII.subpass = 0;
-  commandBufferII.framebuffer = VK_NULL_HANDLE;
-
-  VkCommandBufferBeginInfo secondaryCommandBufferBI = {};
-  secondaryCommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  secondaryCommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
-                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-  secondaryCommandBufferBI.pInheritanceInfo = &commandBufferII;
-#endif
+  std::uint64_t frameCount = 0;
 
   while (iris::Renderer::IsRunning()) {
-    //
-    // Raytrace!
-    //
+    iris::Renderer::BeginFrame();
 
-    if (auto result =
-          vkGetFenceStatus(iris::Renderer::sDevice, sCommandQueue.submitFence);
-        result == VK_SUCCESS) {
-      vkWaitForFences(iris::Renderer::sDevice, 1, &sCommandQueue.submitFence,
-                      VK_TRUE, UINT64_MAX);
-      vkResetFences(iris::Renderer::sDevice, 1, &sCommandQueue.submitFence);
-    }
+    vkWaitForFences(iris::Renderer::sDevice, 1,
+                    &traceCompleteFences[currentCBIndex], VK_TRUE, UINT64_MAX);
+    vkResetFences(iris::Renderer::sDevice, 1,
+                  &traceCompleteFences[currentCBIndex]);
 
     VkCommandBuffer cb = (*commandBuffers)[currentCBIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
@@ -752,6 +751,7 @@ int main(int argc, char** argv) {
 
     cbLabel.pLabelName = "readyBarrier";
     vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
+    logger.info("readyBarrier");
 
     VkImageSubresourceRange sr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
@@ -772,6 +772,7 @@ int main(int argc, char** argv) {
 
     cbLabel.pLabelName = "trace";
     vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
+    logger.info("trace");
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, pipeline);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, layout,
@@ -789,14 +790,15 @@ int main(int argc, char** argv) {
 
     cbLabel.pLabelName = "tracedBarrier";
     vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
+    logger.info("tracedBarrier");
 
     VkImageMemoryBarrier tracedBarrier = {};
     tracedBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    tracedBarrier.srcAccessMask = 0;
-    tracedBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    tracedBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    tracedBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
+    tracedBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    tracedBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    tracedBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    tracedBarrier.srcQueueFamilyIndex = tracedBarrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
     tracedBarrier.image = outputImage;
     tracedBarrier.subresourceRange = sr;
@@ -804,50 +806,24 @@ int main(int argc, char** argv) {
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &tracedBarrier);
-
-    cbLabel.pLabelName = "copyableBarrier";
-    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
-
-    VkImageMemoryBarrier copyableBarrier = {};
-    copyableBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    copyableBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    copyableBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    copyableBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    copyableBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    copyableBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
-      VK_QUEUE_FAMILY_IGNORED;
-    copyableBarrier.image = outputImage;
-    copyableBarrier.subresourceRange = sr;
-
-    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &copyableBarrier);
     vkEndCommandBuffer(cb);
 
+    logger.info("submit");
     VkSubmitInfo submitI = {};
     submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitI.commandBufferCount = 1;
     submitI.pCommandBuffers = &cb;
 
     if (auto result = vkQueueSubmit(sCommandQueue.queue, 1, &submitI,
-                                    sCommandQueue.submitFence);
+                                    traceCompleteFences[currentCBIndex]);
         result != VK_SUCCESS) {
       logger.error("Error submitting command buffer: {}",
                    iris::Renderer::to_string(result));
     }
 
-    //
-    // Begin a rendering frame
-    //
-
-    VkRenderPass renderPass[[maybe_unused]] = iris::Renderer::BeginFrame();
-    //commandBufferII.renderPass = renderPass;
-
-    // TODO: copy outputImage to framebuffer...
-
-    iris::Renderer::EndFrame();//gsl::make_span(&cb, 1));
-
+    iris::Renderer::EndFrame(outputImage);
     currentCBIndex = (currentCBIndex + 1) % 2;
+    frameCount++;
   }
 
   logger.info("exiting");

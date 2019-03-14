@@ -227,6 +227,65 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   }
 } // CreateEmplaceWindow
 
+static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
+                                 VkExtent3D const& extent) noexcept {
+  VkCommandBuffer commandBuffer;
+  if (auto cb = AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)) {
+    commandBuffer = (*cb)[0];
+  } else {
+    GetLogger()->error("Cannot allocate command buffer: {}", cb.error().what());
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+
+  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.srcAccessMask = 0;
+  barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
+    VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = dst;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+
+  VkImageCopy copy = {};
+  copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  copy.srcOffset = {0, 0, 0};
+  copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  copy.dstOffset = {0, 0, 0};
+  copy.extent = extent;
+
+  vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = 0;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+
+  vkEndCommandBuffer(commandBuffer);
+  return commandBuffer;
+} // CopyImage
+
 static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
                                         VkViewport* pViewport,
                                         VkRect2D* pScissor) noexcept {
@@ -1319,7 +1378,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   swapchainCI.imageColorSpace = sSurfaceColorFormat.colorSpace;
   swapchainCI.imageExtent = newExtent;
   swapchainCI.imageArrayLayers = 1;
-  swapchainCI.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  swapchainCI.imageUsage =
+    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   swapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   swapchainCI.queueFamilyIndexCount = 0;
   swapchainCI.pQueueFamilyIndices = nullptr;
@@ -1680,7 +1740,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
-void iris::Renderer::EndFrame(
+void iris::Renderer::EndFrame(VkImage image,
   gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
 
@@ -1765,14 +1825,21 @@ void iris::Renderer::EndFrame(
         window.frameIndex, make_error_code(result).message());
     }
 
+    vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
+    vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
+
+    if (image != VK_NULL_HANDLE) {
+      VkCommandBuffer commandBuffer =
+        CopyImage(window.colorImages[window.frameIndex], image,
+                  {window.extent.width, window.extent.height, 1});
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+    }
+
     clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
 
     renderPassBI.framebuffer = frame.framebuffer;
     renderPassBI.renderArea.extent = window.extent;
     renderPassBI.pClearValues = clearValues.data();
-
-    vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
-    vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);

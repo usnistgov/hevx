@@ -77,7 +77,8 @@ VkRenderPass BeginFrame() noexcept;
  * This must be called each time through the rendering loop after calling \ref
  * BeginFrame.
  */
-void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
+void EndFrame(VkImage image = VK_NULL_HANDLE,
+              gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
 tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
 AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
