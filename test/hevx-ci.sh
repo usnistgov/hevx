@@ -6,6 +6,9 @@ BUILD_CONFIG="RelWithDebInfo"
 # URL of CTest Script
 URL=https://raw.githubusercontent.com/usnistgov/hevx/master/test/CTestScript.cmake
 
+# VulkanSDK Location
+VULKAN_SDK=$HOME/local/VulkanSDK/1.1.102
+
 ##
 ## Nothing below here should have to be changed
 ##
