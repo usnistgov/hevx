@@ -1193,6 +1193,10 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       {vertexSM, VK_SHADER_STAGE_VERTEX_BIT},
       {fragmentSM, VK_SHADER_STAGE_FRAGMENT_BIT}};
 
+    absl::FixedArray<VkPushConstantRange> pushConstantRanges{
+      {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+       sizeof(iris::Renderer::PushConstants)}};
+
     std::uint32_t vertexSize = sizeof(glm::vec3) * 2;
     if (!tangents.empty()) vertexSize += sizeof(glm::vec4);
     if (!texcoords.empty()) vertexSize += sizeof(glm::vec2);
@@ -1224,236 +1228,240 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       offset += sizeof(glm::vec2);
     }
 
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
-  inputAssemblyStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssemblyStateCI.topology = topology;
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+    inputAssemblyStateCI.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyStateCI.topology = topology;
 
-  VkPipelineViewportStateCreateInfo viewportStateCI = {};
-  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportStateCI.viewportCount = 1;
-  viewportStateCI.scissorCount = 1;
+    VkPipelineViewportStateCreateInfo viewportStateCI = {};
+    viewportStateCI.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportStateCI.viewportCount = 1;
+    viewportStateCI.scissorCount = 1;
 
-  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
-  rasterizationStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
-  if (glm::determinant(nodeMat) < 0.f) {
-    rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
-  } else {
-    rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  }
-  rasterizationStateCI.lineWidth = 1.f;
+    VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+    rasterizationStateCI.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
+    if (glm::determinant(nodeMat) < 0.f) {
+      rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    } else {
+      rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    }
+    rasterizationStateCI.lineWidth = 1.f;
 
-  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
-  multisampleStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampleStateCI.rasterizationSamples = iris::Renderer::sSurfaceSampleCount;
-  multisampleStateCI.minSampleShading = 1.f;
+    VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+    multisampleStateCI.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampleStateCI.rasterizationSamples =
+      iris::Renderer::sSurfaceSampleCount;
+    multisampleStateCI.minSampleShading = 1.f;
 
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
-  depthStencilStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencilStateCI.depthTestEnable = VK_TRUE;
-  depthStencilStateCI.depthWriteEnable = VK_TRUE;
-  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+    depthStencilStateCI.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilStateCI.depthTestEnable = VK_TRUE;
+    depthStencilStateCI.depthWriteEnable = VK_TRUE;
+    depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
-  absl::FixedArray<VkPipelineColorBlendAttachmentState>
-    colorBlendAttachmentStates(1);
-  colorBlendAttachmentStates[0] = {
-    VK_FALSE,                            // blendEnable
-    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
-    VK_BLEND_OP_ADD,                     // colorBlendOp
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
-    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
-    VK_BLEND_OP_ADD,                     // alphaBlendOp
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
-  };
+    absl::FixedArray<VkPipelineColorBlendAttachmentState>
+      colorBlendAttachmentStates(1);
+    colorBlendAttachmentStates[0] = {
+      VK_FALSE,                            // blendEnable
+      VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+      VK_BLEND_OP_ADD,                     // colorBlendOp
+      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+      VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+      VK_BLEND_OP_ADD,                     // alphaBlendOp
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+    };
 
-  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
-                                                 VK_DYNAMIC_STATE_SCISSOR};
+    absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                   VK_DYNAMIC_STATE_SCISSOR};
 
-  if (auto lp = iris::Renderer::CreateGraphicsPipeline(
-        {}, {}, shaders, vertexInputBindingDescriptions,
-        vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
-        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
-        colorBlendAttachmentStates, dynamicStates, 0, meshName + ":Pipeline")) {
-    std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
-  }
-
-  VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
-
-  VkBuffer stagingBuffer = VK_NULL_HANDLE;
-  VmaAllocation stagingAllocation = VK_NULL_HANDLE;
-  VkDeviceSize stagingSize = 0;
-
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
-        stagingSize, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(bas.error());
-  }
-
-  float* pVertexBuffer;
-  if (auto ptr = iris::Renderer::MapMemory<float*>(iris::Renderer::sAllocator,
-                                                   stagingAllocation)) {
-    pVertexBuffer = *ptr;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(ptr.error());
-  }
-
-  for (std::size_t i = 0; i < positions.size();) {
-    pVertexBuffer[i++] = positions[i].x;
-    pVertexBuffer[i++] = positions[i].y;
-    pVertexBuffer[i++] = positions[i].z;
-    pVertexBuffer[i++] = normals[i].x;
-    pVertexBuffer[i++] = normals[i].y;
-    pVertexBuffer[i++] = normals[i].z;
-
-    if (!tangents.empty()) {
-      pVertexBuffer[i++] = tangents[i].x;
-      pVertexBuffer[i++] = tangents[i].y;
-      pVertexBuffer[i++] = tangents[i].z;
-      pVertexBuffer[i++] = tangents[i].w;
+    if (auto lp = iris::Renderer::CreateGraphicsPipeline(
+          {}, pushConstantRanges, shaders, vertexInputBindingDescriptions,
+          vertexInputAttributeDescriptions, inputAssemblyStateCI,
+          viewportStateCI, rasterizationStateCI, multisampleStateCI,
+          depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
+          meshName + ":Pipeline")) {
+      std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
     }
 
-    if (!texcoords.empty()) {
-      pVertexBuffer[i++] = texcoords[i].x;
-      pVertexBuffer[i++] = texcoords[i].y;
+    VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
+
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    VmaAllocation stagingAllocation = VK_NULL_HANDLE;
+    VkDeviceSize stagingSize = 0;
+
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
+          stagingSize, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+          VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
     }
-  }
 
-  vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
+    float* pVertexBuffer;
+    if (auto ptr = iris::Renderer::MapMemory<float*>(iris::Renderer::sAllocator,
+                                                     stagingAllocation)) {
+      pVertexBuffer = *ptr;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(ptr.error());
+    }
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, renderable.vertexBuffer,
-        renderable.vertexBufferAllocation, renderable.vertexBufferSize,
-        vertexBufferSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY)) {
-    std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
-             renderable.vertexBufferSize) = *bas;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(bas.error());
-  }
+    for (std::size_t i = 0; i < positions.size();) {
+      pVertexBuffer[i++] = positions[i].x;
+      pVertexBuffer[i++] = positions[i].y;
+      pVertexBuffer[i++] = positions[i].z;
+      pVertexBuffer[i++] = normals[i].x;
+      pVertexBuffer[i++] = normals[i].y;
+      pVertexBuffer[i++] = normals[i].z;
 
-  VkCommandBuffer commandBuffer;
+      if (!tangents.empty()) {
+        pVertexBuffer[i++] = tangents[i].x;
+        pVertexBuffer[i++] = tangents[i].y;
+        pVertexBuffer[i++] = tangents[i].z;
+        pVertexBuffer[i++] = tangents[i].w;
+      }
 
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
-                                                   commandQueue.commandPool)) {
-    commandBuffer = *cb;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
-  }
+      if (!texcoords.empty()) {
+        pVertexBuffer[i++] = texcoords[i].x;
+        pVertexBuffer[i++] = texcoords[i].y;
+      }
+    }
 
-  VkBufferCopy region = {};
-  region.srcOffset = 0;
-  region.dstOffset = 0;
-  region.size = vertexBufferSize;
+    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
 
-  vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.vertexBuffer, 1,
-                  &region);
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, renderable.vertexBuffer,
+          renderable.vertexBufferAllocation, renderable.vertexBufferSize,
+          vertexBufferSize,
+          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+          VMA_MEMORY_USAGE_GPU_ONLY)) {
+      std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
+               renderable.vertexBufferSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
+    }
 
-  if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
-        commandQueue.queue, commandQueue.submitFence);
-      !result) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
-  }
+    VkCommandBuffer commandBuffer;
 
-  auto indexAccessor = (*accessors)[*primitive.indices];
+    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
+          iris::Renderer::sDevice, commandQueue.commandPool)) {
+      commandBuffer = *cb;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(cb.error());
+    }
 
-  VkDeviceSize const indexBufferSize =
-    indexAccessor.count * (indexAccessor.componentType == 5123
-                             ? sizeof(std::uint16_t)
-                             : sizeof(std::uint32_t));
+    VkBufferCopy region = {};
+    region.srcOffset = 0;
+    region.dstOffset = 0;
+    region.size = vertexBufferSize;
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
-        stagingSize, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(bas.error());
-  }
+    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.vertexBuffer, 1,
+                    &region);
 
-  std::byte* pIndexBuffer;
-  if (auto ptr = iris::Renderer::MapMemory<std::byte*>(
-        iris::Renderer::sAllocator, stagingAllocation)) {
-    pIndexBuffer = *ptr;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(ptr.error());
-  }
+    if (auto result = iris::Renderer::EndOneTimeSubmit(
+          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
+          commandQueue.queue, commandQueue.submitFence);
+        !result) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(result.error());
+    }
 
-  auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
-  auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
+    auto indexAccessor = (*accessors)[*primitive.indices];
 
-  std::memcpy(pIndexBuffer,
-              buffersBytes[indexBufferView.buffer].data() +
-                indexBufferView.byteOffset.value_or(0),
-              indexBufferSize);
+    VkDeviceSize const indexBufferSize =
+      indexAccessor.count * (indexAccessor.componentType == 5123
+                               ? sizeof(std::uint16_t)
+                               : sizeof(std::uint32_t));
 
-  vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
+          stagingSize, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+          VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
+    }
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, renderable.indexBuffer,
-        renderable.indexBufferAllocation, renderable.indexBufferSize,
-        indexBufferSize,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY)) {
-    std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
-             renderable.indexBufferSize) = *bas;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(bas.error());
-  }
+    std::byte* pIndexBuffer;
+    if (auto ptr = iris::Renderer::MapMemory<std::byte*>(
+          iris::Renderer::sAllocator, stagingAllocation)) {
+      pIndexBuffer = *ptr;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(ptr.error());
+    }
 
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
-                                                   commandQueue.commandPool)) {
-    commandBuffer = *cb;
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
-  }
+    auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
+    auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
 
-  region = {};
-  region.srcOffset = 0;
-  region.dstOffset = 0;
-  region.size = indexBufferSize;
+    std::memcpy(pIndexBuffer,
+                buffersBytes[indexBufferView.buffer].data() +
+                  indexBufferView.byteOffset.value_or(0),
+                indexBufferSize);
 
-  vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.indexBuffer, 1,
-                  &region);
+    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
 
-  if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
-        commandQueue.queue, commandQueue.submitFence);
-      !result) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
-  }
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, renderable.indexBuffer,
+          renderable.indexBufferAllocation, renderable.indexBufferSize,
+          indexBufferSize,
+          VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+          VMA_MEMORY_USAGE_GPU_ONLY)) {
+      std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
+               renderable.indexBufferSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
+    }
 
-  renderable.indexType =
-    (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
-                                         : VK_INDEX_TYPE_UINT32);
-  renderable.numIndices = indexAccessor.count;
+    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
+          iris::Renderer::sDevice, commandQueue.commandPool)) {
+      commandBuffer = *cb;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(cb.error());
+    }
 
-  renderables.push_back(renderable);
+    region = {};
+    region.srcOffset = 0;
+    region.dstOffset = 0;
+    region.size = indexBufferSize;
+
+    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.indexBuffer, 1,
+                    &region);
+
+    if (auto result = iris::Renderer::EndOneTimeSubmit(
+          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
+          commandQueue.queue, commandQueue.submitFence);
+        !result) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(result.error());
+    }
+
+    renderable.indexType =
+      (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
+                                           : VK_INDEX_TYPE_UINT32);
+    renderable.numIndices = indexAccessor.count;
+
+    renderable.modelMatrix = nodeMat;
+    renderables.push_back(renderable);
   }
 
   IRIS_LOG_LEAVE();

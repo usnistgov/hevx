@@ -28,6 +28,13 @@
 #version 460 core
 
 layout(push_constant) uniform PushConstants {
+  vec4 iMouse;
+  float iTime;
+  float iTimeDelta;
+  float iFrameRate;
+  float iFrame;
+  vec3 iResolution;
+  float padding0;
   mat4 ModelViewMatrix;
   mat4 ModelViewMatrixInverse;
   mat3 NormalMatrix;

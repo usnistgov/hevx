@@ -2,6 +2,7 @@
 #define HEV_IRIS_COMPONENTS_RENDERABLE_H_
 
 #include "absl/container/inlined_vector.h"
+#include "glm/mat4x4.hpp"
 #include "iris/vulkan.h"
 #include <cstdint>
 
@@ -36,6 +37,8 @@ struct Renderable {
   VkDeviceSize indexBufferBindingOffset{0};
   VkBuffer indexBuffer{VK_NULL_HANDLE};
   VmaAllocation indexBufferAllocation{VK_NULL_HANDLE};
+
+  glm::mat4 modelMatrix{1.f};
 
   VkIndexType indexType{VK_INDEX_TYPE_UINT32};
   std::uint32_t numIndices{0};

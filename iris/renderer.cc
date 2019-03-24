@@ -1829,7 +1829,7 @@ void iris::Renderer::EndFrame(VkImage image,
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
-    ShaderToyPushConstants pushConstants;
+    PushConstants pushConstants;
     pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
                             0.f};
 
@@ -1854,8 +1854,13 @@ void iris::Renderer::EndFrame(VkImage image,
     std::vector<Component::Renderable> renderables = sRenderables();
     for (auto&& renderable : renderables) {
       // FIXME: this needs to work differently
+      pushConstants.ModelViewMatrix = renderable.modelMatrix;
+      pushConstants.ModelViewMatrixInverse =
+        glm::inverse(pushConstants.ModelViewMatrix);
+      pushConstants.NormalMatrix = glm::mat3(renderable.modelMatrix);
+
       renderable.pushConstants = reinterpret_cast<void*>(&pushConstants);
-      renderable.pushConstantsSize = sizeof(ShaderToyPushConstants);
+      renderable.pushConstantsSize = sizeof(PushConstants);
 
       VkCommandBuffer commandBuffer =
         RenderRenderable(renderable, &window.viewport, &window.scissor);

@@ -1,6 +1,8 @@
 #ifndef HEV_IRIS_RENDERER_UTIL_H_
 #define HEV_IRIS_RENDERER_UTIL_H_
 
+#include "glm/mat3x3.hpp"
+#include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
 #include "iris/vulkan_util.h"
@@ -19,7 +21,7 @@ extern VkFormat const sSurfaceDepthStencilFormat;
 extern VkSampleCountFlagBits const sSurfaceSampleCount;
 extern VkPresentModeKHR const sSurfacePresentMode;
 
-struct ShaderToyPushConstants {
+struct PushConstants {
     glm::vec4 iMouse;
     float iTime;
     float iTimeDelta;
@@ -27,7 +29,10 @@ struct ShaderToyPushConstants {
     float iFrame;
     glm::vec3 iResolution;
     float padding0;
-}; // struct ShaderToyPushConstants
+    glm::mat4 ModelViewMatrix;
+    glm::mat4 ModelViewMatrixInverse;
+    glm::mat3 NormalMatrix;
+}; // struct PushConstants
 
 tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
 CreateGraphicsPipeline(

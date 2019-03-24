@@ -28,6 +28,9 @@ layout(push_constant) uniform uPC {
     float iFrame;
     vec3 iResolution;
     float padding0;
+    mat4 ModelViewMatrix;
+    mat4 ModelViewMatrixInverse;
+    mat3 NormalMatrix;
 };
 
 layout(location = 0) out vec2 fragCoord;
@@ -94,7 +97,7 @@ void main() {
 
   absl::FixedArray<VkPushConstantRange> pushConstantRanges{
     {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-     sizeof(iris::Renderer::ShaderToyPushConstants)}};
+     sizeof(iris::Renderer::PushConstants)}};
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
