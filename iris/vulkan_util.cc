@@ -3,6 +3,7 @@
 #include "enumerate.h"
 #include "error.h"
 #include "logging.h"
+#include "io/read_file.h"
 
 using namespace std::string_literals;
 
@@ -1061,7 +1062,7 @@ iris::Renderer::CreateBuffer(VkDevice device, VmaAllocator allocator,
                                               bas.error().what()));
   }
 
-  if (auto ptr = MapMemory<std::byte>(allocator, stagingAllocation)) {
+  if (auto ptr = MapMemory<std::byte*>(allocator, stagingAllocation)) {
     std::memcpy(*ptr, data, size);
   } else {
     return tl::unexpected(std::system_error(
@@ -1431,6 +1432,34 @@ iris::Renderer::CompileShaderFromSource(VkDevice device,
   IRIS_LOG_LEAVE();
   return module;
 } // iris::Renderer::CompileShaderFromSource
+
+tl::expected<VkShaderModule, std::system_error>
+iris::Renderer::LoadShaderFromFile(VkDevice device,
+                                   filesystem::path const& path,
+                                   VkShaderStageFlagBits stage,
+                                   std::string name) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(device != VK_NULL_HANDLE);
+  Expects(!path.empty());
+
+  auto bytes = iris::io::ReadFile(path);
+
+  if (!bytes) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(bytes.error());
+  }
+
+  auto sm = iris::Renderer::CompileShaderFromSource(
+    device, {reinterpret_cast<char const*>(bytes->data()), bytes->size()},
+    stage);
+  if (!sm) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(sm.error());
+  }
+
+  IRIS_LOG_LEAVE();
+  return *sm;
+} // iris::Renderer::LoadShaderFromFile
 
 tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
              std::system_error>

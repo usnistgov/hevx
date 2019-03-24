@@ -103,6 +103,12 @@ VkDevice sDevice{VK_NULL_HANDLE};
 VmaAllocator sAllocator{VK_NULL_HANDLE};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
+VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
+                                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
+VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
+VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
+
 absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
   return sWindows;
@@ -122,12 +128,6 @@ static std::uint32_t const sColorTargetAttachmentIndex{0};
 static std::uint32_t const sColorResolveAttachmentIndex{1};
 static std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
 static std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
-
-static VkSurfaceFormatKHR const sSurfaceColorFormat{
-  VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-static VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
-static VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
-static VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 class Renderables {
 public:
@@ -310,13 +310,10 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-  GetLogger()->trace("Binding pipeline: {}", (void*)renderable.pipeline);
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     renderable.pipeline);
 
   if (renderable.pushConstants) {
-    GetLogger()->trace("Pushing constants: {}",
-                       (void*)renderable.pushConstants);
     vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
                        renderable.pushConstantsStages, 0,
                        renderable.pushConstantsSize, renderable.pushConstants);
@@ -326,39 +323,27 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
-    GetLogger()->trace("Binding descriptor set: {}",
-                       (void*)renderable.descriptorSet);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             renderable.pipelineLayout, 0, 1,
                             &renderable.descriptorSet, 0, nullptr);
   }
 
   if (renderable.vertexBuffer != VK_NULL_HANDLE) {
-    GetLogger()->trace("Binding vertex buffer: {}",
-                       (void*)renderable.vertexBuffer);
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &renderable.vertexBuffer,
                            &renderable.vertexBufferBindingOffset);
   }
 
   if (renderable.indexBuffer != VK_NULL_HANDLE) {
-    GetLogger()->trace("Binding index buffer: {}",
-                       (void*)renderable.indexBuffer);
     vkCmdBindIndexBuffer(commandBuffer, renderable.indexBuffer,
                          renderable.indexBufferBindingOffset,
                          renderable.indexType);
   }
 
   if (renderable.numIndices > 0) {
-    GetLogger()->trace("Drawing indexed: {} {} {} {} {}", renderable.numIndices,
-                       renderable.instanceCount, renderable.firstIndex,
-                       renderable.vertexOffset, renderable.firstInstance);
     vkCmdDrawIndexed(commandBuffer, renderable.numIndices,
                      renderable.instanceCount, renderable.firstIndex,
                      renderable.vertexOffset, renderable.firstInstance);
   } else {
-    GetLogger()->trace("Drawing: {} {} {} {}", renderable.numVertices,
-                       renderable.instanceCount, renderable.firstVertex,
-                       renderable.firstInstance);
     vkCmdDraw(commandBuffer, renderable.numVertices, renderable.instanceCount,
               renderable.firstVertex, renderable.firstInstance);
   }

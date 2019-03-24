@@ -14,6 +14,11 @@ extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
 extern VkRenderPass sRenderPass;
 
+extern VkSurfaceFormatKHR const sSurfaceColorFormat;
+extern VkFormat const sSurfaceDepthStencilFormat;
+extern VkSampleCountFlagBits const sSurfaceSampleCount;
+extern VkPresentModeKHR const sSurfacePresentMode;
+
 struct ShaderToyPushConstants {
     glm::vec4 iMouse;
     float iTime;

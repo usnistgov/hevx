@@ -420,7 +420,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
     uint64_t accelerationStructureHandle;
   };
 
-  if (auto p = iris::Renderer::MapMemory<VkGeometryInstanceNV>(
+  if (auto p = iris::Renderer::MapMemory<VkGeometryInstanceNV*>(
         iris::Renderer::sAllocator, instanceAllocation)) {
     for (int i = 0; i < 12; ++i) (*p)->transform[i] = 0.f;
     (*p)->instanceCustomIndex = 0;
@@ -687,7 +687,7 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  if (auto p = iris::Renderer::MapMemory<std::byte>(iris::Renderer::sAllocator,
+  if (auto p = iris::Renderer::MapMemory<std::byte*>(iris::Renderer::sAllocator,
                                                     sbtAllocation)) {
     std::memcpy(shaderGroupHandles.data(), *p, sbtBufferSize);
   } else {

@@ -157,13 +157,17 @@ struct Shader {
   VkShaderStageFlagBits stage;
 }; // struct Shader
 
-tl::expected<VkShaderModule, std::system_error>
+[[nodiscard]] tl::expected<VkShaderModule, std::system_error>
 CompileShaderFromSource(VkDevice device, std::string_view source,
                         VkShaderStageFlagBits stage,
                         std::string name = {}) noexcept;
 
-tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
-             std::system_error>
+[[nodiscard]] tl::expected<VkShaderModule, std::system_error>
+LoadShaderFromFile(VkDevice device, filesystem::path const& path,
+                   VkShaderStageFlagBits stage, std::string name = {}) noexcept;
+
+[[nodiscard]] tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
+                           std::system_error>
 CreateAccelerationStructure(VkDevice device, VmaAllocator allocator,
                             VkAccelerationStructureCreateInfoNV*
                               pAccelerationStructureCreateInfo) noexcept;
@@ -173,7 +177,7 @@ void NameObject(VkDevice device [[maybe_unused]],
                 VkObjectType objectType [[maybe_unused]],
                 T objectHandle [[maybe_unused]],
                 gsl::czstring<> objectName [[maybe_unused]]) noexcept {
-#if 0
+#if 0 // doesn't work with 1.1.101 validation layers??
   VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
     VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
     reinterpret_cast<std::uint64_t>(objectHandle), objectName};
@@ -182,7 +186,7 @@ void NameObject(VkDevice device [[maybe_unused]],
 } // NameObject
 
 template <class T>
-tl::expected<T*, std::system_error>
+tl::expected<T, std::system_error>
 MapMemory(VmaAllocator allocator, VmaAllocation allocation) noexcept {
   void* ptr;
   if (auto result = vmaMapMemory(allocator, allocation, &ptr);
@@ -190,7 +194,7 @@ MapMemory(VmaAllocator allocator, VmaAllocation allocation) noexcept {
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot map memory"));
   }
-  return reinterpret_cast<T*>(ptr);
+  return reinterpret_cast<T>(ptr);
 }
 
 //! \brief Convert a VkPhysicalDeviceType to a std::string
