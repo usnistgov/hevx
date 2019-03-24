@@ -1169,6 +1169,53 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
 
     iris::Renderer::Component::Renderable renderable;
 
+    absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(
+      2);
+    descriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                      VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+    descriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                      VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
+    descriptorSetLayoutCI.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutCI.bindingCount =
+      gsl::narrow_cast<std::uint32_t>(descriptorSetLayoutBindings.size());
+    descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
+
+    if (auto result = vkCreateDescriptorSetLayout(
+          iris::Renderer::sDevice, &descriptorSetLayoutCI, nullptr,
+          &renderable.descriptorSetLayout);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(
+        std::system_error(iris::Renderer::make_error_code(result),
+                          "Cannot create descriptor set layout"));
+    }
+
+    iris::Renderer::NameObject(iris::Renderer::sDevice,
+                               VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                               renderable.descriptorSetLayout,
+                               (meshName + ":DescriptorSetLayout").c_str());
+
+    VkDescriptorSetAllocateInfo descriptorSetAI = {};
+    descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAI.descriptorPool = iris::Renderer::sDescriptorPool;
+    descriptorSetAI.descriptorSetCount = 1;
+    descriptorSetAI.pSetLayouts = &renderable.descriptorSetLayout;
+
+    if (auto result = vkAllocateDescriptorSets(
+          iris::Renderer::sDevice, &descriptorSetAI, &renderable.descriptorSet);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        iris::Renderer::make_error_code(result), "Cannot allocate descriptor set"));
+    }
+
+    iris::Renderer::NameObject(
+      iris::Renderer::sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET,
+      renderable.descriptorSet, (meshName + ":DescriptorSet").c_str());
+
     VkShaderModule vertexSM;
     if (auto sm = iris::Renderer::LoadShaderFromFile(
           iris::Renderer::sDevice, "assets/shaders/gltf.vert",
@@ -1283,7 +1330,8 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
                                                    VK_DYNAMIC_STATE_SCISSOR};
 
     if (auto lp = iris::Renderer::CreateGraphicsPipeline(
-          {}, pushConstantRanges, shaders, vertexInputBindingDescriptions,
+          gsl::make_span(&renderable.descriptorSetLayout, 1),
+          pushConstantRanges, shaders, vertexInputBindingDescriptions,
           vertexInputAttributeDescriptions, inputAssemblyStateCI,
           viewportStateCI, rasterizationStateCI, multisampleStateCI,
           depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
@@ -1295,11 +1343,74 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
         iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
     }
 
-    VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
-
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VmaAllocation stagingAllocation = VK_NULL_HANDLE;
     VkDeviceSize stagingSize = 0;
+
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
+          stagingSize, sizeof(iris::Renderer::ModelBuffer),
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
+    }
+
+    iris::Renderer::ModelBuffer* pModelBuffer;
+    if (auto ptr = iris::Renderer::MapMemory<iris::Renderer::ModelBuffer*>(
+          iris::Renderer::sAllocator, stagingAllocation)) {
+      pModelBuffer = *ptr;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(ptr.error());
+    }
+
+    pModelBuffer->ModelMatrix = nodeMat;
+    pModelBuffer->ModelMatrixInverse = glm::inverse(nodeMat);
+
+    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
+
+    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
+          iris::Renderer::sAllocator, renderable.uniformBuffer,
+          renderable.uniformBufferAllocation, renderable.uniformBufferSize,
+          sizeof(iris::Renderer::ModelBuffer),
+          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+          VMA_MEMORY_USAGE_GPU_ONLY)) {
+      std::tie(renderable.uniformBuffer, renderable.uniformBufferAllocation,
+               renderable.uniformBufferSize) = *bas;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(bas.error());
+    }
+
+    VkCommandBuffer commandBuffer;
+
+    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
+          iris::Renderer::sDevice, commandQueue.commandPool)) {
+      commandBuffer = *cb;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(cb.error());
+    }
+
+    VkBufferCopy region = {};
+    region.srcOffset = 0;
+    region.dstOffset = 0;
+    region.size = sizeof(iris::Renderer::ModelBuffer);
+
+    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.uniformBuffer, 1,
+                    &region);
+
+    if (auto result = iris::Renderer::EndOneTimeSubmit(
+          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
+          commandQueue.queue, commandQueue.submitFence);
+        !result) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(result.error());
+    }
+
+    VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
 
     if (auto bas = iris::Renderer::CreateOrResizeBuffer(
           iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
@@ -1356,8 +1467,6 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(bas.error());
     }
 
-    VkCommandBuffer commandBuffer;
-
     if (auto cb = iris::Renderer::BeginOneTimeSubmit(
           iris::Renderer::sDevice, commandQueue.commandPool)) {
       commandBuffer = *cb;
@@ -1366,7 +1475,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(cb.error());
     }
 
-    VkBufferCopy region = {};
+    region = {};
     region.srcOffset = 0;
     region.dstOffset = 0;
     region.size = vertexBufferSize;

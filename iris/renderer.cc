@@ -109,6 +109,8 @@ VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
 VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
+VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+
 absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
   return sWindows;
@@ -148,7 +150,11 @@ private:
 }; // class Renderables
 
 static Renderables sRenderables{};
-static VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+
+static VkBuffer sMatricesBuffer{VK_NULL_HANDLE};
+static VmaAllocation sMatricesBufferAllocation{VK_NULL_HANDLE};
+static VkDeviceSize sMatricesSize = 0;
+static VkDescriptorSet sMatricesDescriptorSet{VK_NULL_HANDLE};
 
 static bool sRunning{false};
 static bool sInFrame{false};
@@ -323,9 +329,12 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
+    absl::FixedArray<VkDescriptorSet> sets = {sMatricesDescriptorSet,
+                                              renderable.descriptorSet};
+
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            renderable.pipelineLayout, 0, 1,
-                            &renderable.descriptorSet, 0, nullptr);
+                            renderable.pipelineLayout, 0, sets.size(),
+                            sets.data(), 0, nullptr);
   }
 
   if (renderable.vertexBuffer != VK_NULL_HANDLE) {

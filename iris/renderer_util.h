@@ -21,6 +21,8 @@ extern VkFormat const sSurfaceDepthStencilFormat;
 extern VkSampleCountFlagBits const sSurfaceSampleCount;
 extern VkPresentModeKHR const sSurfacePresentMode;
 
+extern VkDescriptorPool sDescriptorPool;
+
 struct PushConstants {
     glm::vec4 iMouse;
     float iTime;
@@ -33,6 +35,16 @@ struct PushConstants {
     glm::mat4 ModelViewMatrixInverse;
     glm::mat3 NormalMatrix;
 }; // struct PushConstants
+
+struct MatricesBuffer {
+  glm::mat4 ProjectionMatrix;
+  glm::mat4 ProjectionMatrixInverse;
+}; // struct MatrixBuffer
+
+struct ModelBuffer {
+  glm::mat4 ModelMatrix;
+  glm::mat4 ModelMatrixInverse;
+}; // struct ModelBuffer
 
 tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
 CreateGraphicsPipeline(

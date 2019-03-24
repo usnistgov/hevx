@@ -41,8 +41,6 @@ layout(push_constant) uniform PushConstants {
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {
-  mat4 ViewMatrix;
-  mat4 ViewMatrixInverse;
   mat4 ProjectionMatrix;
   mat4 ProjectionMatrixInverse;
 };
