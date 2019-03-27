@@ -2010,8 +2010,8 @@ void iris::Renderer::EndFrame(VkImage image,
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
 
-    glm::mat4 const viewMatrix = glm::inverse(glm::lookAt(
-      glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f)));
+    glm::mat4 const viewMatrix = glm::lookAt(
+      glm::vec3(1.f, 1.f, -1.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
     std::vector<Component::Renderable> renderables = sRenderables();
 
     for (auto&& renderable : renderables) {

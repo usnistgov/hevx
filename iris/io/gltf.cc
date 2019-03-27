@@ -1,11 +1,19 @@
 #include "io/gltf.h"
 
+#include "config.h"
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4714) // ignore forceinline failures
+#endif
+
 #include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/matrix_decompose.hpp"
+#include "glm/gtx/string_cast.hpp"
 #include "gsl/gsl"
 #include "io/read_file.h"
 #include "logging.h"
@@ -990,6 +998,19 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     if (node.scale) nodeMat *= glm::scale({}, *node.scale);
   }
 
+  {
+    glm::vec3 scale;
+    glm::quat rotation;
+    glm::vec3 translation;
+    glm::vec3 skew;
+    glm::vec4 perspective;
+    glm::decompose(nodeMat, scale, rotation, translation, skew, perspective);
+    GetLogger()->debug("decomposed node matrix: t: {} r: {} s: {} k: {} p: {}",
+                       glm::to_string(translation), glm::to_string(rotation),
+                       glm::to_string(scale), glm::to_string(skew),
+                       glm::to_string(perspective));
+  }
+
   auto&& children =
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
@@ -1287,9 +1308,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
     if (glm::determinant(nodeMat) < 0.f) {
-      rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    } else {
       rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    } else {
+      rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
     }
     rasterizationStateCI.lineWidth = 1.f;
 
@@ -1437,24 +1458,24 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(ptr.error());
     }
 
-    for (std::size_t i = 0; i < positions.size();) {
-      pVertexBuffer[i++] = positions[i].x;
-      pVertexBuffer[i++] = positions[i].y;
-      pVertexBuffer[i++] = positions[i].z;
-      pVertexBuffer[i++] = normals[i].x;
-      pVertexBuffer[i++] = normals[i].y;
-      pVertexBuffer[i++] = normals[i].z;
+    for (std::size_t i = 0; i < positions.size(); i++) {
+      *pVertexBuffer++ = positions[i].x;
+      *pVertexBuffer++ = positions[i].y;
+      *pVertexBuffer++ = positions[i].z;
+      *pVertexBuffer++ = normals[i].x;
+      *pVertexBuffer++ = normals[i].y;
+      *pVertexBuffer++ = normals[i].z;
 
       if (!tangents.empty()) {
-        pVertexBuffer[i++] = tangents[i].x;
-        pVertexBuffer[i++] = tangents[i].y;
-        pVertexBuffer[i++] = tangents[i].z;
-        pVertexBuffer[i++] = tangents[i].w;
+        *pVertexBuffer++ = tangents[i].x;
+        *pVertexBuffer++ = tangents[i].y;
+        *pVertexBuffer++ = tangents[i].z;
+        *pVertexBuffer++ = tangents[i].w;
       }
 
       if (!texcoords.empty()) {
-        pVertexBuffer[i++] = texcoords[i].x;
-        pVertexBuffer[i++] = texcoords[i].y;
+        *pVertexBuffer++ = texcoords[i].x;
+        *pVertexBuffer++ = texcoords[i].y;
       }
     }
 
