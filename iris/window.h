@@ -71,6 +71,7 @@ struct Window {
   glm::vec2 lastMousePos{0.f, 0.f};
 
   glm::mat4 projectionMatrix{1.f};
+  glm::mat4 projectionMatrixInverse{1.f};
 
   [[nodiscard]] Frame& currentFrame() noexcept { return frames[frameIndex]; }
   [[nodiscard]] Frame& previousFrame() noexcept {
@@ -88,7 +89,7 @@ struct Window {
   Window(Window const&) = delete;
   Window(Window&&) noexcept;
   Window& operator=(Window const&) = delete;
-  Window& operator=(Window&&) noexcept;
+  Window& operator=(Window&&) noexcept = delete; // FIXME: implement
   ~Window() noexcept = default;
 }; // struct Window
 
@@ -149,7 +150,10 @@ inline Window::Window(Window&& other) noexcept
   , imageAcquired(other.imageAcquired)
   , uiContext(std::move(other.uiContext))
   , uiRenderable(std::move(other.uiRenderable))
-  , lastMousePos(std::move(other.lastMousePos)) {} // Window::Window
+  , lastMousePos(std::move(other.lastMousePos))
+  , projectionMatrix(std::move(other.projectionMatrix))
+  , projectionMatrixInverse(std::move(other.projectionMatrixInverse)) {
+} // Window::Window
 
 } // namespace iris
 

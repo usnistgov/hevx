@@ -138,7 +138,7 @@ struct PushConstants {
 struct MatricesBuffer {
   glm::mat4 ProjectionMatrix;
   glm::mat4 ProjectionMatrixInverse;
-}; // struct MatrixBuffer
+}; // struct MatricesBuffer
 
 #define MAX_LIGHTS 100
 

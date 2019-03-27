@@ -1718,6 +1718,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     }
   }
 
+  glm::mat4 const newProjectionMatrix =
+    glm::perspectiveFov(60.f, static_cast<float>(newExtent.width),
+                        static_cast<float>(newExtent.height), .001f, 1000.f);
+
   if (window.swapchain != VK_NULL_HANDLE) {
     GetLogger()->trace("ResizeWindow: releasing old resources");
     for (auto&& frame : window.frames) {
@@ -1788,9 +1792,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
   }
 
-  window.projectionMatrix = glm::perspectiveFov(
-    60.f, static_cast<float>(window.extent.width),
-    static_cast<float>(window.extent.height), .001f, 1000.f);
+  window.projectionMatrix = newProjectionMatrix;
+  window.projectionMatrixInverse = glm::inverse(window.projectionMatrix);
 
   IRIS_LOG_LEAVE();
   return {};
@@ -1946,7 +1949,7 @@ void iris::Renderer::EndFrame(VkImage image,
 
     if (auto ptr = MapMemory<MatricesBuffer*>(sMatricesBufferAllocation)) {
       (*ptr)->ProjectionMatrix = window.projectionMatrix;
-      (*ptr)->ProjectionMatrixInverse = glm::inverse(window.projectionMatrix);
+      (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
       UnmapMemory(sMatricesBufferAllocation);
     } else {
       GetLogger()->error("Cannot update matrices buffer: {}",
