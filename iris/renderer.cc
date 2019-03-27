@@ -949,25 +949,25 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets{
     {
       VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-      sGlobalDescriptorSet, // dstSet
-      0,                    // dstBinding
-      0,                    // dstArrayElement
-      1,                    // descriptorCount
-      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      nullptr,             // pImageInfo
-      &matricesBufferInfo, // pBufferInfo
-      nullptr              // pTexelBufferView
+      sGlobalDescriptorSet,              // dstSet
+      0,                                 // dstBinding
+      0,                                 // dstArrayElement
+      1,                                 // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+      nullptr,                           // pImageInfo
+      &matricesBufferInfo,               // pBufferInfo
+      nullptr                            // pTexelBufferView
     },
     {
       VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-      sGlobalDescriptorSet, // dstSet
-      1,                    // setBinding
-      0,                    // dstArrayElement
-      1,                    // descriptorCount
-      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      nullptr,           // pImageInfo
-      &lightsBufferInfo, // pBufferInfo
-      nullptr            // pTexelBufferView
+      sGlobalDescriptorSet,              // dstSet
+      1,                                 // setBinding
+      0,                                 // dstArrayElement
+      1,                                 // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+      nullptr,                           // pImageInfo
+      &lightsBufferInfo,                 // pBufferInfo
+      nullptr                            // pTexelBufferView
     }};
 
   vkUpdateDescriptorSets(
