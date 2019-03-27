@@ -85,7 +85,7 @@ struct adl_serializer<glm::mat4> {
 
 using json = nlohmann::json;
 
-namespace gltf {
+namespace iris::gltf {
 
 struct Asset {
   std::optional<std::string> copyright;
@@ -509,9 +509,8 @@ struct GLTF {
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
 
-  tl::expected<std::vector<iris::Renderer::Component::Renderable>,
-               std::system_error>
-  ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
+  tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+  ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes);
 }; // struct GLTF
@@ -590,7 +589,7 @@ inline std::size_t AccessorComponentTypeSize(int type) {
 
 template <class T, class U>
 T GetAccessorDataComponent(gsl::not_null<U*>) {
-  iris::GetLogger()->critical("Not implemented");
+  GetLogger()->critical("Not implemented");
   std::terminate();
 }
 
@@ -656,20 +655,19 @@ GetAccessorData(int index, std::string const& accessorType,
 
   if (!accessors || accessors->empty()) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "no accessors"));
+      std::system_error(Error::kFileParseFailed, "no accessors"));
   } else if (accessors->size() < static_cast<std::size_t>(index)) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "too few accessors"));
+      std::system_error(Error::kFileParseFailed, "too few accessors"));
   }
 
   auto&& accessor = (*accessors)[index];
-  iris::GetLogger()->trace("accessor: {}", json(accessor).dump());
+  GetLogger()->trace("accessor: {}", json(accessor).dump());
 
   if (accessor.type != accessorType) {
-    return tl::unexpected(std::system_error(iris::Error::kFileParseFailed,
-                                            "accessor has wrong type '" +
-                                              accessor.type + "'; expecting '" +
-                                              accessorType + "'"));
+    return tl::unexpected(std::system_error(
+      Error::kFileParseFailed, "accessor has wrong type '" + accessor.type +
+                                 "'; expecting '" + accessorType + "'"));
   }
 
   if (!requiredComponentTypes.empty()) {
@@ -679,7 +677,7 @@ GetAccessorData(int index, std::string const& accessorType,
     }
     if (!goodComponentType) {
       return tl::unexpected(std::system_error(
-        iris::Error::kFileParseFailed, "accessor has wrong componentType"));
+        Error::kFileParseFailed, "accessor has wrong componentType"));
     }
   }
 
@@ -688,7 +686,7 @@ GetAccessorData(int index, std::string const& accessorType,
   // zeros with actual values.
   if (!accessor.bufferView) {
     if (!canBeZero) {
-      return tl::unexpected(std::system_error(iris::Error::kFileParseFailed,
+      return tl::unexpected(std::system_error(Error::kFileParseFailed,
                                               "accessor has no bufferView"));
     }
 
@@ -699,19 +697,19 @@ GetAccessorData(int index, std::string const& accessorType,
 
   if (!bufferViews || bufferViews->empty()) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "no bufferViews"));
+      std::system_error(Error::kFileParseFailed, "no bufferViews"));
   } else if (bufferViews->size() <
              static_cast<std::size_t>(*accessor.bufferView)) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "too few bufferViews"));
+      std::system_error(Error::kFileParseFailed, "too few bufferViews"));
   }
 
   auto&& bufferView = (*bufferViews)[*accessor.bufferView];
-  iris::GetLogger()->trace("bufferView: {}", json(bufferView).dump());
+  GetLogger()->trace("bufferView: {}", json(bufferView).dump());
 
   if (buffersBytes.size() < static_cast<std::size_t>(bufferView.buffer)) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "too few buffers"));
+      std::system_error(Error::kFileParseFailed, "too few buffers"));
   }
 
   int const componentCount = AccessorTypeCount(accessorType);
@@ -723,7 +721,7 @@ GetAccessorData(int index, std::string const& accessorType,
   auto&& bufferBytes = buffersBytes[bufferView.buffer];
   if (bufferBytes.size() < byteOffset + componentTypeSize * accessor.count) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "buffer too small"));
+      std::system_error(Error::kFileParseFailed, "buffer too small"));
   }
 
   std::byte* bytes = bufferBytes.data() + byteOffset;
@@ -774,7 +772,7 @@ GetAccessorData(int index, std::string const& accessorType,
 
   default:
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed,
+      std::system_error(Error::kFileParseFailed,
                         "Invalid combination of type and componentType"));
   }
 
@@ -806,7 +804,7 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
   }
 
   return tl::unexpected(
-    std::system_error(iris::Error::kFileParseFailed, "unknown primitive mode"));
+    std::system_error(Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
 static std::vector<glm::vec3>
@@ -947,17 +945,16 @@ struct TangentGenerator {
   }
 }; // struct TangentGenerator
 
-tl::expected<std::vector<iris::Renderer::Component::Renderable>,
-             std::system_error>
-GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
+tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 glm::mat4x4 parentMat, filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes) {
   IRIS_LOG_ENTER();
-  std::vector<iris::Renderer::Component::Renderable> renderables;
+  std::vector<Renderer::Component::Renderable> renderables;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed, "not enough nodes"));
+      std::system_error(Error::kFileParseFailed, "not enough nodes"));
   }
 
   auto&& node = (*nodes)[nodeIdx];
@@ -970,7 +967,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
   // std::optional<glm::vec3> translation;
   // std::optional<std::string> name;
 
-  iris::GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
+  GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
 
@@ -979,7 +976,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
   if (node.matrix) {
     nodeMat *= *node.matrix;
     if (node.translation || node.rotation || node.scale) {
-      iris::GetLogger()->warn("node has both matrix and TRS; using matrix");
+      GetLogger()->warn("node has both matrix and TRS; using matrix");
     }
   } else {
     if (node.translation) nodeMat *= glm::translate({}, *node.translation);
@@ -1007,13 +1004,13 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
   if (!meshes || meshes->empty()) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
-      iris::Error::kFileParseFailed, "node defines mesh, but no meshes"));
+      Error::kFileParseFailed, "node defines mesh, but no meshes"));
   }
 
   if (meshes->size() < static_cast<std::size_t>(*node.mesh)) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
-      std::system_error(iris::Error::kFileParseFailed,
+      std::system_error(Error::kFileParseFailed,
                         "node defines mesh, but not enough meshes"));
   }
 
@@ -1021,7 +1018,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
   // Mesh:
   // std::vector<Primitive> primitives;
 
-  iris::GetLogger()->trace("mesh: {}", json(mesh).dump());
+  GetLogger()->trace("mesh: {}", json(mesh).dump());
 
   for (std::size_t primIdx = 0; primIdx < mesh.primitives.size(); ++primIdx) {
     auto&& primitive = mesh.primitives[primIdx];
@@ -1163,17 +1160,15 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       } else {
         IRIS_LOG_LEAVE();
         return tl::unexpected(std::system_error(
-          iris::Error::kFileLoadFailed, "unable to generate tangent space"));
+          Error::kFileLoadFailed, "unable to generate tangent space"));
       }
     }
 
-    iris::Renderer::Component::Renderable renderable;
+    Renderer::Component::Renderable renderable;
 
     absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(
-      2);
+      1);
     descriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-                                      VK_SHADER_STAGE_VERTEX_BIT, nullptr};
-    descriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
                                       VK_SHADER_STAGE_VERTEX_BIT, nullptr};
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
@@ -1183,66 +1178,55 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       gsl::narrow_cast<std::uint32_t>(descriptorSetLayoutBindings.size());
     descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
 
-    if (auto result = vkCreateDescriptorSetLayout(
-          iris::Renderer::sDevice, &descriptorSetLayoutCI, nullptr,
-          &renderable.descriptorSetLayout);
+    if (auto result =
+          vkCreateDescriptorSetLayout(Renderer::sDevice, &descriptorSetLayoutCI,
+                                      nullptr, &renderable.descriptorSetLayout);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(
-        std::system_error(iris::Renderer::make_error_code(result),
+        std::system_error(Renderer::make_error_code(result),
                           "Cannot create descriptor set layout"));
     }
 
-    iris::Renderer::NameObject(iris::Renderer::sDevice,
-                               VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                               renderable.descriptorSetLayout,
-                               (meshName + ":DescriptorSetLayout").c_str());
+    Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                         renderable.descriptorSetLayout,
+                         (meshName + ":DescriptorSetLayout").c_str());
 
     VkDescriptorSetAllocateInfo descriptorSetAI = {};
     descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAI.descriptorPool = iris::Renderer::sDescriptorPool;
+    descriptorSetAI.descriptorPool = Renderer::sDescriptorPool;
     descriptorSetAI.descriptorSetCount = 1;
     descriptorSetAI.pSetLayouts = &renderable.descriptorSetLayout;
 
     if (auto result = vkAllocateDescriptorSets(
-          iris::Renderer::sDevice, &descriptorSetAI, &renderable.descriptorSet);
+          Renderer::sDevice, &descriptorSetAI, &renderable.descriptorSet);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
-        iris::Renderer::make_error_code(result), "Cannot allocate descriptor set"));
+        Renderer::make_error_code(result), "Cannot allocate descriptor set"));
     }
 
-    iris::Renderer::NameObject(
-      iris::Renderer::sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET,
-      renderable.descriptorSet, (meshName + ":DescriptorSet").c_str());
+    Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                         renderable.descriptorSet,
+                         (meshName + ":DescriptorSet").c_str());
 
-    VkShaderModule vertexSM;
-    if (auto sm = iris::Renderer::LoadShaderFromFile(
-          iris::Renderer::sDevice, "assets/shaders/gltf.vert",
-          VK_SHADER_STAGE_VERTEX_BIT)) {
-      vertexSM = std::move(*sm);
+    absl::FixedArray<Renderer::Shader> shaders(2);
+
+    if (auto s = Renderer::LoadShaderFromFile("assets/shaders/gltf.vert",
+                                              VK_SHADER_STAGE_VERTEX_BIT)) {
+      shaders[0] = {*s, VK_SHADER_STAGE_VERTEX_BIT};
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(sm.error());
+      return tl::unexpected(s.error());
     }
 
-    VkShaderModule fragmentSM;
-    if (auto sm = iris::Renderer::LoadShaderFromFile(
-          iris::Renderer::sDevice, "assets/shaders/gltf.frag",
-          VK_SHADER_STAGE_FRAGMENT_BIT)) {
-      fragmentSM = std::move(*sm);
+    if (auto s = Renderer::LoadShaderFromFile("assets/shaders/gltf.frag",
+                                              VK_SHADER_STAGE_FRAGMENT_BIT)) {
+      shaders[1] = {*s, VK_SHADER_STAGE_FRAGMENT_BIT};
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(sm.error());
+      return tl::unexpected(s.error());
     }
-
-    absl::FixedArray<iris::Renderer::Shader> shaders = {
-      {vertexSM, VK_SHADER_STAGE_VERTEX_BIT},
-      {fragmentSM, VK_SHADER_STAGE_FRAGMENT_BIT}};
-
-    absl::FixedArray<VkPushConstantRange> pushConstantRanges{
-      {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-       sizeof(iris::Renderer::PushConstants)}};
 
     std::uint32_t vertexSize = sizeof(glm::vec3) * 2;
     if (!tangents.empty()) vertexSize += sizeof(glm::vec4);
@@ -1301,8 +1285,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
     multisampleStateCI.sType =
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleStateCI.rasterizationSamples =
-      iris::Renderer::sSurfaceSampleCount;
+    multisampleStateCI.rasterizationSamples = Renderer::sSurfaceSampleCount;
     multisampleStateCI.minSampleShading = 1.f;
 
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
@@ -1329,13 +1312,12 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                    VK_DYNAMIC_STATE_SCISSOR};
 
-    if (auto lp = iris::Renderer::CreateGraphicsPipeline(
-          gsl::make_span(&renderable.descriptorSetLayout, 1),
-          pushConstantRanges, shaders, vertexInputBindingDescriptions,
+    if (auto lp = Renderer::CreateGraphicsPipeline(
+          shaders, vertexInputBindingDescriptions,
           vertexInputAttributeDescriptions, inputAssemblyStateCI,
           viewportStateCI, rasterizationStateCI, multisampleStateCI,
           depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
-          meshName + ":Pipeline")) {
+          gsl::make_span(&renderable.descriptorSetLayout, 1))) {
       std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
     } else {
       IRIS_LOG_LEAVE();
@@ -1347,36 +1329,29 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     VmaAllocation stagingAllocation = VK_NULL_HANDLE;
     VkDeviceSize stagingSize = 0;
 
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
-          stagingSize, sizeof(iris::Renderer::ModelBuffer),
-          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    if (auto bas = Renderer::AllocateBuffer(sizeof(iris::Renderer::ModelBuffer),
+                                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                            VMA_MEMORY_USAGE_CPU_TO_GPU)) {
       std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(bas.error());
     }
 
-    iris::Renderer::ModelBuffer* pModelBuffer;
-    if (auto ptr = iris::Renderer::MapMemory<iris::Renderer::ModelBuffer*>(
-          iris::Renderer::sAllocator, stagingAllocation)) {
-      pModelBuffer = *ptr;
+    if (auto ptr =
+          Renderer::MapMemory<Renderer::ModelBuffer*>(stagingAllocation)) {
+      (*ptr)->ModelMatrix = nodeMat;
+      (*ptr)->ModelMatrixInverse = glm::inverse(nodeMat);
+      Renderer::UnmapMemory(stagingAllocation);
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(ptr.error());
     }
 
-    pModelBuffer->ModelMatrix = nodeMat;
-    pModelBuffer->ModelMatrixInverse = glm::inverse(nodeMat);
-
-    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
-
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, renderable.uniformBuffer,
-          renderable.uniformBufferAllocation, renderable.uniformBufferSize,
-          sizeof(iris::Renderer::ModelBuffer),
-          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto bas = Renderer::AllocateBuffer(sizeof(iris::Renderer::ModelBuffer),
+                                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
       std::tie(renderable.uniformBuffer, renderable.uniformBufferAllocation,
                renderable.uniformBufferSize) = *bas;
     } else {
@@ -1386,8 +1361,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
 
     VkCommandBuffer commandBuffer;
 
-    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
-          iris::Renderer::sDevice, commandQueue.commandPool)) {
+    if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
       IRIS_LOG_LEAVE();
@@ -1402,9 +1376,9 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.uniformBuffer, 1,
                     &region);
 
-    if (auto result = iris::Renderer::EndOneTimeSubmit(
-          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
-          commandQueue.queue, commandQueue.submitFence);
+    if (auto result = Renderer::EndOneTimeSubmit(
+          commandBuffer, commandQueue.commandPool, commandQueue.queue,
+          commandQueue.submitFence);
         !result) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
@@ -1412,10 +1386,9 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
 
     VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
 
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
-          stagingSize, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-          VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    if (auto bas = Renderer::ReallocateBuffer(
+          stagingBuffer, stagingAllocation, stagingSize, vertexBufferSize,
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
       std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
     } else {
       IRIS_LOG_LEAVE();
@@ -1423,8 +1396,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     }
 
     float* pVertexBuffer;
-    if (auto ptr = iris::Renderer::MapMemory<float*>(iris::Renderer::sAllocator,
-                                                     stagingAllocation)) {
+    if (auto ptr = Renderer::MapMemory<float*>(stagingAllocation)) {
       pVertexBuffer = *ptr;
     } else {
       IRIS_LOG_LEAVE();
@@ -1452,14 +1424,12 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       }
     }
 
-    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
+    Renderer::UnmapMemory(stagingAllocation);
 
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, renderable.vertexBuffer,
-          renderable.vertexBufferAllocation, renderable.vertexBufferSize,
-          vertexBufferSize,
-          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto bas = Renderer::AllocateBuffer(vertexBufferSize,
+                                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
       std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
                renderable.vertexBufferSize) = *bas;
     } else {
@@ -1467,8 +1437,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(bas.error());
     }
 
-    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
-          iris::Renderer::sDevice, commandQueue.commandPool)) {
+    if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
       IRIS_LOG_LEAVE();
@@ -1483,9 +1452,9 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.vertexBuffer, 1,
                     &region);
 
-    if (auto result = iris::Renderer::EndOneTimeSubmit(
-          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
-          commandQueue.queue, commandQueue.submitFence);
+    if (auto result = Renderer::EndOneTimeSubmit(
+          commandBuffer, commandQueue.commandPool, commandQueue.queue,
+          commandQueue.submitFence);
         !result) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
@@ -1498,10 +1467,9 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
                                ? sizeof(std::uint16_t)
                                : sizeof(std::uint32_t));
 
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, stagingBuffer, stagingAllocation,
-          stagingSize, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-          VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    if (auto bas = Renderer::ReallocateBuffer(
+          stagingBuffer, stagingAllocation, stagingSize, indexBufferSize,
+          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
       std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
     } else {
       IRIS_LOG_LEAVE();
@@ -1509,8 +1477,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     }
 
     std::byte* pIndexBuffer;
-    if (auto ptr = iris::Renderer::MapMemory<std::byte*>(
-          iris::Renderer::sAllocator, stagingAllocation)) {
+    if (auto ptr = Renderer::MapMemory<std::byte*>(stagingAllocation)) {
       pIndexBuffer = *ptr;
     } else {
       IRIS_LOG_LEAVE();
@@ -1525,14 +1492,12 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
                   indexBufferView.byteOffset.value_or(0),
                 indexBufferSize);
 
-    vmaUnmapMemory(iris::Renderer::sAllocator, stagingAllocation);
+    Renderer::UnmapMemory(stagingAllocation);
 
-    if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-          iris::Renderer::sAllocator, renderable.indexBuffer,
-          renderable.indexBufferAllocation, renderable.indexBufferSize,
-          indexBufferSize,
-          VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto bas = Renderer::AllocateBuffer(indexBufferSize,
+                                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
       std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
                renderable.indexBufferSize) = *bas;
     } else {
@@ -1540,8 +1505,7 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(bas.error());
     }
 
-    if (auto cb = iris::Renderer::BeginOneTimeSubmit(
-          iris::Renderer::sDevice, commandQueue.commandPool)) {
+    if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
       IRIS_LOG_LEAVE();
@@ -1556,9 +1520,9 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
     vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.indexBuffer, 1,
                     &region);
 
-    if (auto result = iris::Renderer::EndOneTimeSubmit(
-          commandBuffer, iris::Renderer::sDevice, commandQueue.commandPool,
-          commandQueue.queue, commandQueue.submitFence);
+    if (auto result = Renderer::EndOneTimeSubmit(
+          commandBuffer, commandQueue.commandPool, commandQueue.queue,
+          commandQueue.submitFence);
         !result) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
@@ -1577,12 +1541,11 @@ GLTF::ParseNode(iris::Renderer::CommandQueue commandQueue, int nodeIdx,
   return renderables;
 } // GLTF::ParseNode
 
-} // namespace gltf
+} // namespace iris::gltf
 
 namespace iris::io {
 
-tl::expected<std::vector<iris::Renderer::Component::Renderable>,
-             std::system_error>
+tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
 ReadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
@@ -1709,9 +1672,9 @@ ReadGLTF(filesystem::path const& path) noexcept {
           VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(bytes.data()), 4)) {
       deviceImages.push_back(std::move(*ia));
 
-      Renderer::NameObject(Renderer::sDevice, VK_OBJECT_TYPE_IMAGE,
-                           std::get<0>(deviceImages.back()),
-                           textureName.c_str());
+      iris::Renderer::NameObject(VK_OBJECT_TYPE_IMAGE,
+                                 std::get<0>(deviceImages.back()),
+                                 textureName.c_str());
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(ia.error());
@@ -1849,7 +1812,7 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   if (auto renderables = ReadGLTF(path)) {
-    for (auto&& r : *renderables) iris::Renderer::AddRenderable(r);
+    for (auto&& r : *renderables) Renderer::AddRenderable(r);
   } else {
     GetLogger()->error("Error creating renderable: {}",
                        renderables.error().what());

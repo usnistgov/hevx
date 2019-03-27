@@ -5,9 +5,9 @@
 #include "fmt/format.h"
 #include "glm/mat4x4.hpp"
 #include "iris/io/read_file.h"
+#include "iris/protos.h"
 #include "iris/renderer.h"
 #include "iris/renderer_util.h"
-#include "iris/protos.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -39,8 +39,9 @@ struct Matrices {
   glm::mat4 projInverse;
 } gMatrices;
 
-tl::expected<std::tuple<VkDescriptorPool, VkDescriptorSetLayout, VkDescriptorSet>,
-             std::system_error>
+tl::expected<
+  std::tuple<VkDescriptorPool, VkDescriptorSetLayout, VkDescriptorSet>,
+  std::system_error>
 CreateDescriptor() noexcept {
   absl::FixedArray<VkDescriptorPoolSize, 3> poolSizes{{
     {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 32},
@@ -106,20 +107,20 @@ CreateDescriptor() noexcept {
 }
 
 tl::expected<VkShaderModule, std::system_error>
-LoadShaderFromFile(filesystem::path const& path, VkShaderStageFlagBits stage) noexcept {
+LoadShaderFromFile(filesystem::path const& path,
+                   VkShaderStageFlagBits stage) noexcept {
   std::string rayGenSource;
   if (auto bytes = iris::io::ReadFile(path)) {
     if (auto module = iris::Renderer::CompileShaderFromSource(
-          iris::Renderer::sDevice,
           {reinterpret_cast<char const*>(bytes->data()), bytes->size()},
           stage)) {
       return *module;
     } else {
       return tl::unexpected(module.error());
     }
-    } else {
-      return tl::unexpected(bytes.error());
-    }
+  } else {
+    return tl::unexpected(bytes.error());
+  }
 }
 
 tl::expected<std::tuple<VkPipelineLayout, VkPipeline>, std::system_error>
@@ -246,10 +247,9 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   VmaAllocation aabbBufferAllocation{VK_NULL_HANDLE};
   VkDeviceSize aabbBufferSize{0};
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, aabbBuffer, aabbBufferAllocation,
-        aabbBufferSize, 24, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
-        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        aabbBuffer, aabbBufferAllocation, aabbBufferSize, 24,
+        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(aabbBuffer, aabbBufferAllocation, aabbBufferSize) = *bas;
   } else {
     return tl::unexpected(std::system_error(
@@ -266,7 +266,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   float* aabbData = reinterpret_cast<float*>(aabbPointer);
   aabbData[0] = aabbData[1] = aabbData[2] = -1.f;
-  aabbData[3] = aabbData[4] = aabbData[5] =  1.f;
+  aabbData[3] = aabbData[4] = aabbData[5] = 1.f;
 
   vmaUnmapMemory(iris::Renderer::sAllocator, aabbBufferAllocation);
 
@@ -285,10 +285,13 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   geometry.geometry.aabbs.offset = 0;
 
   VkAccelerationStructureCreateInfoNV accelerationStructureCI = {};
-  accelerationStructureCI.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
+  accelerationStructureCI.sType =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
   accelerationStructureCI.compactedSize = 0;
-  accelerationStructureCI.info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-  accelerationStructureCI.info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+  accelerationStructureCI.info.sType =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+  accelerationStructureCI.info.type =
+    VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
   accelerationStructureCI.info.flags = 0;
   accelerationStructureCI.info.instanceCount = 0;
   accelerationStructureCI.info.geometryCount = 1;
@@ -296,9 +299,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   VkAccelerationStructureNV bottomLevelAS{VK_NULL_HANDLE};
   VmaAllocation bottomLevelASAllocation{VK_NULL_HANDLE};
-  if (auto as = iris::Renderer::CreateAccelerationStructure(
-        iris::Renderer::sDevice, iris::Renderer::sAllocator,
-        &accelerationStructureCI)) {
+  if (auto as =
+        iris::Renderer::CreateAccelerationStructure(&accelerationStructureCI)) {
     std::tie(bottomLevelAS, bottomLevelASAllocation) = *as;
   } else {
     return tl::unexpected(
@@ -324,9 +326,9 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   logger.info("Creating scratch buffer for bottomLevelAS sized: {}",
               memoryRequirements.memoryRequirements.size);
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, scratchBuffer, scratchAllocation,
-        scratchBufferSize, memoryRequirements.memoryRequirements.size,
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        scratchBuffer, scratchAllocation, scratchBufferSize,
+        memoryRequirements.memoryRequirements.size,
         VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY)) {
     std::tie(scratchBuffer, scratchAllocation, scratchBufferSize) = *bas;
   } else {
@@ -336,8 +338,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   }
 
   VkCommandBuffer commandBuffer;
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
-                                                   sCommandQueue.commandPool)) {
+  if (auto cb = iris::Renderer::BeginOneTimeSubmit(sCommandQueue.commandPool)) {
     commandBuffer = *cb;
   } else {
     return tl::unexpected(std::system_error(cb.error()));
@@ -352,8 +353,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   logger.info("EndOneTimeSubmit bottomLevelAS");
   if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice, sCommandQueue.commandPool,
-        sCommandQueue.queue, sCommandQueue.submitFence);
+        commandBuffer, sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence);
       !result) {
     return tl::unexpected(std::system_error(
       result.error().code(),
@@ -366,7 +367,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   //
   /////
 
-  accelerationStructureCI.info.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+  accelerationStructureCI.info.type =
+    VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
   accelerationStructureCI.info.instanceCount = 1;
   accelerationStructureCI.info.geometryCount = 0;
   accelerationStructureCI.info.pGeometries = nullptr;
@@ -374,24 +376,21 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   VkAccelerationStructureNV topLevelAS{VK_NULL_HANDLE};
   VmaAllocation topLevelASAllocation{VK_NULL_HANDLE};
 
-  if (auto as = iris::Renderer::CreateAccelerationStructure(
-        iris::Renderer::sDevice, iris::Renderer::sAllocator,
-        &accelerationStructureCI)) {
+  if (auto as =
+        iris::Renderer::CreateAccelerationStructure(&accelerationStructureCI)) {
     std::tie(topLevelAS, topLevelASAllocation) = *as;
   } else {
-    return tl::unexpected(
-      std::system_error(as.error().code(), "Cannot create top level AS: "s +
-                                             as.error().what()));
+    return tl::unexpected(std::system_error(
+      as.error().code(), "Cannot create top level AS: "s + as.error().what()));
   }
 
   VkBuffer instanceBuffer{VK_NULL_HANDLE};
   VmaAllocation instanceAllocation{VK_NULL_HANDLE};
   VkDeviceSize instanceBufferSize = 0;
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, instanceBuffer, instanceAllocation,
-        instanceBufferSize, 64, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
-        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        instanceBuffer, instanceAllocation, instanceBufferSize, 64,
+        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(instanceBuffer, instanceAllocation, instanceBufferSize) = *bas;
   } else {
     return tl::unexpected(std::system_error(
@@ -420,8 +419,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
     uint64_t accelerationStructureHandle;
   };
 
-  if (auto p = iris::Renderer::MapMemory<VkGeometryInstanceNV*>(
-        iris::Renderer::sAllocator, instanceAllocation)) {
+  if (auto p =
+        iris::Renderer::MapMemory<VkGeometryInstanceNV*>(instanceAllocation)) {
     for (int i = 0; i < 12; ++i) (*p)->transform[i] = 0.f;
     (*p)->instanceCustomIndex = 0;
     (*p)->mask = 0xF;
@@ -429,12 +428,12 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
     (*p)->flags = 0;
     (*p)->accelerationStructureHandle =
       *reinterpret_cast<uint64_t*>(bottomLevelASHandle.data());
+    iris::Renderer::UnmapMemory(instanceAllocation);
+
   } else {
     return tl::unexpected(std::system_error(
       p.error().code(), "Cannot map instance buffer: "s + p.error().what()));
   }
-
-  vmaUnmapMemory(iris::Renderer::sAllocator, instanceAllocation);
 
   memoryRequirementsInfo.accelerationStructure = topLevelAS;
   memoryRequirementsInfo.type =
@@ -444,9 +443,9 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   logger.info("Creating scratch buffer for topLevelAS sized: {}",
               memoryRequirements.memoryRequirements.size);
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, scratchBuffer, scratchAllocation,
-        scratchBufferSize, memoryRequirements.memoryRequirements.size,
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        scratchBuffer, scratchAllocation, scratchBufferSize,
+        memoryRequirements.memoryRequirements.size,
         VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY)) {
     std::tie(scratchBuffer, scratchAllocation, scratchBufferSize) = *bas;
   } else {
@@ -455,8 +454,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
                                               bas.error().what()));
   }
 
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(iris::Renderer::sDevice,
-                                                   sCommandQueue.commandPool)) {
+  if (auto cb = iris::Renderer::BeginOneTimeSubmit(sCommandQueue.commandPool)) {
     commandBuffer = *cb;
   } else {
     return tl::unexpected(std::system_error(cb.error()));
@@ -470,8 +468,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
     scratchBuffer, 0 /* scratchOffset */);
 
   if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, iris::Renderer::sDevice, sCommandQueue.commandPool,
-        sCommandQueue.queue, sCommandQueue.submitFence);
+        commandBuffer, sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence);
       !result) {
     return tl::unexpected(std::system_error(
       result.error().code(),
@@ -583,10 +581,10 @@ int main(int argc, char** argv) {
   VmaAllocation matricesBufferAllocation{VK_NULL_HANDLE};
   VkDeviceSize matricesBufferSize{0};
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, matricesBuffer, matricesBufferAllocation,
-        matricesBufferSize, sizeof(Matrices),
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        matricesBuffer, matricesBufferAllocation, matricesBufferSize,
+        sizeof(Matrices), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(matricesBuffer, matricesBufferAllocation, matricesBufferSize) =
       *bas;
   } else {
@@ -599,7 +597,6 @@ int main(int argc, char** argv) {
   VkImageView outputImageView;
 
   if (auto iav = iris::Renderer::AllocateImageAndView(
-        iris::Renderer::sDevice, iris::Renderer::sAllocator,
         VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
@@ -677,8 +674,8 @@ int main(int argc, char** argv) {
   VmaAllocation sbtAllocation{VK_NULL_HANDLE};
   VkDeviceSize sbtBufferSize{0};
 
-  if (auto bas = iris::Renderer::CreateOrResizeBuffer(
-        iris::Renderer::sAllocator, sbtBuffer, sbtAllocation, sbtBufferSize,
+  if (auto bas = iris::Renderer::ReallocateBuffer(
+        sbtBuffer, sbtAllocation, sbtBufferSize,
         rayTracingProperties.shaderGroupHandleSize * numGroups,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(sbtBuffer, sbtAllocation, sbtBufferSize) = *bas;
@@ -687,15 +684,13 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  if (auto p = iris::Renderer::MapMemory<std::byte*>(iris::Renderer::sAllocator,
-                                                    sbtAllocation)) {
+  if (auto p = iris::Renderer::MapMemory<std::byte*>(sbtAllocation)) {
     std::memcpy(shaderGroupHandles.data(), *p, sbtBufferSize);
+    iris::Renderer::UnmapMemory(sbtAllocation);
   } else {
     logger.critical("cannot map sbt: {}", p.error().what());
     std::exit(EXIT_FAILURE);
   }
-
-  vmaUnmapMemory(iris::Renderer::sAllocator, sbtAllocation);
 
   for (auto&& file : files) {
     logger.info("Loading {}", file);
@@ -706,8 +701,8 @@ int main(int argc, char** argv) {
 
   int currentCBIndex = 0;
 
-  auto commandBuffers = iris::Renderer::AllocateCommandBuffers(
-    VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2);
+  auto commandBuffers =
+    iris::Renderer::AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2);
   if (!commandBuffers) {
     logger.error("Error allocating command buffers: {}",
                  commandBuffers.error().what());
@@ -828,4 +823,3 @@ int main(int argc, char** argv) {
 
   logger.info("exiting");
 }
-

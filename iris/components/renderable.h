@@ -22,10 +22,6 @@ struct Renderable {
   absl::InlinedVector<VkImageView, kMaxTextures> views;
   absl::InlinedVector<VkSampler, kMaxTextures> samplers;
 
-  VkShaderStageFlags pushConstantsStages{};
-  void* pushConstants{nullptr};
-  VkDeviceSize pushConstantsSize{0};
-
   VkDeviceSize uniformBufferSize{0};
   VkBuffer uniformBuffer{VK_NULL_HANDLE};
   VmaAllocation uniformBufferAllocation{VK_NULL_HANDLE};

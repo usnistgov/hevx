@@ -110,6 +110,8 @@ VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
 VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
+VkDescriptorSetLayout sGlobalDescriptorSetLayout{VK_NULL_HANDLE};
+static VkDescriptorSet sGlobalDescriptorSet{VK_NULL_HANDLE};
 
 absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
@@ -153,8 +155,7 @@ static Renderables sRenderables{};
 
 static VkBuffer sMatricesBuffer{VK_NULL_HANDLE};
 static VmaAllocation sMatricesBufferAllocation{VK_NULL_HANDLE};
-static VkDeviceSize sMatricesSize = 0;
-static VkDescriptorSet sMatricesDescriptorSet{VK_NULL_HANDLE};
+static VkDeviceSize sMatricesBufferSize = 0;
 
 static bool sRunning{false};
 static bool sInFrame{false};
@@ -174,15 +175,15 @@ static tbb::concurrent_queue<std::function<std::system_error(void)>>
 
 static char const* sUIVertexShaderSource = R"(
 #version 450 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUV;
-layout(location = 2) in vec4 aColor;
+layout(location=0) in vec2 aPos;
+layout(location=1) in vec2 aUV;
+layout(location=2) in vec4 aColor;
 layout(push_constant) uniform uPushConstant {
   vec2 uScale;
   vec2 uTranslate;
 };
-layout(location = 0) out vec4 Color;
-layout(location = 1) out vec2 UV;
+layout(location=0) out vec4 Color;
+layout(location=1) out vec2 UV;
 out gl_PerVertex {
   vec4 gl_Position;
 };
@@ -194,11 +195,11 @@ void main() {
 
 static char const* sUIFragmentShaderSource = R"(
 #version 450 core
-layout(set = 0, binding = 0) uniform sampler sSampler;
-layout(set = 0, binding = 1) uniform texture2D sTexture;
-layout(location = 0) in vec4 Color;
-layout(location = 1) in vec2 UV;
-layout(location = 0) out vec4 fColor;
+layout(set=1, binding=0) uniform sampler sSampler;
+layout(set=1, binding=1) uniform texture2D sTexture;
+layout(location=0) in vec4 Color;
+layout(location=1) in vec2 UV;
+layout(location=0) out vec4 fColor;
 void main() {
   fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
 })";
@@ -292,9 +293,10 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   return commandBuffer;
 } // CopyImage
 
-static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
-                                        VkViewport* pViewport,
-                                        VkRect2D* pScissor) noexcept {
+static VkCommandBuffer
+RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
+                 VkRect2D* pScissor,
+                 gsl::span<std::byte> pushConstants) noexcept {
   VkCommandBuffer commandBuffer;
   if (auto cb = AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_SECONDARY, 1)) {
     commandBuffer = (*cb)[0];
@@ -319,22 +321,21 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     renderable.pipeline);
 
-  if (renderable.pushConstants) {
-    vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
-                       renderable.pushConstantsStages, 0,
-                       renderable.pushConstantsSize, renderable.pushConstants);
-  }
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          renderable.pipelineLayout, 0 /* firstSet */, 1,
+                          &sGlobalDescriptorSet, 0, nullptr);
+
+  vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, pushConstants.size(), pushConstants.data());
 
   vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
-    absl::FixedArray<VkDescriptorSet> sets = {sMatricesDescriptorSet,
-                                              renderable.descriptorSet};
-
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            renderable.pipelineLayout, 0, sets.size(),
-                            sets.data(), 0, nullptr);
+                            renderable.pipelineLayout, 1 /* firstSet */, 1,
+                            &renderable.descriptorSet, 0, nullptr);
   }
 
   if (renderable.vertexBuffer != VK_NULL_HANDLE) {
@@ -361,16 +362,17 @@ static VkCommandBuffer RenderRenderable(Component::Renderable const& renderable,
   return commandBuffer;
 } // RenderRenderable
 
-void UpdateUIRenderable(Component::Renderable& renderable, ImDrawData* drawData,
-                        std::string const& title) noexcept {
-  if (auto vb = CreateOrResizeBuffer(
-        sAllocator, renderable.vertexBuffer, renderable.vertexBufferAllocation,
+static void UpdateUIRenderable(Component::Renderable& renderable,
+                               ImDrawData* drawData,
+                               std::string const& title) noexcept {
+  if (auto vb = ReallocateBuffer(
+        renderable.vertexBuffer, renderable.vertexBufferAllocation,
         renderable.vertexBufferSize,
         drawData->TotalVtxCount * sizeof(ImDrawVert),
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
              renderable.vertexBufferSize) = *vb;
-    NameObject(sDevice, VK_OBJECT_TYPE_BUFFER, renderable.vertexBuffer,
+    NameObject(VK_OBJECT_TYPE_BUFFER, renderable.vertexBuffer,
                (title + "::uiRenderable.vertexBuffer").c_str());
   } else {
     GetLogger()->warn(
@@ -379,13 +381,13 @@ void UpdateUIRenderable(Component::Renderable& renderable, ImDrawData* drawData,
     return;
   }
 
-  if (auto ib = CreateOrResizeBuffer(
-        sAllocator, renderable.indexBuffer, renderable.indexBufferAllocation,
+  if (auto ib = ReallocateBuffer(
+        renderable.indexBuffer, renderable.indexBufferAllocation,
         renderable.indexBufferSize, drawData->TotalIdxCount * sizeof(ImDrawIdx),
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
              renderable.indexBufferSize) = *ib;
-    NameObject(sDevice, VK_OBJECT_TYPE_BUFFER, renderable.indexBuffer,
+    NameObject(VK_OBJECT_TYPE_BUFFER, renderable.indexBuffer,
                (title + "::uiRenderable.indexBuffer").c_str());
   } else {
     GetLogger()->warn(
@@ -397,19 +399,19 @@ void UpdateUIRenderable(Component::Renderable& renderable, ImDrawData* drawData,
   ImDrawVert* pVertices;
   ImDrawIdx* pIndices;
 
-  if (auto result = vmaMapMemory(sAllocator, renderable.vertexBufferAllocation,
-                                 reinterpret_cast<void**>(&pVertices));
-      result != VK_SUCCESS) {
+  if (auto ptr = MapMemory<ImDrawVert*>(renderable.vertexBufferAllocation)) {
+    pVertices = std::move(*ptr);
+  } else {
     GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}", title,
-                      to_string(result));
+                      ptr.error().what());
     return;
   }
 
-  if (auto result = vmaMapMemory(sAllocator, renderable.indexBufferAllocation,
-                                 reinterpret_cast<void**>(&pIndices));
-      result != VK_SUCCESS) {
+  if (auto ptr = MapMemory<ImDrawIdx*>(renderable.indexBufferAllocation)) {
+    pIndices = std::move(*ptr);
+  } else {
     GetLogger()->warn("Unable to map ui index buffer for window {}: {}", title,
-                      to_string(result));
+                      ptr.error().what());
     return;
   }
 
@@ -423,8 +425,8 @@ void UpdateUIRenderable(Component::Renderable& renderable, ImDrawData* drawData,
     pIndices += cmdList->IdxBuffer.Size;
   }
 
-  vmaUnmapMemory(sAllocator, renderable.vertexBufferAllocation);
-  vmaUnmapMemory(sAllocator, renderable.indexBufferAllocation);
+  UnmapMemory(renderable.vertexBufferAllocation);
+  UnmapMemory(renderable.indexBufferAllocation);
 } // UpdateUIRenderable
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
@@ -623,10 +625,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(dn.error());
   }
 
-  NameObject(sDevice, VK_OBJECT_TYPE_INSTANCE, sInstance, "sInstance");
-  NameObject(sDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE, sPhysicalDevice,
+  NameObject(VK_OBJECT_TYPE_INSTANCE, sInstance, "sInstance");
+  NameObject(VK_OBJECT_TYPE_PHYSICAL_DEVICE, sPhysicalDevice,
              "sPhysicalDevice");
-  NameObject(sDevice, VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
+  NameObject(VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
 
   sCommandQueues.resize(numQueues);
   sCommandPools.resize(numQueues);
@@ -643,7 +645,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   for (std::uint32_t i = 0; i < numQueues; ++i) {
     vkGetDeviceQueue(sDevice, sQueueFamilyIndex, i, &sCommandQueues[i]);
 
-    NameObject(sDevice, VK_OBJECT_TYPE_QUEUE, sCommandQueues[i],
+    NameObject(VK_OBJECT_TYPE_QUEUE, sCommandQueues[i],
                fmt::format("sCommandQueue[{}]", i).c_str());
 
     if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
@@ -654,7 +656,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         make_error_code(result), "Cannot create graphics command pool"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, &sCommandPools[i],
+    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, &sCommandPools[i],
                fmt::format("sCommandPools[{}]", i).c_str());
 
     if (auto result =
@@ -665,7 +667,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         make_error_code(result), "Cannot create graphics submit fence"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_FENCE, &sCommandFences[i],
+    NameObject(VK_OBJECT_TYPE_FENCE, &sCommandFences[i],
                fmt::format("sCommandFences[{}]", i).c_str());
   }
 
@@ -792,7 +794,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       std::system_error(make_error_code(result), "Cannot create render pass"));
   }
 
-  NameObject(sDevice, VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
+  NameObject(VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
 
   for (auto&& fence : sFrameFinishedFences) {
     if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &fence);
@@ -844,20 +846,19 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                                             "Cannot create descriptor pool"));
   }
 
-  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, sDescriptorPool,
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_POOL, sDescriptorPool,
              "sDescriptorPool");
 
   /////
   //
-  // Create UI Pipeline and other shared state
+  // Create the global descriptor set for all pipelines
   //
   /////
 
-  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(2);
-  descriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
-                                    VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-  descriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
-                                    VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
+  descriptorSetLayoutBindings[0] = {
+    0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
   descriptorSetLayoutCI.sType =
@@ -867,36 +868,117 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
 
   if (auto result = vkCreateDescriptorSetLayout(
-        sDevice, &descriptorSetLayoutCI, nullptr, &sUIDescriptorSetLayout);
+        sDevice, &descriptorSetLayoutCI, nullptr, &sGlobalDescriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create descriptor set layout"));
+  }
+
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sGlobalDescriptorSetLayout,
+             "sGlobalDescriptorSetLayout");
+
+  VkDescriptorSetAllocateInfo descriptorSetAI = {};
+  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptorSetAI.descriptorPool = sDescriptorPool;
+  descriptorSetAI.descriptorSetCount = 1;
+  descriptorSetAI.pSetLayouts = &sGlobalDescriptorSetLayout;
+
+  if (auto result = vkAllocateDescriptorSets(sDevice, &descriptorSetAI,
+                                             &sGlobalDescriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate descriptor set"));
+  }
+
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, sGlobalDescriptorSet,
+             "sGlobalDescriptorSet");
+
+  if (auto bas = AllocateBuffer(sizeof(MatricesBuffer),
+                                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(sMatricesBuffer, sMatricesBufferAllocation, sMatricesBufferSize) =
+      *bas;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(bas.error());
+  }
+
+  NameObject(VK_OBJECT_TYPE_BUFFER, sMatricesBuffer, "sMatricesBuffer");
+
+  VkDescriptorBufferInfo bufferInfo = {};
+  bufferInfo.buffer = sMatricesBuffer;
+  bufferInfo.offset = 0;
+  bufferInfo.range = VK_WHOLE_SIZE;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(1);
+  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            sGlobalDescriptorSet,
+                            0,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                            nullptr,
+                            &bufferInfo,
+                            nullptr};
+
+  vkUpdateDescriptorSets(
+    sDevice, gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
+    writeDescriptorSets.data(), 0, nullptr);
+
+  /////
+  //
+  // Create UI Pipeline and other shared state
+  //
+  /////
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding> uiDescriptorSetLayoutBindings(
+    2);
+  uiDescriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
+                                      VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  uiDescriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
+                                      VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+
+  VkDescriptorSetLayoutCreateInfo uiDescriptorSetLayoutCI = {};
+  uiDescriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  uiDescriptorSetLayoutCI.bindingCount =
+    gsl::narrow_cast<std::uint32_t>(uiDescriptorSetLayoutBindings.size());
+  uiDescriptorSetLayoutCI.pBindings = uiDescriptorSetLayoutBindings.data();
+
+  if (auto result = vkCreateDescriptorSetLayout(
+        sDevice, &uiDescriptorSetLayoutCI, nullptr, &sUIDescriptorSetLayout);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot create UI descriptor set layout"));
   }
 
-  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-             sUIDescriptorSetLayout, "sUIDescriptorSetLayout");
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, sUIDescriptorSetLayout,
+             "sUIDescriptorSetLayout");
 
-  VkDescriptorSetAllocateInfo descriptorSetAI = {};
-  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descriptorSetAI.descriptorPool = sDescriptorPool;
-  descriptorSetAI.descriptorSetCount = 1;
-  descriptorSetAI.pSetLayouts = &sUIDescriptorSetLayout;
+  VkDescriptorSetAllocateInfo uiDescriptorSetAI = {};
+  uiDescriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  uiDescriptorSetAI.descriptorPool = sDescriptorPool;
+  uiDescriptorSetAI.descriptorSetCount = 1;
+  uiDescriptorSetAI.pSetLayouts = &sUIDescriptorSetLayout;
 
-  if (auto result =
-        vkAllocateDescriptorSets(sDevice, &descriptorSetAI, &sUIDescriptorSet);
+  if (auto result = vkAllocateDescriptorSets(sDevice, &uiDescriptorSetAI,
+                                             &sUIDescriptorSet);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot allocate UI descriptor set"));
   }
 
-  NameObject(sDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, sUIDescriptorSet,
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, sUIDescriptorSet,
              "sUIDescriptorSet");
 
   absl::FixedArray<Shader> shaders(2);
 
-  if (auto s = CompileShaderFromSource(sDevice, sUIVertexShaderSource,
+  if (auto s = CompileShaderFromSource(sUIVertexShaderSource,
                                        VK_SHADER_STAGE_VERTEX_BIT)) {
     shaders[0] = {*s, VK_SHADER_STAGE_VERTEX_BIT};
   } else {
@@ -904,15 +986,13 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(s.error());
   }
 
-  if (auto s = CompileShaderFromSource(sDevice, sUIFragmentShaderSource,
+  if (auto s = CompileShaderFromSource(sUIFragmentShaderSource,
                                        VK_SHADER_STAGE_FRAGMENT_BIT)) {
     shaders[1] = {*s, VK_SHADER_STAGE_FRAGMENT_BIT};
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(s.error());
   }
-
-  absl::FixedArray<VkDescriptorSetLayout> descriptorSetLayouts{sUIDescriptorSetLayout};
 
   absl::FixedArray<VkPushConstantRange> pushConstantRanges{
     {VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::vec2) * 2}};
@@ -977,11 +1057,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
   if (auto lp = CreateGraphicsPipeline(
-        descriptorSetLayouts, pushConstantRanges, shaders,
-        vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
-        inputAssemblyStateCI, viewportStateCI, rasterizationStateCI,
-        multisampleStateCI, depthStencilStateCI, colorBlendAttachmentStates,
-        dynamicStates, 0, "sUIPipeline")) {
+        shaders, vertexInputBindingDescriptions,
+        vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0,
+        gsl::make_span(&sUIDescriptorSetLayout, 1))) {
     std::tie(sUIPipelineLayout, sUIPipeline) = *lp;
   } else {
     using namespace std::string_literals;
@@ -989,6 +1069,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(std::system_error(
       lp.error().code(), "Cannot create UI pipeline: "s + lp.error().what()));
   }
+
+  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sUIPipelineLayout,
+             "sUIPipelineLayout");
+  NameObject(VK_OBJECT_TYPE_PIPELINE, sUIPipeline, "sUIPipeline");
 
   sRunning = true;
   IRIS_LOG_LEAVE();
@@ -1065,7 +1149,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
 
 #endif
 
-  NameObject(sDevice, VK_OBJECT_TYPE_SURFACE_KHR, window.surface,
+  NameObject(VK_OBJECT_TYPE_SURFACE_KHR, window.surface,
              fmt::format("{}.surface", title).c_str());
 
   VkBool32 surfaceSupported;
@@ -1134,7 +1218,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         make_error_code(result), "Cannot create image available semaphore"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_SEMAPHORE, frame.imageAvailable,
+    NameObject(VK_OBJECT_TYPE_SEMAPHORE, frame.imageAvailable,
                fmt::format("{}.frames[{}].imageAvailable", title, i).c_str());
 
     if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
@@ -1145,7 +1229,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                                               "Cannot create command pool"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_POOL, frame.commandPool,
+    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, frame.commandPool,
                fmt::format("{}.frames[{}].commandPool", title, i).c_str());
 
     commandBufferAI.commandPool = frame.commandPool;
@@ -1158,7 +1242,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         make_error_code(result), "Cannot allocate command buffer"));
     }
 
-    NameObject(sDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, frame.commandBuffer,
+    NameObject(VK_OBJECT_TYPE_COMMAND_BUFFER, frame.commandBuffer,
                fmt::format("{}.frames[{}].commandBuffer", title, i).c_str());
   }
 
@@ -1190,8 +1274,8 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   VmaAllocation fontTextureAllocation;
 
   if (auto ia =
-        CreateImage(sDevice, sAllocator, sCommandPools[0], sCommandQueues[0],
-                    sCommandFences[0], VK_FORMAT_R8G8B8A8_UNORM,
+        CreateImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
+                    VK_FORMAT_R8G8B8A8_UNORM,
                     VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
                                gsl::narrow_cast<std::uint32_t>(height)},
                     VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
@@ -1207,7 +1291,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   window.uiRenderable.allocations.push_back(fontTextureAllocation);
 
   NameObject(
-    sDevice, VK_OBJECT_TYPE_IMAGE, window.uiRenderable.images[0],
+    VK_OBJECT_TYPE_IMAGE, window.uiRenderable.images[0],
     fmt::format("{}.uiRenderable.images[0] (fontTexture)", title).c_str());
 
   VkImageViewCreateInfo imageViewCI = {};
@@ -1232,7 +1316,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   window.uiRenderable.views.push_back(fontTextureView);
 
   NameObject(
-    sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.views[0],
+    VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.views[0],
     fmt::format("{}.uiRenderable.views[0] (fontTextureView)", title).c_str());
 
   VkSamplerCreateInfo samplerCI = {};
@@ -1265,7 +1349,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   window.uiRenderable.samplers.push_back(fontTextureSampler);
 
   NameObject(
-    sDevice, VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.samplers[0],
+    VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.samplers[0],
     fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
       .c_str());
 
@@ -1454,10 +1538,9 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   VkImageView newDepthStencilImageView;
 
   if (auto iav = AllocateImageAndView(
-        sDevice, sAllocator, sSurfaceDepthStencilFormat, newExtent, 1, 1,
-        VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
-        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+        sSurfaceDepthStencilFormat, newExtent, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
+        VMA_MEMORY_USAGE_GPU_ONLY, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     std::tie(newDepthStencilImage, newDepthStencilImageAllocation,
              newDepthStencilImageView) = *iav;
   } else {
@@ -1471,13 +1554,12 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   VmaAllocation newColorTargetAllocation;
   VkImageView newColorTargetView;
 
-  if (auto iav =
-        AllocateImageAndView(sDevice, sAllocator, sSurfaceColorFormat.format,
-                             newExtent, 1, 1, sSurfaceSampleCount,
-                             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                               VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-                             VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
-                             {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+  if (auto iav = AllocateImageAndView(
+        sSurfaceColorFormat.format, newExtent, 1, 1, sSurfaceSampleCount,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+          VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     std::tie(newColorTarget, newColorTargetAllocation, newColorTargetView) =
       *iav;
   } else {
@@ -1495,10 +1577,9 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   VkImageView newDepthStencilTargetView;
 
   if (auto iav = AllocateImageAndView(
-        sDevice, sAllocator, sSurfaceDepthStencilFormat, newExtent, 1, 1,
-        sSurfaceSampleCount, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
-        {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+        sSurfaceDepthStencilFormat, newExtent, 1, 1, sSurfaceSampleCount,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
+        VMA_MEMORY_USAGE_GPU_ONLY, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
     std::tie(newDepthStencilTarget, newDepthStencilTargetAllocation,
              newDepthStencilTargetView) = *iav;
   } else {
@@ -1513,10 +1594,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     return tl::unexpected(iav.error());
   }
 
-  if (auto result = TransitionImage(
-        sDevice, sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-        newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
+  if (auto result =
+        TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
+                        newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
     vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
@@ -1529,10 +1610,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     return tl::unexpected(result.error());
   }
 
-  if (auto result = TransitionImage(
-        sDevice, sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+  if (auto result =
+        TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
+                        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
     vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
@@ -1603,51 +1684,51 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   window.scissor = newScissor;
 
   window.swapchain = newSwapchain;
-  NameObject(sDevice, VK_OBJECT_TYPE_SWAPCHAIN_KHR, window.swapchain,
+  NameObject(VK_OBJECT_TYPE_SWAPCHAIN_KHR, window.swapchain,
              fmt::format("{}.swapchain", window.title).c_str());
 
   std::copy_n(newColorImages.begin(), numSwapchainImages,
               window.colorImages.begin());
   for (auto&& [i, image] : enumerate(window.colorImages)) {
-    NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, image,
+    NameObject(VK_OBJECT_TYPE_IMAGE, image,
                fmt::format("{}.colorImages[{}]", window.title, i).c_str());
   }
 
   std::copy_n(newColorImageViews.begin(), numSwapchainImages,
               window.colorImageViews.begin());
   for (auto&& [i, view] : enumerate(window.colorImageViews)) {
-    NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, view,
+    NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, view,
                fmt::format("{}.colorImageViews[{}]", window.title, i).c_str());
   }
 
   window.depthStencilImage = newDepthStencilImage;
   window.depthStencilImageAllocation = newDepthStencilImageAllocation;
   window.depthStencilImageView = newDepthStencilImageView;
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.depthStencilImage,
+  NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilImage,
              fmt::format("{}.depthStencilImage", window.title).c_str());
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilImageView,
+  NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilImageView,
              fmt::format("{}.depthStencilImageView", window.title).c_str());
 
   window.colorTarget = newColorTarget;
   window.colorTargetAllocation = newColorTargetAllocation;
   window.colorTargetView = newColorTargetView;
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.colorTarget,
+  NameObject(VK_OBJECT_TYPE_IMAGE, window.colorTarget,
              fmt::format("{}.colorTarget", window.title).c_str());
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.colorTargetView,
+  NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.colorTargetView,
              fmt::format("{}.colorTargetView", window.title).c_str());
 
   window.depthStencilTarget = newDepthStencilTarget;
   window.depthStencilTargetAllocation = newDepthStencilTargetAllocation;
   window.depthStencilTargetView = newDepthStencilTargetView;
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE, window.depthStencilTarget,
+  NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilTarget,
              fmt::format("{}.depthStencilTarget", window.title).c_str());
-  NameObject(sDevice, VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilTargetView,
+  NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilTargetView,
              fmt::format("{}.depthStencilTargetView", window.title).c_str());
 
   for (auto&& [i, frame] : enumerate(window.frames)) {
     frame.framebuffer = newFramebuffers[i];
     NameObject(
-      sDevice, VK_OBJECT_TYPE_FRAMEBUFFER, frame.framebuffer,
+      VK_OBJECT_TYPE_FRAMEBUFFER, frame.framebuffer,
       fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
   }
 
@@ -1803,6 +1884,15 @@ void iris::Renderer::EndFrame(VkImage image,
                          make_error_code(result).message());
     }
 
+    if (auto ptr = MapMemory<MatricesBuffer*>(sMatricesBufferAllocation)) {
+      (*ptr)->ProjectionMatrix = glm::mat4(1.f);
+      (*ptr)->ProjectionMatrixInverse = glm::inverse((*ptr)->ProjectionMatrix);
+      UnmapMemory(sMatricesBufferAllocation);
+    } else {
+      GetLogger()->error("Cannot update matrices buffer: {}",
+                         ptr.error().what());
+    }
+
     Window::Frame& frame = window.currentFrame();
 
     if (result = vkResetCommandPool(sDevice, frame.commandPool, 0);
@@ -1868,11 +1958,10 @@ void iris::Renderer::EndFrame(VkImage image,
         glm::inverse(pushConstants.ModelViewMatrix);
       pushConstants.NormalMatrix = glm::mat3(renderable.modelMatrix);
 
-      renderable.pushConstants = reinterpret_cast<void*>(&pushConstants);
-      renderable.pushConstantsSize = sizeof(PushConstants);
-
-      VkCommandBuffer commandBuffer =
-        RenderRenderable(renderable, &window.viewport, &window.scissor);
+      VkCommandBuffer commandBuffer = RenderRenderable(
+        renderable, &window.viewport, &window.scissor,
+        gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                                  sizeof(PushConstants)));
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
     }
 
@@ -1888,6 +1977,8 @@ void iris::Renderer::EndFrame(VkImage image,
 
       if (drawData && drawData->TotalVtxCount > 0) {
         UpdateUIRenderable(window.uiRenderable, drawData, title);
+
+        // TODO: update uiRenderable uniform buffer
 
         VkDescriptorImageInfo uiSamplerInfo = {};
         uiSamplerInfo.sampler = window.uiRenderable.samplers[0];
@@ -1926,13 +2017,13 @@ void iris::Renderer::EndFrame(VkImage image,
         glm::vec2 const displaySize = drawData->DisplaySize;
         glm::vec2 const displayPos = drawData->DisplayPos;
 
+        VkViewport viewport = {0.f,           0.f, displaySize.x,
+                               displaySize.y, 0.f, 1.f};
+
         absl::FixedArray<glm::vec2> uiPushConstants(2);
         uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
         uiPushConstants[1] =
           glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
-
-        VkViewport viewport = {0.f,           0.f, displaySize.x,
-                               displaySize.y, 0.f, 1.f};
 
         for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount;
              ++j) {
@@ -1954,21 +2045,21 @@ void iris::Renderer::EndFrame(VkImage image,
               (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
             // TODO: why + 1 above?
 
+            // FIXME: this has to change: maybe not use Renderable for UI?
             Component::Renderable renderable = window.uiRenderable;
             renderable.pipelineLayout = sUIPipelineLayout;
             renderable.pipeline = sUIPipeline;
             renderable.descriptorSet = sUIDescriptorSet;
-            renderable.pushConstantsStages = VK_SHADER_STAGE_VERTEX_BIT;
-            renderable.pushConstants = uiPushConstants.data();
-            renderable.pushConstantsSize =
-              uiPushConstants.size() * sizeof(glm::vec2);
             renderable.indexType = VK_INDEX_TYPE_UINT16;
             renderable.numIndices = drawCmd->ElemCount;
             renderable.firstIndex = idOff;
             renderable.firstVertex = vtOff;
 
-            VkCommandBuffer commandBuffer =
-              RenderRenderable(renderable, &viewport, &scissor);
+            VkCommandBuffer commandBuffer = RenderRenderable(
+              renderable, &viewport, &scissor,
+              gsl::make_span<std::byte>(
+                reinterpret_cast<std::byte*>(uiPushConstants.data()),
+                uiPushConstants.size() * sizeof(glm::vec2)));
             vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
 
             idOff += drawCmd->ElemCount;
