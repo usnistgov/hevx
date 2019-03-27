@@ -139,10 +139,17 @@ struct MatricesBuffer {
   glm::mat4 ProjectionMatrixInverse;
 }; // struct MatrixBuffer
 
-struct ModelBuffer {
-  glm::mat4 ModelMatrix;
-  glm::mat4 ModelMatrixInverse;
-}; // struct ModelBuffer
+#define MAX_LIGHTS 100
+
+struct Light {
+  glm::vec4 direction;
+  glm::vec4 color;
+}; // struct Light
+
+struct LightsBuffer {
+  Light Lights[MAX_LIGHTS];
+  int NumLights;
+}; // struct LightsBuffer
 
 tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
 CreateGraphicsPipeline(

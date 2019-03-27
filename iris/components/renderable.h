@@ -10,6 +10,7 @@ namespace iris::Renderer::Component {
 
 struct Renderable {
   static constexpr std::size_t const kMaxTextures = 8;
+  static constexpr std::size_t const kMaxBuffers = 4;
 
   VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
   VkPipeline pipeline{VK_NULL_HANDLE};
@@ -18,13 +19,13 @@ struct Renderable {
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
   absl::InlinedVector<VkImage, kMaxTextures> images;
-  absl::InlinedVector<VmaAllocation, kMaxTextures> allocations;
-  absl::InlinedVector<VkImageView, kMaxTextures> views;
-  absl::InlinedVector<VkSampler, kMaxTextures> samplers;
+  absl::InlinedVector<VmaAllocation, kMaxTextures> imageAllocations;
+  absl::InlinedVector<VkImageView, kMaxTextures> imageViews;
+  absl::InlinedVector<VkSampler, kMaxTextures> imageSamplers;
 
-  VkDeviceSize uniformBufferSize{0};
-  VkBuffer uniformBuffer{VK_NULL_HANDLE};
-  VmaAllocation uniformBufferAllocation{VK_NULL_HANDLE};
+  absl::InlinedVector<VkBuffer, kMaxBuffers> buffers;
+  absl::InlinedVector<VmaAllocation, kMaxBuffers> bufferAllocations;
+  absl::InlinedVector<VkDeviceSize, kMaxBuffers> bufferSizes;
 
   VkDeviceSize vertexBufferSize{0};
   VkDeviceSize vertexBufferBindingOffset{0};

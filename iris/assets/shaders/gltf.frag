@@ -52,19 +52,10 @@ layout(set = 0, binding = 1) uniform LightsBuffer {
   int NumLights;
 };
 
-layout(set = 1, binding = 1) uniform MaterialBuffer {
-  vec2 MetallicRoughnessValues;
+layout(set = 1, binding = 0) uniform MaterialBuffer {
+  vec4 MetallicRoughnessNormalOcclusion;
   vec4 BaseColorFactor;
-
-#ifdef HAS_NORMAL_MAP
-  float NormalScale;
-#endif
-#ifdef HAS_EMISSIVE_MAP
   vec3 EmissiveFactor;
-#endif
-#ifdef HAS_OCCLUSION_MAP
-  float OcclusionStrength;
-#endif
 };
 
 #ifdef HAS_BASECOLOR_MAP
@@ -103,7 +94,9 @@ layout(location = 6) in vec3 Ve; // view vector in eye-space
 layout(location = 7) in vec3 Ne; // normal vector in eye-space
 
 layout(location = 8) in vec2 UV;
+#ifdef HAS_TEXCOORDS
 layout(location = 9) in mat3 TBN;
+#endif
 
 layout(location = 0) out vec4 Color;
 
@@ -137,12 +130,29 @@ vec4 SRGBtoLINEAR(vec4 srgbIn) {
 // Find the normal for this fragment, pulling either from a predefined normal
 // map or from the interpolated mesh normal and tangent attributes.
 vec3 GetNormal() {
+#ifdef HAS_TEXCOORDS
   // Retrieve the tangent space matrix
   mat3 tbn = TBN;
+#else
+  vec3 ng = normalize(Ne);
+
+  vec3 posDx = dFdx(Pe.xyz/ Pe.w);
+  vec3 posDy = dFdy(Pe.xyz / Pe.w);
+  vec3 texDx = dFdx(vec3(UV, 0.0));
+  vec3 texDy = dFdy(vec3(UV, 0.0));
+
+  vec3 t = (texDy.t * posDx - texDx.t * posDy)
+           / (texDx.s * texDy.t - texDy.s * texDx.t);
+  t = normalize(t - ng * dot(ng, t));
+  vec3 b = normalize(cross(ng, t));
+
+  mat3 tbn = mat3(t, b, ng);
+#endif
 
 #ifdef HAS_NORMAL_MAP
     vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV0.st).rgb;
-    n = normalize(tbn * ((2.0 * n - 1.0) * vec3(NormalScale, NormalScale, 1.0)));
+    vec3 s = vec3(MetallicRoughnessNormalOcclusion.zz, 1.0);
+    n = normalize(tbn * ((2.0 * n - 1.0) * s));
 #else
   // The tbn matrix is linearly interpolated, so we need to re-normalize
   vec3 n = normalize(tbn[2].xyz);
@@ -152,8 +162,8 @@ vec3 GetNormal() {
 }
 
 void main() {
-  float metallic = MetallicRoughnessValues.x;
-  float perceptualRoughness = MetallicRoughnessValues.y;
+  float metallic = MetallicRoughnessNormalOcclusion.x;
+  float perceptualRoughness = MetallicRoughnessNormalOcclusion.y;
 
 #ifdef HAS_METALLICROUGHNESS_MAP
   // Roughness is stored in the 'g' channel, metallic is stored in the 'b' channel.
@@ -236,7 +246,7 @@ void main() {
   // Apply optional PBR terms for additional (optional) shading
 #ifdef HAS_OCCLUSION_MAP
   float ao = texture(sampler2D(OcclusionTexture, OcclusionSampler), UV0.st).r;
-  color = mix(color, color * ao, OcclusionStrength);
+  color = mix(color, color * ao,MetallicRoughnessNormalOcclusion.w);
 #endif
 
 #ifdef HAS_EMISSIVE_MAP

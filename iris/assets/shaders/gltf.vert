@@ -45,15 +45,10 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
   mat4 ProjectionMatrixInverse;
 };
 
-layout(set = 1, binding = 0) uniform ModelBuffer {
-  mat4 ModelMatrix;
-  mat4 ModelMatrixInverse;
-};
-
 layout(location = 0) in vec3 Vertex;
 layout(location = 1) in vec3 Normal;
-layout(location = 2) in vec4 Tangent;
 #ifdef HAS_TEXCOORDS
+layout(location = 2) in vec4 Tangent;
 layout(location = 3) in vec2 Texcoord;
 #endif
 
@@ -68,7 +63,9 @@ layout(location = 6) out vec3 Ve; // view vector in eye-space
 layout(location = 7) out vec3 Ne; // normal vector in eye-space
 
 layout(location = 8) out vec2 UV;
+#ifdef HAS_TEXCOORDS
 layout(location = 9) out mat3 TBN;
+#endif
 
 out gl_PerVertex {
   vec4 gl_Position;
@@ -87,10 +84,13 @@ void main() {
   Vo = normalize(Eo.xyz*Po.w - Po.xyz*Eo.w);
   Ve = normalize(Ee.xyz*Pe.w - Pe.xyz*Ee.w);
 
+#ifdef HAS_TEXCOORDS
   vec3 normalW = normalize(Ne);
-  vec3 tangentW = normalize(vec3(ModelMatrix * vec4(Tangent.xyz, 0.0)));
+  //vec3 tangentW = normalize(NormalMatrix * Tangent);
+  vec3 tangentW = normalize(vec3(ModelViewMatrix * vec4(Tangent.xyz, 0.0)));
   vec3 bitangentW = cross(normalW, tangentW) * Tangent.w;
   TBN = mat3(tangentW, bitangentW, normalW);
+#endif
 
 #ifdef HAS_TEXCOORDS
   UV = Texcoord0;

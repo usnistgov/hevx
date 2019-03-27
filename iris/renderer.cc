@@ -157,6 +157,10 @@ static VkBuffer sMatricesBuffer{VK_NULL_HANDLE};
 static VmaAllocation sMatricesBufferAllocation{VK_NULL_HANDLE};
 static VkDeviceSize sMatricesBufferSize = 0;
 
+static VkBuffer sLightsBuffer{VK_NULL_HANDLE};
+static VmaAllocation sLightsBufferAllocation{VK_NULL_HANDLE};
+static VkDeviceSize sLightsBufferSize = 0;
+
 static bool sRunning{false};
 static bool sInFrame{false};
 static std::uint32_t sFrameNum{0};
@@ -175,15 +179,15 @@ static tbb::concurrent_queue<std::function<std::system_error(void)>>
 
 static char const* sUIVertexShaderSource = R"(
 #version 450 core
-layout(location=0) in vec2 aPos;
-layout(location=1) in vec2 aUV;
-layout(location=2) in vec4 aColor;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+layout(location = 2) in vec4 aColor;
 layout(push_constant) uniform uPushConstant {
   vec2 uScale;
   vec2 uTranslate;
 };
-layout(location=0) out vec4 Color;
-layout(location=1) out vec2 UV;
+layout(location = 0) out vec4 Color;
+layout(location = 1) out vec2 UV;
 out gl_PerVertex {
   vec4 gl_Position;
 };
@@ -195,11 +199,11 @@ void main() {
 
 static char const* sUIFragmentShaderSource = R"(
 #version 450 core
-layout(set=1, binding=0) uniform sampler sSampler;
-layout(set=1, binding=1) uniform texture2D sTexture;
-layout(location=0) in vec4 Color;
-layout(location=1) in vec2 UV;
-layout(location=0) out vec4 fColor;
+layout(set = 1, binding = 0) uniform sampler sSampler;
+layout(set = 1, binding = 1) uniform texture2D sTexture;
+layout(location = 0) in vec4 Color;
+layout(location = 1) in vec2 UV;
+layout(location = 0) out vec4 fColor;
 void main() {
   fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
 })";
@@ -855,10 +859,23 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   //
   /////
 
-  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(1);
-  descriptorSetLayoutBindings[0] = {
-    0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings{
+    // This is the MatricesBuffer
+    {
+      0,                                 // binding
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+      1,                                 // descriptorCount
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
+      nullptr // pImmutableSamplers
+    },
+    // This is the LightsBuffer
+    {
+      1,                                 // binding
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+      1,                                 // descriptorCount
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
+      nullptr // pImmutableSamplers
+    }};
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
   descriptorSetLayoutCI.sType =
@@ -907,22 +924,51 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   NameObject(VK_OBJECT_TYPE_BUFFER, sMatricesBuffer, "sMatricesBuffer");
 
-  VkDescriptorBufferInfo bufferInfo = {};
-  bufferInfo.buffer = sMatricesBuffer;
-  bufferInfo.offset = 0;
-  bufferInfo.range = VK_WHOLE_SIZE;
+  if (auto bas = AllocateBuffer(sizeof(LightsBuffer),
+                                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    std::tie(sLightsBuffer, sLightsBufferAllocation, sLightsBufferSize) =
+      *bas;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(bas.error());
+  }
 
-  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(1);
-  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            nullptr,
-                            sGlobalDescriptorSet,
-                            0,
-                            0,
-                            1,
-                            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                            nullptr,
-                            &bufferInfo,
-                            nullptr};
+  NameObject(VK_OBJECT_TYPE_BUFFER, sLightsBuffer, "sLightsBuffer");
+
+  VkDescriptorBufferInfo matricesBufferInfo = {};
+  matricesBufferInfo.buffer = sMatricesBuffer;
+  matricesBufferInfo.offset = 0;
+  matricesBufferInfo.range = VK_WHOLE_SIZE;
+
+  VkDescriptorBufferInfo lightsBufferInfo = {};
+  lightsBufferInfo.buffer = sLightsBuffer;
+  lightsBufferInfo.offset = 0;
+  lightsBufferInfo.range = VK_WHOLE_SIZE;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets{
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+      sGlobalDescriptorSet, // dstSet
+      0,                    // dstBinding
+      0,                    // dstArrayElement
+      1,                    // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      nullptr,             // pImageInfo
+      &matricesBufferInfo, // pBufferInfo
+      nullptr              // pTexelBufferView
+    },
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+      sGlobalDescriptorSet, // dstSet
+      1,                    // setBinding
+      0,                    // dstArrayElement
+      1,                    // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      nullptr,           // pImageInfo
+      &lightsBufferInfo, // pBufferInfo
+      nullptr            // pTexelBufferView
+    }};
 
   vkUpdateDescriptorSets(
     sDevice, gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
@@ -934,12 +980,21 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   //
   /////
 
-  absl::FixedArray<VkDescriptorSetLayoutBinding> uiDescriptorSetLayoutBindings(
-    2);
-  uiDescriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
-                                      VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-  uiDescriptorSetLayoutBindings[1] = {1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
-                                      VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  absl::FixedArray<VkDescriptorSetLayoutBinding> uiDescriptorSetLayoutBindings{
+    {
+      0,                            // binding
+      VK_DESCRIPTOR_TYPE_SAMPLER,   // descriptorType
+      1,                            // descriptorCount
+      VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
+      nullptr                       // pImmutableSamplers
+    },
+    {
+      1,                                // binding
+      VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, // descriptorType
+      1,                                // descriptorCount
+      VK_SHADER_STAGE_FRAGMENT_BIT,     // stageFlags
+      nullptr                           // pImmutableSamplers
+    }};
 
   VkDescriptorSetLayoutCreateInfo uiDescriptorSetLayoutCI = {};
   uiDescriptorSetLayoutCI.sType =
@@ -1288,7 +1343,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   }
 
   window.uiRenderable.images.push_back(fontTexture);
-  window.uiRenderable.allocations.push_back(fontTextureAllocation);
+  window.uiRenderable.imageAllocations.push_back(fontTextureAllocation);
 
   NameObject(
     VK_OBJECT_TYPE_IMAGE, window.uiRenderable.images[0],
@@ -1313,10 +1368,10 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
       std::system_error(make_error_code(result), "Cannot create image view"));
   }
 
-  window.uiRenderable.views.push_back(fontTextureView);
+  window.uiRenderable.imageViews.push_back(fontTextureView);
 
   NameObject(
-    VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.views[0],
+    VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.imageViews[0],
     fmt::format("{}.uiRenderable.views[0] (fontTextureView)", title).c_str());
 
   VkSamplerCreateInfo samplerCI = {};
@@ -1346,10 +1401,10 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
       std::system_error(make_error_code(result), "Cannot create sampler"));
   }
 
-  window.uiRenderable.samplers.push_back(fontTextureSampler);
+  window.uiRenderable.imageSamplers.push_back(fontTextureSampler);
 
   NameObject(
-    VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.samplers[0],
+    VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.imageSamplers[0],
     fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
       .c_str());
 
@@ -1952,7 +2007,6 @@ void iris::Renderer::EndFrame(VkImage image,
 
     std::vector<Component::Renderable> renderables = sRenderables();
     for (auto&& renderable : renderables) {
-      // FIXME: this needs to work differently
       pushConstants.ModelViewMatrix = renderable.modelMatrix;
       pushConstants.ModelViewMatrixInverse =
         glm::inverse(pushConstants.ModelViewMatrix);
@@ -1981,10 +2035,10 @@ void iris::Renderer::EndFrame(VkImage image,
         // TODO: update uiRenderable uniform buffer
 
         VkDescriptorImageInfo uiSamplerInfo = {};
-        uiSamplerInfo.sampler = window.uiRenderable.samplers[0];
+        uiSamplerInfo.sampler = window.uiRenderable.imageSamplers[0];
 
         VkDescriptorImageInfo uiTextureInfo = {};
-        uiTextureInfo.imageView = window.uiRenderable.views[0];
+        uiTextureInfo.imageView = window.uiRenderable.imageViews[0];
         uiTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         absl::FixedArray<VkWriteDescriptorSet> uiWriteDescriptorSets(2);

@@ -87,6 +87,12 @@ using json = nlohmann::json;
 
 namespace iris::gltf {
 
+struct MaterialBuffer {
+  glm::vec4 MetallicRoughnessNormalOcclusion;
+  glm::vec4 BaseColorFactor;
+  glm::vec3 EmissiveFactor;
+}; // struct MaterialBuffer
+
 struct Asset {
   std::optional<std::string> copyright;
   std::optional<std::string> generator;
@@ -1166,10 +1172,15 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     Renderer::Component::Renderable renderable;
 
-    absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings(
-      1);
-    descriptorSetLayoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-                                      VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+    absl::FixedArray<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings{
+      {
+        0,                                 // binding
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+        1,                                 // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,      // stageFlags
+        nullptr                            // pImmutableSamplers
+      } // This is the MaterialBuffer in gltf.frag
+    };
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
     descriptorSetLayoutCI.sType =
@@ -1329,7 +1340,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     VmaAllocation stagingAllocation = VK_NULL_HANDLE;
     VkDeviceSize stagingSize = 0;
 
-    if (auto bas = Renderer::AllocateBuffer(sizeof(iris::Renderer::ModelBuffer),
+    if (auto bas = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
                                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                             VMA_MEMORY_USAGE_CPU_TO_GPU)) {
       std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
@@ -1338,22 +1349,23 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(bas.error());
     }
 
-    if (auto ptr =
-          Renderer::MapMemory<Renderer::ModelBuffer*>(stagingAllocation)) {
-      (*ptr)->ModelMatrix = nodeMat;
-      (*ptr)->ModelMatrixInverse = glm::inverse(nodeMat);
+    if (auto ptr = Renderer::MapMemory<MaterialBuffer*>(stagingAllocation)) {
+      (*ptr)->MetallicRoughnessNormalOcclusion = glm::vec4(0.0, 1.0, 0.0, 0.0);
+      (*ptr)->BaseColorFactor = glm::vec4(0.8, 0.0, 0.0, 1.0);
+      (*ptr)->EmissiveFactor = glm::vec3(0.0);
       Renderer::UnmapMemory(stagingAllocation);
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(ptr.error());
     }
 
-    if (auto bas = Renderer::AllocateBuffer(sizeof(iris::Renderer::ModelBuffer),
+    if (auto bas = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
                                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VMA_MEMORY_USAGE_GPU_ONLY)) {
-      std::tie(renderable.uniformBuffer, renderable.uniformBufferAllocation,
-               renderable.uniformBufferSize) = *bas;
+      renderable.buffers.push_back(std::get<0>(*bas));
+      renderable.bufferAllocations.push_back(std::get<1>(*bas));
+      renderable.bufferSizes.push_back(std::get<2>(*bas));
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(bas.error());
@@ -1371,9 +1383,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     VkBufferCopy region = {};
     region.srcOffset = 0;
     region.dstOffset = 0;
-    region.size = sizeof(iris::Renderer::ModelBuffer);
+    region.size = sizeof(MaterialBuffer);
 
-    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.uniformBuffer, 1,
+    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.buffers[0], 1,
                     &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
@@ -1383,6 +1395,28 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
     }
+
+    VkDescriptorBufferInfo materialBufferInfo = {};
+    materialBufferInfo.buffer = renderable.buffers[0];
+    materialBufferInfo.offset = 0;
+    materialBufferInfo.range = VK_WHOLE_SIZE;
+
+    absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets{{
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+      renderable.descriptorSet, // dstSet
+      0,                        // dstBinding
+      0,                        // dstArrayElement
+      1,                        // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      nullptr,             // pImageInfo
+      &materialBufferInfo, // pBufferInfo
+      nullptr              // pTexelBufferView
+    }};
+
+    vkUpdateDescriptorSets(
+      Renderer::sDevice,
+      gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
+      writeDescriptorSets.data(), 0, nullptr);
 
     VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
 
