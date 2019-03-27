@@ -1371,9 +1371,46 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     }
 
     if (auto ptr = Renderer::MapMemory<MaterialBuffer*>(stagingAllocation)) {
-      (*ptr)->MetallicRoughnessNormalOcclusion = glm::vec4(0.0, 1.0, 0.0, 0.0);
-      (*ptr)->BaseColorFactor = glm::vec4(0.8, 0.0, 0.0, 1.0);
-      (*ptr)->EmissiveFactor = glm::vec3(0.0);
+      if (primitive.material) {
+        if (!materials || materials->size() < *primitive.material) {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(
+            std::system_error(Error::kFileParseFailed,
+                              "primitive references non-existent material"));
+        }
+
+        // Set a default material first
+        (*ptr)->MetallicRoughnessNormalOcclusion =
+          glm::vec4(1.f, 1.f, 1.f, 1.f);
+        (*ptr)->BaseColorFactor = glm::vec4(1.f);
+        (*ptr)->EmissiveFactor = glm::vec3(0.f);
+
+        auto&& material = (*materials)[*primitive.material];
+
+        if (material.pbrMetallicRoughness) {
+          (*ptr)->MetallicRoughnessNormalOcclusion.x =
+            material.pbrMetallicRoughness->metallicFactor.value_or(1.f);
+          (*ptr)->MetallicRoughnessNormalOcclusion.y =
+            material.pbrMetallicRoughness->roughnessFactor.value_or(1.f);
+          (*ptr)->BaseColorFactor =
+            material.pbrMetallicRoughness->baseColorFactor.value_or(
+              glm::vec4(1.f));
+        }
+
+        if (material.normalTexture) {
+          (*ptr)->MetallicRoughnessNormalOcclusion.z =
+            material.normalTexture->scale.value_or(1.f);
+        }
+
+        if (material.occlusionTexture) {
+          (*ptr)->MetallicRoughnessNormalOcclusion.w =
+            material.occlusionTexture->strength.value_or(1.f);
+        }
+
+        (*ptr)->EmissiveFactor =
+          material.emissiveFactor.value_or(glm::vec3(0.f));
+      }
+
       Renderer::UnmapMemory(stagingAllocation);
     } else {
       IRIS_LOG_LEAVE();
