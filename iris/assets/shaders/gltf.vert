@@ -35,9 +35,10 @@ layout(push_constant) uniform PushConstants {
   float iFrame;
   vec3 iResolution;
   float padding0;
+  mat4 ModelMatrix;
   mat4 ModelViewMatrix;
   mat4 ModelViewMatrixInverse;
-  mat3 NormalMatrix;
+  //mat3 NormalMatrix;
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {
@@ -76,7 +77,7 @@ void main() {
   Pe = ModelViewMatrix * Po;
 
   No = normalize(Normal);
-  Ne = NormalMatrix * No;
+  Ne = vec3(ModelMatrix) * No;
 
   Ee = -ProjectionMatrixInverse[2];
   Eo = ModelViewMatrixInverse * Ee;
@@ -86,8 +87,7 @@ void main() {
 
 #ifdef HAS_TEXCOORDS
   vec3 normalW = normalize(Ne);
-  //vec3 tangentW = normalize(NormalMatrix * Tangent);
-  vec3 tangentW = normalize(vec3(ModelViewMatrix * vec4(Tangent.xyz, 0.0)));
+  vec3 tangentW = normalize(vec3(ModelMatrix * vec4(Tangent.xyz, 0.0)));
   vec3 bitangentW = cross(normalW, tangentW) * Tangent.w;
   TBN = mat3(tangentW, bitangentW, normalW);
 #endif

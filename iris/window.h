@@ -70,6 +70,8 @@ struct Window {
   Renderer::Component::Renderable uiRenderable;
   glm::vec2 lastMousePos{0.f, 0.f};
 
+  glm::mat4 projectionMatrix{1.f};
+
   [[nodiscard]] Frame& currentFrame() noexcept { return frames[frameIndex]; }
   [[nodiscard]] Frame& previousFrame() noexcept {
     return frames[(frameIndex - 1) % frames.size()];

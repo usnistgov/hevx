@@ -13,6 +13,7 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/common.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
@@ -1787,6 +1788,10 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       fmt::format("{}.frames[{}].framebuffer", window.title, i).c_str());
   }
 
+  window.projectionMatrix = glm::perspectiveFov(
+    60.f, static_cast<float>(window.extent.width),
+    static_cast<float>(window.extent.height), .001f, 1000.f);
+
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ResizeWindow
@@ -1940,8 +1945,8 @@ void iris::Renderer::EndFrame(VkImage image,
     }
 
     if (auto ptr = MapMemory<MatricesBuffer*>(sMatricesBufferAllocation)) {
-      (*ptr)->ProjectionMatrix = glm::mat4(1.f);
-      (*ptr)->ProjectionMatrixInverse = glm::inverse((*ptr)->ProjectionMatrix);
+      (*ptr)->ProjectionMatrix = window.projectionMatrix;
+      (*ptr)->ProjectionMatrixInverse = glm::inverse(window.projectionMatrix);
       UnmapMemory(sMatricesBufferAllocation);
     } else {
       GetLogger()->error("Cannot update matrices buffer: {}",
@@ -2005,12 +2010,17 @@ void iris::Renderer::EndFrame(VkImage image,
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
 
+    glm::mat4 const viewMatrix = glm::inverse(glm::lookAt(
+      glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f)));
     std::vector<Component::Renderable> renderables = sRenderables();
+
     for (auto&& renderable : renderables) {
-      pushConstants.ModelViewMatrix = renderable.modelMatrix;
+      pushConstants.ModelMatrix = renderable.modelMatrix;
+      pushConstants.ModelViewMatrix = viewMatrix * renderable.modelMatrix;
       pushConstants.ModelViewMatrixInverse =
         glm::inverse(pushConstants.ModelViewMatrix);
-      pushConstants.NormalMatrix = glm::mat3(renderable.modelMatrix);
+      //pushConstants.NormalMatrix =
+        //glm::transpose(glm::inverse(glm::mat3(renderable.modelMatrix)));
 
       VkCommandBuffer commandBuffer = RenderRenderable(
         renderable, &window.viewport, &window.scissor,
