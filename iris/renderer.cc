@@ -491,8 +491,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
 
 tl::expected<void, std::system_error>
 iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
-                           std::uint32_t appVersion,
-                           spdlog::sinks_init_list logSinks) noexcept {
+                           spdlog::sinks_init_list logSinks,
+                           std::uint32_t appVersion) noexcept {
   GetLogger(logSinks);
   Expects(sInstance == VK_NULL_HANDLE);
   IRIS_LOG_ENTER();
@@ -560,7 +560,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
     VK_KHR_MAINTENANCE2_EXTENSION_NAME,
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#if 0 // FIXME: which GPUs support this?
+#if 0 // TODO: which GPUs support this?
     VK_KHR_MULTIVIEW_EXTENSION_NAME
 #endif
   }};
@@ -578,12 +578,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   flextVkInit();
 
-  if (auto instance =
-        CreateInstance(appName, appVersion, instanceExtensionNames, layerNames,
-                       (options & Options::kReportDebugMessages) ==
-                           Options::kReportDebugMessages
-                         ? &DebugUtilsMessengerCallback
-                         : nullptr)) {
+  if (auto instance = CreateInstance(
+        appName,
+        (appVersion == 0
+           ? VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch)
+           : appVersion),
+        instanceExtensionNames, layerNames,
+        (options & Options::kReportDebugMessages) ==
+            Options::kReportDebugMessages
+          ? &DebugUtilsMessengerCallback
+          : nullptr)) {
     sInstance = std::move(*instance);
   } else {
     IRIS_LOG_LEAVE();
@@ -1851,7 +1855,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 
     io.MousePos = window.platformWindow.CursorPos();
 
-    // FIXME: update mouse cursor based on imgui request
+    // TODO: update mouse cursor based on imgui request
 
     ImGui::NewFrame();
   }
@@ -1908,7 +1912,7 @@ void iris::Renderer::EndFrame(VkImage image,
     auto&& [title, window] = iter;
     ImGui::SetCurrentContext(window.uiContext.get());
 
-    // FIXME: how to handle this at application scope?
+    // TODO: how to handle this at application scope?
     if (window.showUI) {
       ImGui::Begin("Status");
       ImGui::Text("Last Frame %.3f ms", ImGui::GetIO().DeltaTime);
@@ -2112,7 +2116,7 @@ void iris::Renderer::EndFrame(VkImage image,
               (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
             // TODO: why + 1 above?
 
-            // FIXME: this has to change: maybe not use Renderable for UI?
+            // TODO: this has to change: maybe not use Renderable for UI?
             Component::Renderable renderable = window.uiRenderable;
             renderable.pipelineLayout = sUIPipelineLayout;
             renderable.pipeline = sUIPipeline;
@@ -2200,6 +2204,10 @@ void iris::Renderer::EndFrame(VkImage image,
   sInFrame = false;
 } // iris::Renderer::EndFrame
 
+void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
+  sRenderables.push_back(std::move(renderable));
+} // AddRenderable
+
 tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
 iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
                                        std::uint32_t count) noexcept {
@@ -2222,10 +2230,6 @@ iris::Renderer::AllocateCommandBuffers(VkCommandBufferLevel level,
 
   return commandBuffers;
 } // iris::Renderer::AllocateCommandBuffers
-
-void iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
-  sRenderables.push_back(std::move(renderable));
-} // AddRenderable
 
 tl::expected<iris::Renderer::CommandQueue, std::system_error>
 iris::Renderer::AcquireCommandQueue(

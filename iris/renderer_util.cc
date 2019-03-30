@@ -136,7 +136,7 @@ tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
 
   if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    // FIXME: handle stencil
+    // TODO: handle stencil
   } else {
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   }

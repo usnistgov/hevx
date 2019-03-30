@@ -12,7 +12,7 @@
 #include <string>
 #include <system_error>
 
-// FIXME: vma needs these, flextGL should probably generate them
+// TODO: vma needs these, flextGL should probably generate them
 using PFN_vkGetPhysicalDeviceProperties =
   decltype(vkGetPhysicalDeviceProperties);
 using PFN_vkGetPhysicalDeviceMemoryProperties =

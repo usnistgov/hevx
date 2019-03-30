@@ -1883,8 +1883,8 @@ ReadGLTF(filesystem::path const& path) noexcept {
 
   //
   // Parse the scene graph
-  // FIXME: this removes the hierarchy: need to maintain those relationships
-  // FIXME: implement Animatable(?) component to support animations
+  // TODO: this removes the hierarchy: need to maintain those relationships
+  // TODO: implement Animatable(?) component to support animations
   //
 
   if (auto renderables = g.ParseNode(commandQueue, *g.scene, glm::mat4x4(1.f),

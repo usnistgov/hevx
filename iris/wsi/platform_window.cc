@@ -1,3 +1,6 @@
+/*! \file
+\brief \ref iris::wsi::PlatformWindow definition.
+*/
 #include "wsi/platform_window.h"
 #include "config.h"
 #include "logging.h"
@@ -6,9 +9,6 @@
 #elif PLATFORM_WINDOWS
 #include "wsi/platform_window_win32.h"
 #endif
-/*! \file
- * \brief \ref iris::wsi::PlatformWindow definition.
- */
 
 tl::expected<iris::wsi::PlatformWindow, std::exception>
 iris::wsi::PlatformWindow::Create(gsl::czstring<> title, Offset2D offset,

@@ -1,4 +1,5 @@
-# HEVx ECS Design #
+HEVx ECS Design {#ECS}
+===============
 
 ## Entity Component System (ECS) Overview ##
 TODO: list some references here

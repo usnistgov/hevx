@@ -1,6 +1,7 @@
-/*! \file
- * \brief \ref iris::wsi::PlatformWindow::Impl definition for X11.
- */
+/*!
+\file
+\brief \ref iris::wsi::PlatformWindow::Impl definition for X11.
+*/
 #include "wsi/platform_window_x11.h"
 #include "fmt/format.h"
 #include "imgui.h"
@@ -18,28 +19,37 @@
 
 namespace iris::wsi {
 
-//! \brief Implements a std::error_category for \ref X errors
+/*!
+\brief Implements a std::error_category for \ref X errors
+*/
 class XCategory : public std::error_category {
 public:
   virtual ~XCategory() {}
 
-  //! \brief Get the name of this category.
+  /*!
+  \brief Get the name of this category.
+  */
   virtual const char* name() const noexcept override {
     return "iris::wsi::XCategory";
   }
 
-  //! \brief Convert an int representing an ErrorCodes into a std::string.
+  /*!
+  \brief Convert an int representing an ErrorCode into a std::string.
+  */
   virtual std::string message(int code) const override {
     return fmt::format("{}", code);
   }
-}; // class ErrorCodesCategory
+}; // class XCategory
 
-//! The global instance of the ErrorCodesCategory.
+/*!
+\brief The global instance of the XCategory.
+*/
 inline XCategory const gXCategory;
 
-/*! \brief Get the global instance of the ErrorCodesCategory.
- * \return \ref gErrorCodesCategory
- */
+/*!
+\brief Get the global instance of the XCategory.
+\return \ref gErrorCodesCategory
+*/
 inline std::error_category const& GetXCategory() {
   return gXCategory;
 }
@@ -174,6 +184,7 @@ KeyCodeToKeys(::xcb_keycode_t keycode,
 
   return Keys::kUnknown;
 } // KeyCodeToKeys
+
 } // namespace iris::wsi
 
 tl::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
@@ -397,6 +408,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   }
 
   int const nKeycodes = mapping->length / mapping->keysyms_per_keycode;
+  Expects(nKeyCodes < pWin->keyLUT_.size());
 
   for (int i = 0; i < nKeycodes; ++i) {
     ::xcb_keycode_t const keycode = setup->min_keycode + i;
@@ -457,7 +469,7 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
     }
 
     ImGui::GetIO().MouseDown[button] = true;
-    // FIXME: need to handle capture
+    // TODO: need to handle capture
   } break;
 
   case XCB_BUTTON_RELEASE: {
@@ -470,7 +482,7 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
     case 2: button = 2; break;
     }
 
-    // FIXME: need to handle capture
+    // TODO: need to handle capture
     ImGui::GetIO().MouseDown[button] = false;
   } break;
 

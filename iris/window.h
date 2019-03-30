@@ -1,3 +1,7 @@
+/*!
+\file
+\brief iris::Window declaration
+*/
 #ifndef HEV_IRIS_WINDOW_H_
 #define HEV_IRIS_WINDOW_H_
 
@@ -17,6 +21,20 @@
 
 namespace iris {
 
+/*!
+\brief Holds all state related to a single renderable window.
+
+The Window state is:
+- the wsi::PlatformWindow
+- Vulkan handles needed to render to a VkSurfaceKHR
+- a number of buffered Frame objects
+- the ImGui context
+
+A buffered Frame is:
+- Vulkan handles to render a single frame
+
+TODO: document attributes
+*/
 struct Window {
   //! \brief Options for window creation.
   enum class Options {
@@ -55,6 +73,9 @@ struct Window {
   VmaAllocation depthStencilTargetAllocation;
   VkImageView depthStencilTargetView;
 
+  /*!
+  \brief Holds state that is duplicated for each rendered frame.
+  */
   struct Frame {
     VkSemaphore imageAvailable{VK_NULL_HANDLE};
     VkCommandPool commandPool{VK_NULL_HANDLE};
@@ -73,27 +94,64 @@ struct Window {
   glm::mat4 projectionMatrix{1.f};
   glm::mat4 projectionMatrixInverse{1.f};
 
+  /*!
+  \brief Get the current buffered Frame.
+  \return the current Frame.
+  */
   [[nodiscard]] Frame& currentFrame() noexcept { return frames[frameIndex]; }
+
+  /*!
+  \brief Get the previous buffered Frame.
+  \return the previous Frame.
+  */
   [[nodiscard]] Frame& previousFrame() noexcept {
     return frames[(frameIndex - 1) % frames.size()];
   }
 
-  Window(std::string windowTitle, VkClearColorValue cc, std::size_t numFrames)
-    : title(std::move(windowTitle))
-    , clearColor(cc)
+  /*!
+  Constructor.
+  \param[in] title_ the title of the window.
+  \param[in] clearColor_ the color to clear the framebuffer with.
+  \param[in] numFrames the number of frames to buffer for rendering.
+  */
+  Window(std::string title_, VkClearColorValue clearColor_,
+         std::size_t numFrames)
+    : title(std::move(title_))
+    , clearColor(clearColor_)
     , colorImages(numFrames)
     , colorImageViews(numFrames)
     , frames(numFrames)
     , uiContext(nullptr, &ImGui::DestroyContext) {}
 
+  /*!
+  \brief No copies.
+  */
   Window(Window const&) = delete;
+
+  /*!
+  \brief Move constructor.
+  */
   Window(Window&&) noexcept;
+
+  /*!
+  \brief No copies.
+  */
   Window& operator=(Window const&) = delete;
-  Window& operator=(Window&&) noexcept = delete; // FIXME: implement
+
+  /*!
+  \brief Move assignment: deleted since violates absl::FixedArray invariants.
+  */
+  Window& operator=(Window&& rhs) noexcept = delete;
+
+  /*!
+  \brief Destructor.
+  */
   ~Window() noexcept = default;
 }; // struct Window
 
-//! \brief bit-wise or of \ref Window::Options.
+/*!
+\brief bit-wise or of \ref Window::Options.
+*/
 inline Window::Options operator|(Window::Options const& lhs,
                                  Window::Options const& rhs) noexcept {
   using U = std::underlying_type_t<Window::Options>;
@@ -101,14 +159,18 @@ inline Window::Options operator|(Window::Options const& lhs,
                                       static_cast<U>(rhs));
 }
 
-//! \brief bit-wise or of \ref Window::Options.
+/*!
+\brief bit-wise or of \ref Window::Options.
+*/
 inline Window::Options operator|=(Window::Options& lhs,
                                   Window::Options const& rhs) noexcept {
   lhs = lhs | rhs;
   return lhs;
 }
 
-//! \brief bit-wise and of \ref Window::Options.
+/*!
+\brief bit-wise and of \ref Window::Options.
+*/
 inline Window::Options operator&(Window::Options const& lhs,
                                  Window::Options const& rhs) noexcept {
   using U = std::underlying_type_t<Window::Options>;
@@ -116,7 +178,9 @@ inline Window::Options operator&(Window::Options const& lhs,
                                       static_cast<U>(rhs));
 }
 
-//! \brief bit-wise and of \ref Window::Options.
+/*!
+\brief bit-wise and of \ref Window::Options.
+*/
 inline Window::Options operator&=(Window::Options& lhs,
                                   Window::Options const& rhs) noexcept {
   lhs = lhs & rhs;

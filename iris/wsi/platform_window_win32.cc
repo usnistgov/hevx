@@ -1,6 +1,7 @@
-/*! \file
- * \brief \ref iris::wsi::PlatformWindow::Impl definition for Win32.
- */
+/*!
+\file
+\brief \ref iris::wsi::PlatformWindow::Impl definition for Win32.
+*/
 #include "wsi/platform_window_win32.h"
 #include "absl/base/macros.h"
 #include "imgui.h"
@@ -12,11 +13,11 @@ namespace iris::wsi {
 static Keys KeycodeToKeys(int keycode) noexcept {
   switch (keycode) {
   case VK_SPACE: return Keys::kSpace;
-  // case Keys::kApostrophe: return 0; // FIXME
-  // case Keys::kComma: return 0; // FIXME
-  // case Keys::kMinus: return 0; // FIXME
-  // case Keys::kPeriod: return 0; // FIXME
-  // case Keys::kSlash: return 0; // FIXME
+  // case Keys::kApostrophe: return 0; // TODO
+  // case Keys::kComma: return 0; // TODO
+  // case Keys::kMinus: return 0; // TODO
+  // case Keys::kPeriod: return 0; // TODO
+  // case Keys::kSlash: return 0; // TODO
   case 0x30: return Keys::k0;
   case 0x31: return Keys::k1;
   case 0x32: return Keys::k2;
@@ -27,8 +28,8 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case 0x37: return Keys::k7;
   case 0x38: return Keys::k8;
   case 0x39: return Keys::k9;
-  // case Keys::kSemicolon: return 0; // FIXME
-  // case Keys::kEqual: return 0; // FIXME
+  // case Keys::kSemicolon: return 0; // TODO
+  // case Keys::kEqual: return 0; // TODO
   case 0x41: return Keys::kA;
   case 0x42: return Keys::kB;
   case 0x43: return Keys::kC;
@@ -55,10 +56,10 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case 0x58: return Keys::kX;
   case 0x59: return Keys::kY;
   case 0x5A: return Keys::kZ;
-  // case Keys::kLeftBracket: return 0; // FIXME
-  // case Keys::kBackslash: return 0; // FIXME
-  // case Keys::kRightBracket: return 0; // FIXME
-  // case Keys::kGraveAccent: return 0; // FIXME
+  // case Keys::kLeftBracket: return 0; // TODO
+  // case Keys::kBackslash: return 0; // TODO
+  // case Keys::kRightBracket: return 0; // TODO
+  // case Keys::kGraveAccent: return 0; // TODO
   case VK_ESCAPE: return Keys::kEscape;
   case VK_RETURN: return Keys::kEnter;
   case VK_TAB: return Keys::kTab;
@@ -73,11 +74,11 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case VK_NEXT: return Keys::kPageDown;
   case VK_HOME: return Keys::kHome;
   case VK_END: return Keys::kEnd;
-  // case Keys::kCapsLock: return 0; // FIXME
-  // case Keys::kScrollLock: return 0; // FIXME
-  // case Keys::kNumLock: return 0; // FIXME
-  // case Keys::kPrintScreen: return 0; // FIXME
-  // case Keys::kPause: return 0; // FIXME
+  // case Keys::kCapsLock: return 0; // TODO
+  // case Keys::kScrollLock: return 0; // TODO
+  // case Keys::kNumLock: return 0; // TODO
+  // case Keys::kPrintScreen: return 0; // TODO
+  // case Keys::kPause: return 0; // TODO
   case VK_F1: return Keys::kF1;
   case VK_F2: return Keys::kF2;
   case VK_F3: return Keys::kF3;
@@ -117,18 +118,18 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case VK_MULTIPLY: return Keys::kKeypadMultiply;
   case VK_SUBTRACT: Keys::kKeypadSubtract;
   case VK_ADD: Keys::kKeypadAdd;
-  // case Keys::kKeypadEnter: return 0; // FIXME
-  // case Keys::kKeypadEqual: return 0; // FIXME
+  // case Keys::kKeypadEnter: return 0; // TODO
+  // case Keys::kKeypadEqual: return 0; // TODO
   // case Keys::kLeftShift: return VK_LSHIFT;
   // case Keys::kLeftControl: return VK_LCONTROL;
   // case Keys::kLeftAlt: return VK_LMENU;
-  // case Keys::kLeftSuper: return 0; // FIXME
+  // case Keys::kLeftSuper: return 0; // TODO
   // case Keys::kRightShift: return VK_RSHIFT;
   // case Keys::kRightControl: return VK_RCONTROL;
   // case Keys::kRightAlt: return VK_RMENU;
-  // case Keys::kRightSuper: return 0; // FIXME
-  // case Keys::kMenu: return 0; // FIXME
-  default: return Keys::kUnknown; // FIXME
+  // case Keys::kRightSuper: return 0; // TODO
+  // case Keys::kMenu: return 0; // TODO
+  default: return Keys::kUnknown; // TODO
   }
 } // KeycodeToKeys
 
@@ -203,7 +204,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.offset = std::move(offset);
   pWin->rect_.extent = std::move(extent);
 
-  for (std::size_t i = 0; i < Keyset::kMaxKeys; ++i) {
+  for (std::size_t i = 0; i < pWin->keyLUT_.size(); ++i) {
     pWin->keyLUT_[i] = KeycodeToKeys(i);
   }
 

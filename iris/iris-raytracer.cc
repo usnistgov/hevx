@@ -530,7 +530,7 @@ int main(int argc, char** argv) {
         iris::Renderer::Options::kReportDebugMessages |
           iris::Renderer::Options::kUseValidationLayers |
           iris::Renderer::Options::kEnableRayTracing,
-        0, {console_sink, file_sink});
+        {console_sink, file_sink}, 0);
       !result) {
     logger.critical("cannot initialize renderer: {}", result.error().what());
     std::exit(EXIT_FAILURE);

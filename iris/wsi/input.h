@@ -1,15 +1,17 @@
 #ifndef HEV_IRIS_WSI_INPUT_H_
 #define HEV_IRIS_WSI_INPUT_H_
-/*! \file
- * \brief \ref iris::wsi user-input definitions.
- */
+/*!
+\file
+\brief \ref iris::wsi user-input definitions.
+*/
 
-#include <bitset>
 #include <cstdint>
 
 namespace iris::wsi {
 
-//! \brief Keyboard keys.
+/*!
+\brief Keyboard keys.
+*/
 enum Keys {
   kUnknown = 0,
 
@@ -139,45 +141,9 @@ enum Keys {
   kMaxKeys = 255
 }; // enum class Keys
 
-//! \brief Tracks the current state of a keyboard.
-class Keyset {
-public:
-  //! \brief The maximum number of keys that are tracked.
-  static constexpr std::size_t kMaxKeys = Keys::kMaxKeys;
-
-private:
-  using bitset = std::bitset<kMaxKeys>;
-
-public:
-  /*! \brief Indicates if the \a key is currently pressed.
-   * \return true if \a key is pressed, false if not.
-   */
-  constexpr bool operator[](Keys key) const {
-    return keys_[static_cast<std::size_t>(key)];
-  }
-
-  //! \brief Get a reference to the status of \a key.
-  typename bitset::reference operator[](Keys key) {
-    return keys_[static_cast<std::size_t>(key)];
-  }
-
-  //! \brief Set the pressed status of \a key to \a value.
-  Keyset& set(Keys key, bool value = true) noexcept {
-    keys_.set(static_cast<std::size_t>(key), value);
-    return *this;
-  }
-
-  //! \brief Clear the pressed status of \a key.
-  Keyset& reset(Keys key) noexcept {
-    keys_.reset(static_cast<std::size_t>(key));
-    return *this;
-  }
-
-private:
-  bitset keys_;
-}; // class Keyset
-
-//! \brief Mouse buttons.
+/*!
+\brief Mouse buttons.
+*/
 enum Buttons : std::uint8_t {
   kButtonLeft,
   kButtonRight,
@@ -187,44 +153,6 @@ enum Buttons : std::uint8_t {
 
   kMaxButtons = 5
 }; // enum class Buttons
-
-//! \brief Tracks the current state of a mouse.
-class Buttonset {
-public:
-  //! \brief The maximum number of buttons that are tracked.
-  static constexpr std::size_t kMaxButtons = Buttons::kMaxButtons;
-
-private:
-  using bitset = std::bitset<kMaxButtons>;
-
-public:
-  /*! \brief Indicates if the \a button is currently pressed.
-   * \return true if \a button is pressed, false if not.
-   */
-  constexpr bool operator[](Buttons button) const {
-    return buttons_[static_cast<std::size_t>(button)];
-  }
-
-  //! \brief Get a reference to the status of \a key.
-  typename bitset::reference operator[](Buttons button) {
-    return buttons_[static_cast<std::size_t>(button)];
-  }
-
-  //! \brief Set the pressed status of \a button to \a value.
-  Buttonset& set(Buttons button, bool value = true) noexcept {
-    buttons_.set(static_cast<std::size_t>(button), value);
-    return *this;
-  }
-
-  //! \brief Clear the pressed status of \a button.
-  Buttonset& reset(Buttons button) noexcept {
-    buttons_.reset(static_cast<std::size_t>(button));
-    return *this;
-  }
-
-private:
-  bitset buttons_;
-}; // class Buttonset
 
 } // namespace iris::wsi
 

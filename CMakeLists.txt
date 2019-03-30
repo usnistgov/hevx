@@ -43,6 +43,13 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(Git REQUIRED)
 
 ##
+# HEV Documentation
+##
+if(BUILD_DOCS AND (PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR))
+  add_subdirectory(docs)
+endif()
+
+##
 # Unit testing
 ##
 if(BUILD_TESTING)
@@ -58,10 +65,3 @@ add_subdirectory(third_party)
 # HEV components
 ##
 add_subdirectory(iris)
-
-##
-# HEV Documentation
-##
-if(BUILD_DOCS AND (PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR))
-  add_subdirectory(docs)
-endif()
