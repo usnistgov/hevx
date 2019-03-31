@@ -135,9 +135,6 @@ void EndFrame(VkImage image = VK_NULL_HANDLE,
 */
 void AddRenderable(Component::Renderable renderable) noexcept;
 
-tl::expected<absl::FixedArray<VkCommandBuffer>, std::system_error>
-AllocateCommandBuffers(VkCommandBufferLevel level, std::uint32_t count) noexcept;
-
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};
   std::uint32_t queueFamilyIndex{UINT32_MAX};

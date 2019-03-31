@@ -701,11 +701,18 @@ int main(int argc, char** argv) {
 
   int currentCBIndex = 0;
 
-  auto commandBuffers =
-    iris::Renderer::AllocateCommandBuffers(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 2);
-  if (!commandBuffers) {
-    logger.error("Error allocating command buffers: {}",
-                 commandBuffers.error().what());
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sCommandQueue.commandPool;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 2;
+
+  absl::FixedArray<VkCommandBuffer> commandBuffers(2);
+  if (auto result = vkAllocateCommandBuffers(
+        iris::Renderer::sDevice, &commandBufferAI, commandBuffers.data());
+      result != VK_SUCCESS) {
+    logger.error("Cannot allocate command buffers: {}",
+                 iris::Renderer::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
@@ -713,7 +720,7 @@ int main(int argc, char** argv) {
   fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  absl::FixedArray<VkFence> traceCompleteFences(commandBuffers->size());
+  absl::FixedArray<VkFence> traceCompleteFences(commandBuffers.size());
   for (std::size_t i = 0; i < traceCompleteFences.size(); ++i) {
     if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
                                     &traceCompleteFences[i]);
@@ -738,7 +745,7 @@ int main(int argc, char** argv) {
     vkResetFences(iris::Renderer::sDevice, 1,
                   &traceCompleteFences[currentCBIndex]);
 
-    VkCommandBuffer cb = (*commandBuffers)[currentCBIndex];
+    VkCommandBuffer cb = commandBuffers[currentCBIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
 
     VkDebugUtilsLabelEXT cbLabel = {};

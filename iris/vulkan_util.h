@@ -23,16 +23,16 @@ namespace filesystem = std::filesystem;
 namespace iris::Renderer {
 
 /*! \brief Create a Vulkan Instance.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#initialization-instances
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extended-functionality-extensions
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extensions
- * \see
- * https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
- */
+
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#initialization-instances
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extended-functionality-extensions
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#extensions
+\see
+https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
+*/
 [[nodiscard]] tl::expected<VkInstance, std::system_error> CreateInstance(
   gsl::czstring<> appName, std::uint32_t appVersion,
   gsl::span<gsl::czstring<>> extensionNames,
@@ -46,10 +46,10 @@ CreateDebugUtilsMessenger(
   PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept;
 
 /*! \brief Compare two VkPhysicalDeviceFeatures2 structures.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
- */
+
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#features-features
+*/
 [[nodiscard]] bool
 ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
                               VkPhysicalDeviceFeatures2 b) noexcept;
@@ -66,31 +66,31 @@ tl::expected<void, std::system_error>
 DumpPhysicalDevices(VkInstance instance) noexcept;
 
 /*! \brief Check if a specific physical device meets specified requirements.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
+
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
+*/
 [[nodiscard]] tl::expected<bool, std::system_error> IsPhysicalDeviceGood(
   VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
   gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept;
 
 /*! \brief Choose the Vulkan physical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
- */
+
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
+*/
 [[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
 ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> extensionNames,
                      VkQueueFlags queueFlags) noexcept;
 
 /*! \brief Create the Vulkan logical device.
- *
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
- * \see
- * https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
- */
+
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-devices
+\see
+https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
+*/
 [[nodiscard]] tl::expected<std::tuple<VkDevice, std::uint32_t>,
                            std::system_error>
 CreateDevice(VkPhysicalDevice physicalDevice,
@@ -106,7 +106,10 @@ CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);
 
-//! \brief Convert a VkPhysicalDeviceType to a std::string
+/*!
+\brief Convert a VkPhysicalDeviceType to a std::string.
+\return a std::string of a VkPhysicalDeviceType.
+*/
 inline std::string to_string(VkPhysicalDeviceType type) noexcept {
   using namespace std::string_literals;
   switch (type) {
@@ -119,7 +122,10 @@ inline std::string to_string(VkPhysicalDeviceType type) noexcept {
   return "unknown"s;
 }
 
-//! \brief Convert a VkQueueFlags to a std::string
+/*!
+\brief Convert a VkQueueFlags to a std::string.
+\return a std::string of a VkQueueFlags.
+*/
 inline std::string to_string(VkQueueFlagBits flags) noexcept {
   using namespace std::string_literals;
   if (!flags) return "{}"s;
@@ -132,7 +138,10 @@ inline std::string to_string(VkQueueFlagBits flags) noexcept {
   return "{" + result.substr(0, result.size() - 3) + "}";
 }
 
-//! \brief Convert a VkDebugUtilsMessageTypeFlagsEXT to a std::string
+/*!
+\brief Convert a VkDebugUtilsMessageTypeFlagsEXT to a std::string
+\return a std::string of a VkDebugUtilsMessageTypeFlagsEXT
+*/
 inline std::string
 to_string(VkDebugUtilsMessageTypeFlagBitsEXT types) noexcept {
   using namespace std::string_literals;
