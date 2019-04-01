@@ -1,4 +1,0 @@
-HEVx
-====
-
-.. doxygenfile:: README.md

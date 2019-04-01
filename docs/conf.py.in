@@ -17,10 +17,10 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'HEVx'
+project = u'HEVx'
 
 # The full version, including alpha/beta/rc tags
-release = '@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@@PROJECT_VERSION_TWEAK@'
+release = u'@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@@PROJECT_VERSION_TWEAK@'
 
 
 # -- General configuration ---------------------------------------------------
@@ -29,7 +29,7 @@ release = '@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATC
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-  'sphinx.ext.todo', 'breathe'
+  'm2r', 'sphinx.ext.todo', 'breathe'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -39,6 +39,10 @@ templates_path = ['@CMAKE_CURRENT_SOURCE_DIR@/sphinx/_templates']
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = []
+
+source_suffix = ['.rst', '.md']
+
+master_doc = 'index'
 
 
 # -- Options for HTML output -------------------------------------------------

@@ -1,4 +1,5 @@
-# HEVx
+HEVx
+====
 [![Build Status](https://travis-ci.org/usnistgov/hevx.svg?branch=master)](https://travis-ci.org/usnistgov/hevx)
 
 High End Visualization (HEV) is a software environment for developing
@@ -11,9 +12,8 @@ community.
 
 Currently this code is under active development and in a pre-release state.
 
-## Building ##
-
-### Requirements ###
+Build Requirements
+------------------
 - CMake 3.12
 - Python 3.4
   - Wheezy Template: `pip install --user wheezy.template`
@@ -23,12 +23,10 @@ Currently this code is under active development and in a pre-release state.
 - Vulkan SDK
 - cpprestsdk (Windows only)
 
-### Installation ###
-
-#### Vulkan SDK ####
+### Vulkan SDK ###
 Ensure the VULKAN_SDK environment variable is set before building HEVx.
 
-#### CentOS 7 ####
+### CentOS 7 ###
 ~~~
 yum install -y centos-release-scl epel-release
 yum install -y devtoolset-8\* python34 git cmake3 boost-\* openssl-devel \
@@ -40,7 +38,7 @@ python3 get-pip.py --user
 pip3 install --user wheezy.template
 ~~~
 
-#### Fedora 28 / 29 ####
+### Fedora 28 / 29 ###
 ~~~
 dnf install -y git cmake gcc-c++ make boost-\* openssl-devel glm-devel \
   libpng-devel wayland-devel libpciaccess-devel libX11-devel libXpresent \
@@ -49,13 +47,30 @@ dnf install -y git cmake gcc-c++ make boost-\* openssl-devel glm-devel \
 pip3 install --user wheezy.template
 ~~~
 
-#### Ubuntu 18.10 ####
+### Ubuntu 18.10 ###
 ~~~
 apt install -y curl python3-pip cmake git pkg-config libssl-dev zlib1g-dev \
   libboost-1.65-all-dev libx11-dev libx11-xcb-dev libxcb1-dev \
   libxkb-common-dev libxcb-icccm4-dev libwayland-dev libxrandr-dev \
   libxcb-randr0-dev libxcb-keysyms1 libxcb-keysyms1-dev libxcb-ewmh-dev
 pip3 install --user wheezy.template
+~~~
+
+Build Instructions
+------------------
+
+### CentOS 7 ###
+~~~
+$ mkdir build && cd build
+$ scl enable devtoolset-8 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ cmake --build .
+~~~
+
+### Fedora 28 / 29 and Ubuntu 18.10 ###
+~~~
+$ mkdir build && cd build
+$ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ cmake --build .
 ~~~
 
 ### Dependencies ###
@@ -78,28 +93,12 @@ The following packages are fetched and managed with CMake:
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
 - [sailormoon/flags](https://github.com/sailormoon/flags)
 
-### Instructions ###
-
-#### CentOS 7 ####
-~~~
-$ mkdir build && cd build
-$ scl enable devtoolset-8 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-$ cmake --build .
-~~~
-
-#### Fedora 28 / 29 and Ubuntu 18.10 ####
-~~~
-$ mkdir build && cd build
-$ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-$ cmake --build .
-~~~
-
-## Other ##
-
-### Developers ###
+Developers
+----------
 - Wesley Griffin wesley.griffin@nist.gov
 
-### License ###
+License
+-------
 This software was developed by employees of the National Institute of
 Standards and Technology (NIST), an agency of the Federal Government and is
 being made available as a public service. Pursuant to title 17 United States
