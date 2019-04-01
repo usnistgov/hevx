@@ -7,8 +7,10 @@ else()
 endif()
 
 configure_file(Doxyfile.in Doxyfile @ONLY)
+configure_file(conf.py.in conf.py @ONLY)
 
 add_custom_target(docs ALL
-  Doxygen::doxygen ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  Doxygen::doxygen Doxyfile
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
+  #COMMAND sphinx-build -c "." "${CMAKE_CURRENT_SOURCE_DIR}/sphinx" "rtd"

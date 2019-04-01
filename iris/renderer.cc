@@ -134,6 +134,7 @@ static std::uint32_t const sColorResolveAttachmentIndex{1};
 static std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
 static std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
 
+// TODO: implement ID system so that multiple renderables work and can be removed
 class Renderables {
 public:
   std::vector<Component::Renderable> operator()() {

@@ -486,7 +486,7 @@ INTERNAL_DOCS          = @INTERNAL_DOCS@
 # and Mac users are advised to set this option to NO.
 # The default value is: system dependent.
 
-CASE_SENSE_NAMES       = YES
+CASE_SENSE_NAMES       = NO
 
 # If the HIDE_SCOPE_NAMES tag is set to NO then doxygen will show members with
 # their full class and namespace scopes in the documentation. If set to YES the
@@ -734,7 +734,7 @@ WARN_LOGFILE           = @CMAKE_CURRENT_BINARY_DIR@/doxygen.log
 # spaces.
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = README.md iris docs
+INPUT                  = @PROJECT_SOURCE_DIR@/README.md @PROJECT_SOURCE_DIR@/iris @PROJECT_SOURCE_DIR@/docs
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -1770,7 +1770,7 @@ MAN_LINKS              = NO
 # captures the structure of the code including all documentation.
 # The default value is: NO.
 
-GENERATE_XML           = NO
+GENERATE_XML           = YES
 
 # The XML_OUTPUT tag is used to specify where the XML pages will be put. If a
 # relative path is entered the value of OUTPUT_DIRECTORY will be put in front of
@@ -1787,7 +1787,7 @@ XML_OUTPUT             = xml
 # The default value is: YES.
 # This tag requires that the tag GENERATE_XML is set to YES.
 
-XML_PROGRAMLISTING     = YES
+XML_PROGRAMLISTING     = NO
 
 #---------------------------------------------------------------------------
 # Configuration options related to the DOCBOOK output
@@ -1952,7 +1952,7 @@ SKIP_FUNCTION_MACROS   = YES
 # the path). If a tag file is not located in the directory in which doxygen is
 # run, you must also specify the path to the tagfile here.
 
-TAGFILES               = "docs/cppreference-doxygen-web.tag.xml=http://en.cppreference.com/w/"
+TAGFILES               = "@CMAKE_CURRENT_SOURCE_DIR@/cppreference-doxygen-web.tag.xml=http://en.cppreference.com/w/"
 
 # When a file name is specified after GENERATE_TAGFILE, doxygen will create a
 # tag file that is based on the input files it reads. See section "Linking to
@@ -2200,7 +2200,7 @@ DOT_PATH               =
 # command).
 # This tag requires that the tag HAVE_DOT is set to YES.
 
-DOTFILE_DIRS           = docs/figures
+DOTFILE_DIRS           = @CMAKE_CURRENT_SOURCE_DIR@/figures
 
 # The MSCFILE_DIRS tag can be used to specify one or more directories that
 # contain msc files that are included in the documentation (see the \mscfile
