@@ -63,3 +63,9 @@ html_static_path = ['@CMAKE_CURRENT_SOURCE_DIR@/sphinx/_static']
 breathe_projects = { "hevx": "@CMAKE_CURRENT_BINARY_DIR@/xml/" }
 
 breathe_default_project = "hevx"
+
+
+# -- Setup customization ------------------------------------------------------
+
+def setup(app):
+  app.add_stylesheet('css/hevx_custom.css')
