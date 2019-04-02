@@ -407,10 +407,10 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
                         "Cannot get keyboard mapping"));
   }
 
-  int const nKeycodes = mapping->length / mapping->keysyms_per_keycode;
-  Expects(nKeyCodes < pWin->keyLUT_.size());
+  std::size_t const nKeycodes = mapping->length / mapping->keysyms_per_keycode;
+  Expects(nKeycodes < pWin->keyLUT_.size());
 
-  for (int i = 0; i < nKeycodes; ++i) {
+  for (std::size_t i = 0; i < nKeycodes; ++i) {
     ::xcb_keycode_t const keycode = setup->min_keycode + i;
     pWin->keyLUT_[keycode] = KeyCodeToKeys(i, mapping);
   }

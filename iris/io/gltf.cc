@@ -1,10 +1,6 @@
 #include "io/gltf.h"
 
 #include "config.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4714) // ignore forceinline failures
-#endif
 
 #include "error.h"
 #include "fmt/format.h"
@@ -13,7 +9,6 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
-#include "glm/gtx/string_cast.hpp"
 #include "gsl/gsl"
 #include "io/read_file.h"
 #include "logging.h"
@@ -1005,10 +1000,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     glm::vec3 skew;
     glm::vec4 perspective;
     glm::decompose(nodeMat, scale, rotation, translation, skew, perspective);
-    GetLogger()->debug("decomposed node matrix: t: {} r: {} s: {} k: {} p: {}",
-                       glm::to_string(translation), glm::to_string(rotation),
-                       glm::to_string(scale), glm::to_string(skew),
-                       glm::to_string(perspective));
+    GetLogger()->debug(
+      "decomposed node matrix: t: ({}, {}, {}) r: ({}, {}, {}, {}) s: ({}, {}, "
+      "{}) k: ({}, {}, {}) p: ({}, {}, {}, {})",
+      translation.x, translation.y, translation.z, rotation.x, rotation.y,
+      rotation.z, rotation.w, scale.x, scale.y, scale.z, skew.x, skew.y, skew.z,
+      perspective.x, perspective.y, perspective.z, perspective.w);
   }
 
   auto&& children =
@@ -1372,7 +1369,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     if (auto ptr = Renderer::MapMemory<MaterialBuffer*>(stagingAllocation)) {
       if (primitive.material) {
-        if (!materials || materials->size() < *primitive.material) {
+        if (!materials ||
+            materials->size() < static_cast<std::size_t>(*primitive.material)) {
           IRIS_LOG_LEAVE();
           return tl::unexpected(
             std::system_error(Error::kFileParseFailed,
