@@ -197,13 +197,14 @@ tl::expected<void, std::system_error> iris::Renderer::TransitionImage(
   return {};
 } // iris::Renderer::TransitionImage
 
-tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>, std::system_error>
-iris::Renderer::AllocateImageAndView(
-  VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
-  std::uint32_t arrayLayers, VkSampleCountFlagBits sampleCount,
-  VkImageUsageFlags imageUsage, VkImageTiling imageTiling,
-  VmaMemoryUsage memoryUsage,
-  VkImageSubresourceRange subresourceRange) noexcept {
+tl::expected<iris::Renderer::Image, std::system_error>
+iris::Renderer::AllocateImage(VkFormat format, VkExtent2D extent,
+                              std::uint32_t mipLevels,
+                              std::uint32_t arrayLayers,
+                              VkSampleCountFlagBits sampleCount,
+                              VkImageUsageFlags imageUsage,
+                              VkImageTiling imageTiling,
+                              VmaMemoryUsage memoryUsage) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sAllocator != VK_NULL_HANDLE);
@@ -224,22 +225,37 @@ iris::Renderer::AllocateImageAndView(
   VmaAllocationCreateInfo allocationCI = {};
   allocationCI.usage = memoryUsage;
 
-  VkImage image = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
-  VkImageView imageView = VK_NULL_HANDLE;
+  Image image;
 
-  if (auto result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image,
-                                   &allocation, nullptr);
+  if (auto result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image.image,
+                                   &image.allocation, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
+  Ensures(image.image != VK_NULL_HANDLE);
+  Ensures(image.allocation != VK_NULL_HANDLE);
+
+  IRIS_LOG_LEAVE();
+  return image;
+} // iris::Renderer::AllocateImage
+
+tl::expected<VkImageView, std::system_error> iris::Renderer::CreateImageView(
+  Image image, VkImageViewType type, VkFormat format,
+  VkImageSubresourceRange subresourceRange) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(image.image != VK_NULL_HANDLE);
+  Expects(image.allocation != VK_NULL_HANDLE);
+
+  VkImageView imageView = VK_NULL_HANDLE;
+
   VkImageViewCreateInfo imageViewCI = {};
   imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  imageViewCI.image = image;
-  imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  imageViewCI.image = image.image;
+  imageViewCI.viewType = type;
   imageViewCI.format = format;
   imageViewCI.components = {
     VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -254,20 +270,18 @@ iris::Renderer::AllocateImageAndView(
       std::system_error(make_error_code(result), "Cannot create image view"));
   }
 
-  Ensures(image != VK_NULL_HANDLE);
-  Ensures(allocation != VK_NULL_HANDLE);
   Ensures(imageView != VK_NULL_HANDLE);
 
   IRIS_LOG_LEAVE();
-  return std::make_tuple(image, allocation, imageView);
-} // iris::Renderer::AllocateImageAndView
+  return imageView;
+} // iris::Renderer::CreateImageView
 
-tl::expected<std::tuple<VkImage, VmaAllocation>, std::system_error>
+tl::expected<iris::Renderer::Image, std::system_error>
 iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
                             VkFence fence, VkFormat format, VkExtent2D extent,
                             VkImageUsageFlags imageUsage,
                             VmaMemoryUsage memoryUsage,
-                            gsl::not_null<std::byte*> pixels [[maybe_unused]],
+                            gsl::not_null<std::byte*> pixels,
                             std::uint32_t bytesPerPixel) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
@@ -337,18 +351,17 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
   VmaAllocationCreateInfo allocationCI = {};
   allocationCI.usage = memoryUsage;
 
-  VkImage image = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
+  Image image;
 
-  if (auto result = vmaCreateImage(sAllocator, &imageCI, &allocationCI, &image,
-                                   &allocation, nullptr);
+  if (auto result = vmaCreateImage(sAllocator, &imageCI, &allocationCI,
+                                   &image.image, &image.allocation, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
-  if (auto result = TransitionImage(commandPool, queue, fence, image,
+  if (auto result = TransitionImage(commandPool, queue, fence, image.image,
                                     VK_IMAGE_LAYOUT_UNDEFINED,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
       !result) {
@@ -371,7 +384,7 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
   region.imageOffset = {0, 0, 0};
   region.imageExtent = {extent.width, extent.height, 1};
 
-  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
+  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image.image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   if (auto result = EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
@@ -380,23 +393,24 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
     return tl::unexpected(result.error());
   }
 
-  if (auto result = TransitionImage(
-        commandPool, queue, fence, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
-           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-           : VK_IMAGE_LAYOUT_GENERAL),
-        1, 1);
+  if (auto result =
+        TransitionImage(commandPool, queue, fence, image.image,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
+                           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                           : VK_IMAGE_LAYOUT_GENERAL),
+                        1, 1);
       !result) {
     return tl::unexpected(result.error());
   }
 
   DestroyBuffer(stagingBuffer, stagingBufferAllocation);
 
-  Ensures(image != VK_NULL_HANDLE);
-  Ensures(allocation != VK_NULL_HANDLE);
+  Ensures(image.image != VK_NULL_HANDLE);
+  Ensures(image.allocation != VK_NULL_HANDLE);
 
   IRIS_LOG_LEAVE();
-  return std::make_tuple(image, allocation);
+  return image;
 } // iris::Renderer::CreateImage
 
 tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
@@ -904,8 +918,7 @@ iris::Renderer::LoadShaderFromFile(filesystem::path const& path,
   return *sm;
 } // iris::Renderer::LoadShaderFromFile
 
-tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
-             std::system_error>
+tl::expected<iris::Renderer::AccelerationStructure, std::system_error>
 iris::Renderer::CreateAccelerationStructure(
   VkAccelerationStructureCreateInfoNV*
     pAccelerationStructureCreateInfo) noexcept {
@@ -914,9 +927,11 @@ iris::Renderer::CreateAccelerationStructure(
   Expects(sAllocator != VK_NULL_HANDLE);
   Expects(pAccelerationStructureCreateInfo != nullptr);
 
-  VkAccelerationStructureNV structure{VK_NULL_HANDLE};
+  AccelerationStructure structure;
+
   if (auto result = vkCreateAccelerationStructureNV(
-        sDevice, pAccelerationStructureCreateInfo, nullptr, &structure);
+        sDevice, pAccelerationStructureCreateInfo, nullptr,
+        &structure.structure);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot create acceleration structure"));
@@ -928,7 +943,7 @@ iris::Renderer::CreateAccelerationStructure(
   VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
   memoryRequirementsInfo.sType =
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-  memoryRequirementsInfo.accelerationStructure = structure;
+  memoryRequirementsInfo.accelerationStructure = structure.structure;
   memoryRequirementsInfo.type =
     VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
   vkGetAccelerationStructureMemoryRequirementsNV(
@@ -939,41 +954,41 @@ iris::Renderer::CreateAccelerationStructure(
   allocationCI.memoryTypeBits =
     memoryRequirements.memoryRequirements.memoryTypeBits;
 
-  VmaAllocation allocation;
   if (auto result =
         vmaAllocateMemory(sAllocator, &memoryRequirements.memoryRequirements,
-                          &allocationCI, &allocation, nullptr);
+                          &allocationCI, &structure.allocation, nullptr);
       result != VK_SUCCESS) {
-    vkDestroyAccelerationStructureNV(sDevice, structure, nullptr);
+    vkDestroyAccelerationStructureNV(sDevice, structure.structure, nullptr);
     return tl::unexpected(std::system_error(
       iris::Renderer::make_error_code(result), "Cannot allocate memory"));
   }
 
   VmaAllocationInfo allocationInfo;
-  vmaGetAllocationInfo(sAllocator, allocation, &allocationInfo);
+  vmaGetAllocationInfo(sAllocator, structure.allocation, &allocationInfo);
 
   VkBindAccelerationStructureMemoryInfoNV bindAccelerationStructureMemoryInfo =
     {};
   bindAccelerationStructureMemoryInfo.sType =
     VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV;
-  bindAccelerationStructureMemoryInfo.accelerationStructure = structure;
+  bindAccelerationStructureMemoryInfo.accelerationStructure =
+    structure.structure;
   bindAccelerationStructureMemoryInfo.memory = allocationInfo.deviceMemory;
   bindAccelerationStructureMemoryInfo.memoryOffset = 0;
 
   if (auto result = vkBindAccelerationStructureMemoryNV(
         sDevice, 1, &bindAccelerationStructureMemoryInfo);
       result != VK_SUCCESS) {
-    vmaFreeMemory(sAllocator, allocation);
-    vkDestroyAccelerationStructureNV(sDevice, structure, nullptr);
+    vmaFreeMemory(sAllocator, structure.allocation);
+    vkDestroyAccelerationStructureNV(sDevice, structure.structure, nullptr);
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot bind memory to acceleration structure"));
   }
 
-  Ensures(structure != VK_NULL_HANDLE);
-  Ensures(allocation != VK_NULL_HANDLE);
+  Ensures(structure.structure != VK_NULL_HANDLE);
+  Ensures(structure.allocation != VK_NULL_HANDLE);
 
   IRIS_LOG_LEAVE();
-  return std::make_tuple(structure, allocation);
+  return structure;
 } // iris::Renderer::CreateAccelerationStructure
 
 tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>

@@ -232,7 +232,8 @@ CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
   return std::make_tuple(layout, pipeline);
 } // CreatePipeline
 
-tl::expected<std::tuple<VkAccelerationStructureNV, VkAccelerationStructureNV>,
+tl::expected<std::pair<iris::Renderer::AccelerationStructure,
+                       iris::Renderer::AccelerationStructure>,
              std::system_error>
 CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   using namespace std::string_literals;
@@ -297,11 +298,11 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   accelerationStructureCI.info.geometryCount = 1;
   accelerationStructureCI.info.pGeometries = &geometry;
 
-  VkAccelerationStructureNV bottomLevelAS{VK_NULL_HANDLE};
-  VmaAllocation bottomLevelASAllocation{VK_NULL_HANDLE};
+  iris::Renderer::AccelerationStructure bottomLevelAS;
+
   if (auto as =
         iris::Renderer::CreateAccelerationStructure(&accelerationStructureCI)) {
-    std::tie(bottomLevelAS, bottomLevelASAllocation) = *as;
+    bottomLevelAS = std::move(*as);
   } else {
     return tl::unexpected(
       std::system_error(as.error().code(), "Cannot create bottom level AS: "s +
@@ -314,7 +315,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
   memoryRequirementsInfo.sType =
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-  memoryRequirementsInfo.accelerationStructure = bottomLevelAS;
+  memoryRequirementsInfo.accelerationStructure = bottomLevelAS.structure;
   memoryRequirementsInfo.type =
     VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
   vkGetAccelerationStructureMemoryRequirementsNV(
@@ -348,8 +349,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   vkCmdBuildAccelerationStructureNV(
     commandBuffer, &accelerationStructureCI.info,
     VK_NULL_HANDLE /* instanceData */, 0 /* instanceOffset */,
-    VK_FALSE /* update */, bottomLevelAS /* dst */, VK_NULL_HANDLE /* src */,
-    scratchBuffer, 0 /* scratchOffset */);
+    VK_FALSE /* update */, bottomLevelAS.structure /* dst */,
+    VK_NULL_HANDLE /* src */, scratchBuffer, 0 /* scratchOffset */);
 
   logger.info("EndOneTimeSubmit bottomLevelAS");
   if (auto result = iris::Renderer::EndOneTimeSubmit(
@@ -373,12 +374,11 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   accelerationStructureCI.info.geometryCount = 0;
   accelerationStructureCI.info.pGeometries = nullptr;
 
-  VkAccelerationStructureNV topLevelAS{VK_NULL_HANDLE};
-  VmaAllocation topLevelASAllocation{VK_NULL_HANDLE};
+  iris::Renderer::AccelerationStructure topLevelAS;
 
   if (auto as =
         iris::Renderer::CreateAccelerationStructure(&accelerationStructureCI)) {
-    std::tie(topLevelAS, topLevelASAllocation) = *as;
+    topLevelAS = std::move(*as);
   } else {
     return tl::unexpected(std::system_error(
       as.error().code(), "Cannot create top level AS: "s + as.error().what()));
@@ -402,8 +402,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
 
   absl::FixedArray<std::byte> bottomLevelASHandle(8);
   if (auto result = vkGetAccelerationStructureHandleNV(
-        iris::Renderer::sDevice, bottomLevelAS, bottomLevelASHandle.size(),
-        bottomLevelASHandle.data());
+        iris::Renderer::sDevice, bottomLevelAS.structure,
+        bottomLevelASHandle.size(), bottomLevelASHandle.data());
       result != VK_SUCCESS) {
     return tl::unexpected(
       std::system_error(iris::Renderer::make_error_code(result),
@@ -435,7 +435,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
       p.error().code(), "Cannot map instance buffer: "s + p.error().what()));
   }
 
-  memoryRequirementsInfo.accelerationStructure = topLevelAS;
+  memoryRequirementsInfo.accelerationStructure = topLevelAS.structure;
   memoryRequirementsInfo.type =
     VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
   vkGetAccelerationStructureMemoryRequirementsNV(
@@ -464,8 +464,8 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
   vkCmdBuildAccelerationStructureNV(
     commandBuffer, &accelerationStructureCI.info,
     instanceBuffer /* instanceData */, 0 /* instanceOffset */,
-    VK_FALSE /* update */, topLevelAS /* dst */, VK_NULL_HANDLE /* dst */,
-    scratchBuffer, 0 /* scratchOffset */);
+    VK_FALSE /* update */, topLevelAS.structure /* dst */,
+    VK_NULL_HANDLE /* dst */, scratchBuffer, 0 /* scratchOffset */);
 
   if (auto result = iris::Renderer::EndOneTimeSubmit(
         commandBuffer, sCommandQueue.commandPool, sCommandQueue.queue,
@@ -476,7 +476,7 @@ CreateAccelerationStructures(spdlog::logger& logger) noexcept {
       "Cannot build acceleration struture: "s + result.error().what()));
   }
 
-  return std::make_tuple(bottomLevelAS, topLevelAS);
+  return std::make_pair(bottomLevelAS, topLevelAS);
 }
 
 #if PLATFORM_WINDOWS
@@ -573,7 +573,7 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  VkAccelerationStructureNV bottomLeveAS, topLevelAS;
+  iris::Renderer::AccelerationStructure bottomLeveAS, topLevelAS;
 
   if (auto as = CreateAccelerationStructures(logger)) {
     std::tie(bottomLeveAS, topLevelAS) = *as;
@@ -598,23 +598,30 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  VkImage outputImage;
-  VmaAllocation outputImageAllocation;
+  iris::Renderer::Image outputImage;
   VkImageView outputImageView;
 
-  if (auto iav = iris::Renderer::AllocateImageAndView(
+  if (auto img = iris::Renderer::AllocateImage(
         VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    std::tie(outputImage, outputImageAllocation, outputImageView) = *iav;
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
+    outputImage = std::move(*img);
   } else {
-    logger.critical("cannot create output image: {}", iav.error().what());
+    logger.critical("cannot create output image: {}", img.error().what());
+    std::exit(EXIT_FAILURE);
+  }
+
+  if (auto view = iris::Renderer::CreateImageView(
+        outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    outputImageView = *view;
+  } else {
+    logger.critical("cannot create output image view: {}", view.error().what());
     std::exit(EXIT_FAILURE);
   }
 
   absl::FixedArray<VkAccelerationStructureNV, 2> accelerationStructures{
-    bottomLeveAS, topLevelAS};
+    bottomLeveAS.structure, topLevelAS.structure};
 
   VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
   writeDescriptorSetAS.sType =
@@ -771,7 +778,7 @@ int main(int argc, char** argv) {
     readyBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     readyBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
-    readyBarrier.image = outputImage;
+    readyBarrier.image = outputImage.image;
     readyBarrier.subresourceRange = sr;
 
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -808,7 +815,7 @@ int main(int argc, char** argv) {
     tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     tracedBarrier.srcQueueFamilyIndex = tracedBarrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
-    tracedBarrier.image = outputImage;
+    tracedBarrier.image = outputImage.image;
     tracedBarrier.subresourceRange = sr;
 
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -829,7 +836,7 @@ int main(int argc, char** argv) {
                    iris::Renderer::to_string(result));
     }
 
-    iris::Renderer::EndFrame(outputImage);
+    iris::Renderer::EndFrame(outputImage.image);
     currentCBIndex = (currentCBIndex + 1) % 2;
     frameCount++;
   }

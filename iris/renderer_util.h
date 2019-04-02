@@ -52,17 +52,22 @@ TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                 VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
                 std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept;
 
-[[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation, VkImageView>,
-                           std::system_error>
-AllocateImageAndView(VkFormat format, VkExtent2D extent,
-                     std::uint32_t mipLevels, std::uint32_t arrayLayers,
-                     VkSampleCountFlagBits sampleCount,
-                     VkImageUsageFlags imageUsage, VkImageTiling imageTiling,
-                     VmaMemoryUsage memoryUsage,
-                     VkImageSubresourceRange subresourceRange) noexcept;
+struct Image {
+  VkImage image{VK_NULL_HANDLE};
+  VmaAllocation allocation{VK_NULL_HANDLE};
+}; // struct Image
 
-[[nodiscard]] tl::expected<std::tuple<VkImage, VmaAllocation>,
-                           std::system_error>
+[[nodiscard]] tl::expected<Image, std::system_error>
+AllocateImage(VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
+              std::uint32_t arrayLayers, VkSampleCountFlagBits sampleCount,
+              VkImageUsageFlags imageUsage, VkImageTiling imageTiling,
+              VmaMemoryUsage memoryUsage) noexcept;
+
+[[nodiscard]] tl::expected<VkImageView, std::system_error>
+CreateImageView(Image image, VkImageViewType type, VkFormat format,
+                VkImageSubresourceRange subresourceRange) noexcept;
+
+[[nodiscard]] tl::expected<Image, std::system_error>
 CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
             VkFormat format, VkExtent2D extent, VkImageUsageFlags imageUsage,
             VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
@@ -103,8 +108,12 @@ CompileShaderFromSource(std::string_view source,
 LoadShaderFromFile(filesystem::path const& path,
                    VkShaderStageFlagBits stage) noexcept;
 
-[[nodiscard]] tl::expected<std::tuple<VkAccelerationStructureNV, VmaAllocation>,
-                           std::system_error>
+struct AccelerationStructure {
+  VkAccelerationStructureNV structure{VK_NULL_HANDLE};
+  VmaAllocation allocation{VK_NULL_HANDLE};
+}; // struct AccelerationStructure
+
+[[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
 CreateAccelerationStructure(VkAccelerationStructureCreateInfoNV*
                               pAccelerationStructureCreateInfo) noexcept;
 
@@ -168,6 +177,11 @@ CreateGraphicsPipeline(
     colorBlendAttachmentStates,
   gsl::span<const VkDynamicState> dynamicStates,
   std::uint32_t renderPassSubpass,
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
+
+tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
+CreateRayTracingPipeline(
+  gsl::span<const Shader> shaders,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
 
 } // namespace iris::Renderer

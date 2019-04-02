@@ -114,6 +114,8 @@ VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 VkDescriptorSetLayout sGlobalDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sGlobalDescriptorSet{VK_NULL_HANDLE};
 
+VkQueryPool sTimestampsQueryPool{VK_NULL_HANDLE};
+
 absl::flat_hash_map<std::string, iris::Window>& Windows() {
   static absl::flat_hash_map<std::string, iris::Window> sWindows;
   return sWindows;
@@ -911,6 +913,19 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   NameObject(VK_OBJECT_TYPE_DESCRIPTOR_POOL, sDescriptorPool,
              "sDescriptorPool");
 
+  VkQueryPoolCreateInfo queryPoolCI = {};
+  queryPoolCI.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+  queryPoolCI.queryType = VK_QUERY_TYPE_TIMESTAMP;
+  queryPoolCI.queryCount = 128;
+
+  if (auto result = vkCreateQueryPool(sDevice, &queryPoolCI, nullptr,
+                                      &sTimestampsQueryPool);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create timestamps query pool"));
+  }
+
   /////
   //
   // Create the global descriptor set for all pipelines
@@ -1388,10 +1403,10 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   int width, height, bytesPerPixel;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytesPerPixel);
 
-  VkImage fontTexture;
-  VmaAllocation fontTextureAllocation;
+  Image fontTexture;
+  VkImageView fontTextureView;
 
-  if (auto ia =
+  if (auto img =
         CreateImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
                     VK_FORMAT_R8G8B8A8_UNORM,
                     VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
@@ -1399,42 +1414,27 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                     VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
                     gsl::not_null(reinterpret_cast<std::byte*>(pixels)),
                     gsl::narrow_cast<std::uint32_t>(bytesPerPixel))) {
-    std::tie(fontTexture, fontTextureAllocation) = *ia;
+    fontTexture = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(ia.error());
+    return tl::unexpected(img.error());
   }
 
-  window.uiRenderable.images.push_back(fontTexture);
-  window.uiRenderable.imageAllocations.push_back(fontTextureAllocation);
-
-  NameObject(
-    VK_OBJECT_TYPE_IMAGE, window.uiRenderable.images[0],
-    fmt::format("{}.uiRenderable.images[0] (fontTexture)", title).c_str());
-
-  VkImageViewCreateInfo imageViewCI = {};
-  imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  imageViewCI.image = window.uiRenderable.images[0];
-  imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  imageViewCI.format = VK_FORMAT_R8G8B8A8_UNORM;
-  imageViewCI.components = {
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-    VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
-  imageViewCI.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}; 
-
-  VkImageView fontTextureView;
-  if (auto result =
-        vkCreateImageView(sDevice, &imageViewCI, nullptr, &fontTextureView);
-      result != VK_SUCCESS) {
+  if (auto view = CreateImageView(fontTexture, VK_IMAGE_VIEW_TYPE_2D,
+                                  VK_FORMAT_R8G8B8A8_UNORM,
+                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    fontTextureView = std::move(*view);
+  } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create image view"));
+    vmaDestroyImage(sAllocator, fontTexture.image, fontTexture.allocation);
+    return tl::unexpected(view.error());
   }
 
-  window.uiRenderable.imageViews.push_back(fontTextureView);
-
   NameObject(
-    VK_OBJECT_TYPE_IMAGE_VIEW, window.uiRenderable.imageViews[0],
+    VK_OBJECT_TYPE_IMAGE, fontTexture.image,
+    fmt::format("{}.uiRenderable.images[0] (fontTexture)", title).c_str());
+  NameObject(
+    VK_OBJECT_TYPE_IMAGE_VIEW, fontTextureView,
     fmt::format("{}.uiRenderable.views[0] (fontTextureView)", title).c_str());
 
   VkSamplerCreateInfo samplerCI = {};
@@ -1460,16 +1460,21 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         vkCreateSampler(sDevice, &samplerCI, nullptr, &fontTextureSampler);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
+    vkDestroyImageView(sDevice, fontTextureView, nullptr);
+    vmaDestroyImage(sAllocator, fontTexture.image, fontTexture.allocation);
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create sampler"));
   }
 
-  window.uiRenderable.imageSamplers.push_back(fontTextureSampler);
-
   NameObject(
-    VK_OBJECT_TYPE_SAMPLER, window.uiRenderable.imageSamplers[0],
+    VK_OBJECT_TYPE_SAMPLER, fontTextureSampler,
     fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
       .c_str());
+
+  window.uiRenderable.images.push_back(fontTexture.image);
+  window.uiRenderable.imageAllocations.push_back(fontTexture.allocation);
+  window.uiRenderable.imageViews.push_back(fontTextureView);
+  window.uiRenderable.imageSamplers.push_back(fontTextureSampler);
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);
@@ -1651,77 +1656,114 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     }
   }
 
-  VkImage newDepthStencilImage;
-  VmaAllocation newDepthStencilImageAllocation;
+  Image newDepthStencilImage;
   VkImageView newDepthStencilImageView;
 
-  if (auto iav = AllocateImageAndView(
+  if (auto img = AllocateImage(
         sSurfaceDepthStencilFormat, newExtent, 1, 1, VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
-        VMA_MEMORY_USAGE_GPU_ONLY, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
-    std::tie(newDepthStencilImage, newDepthStencilImageAllocation,
-             newDepthStencilImageView) = *iav;
+        VMA_MEMORY_USAGE_GPU_ONLY)) {
+    newDepthStencilImage = std::move(*img);
   } else {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(iav.error());
+    return tl::unexpected(img.error());
   }
 
-  VkImage newColorTarget;
-  VmaAllocation newColorTargetAllocation;
+  if (auto view = CreateImageView(newDepthStencilImage, VK_IMAGE_VIEW_TYPE_2D,
+                                  sSurfaceDepthStencilFormat,
+                                  {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    newDepthStencilImageView = std::move(*view);
+  } else {
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(view.error());
+  }
+
+  Image newColorTarget;
   VkImageView newColorTargetView;
 
-  if (auto iav = AllocateImageAndView(
+  if (auto img = AllocateImage(
         sSurfaceColorFormat.format, newExtent, 1, 1, sSurfaceSampleCount,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
           VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY,
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    std::tie(newColorTarget, newColorTargetAllocation, newColorTargetView) =
-      *iav;
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
+    newColorTarget = std::move(*img);
   } else {
     vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilImage,
-                    newDepthStencilImageAllocation);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(iav.error());
+    return tl::unexpected(img.error());
   }
 
-  VkImage newDepthStencilTarget;
-  VmaAllocation newDepthStencilTargetAllocation;
-  VkImageView newDepthStencilTargetView;
-
-  if (auto iav = AllocateImageAndView(
-        sSurfaceDepthStencilFormat, newExtent, 1, 1, sSurfaceSampleCount,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
-        VMA_MEMORY_USAGE_GPU_ONLY, {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
-    std::tie(newDepthStencilTarget, newDepthStencilTargetAllocation,
-             newDepthStencilTargetView) = *iav;
+  if (auto view = CreateImageView(newColorTarget, VK_IMAGE_VIEW_TYPE_2D,
+                                  sSurfaceColorFormat.format,
+                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    newColorTargetView = std::move(*view);
   } else {
-    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
     vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilImage,
-                    newDepthStencilImageAllocation);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(iav.error());
+    return tl::unexpected(view.error());
+  }
+
+  Image newDepthStencilTarget;
+  VkImageView newDepthStencilTargetView;
+
+  if (auto img = AllocateImage(
+        sSurfaceDepthStencilFormat, newExtent, 1, 1, sSurfaceSampleCount,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_TILING_OPTIMAL,
+        VMA_MEMORY_USAGE_GPU_ONLY)) {
+    newDepthStencilTarget = std::move(*img);
+  } else {
+    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, newColorTarget.image,
+                    newColorTarget.allocation);
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(img.error());
+  }
+
+  if (auto view = CreateImageView(newDepthStencilTarget, VK_IMAGE_VIEW_TYPE_2D,
+                                  sSurfaceDepthStencilFormat,
+                                  {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1})) {
+    newDepthStencilTargetView = std::move(*view);
+  } else {
+    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
+    vmaDestroyImage(sAllocator, newColorTarget.image,
+                    newColorTarget.allocation);
+    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
+    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
+    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(view.error());
   }
 
   if (auto result =
         TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-                        newColorTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        newColorTarget.image, VK_IMAGE_LAYOUT_UNDEFINED,
                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+    vmaDestroyImage(sAllocator, newColorTarget.image,
+                    newColorTarget.allocation);
     vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilImage,
-                    newDepthStencilImageAllocation);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
@@ -1730,14 +1772,15 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
 
   if (auto result =
         TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-                        newDepthStencilTarget, VK_IMAGE_LAYOUT_UNDEFINED,
+                        newDepthStencilTarget.image, VK_IMAGE_LAYOUT_UNDEFINED,
                         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
       !result) {
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+    vmaDestroyImage(sAllocator, newColorTarget.image,
+                    newColorTarget.allocation);
     vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    vmaDestroyImage(sAllocator, newDepthStencilImage,
-                    newDepthStencilImageAllocation);
+    vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                    newDepthStencilImage.allocation);
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
@@ -1767,10 +1810,11 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
           vkCreateFramebuffer(sDevice, &framebufferCI, nullptr, &framebuffer);
         result != VK_SUCCESS) {
       vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-      vmaDestroyImage(sAllocator, newColorTarget, newColorTargetAllocation);
+      vmaDestroyImage(sAllocator, newColorTarget.image,
+                      newColorTarget.allocation);
       vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-      vmaDestroyImage(sAllocator, newDepthStencilImage,
-                      newDepthStencilImageAllocation);
+      vmaDestroyImage(sAllocator, newDepthStencilImage.image,
+                      newDepthStencilImage.allocation);
       for (auto&& v : newColorImageViews)
         vkDestroyImageView(sDevice, v, nullptr);
       vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
@@ -1823,24 +1867,24 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
                fmt::format("{}.colorImageViews[{}]", window.title, i).c_str());
   }
 
-  window.depthStencilImage = newDepthStencilImage;
-  window.depthStencilImageAllocation = newDepthStencilImageAllocation;
+  window.depthStencilImage = newDepthStencilImage.image;
+  window.depthStencilImageAllocation = newDepthStencilImage.allocation;
   window.depthStencilImageView = newDepthStencilImageView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilImage,
              fmt::format("{}.depthStencilImage", window.title).c_str());
   NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilImageView,
              fmt::format("{}.depthStencilImageView", window.title).c_str());
 
-  window.colorTarget = newColorTarget;
-  window.colorTargetAllocation = newColorTargetAllocation;
+  window.colorTarget = newColorTarget.image;
+  window.colorTargetAllocation = newColorTarget.allocation;
   window.colorTargetView = newColorTargetView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.colorTarget,
              fmt::format("{}.colorTarget", window.title).c_str());
   NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.colorTargetView,
              fmt::format("{}.colorTargetView", window.title).c_str());
 
-  window.depthStencilTarget = newDepthStencilTarget;
-  window.depthStencilTargetAllocation = newDepthStencilTargetAllocation;
+  window.depthStencilTarget = newDepthStencilTarget.image;
+  window.depthStencilTargetAllocation = newDepthStencilTarget.allocation;
   window.depthStencilTargetView = newDepthStencilTargetView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilTarget,
              fmt::format("{}.depthStencilTarget", window.title).c_str());
