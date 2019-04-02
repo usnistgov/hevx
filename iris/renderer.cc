@@ -163,6 +163,7 @@ static VkBuffer sLightsBuffer{VK_NULL_HANDLE};
 static VmaAllocation sLightsBufferAllocation{VK_NULL_HANDLE};
 static VkDeviceSize sLightsBufferSize = 0;
 
+static Features sFeatures{Features::kNone};
 static bool sRunning{false};
 static bool sInFrame{false};
 static std::uint32_t sFrameNum{0};
@@ -517,6 +518,55 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   GetLogger()->debug("Default number of task threads: {}",
                      sTaskSchedulerInit.default_num_threads());
 
+#if PLATFORM_LINUX
+  ::setenv(
+    "VK_LAYER_PATH",
+    (iris::kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
+  GetLogger()->debug("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
+#endif
+
+  flextVkInit();
+
+  std::uint32_t instanceVersion, versionMajor, versionMinor, versionPatch;
+  vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
+  versionMajor = VK_VERSION_MAJOR(instanceVersion);
+  versionMinor = VK_VERSION_MINOR(instanceVersion);
+  versionPatch = VK_VERSION_PATCH(instanceVersion);
+
+  GetLogger()->debug("Vulkan Instance Version: {}.{}.{}", versionMajor,
+                     versionMinor, versionPatch);
+
+  if (versionMajor != 1 && versionMinor != 1) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kInitializationFailed,
+                        fmt::format("Invalid instance version: {}.{}.{}",
+                                    versionMajor, versionMinor, versionPatch)));
+  }
+
+  // Get the number of instance extension properties.
+  std::uint32_t numExtensionProperties;
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot enumerate instance extension properties"));
+  }
+
+  // Get the instance extension properties.
+  absl::FixedArray<VkExtensionProperties> extensionProperties(
+    numExtensionProperties);
+  if (auto result = vkEnumerateInstanceExtensionProperties(
+        nullptr, &numExtensionProperties, extensionProperties.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot enumerate instance extension properties"));
+  }
+
   absl::InlinedVector<gsl::czstring<>, 1> layerNames;
   if ((options & Options::kUseValidationLayers) ==
       Options::kUseValidationLayers) {
@@ -569,27 +619,17 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   // These are the extensions that we require from the physical device.
   absl::InlinedVector<char const*, 32> physicalDeviceExtensionNames{{
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
-    VK_KHR_MAINTENANCE2_EXTENSION_NAME,
+    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, // core in 1.1, but necessary for DEDICATED_ALLOCATION
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#if 0 // TODO: which GPUs support this?
-    VK_KHR_MULTIVIEW_EXTENSION_NAME
-#endif
   }};
 
-  if ((options & Options::kEnableRayTracing) == Options::kEnableRayTracing) {
-    physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
+  for (auto&& prop : extensionProperties) {
+    if (std::strcmp(prop.extensionName, VK_NV_RAY_TRACING_EXTENSION_NAME)) {
+      physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
+      sFeatures |= Features::kRayTracing;
+    }
   }
-
-#if PLATFORM_LINUX
-  ::setenv(
-    "VK_LAYER_PATH",
-    (iris::kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
-  GetLogger()->debug("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
-#endif
-
-  flextVkInit();
 
   if (auto instance = CreateInstance(
         appName,
@@ -1151,6 +1191,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Create
+
+iris::Renderer::Features iris::Renderer::AvailableFeatures() noexcept {
+  Expects(sInstance != VK_NULL_HANDLE);
+  return sFeatures;
+}
 
 bool iris::Renderer::IsRunning() noexcept {
   return sRunning;

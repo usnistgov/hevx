@@ -13,36 +13,6 @@ iris::Renderer::CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion
                PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept {
   IRIS_LOG_ENTER();
 
-  std::uint32_t instanceVersion;
-  vkEnumerateInstanceVersion(&instanceVersion); // can only return VK_SUCCESS
-
-  GetLogger()->debug(
-    "Vulkan Instance Version: {}.{}.{}", VK_VERSION_MAJOR(instanceVersion),
-    VK_VERSION_MINOR(instanceVersion), VK_VERSION_PATCH(instanceVersion));
-
-  // Get the number of instance extension properties.
-  std::uint32_t numExtensionProperties;
-  if (auto result = vkEnumerateInstanceExtensionProperties(
-        nullptr, &numExtensionProperties, nullptr);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
-  }
-
-  // Get the instance extension properties.
-  absl::FixedArray<VkExtensionProperties> extensionProperties(
-    numExtensionProperties);
-  if (auto result = vkEnumerateInstanceExtensionProperties(
-        nullptr, &numExtensionProperties, extensionProperties.data());
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result),
-                        "Cannot enumerate instance extension properties"));
-  }
-
   VkApplicationInfo ai = {};
   ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   ai.pApplicationName = appName;

@@ -62,7 +62,14 @@ Rendering initialization options.
 enum class Options {
   kReportDebugMessages = (1 << 0), //<! Report API debug messages.
   kUseValidationLayers = (1 << 1), //<! Use API validation layers.
-  kEnableRayTracing = (1 << 2),    //<! Enable real-time raytracing extensions.
+};
+
+/*!
+Rendering features available
+*/
+enum class Features {
+  kNone = (1 << 0),       //! No features
+  kRayTracing = (1 << 1), //! Renderer has ray tracing support.
 };
 
 /*!
@@ -79,6 +86,12 @@ enum class Options {
 Initialize(gsl::czstring<> appName, Options const& options,
            spdlog::sinks_init_list logSinks,
            std::uint32_t appVersion = 0) noexcept;
+
+/*!
+\brief Get the available Features for an initialized Renderer.
+\return the available Features for an initialized Renderer.
+*/
+Features AvailableFeatures() noexcept;
 
 /*!
 \brief Indicates if the rendering system is running.
@@ -204,6 +217,38 @@ inline Options operator&(Options const& lhs, Options const& rhs) noexcept {
 \brief bit-wise and of \ref Options.
 */
 inline Options operator&=(Options& lhs, Options const& rhs) noexcept {
+  lhs = lhs & rhs;
+  return lhs;
+}
+
+/*!
+\brief bit-wise or of \ref Renderer::Features.
+*/
+inline Features operator|(Features const& lhs, Features const& rhs) noexcept {
+  using U = std::underlying_type_t<Features>;
+  return static_cast<Features>(static_cast<U>(lhs) | static_cast<U>(rhs));
+}
+
+/*!
+\brief bit-wise or of \ref Features.
+*/
+inline Features operator|=(Features& lhs, Features const& rhs) noexcept {
+  lhs = lhs | rhs;
+  return lhs;
+}
+
+/*!
+\brief bit-wise and of \ref Features.
+*/
+inline Features operator&(Features const& lhs, Features const& rhs) noexcept {
+  using U = std::underlying_type_t<Features>;
+  return static_cast<Features>(static_cast<U>(lhs) & static_cast<U>(rhs));
+}
+
+/*!
+\brief bit-wise and of \ref Features.
+*/
+inline Features operator&=(Features& lhs, Features const& rhs) noexcept {
   lhs = lhs & rhs;
   return lhs;
 }
