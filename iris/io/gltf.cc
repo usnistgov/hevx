@@ -1214,7 +1214,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(
-        std::system_error(Renderer::make_error_code(result),
+        std::system_error(make_error_code(result),
                           "Cannot create descriptor set layout"));
     }
 
@@ -1233,7 +1233,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
-        Renderer::make_error_code(result), "Cannot allocate descriptor set"));
+        make_error_code(result), "Cannot allocate descriptor set"));
     }
 
     Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET,
@@ -1358,9 +1358,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                       pipe.error().what())));
     }
 
-    auto staging = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
-                                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                            VMA_MEMORY_USAGE_CPU_TO_GPU);
+    auto staging =
+      AllocateBuffer(sizeof(MaterialBuffer), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(staging.error());
@@ -1414,10 +1414,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(ptr.error());
     }
 
-    if (auto buf = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
-                                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto buf = AllocateBuffer(sizeof(MaterialBuffer),
+                                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  VMA_MEMORY_USAGE_GPU_ONLY)) {
       renderable.buffers.push_back(std::move(*buf));
     } else {
       DestroyBuffer(*staging);
@@ -1480,9 +1480,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
 
-    staging = Renderer::ReallocateBuffer(*staging, vertexBufferSize,
-                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+    staging = ReallocateBuffer(*staging, vertexBufferSize,
+                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
       DestroyBuffer(renderable.buffers.back());
       renderable.buffers.pop_back();
@@ -1524,10 +1524,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     staging->Unmap();
 
-    if (auto buf = Renderer::AllocateBuffer(vertexBufferSize,
-                                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto buf = AllocateBuffer(vertexBufferSize,
+                                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  VMA_MEMORY_USAGE_GPU_ONLY)) {
       renderable.vertexBuffer = std::move(*buf);
     } else {
       DestroyBuffer(renderable.buffers.back());
@@ -1575,9 +1575,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                ? sizeof(std::uint16_t)
                                : sizeof(std::uint32_t));
 
-    staging = Renderer::ReallocateBuffer(*staging, indexBufferSize,
-                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+    staging = ReallocateBuffer(*staging, indexBufferSize,
+                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
       DestroyBuffer(renderable.vertexBuffer);
       DestroyBuffer(renderable.buffers.back());
@@ -1604,10 +1604,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     staging->Unmap();
 
-    if (auto buf = Renderer::AllocateBuffer(indexBufferSize,
-                                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                              VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                            VMA_MEMORY_USAGE_GPU_ONLY)) {
+    if (auto buf = AllocateBuffer(indexBufferSize,
+                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                  VMA_MEMORY_USAGE_GPU_ONLY)) {
       renderable.indexBuffer = std::move(*buf);
     } else {
       DestroyBuffer(renderable.vertexBuffer);

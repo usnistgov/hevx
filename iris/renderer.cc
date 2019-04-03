@@ -242,10 +242,11 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   commandBufferAI.commandBufferCount = 1;
 
   VkCommandBuffer commandBuffer;
-  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
-                                             &commandBuffer);
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}", to_string(result));
+    GetLogger()->error("Cannot allocate command buffer: {}",
+                       iris::to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -309,10 +310,11 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   commandBufferAI.commandBufferCount = 1;
 
   VkCommandBuffer commandBuffer;
-  if (auto result = vkAllocateCommandBuffers(sDevice, &commandBufferAI,
-                                             &commandBuffer);
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}", to_string(result));
+    GetLogger()->error("Cannot allocate command buffer: {}",
+                       iris::to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -1456,10 +1458,10 @@ void iris::Renderer::EndFrame(VkImage image,
         // TODO: update uiRenderable uniform buffer
 
         VkDescriptorImageInfo uiSamplerInfo = {};
-        uiSamplerInfo.sampler = window.uiRenderable.imageSamplers[0];
+        uiSamplerInfo.sampler = window.uiRenderable.textureSamplers[0];
 
         VkDescriptorImageInfo uiTextureInfo = {};
-        uiTextureInfo.imageView = window.uiRenderable.imageViews[0];
+        uiTextureInfo.imageView = window.uiRenderable.textureViews[0];
         uiTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         absl::FixedArray<VkWriteDescriptorSet> uiWriteDescriptorSets(2);
@@ -1582,7 +1584,7 @@ void iris::Renderer::EndFrame(VkImage image,
         vkQueueSubmit(sCommandQueues[0], 1, &submitI, frameFinishedFence);
       result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
-                       to_string(result));
+                       iris::to_string(result));
   }
 
   if (!swapchains.empty()) {
@@ -1599,7 +1601,8 @@ void iris::Renderer::EndFrame(VkImage image,
 
     if (result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
         result != VK_SUCCESS) {
-      GetLogger()->error("Error presenting swapchains: {}", to_string(result));
+      GetLogger()->error("Error presenting swapchains: {}",
+                         iris::to_string(result));
     }
   }
 
@@ -1741,3 +1744,4 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Control
+

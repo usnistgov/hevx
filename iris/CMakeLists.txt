@@ -104,6 +104,7 @@ set(SOURCES
   buffer.cc
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
+  image.cc
   io/gltf.cc
   io/json.cc
   io/read_file.cc

@@ -65,32 +65,6 @@ inline void UnmapMemory(VmaAllocation allocation) noexcept {
   vmaUnmapMemory(sAllocator, allocation);
 }
 
-tl::expected<void, std::system_error>
-TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
-                VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
-                std::uint32_t mipLevels, std::uint32_t arrayLayers) noexcept;
-
-struct Image {
-  VkImage image{VK_NULL_HANDLE};
-  VmaAllocation allocation{VK_NULL_HANDLE};
-}; // struct Image
-
-[[nodiscard]] tl::expected<Image, std::system_error>
-AllocateImage(VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
-              std::uint32_t arrayLayers, VkSampleCountFlagBits sampleCount,
-              VkImageUsageFlags imageUsage, VkImageTiling imageTiling,
-              VmaMemoryUsage memoryUsage) noexcept;
-
-[[nodiscard]] tl::expected<VkImageView, std::system_error>
-CreateImageView(Image image, VkImageViewType type, VkFormat format,
-                VkImageSubresourceRange subresourceRange) noexcept;
-
-[[nodiscard]] tl::expected<Image, std::system_error>
-CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
-            VkFormat format, VkExtent2D extent, VkImageUsageFlags imageUsage,
-            VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
-            std::uint32_t bytesPerPixel) noexcept;
-
 struct Shader {
   VkShaderModule handle;
   VkShaderStageFlagBits stage;

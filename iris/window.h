@@ -10,6 +10,7 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
 #include "imgui.h"
+#include "iris/image.h"
 #include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
 
@@ -64,16 +65,13 @@ struct Window {
   absl::FixedArray<VkImage> colorImages;
   absl::FixedArray<VkImageView> colorImageViews;
 
-  VkImage depthStencilImage;
-  VmaAllocation depthStencilImageAllocation;
+  Image depthStencilImage;
   VkImageView depthStencilImageView;
 
-  VkImage colorTarget;
-  VmaAllocation colorTargetAllocation;
+  Image colorTarget;
   VkImageView colorTargetView;
 
-  VkImage depthStencilTarget;
-  VmaAllocation depthStencilTargetAllocation;
+  Image depthStencilTarget;
   VkImageView depthStencilTargetView;
 
   /*!

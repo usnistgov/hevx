@@ -3,7 +3,7 @@
 
 #include "iris/vulkan.h"
 
-namespace iris::Renderer {
+namespace iris {
 
 struct Buffer {
   VkBuffer buffer{VK_NULL_HANDLE};
@@ -38,7 +38,7 @@ CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
 
 void DestroyBuffer(Buffer buffer) noexcept;
 
-} // namespace iris::Renderer
+} // namespace iris
 
 #endif // HEV_IRIS_BUFFER_H_
 

@@ -5,6 +5,7 @@
 #include "fmt/format.h"
 #include "glm/mat4x4.hpp"
 #include "iris/buffer.h"
+#include "iris/image.h"
 #include "iris/io/read_file.h"
 #include "iris/protos.h"
 #include "iris/renderer.h"
@@ -57,7 +58,7 @@ static absl::FixedArray<Sphere> sSpheres = {
   Sphere(glm::vec3(0.f, -100.5f, 0.f), 100.f),
 };
 
-static iris::Renderer::Buffer sSpheresBuffer;
+static iris::Buffer sSpheresBuffer;
 
 tl::expected<
   std::tuple<VkDescriptorPool, VkDescriptorSetLayout, VkDescriptorSet>,
@@ -79,9 +80,8 @@ CreateDescriptor() noexcept {
   if (auto result = vkCreateDescriptorPool(iris::Renderer::sDevice, &poolCI,
                                            nullptr, &pool);
       result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(iris::Renderer::make_error_code(result),
-                        "Cannot create descriptor pool"));
+    return tl::unexpected(std::system_error(iris::make_error_code(result),
+                                            "Cannot create descriptor pool"));
   }
 
   absl::FixedArray<VkDescriptorSetLayoutBinding, 3> bindings{{
@@ -100,9 +100,8 @@ CreateDescriptor() noexcept {
   if (auto result = vkCreateDescriptorSetLayout(iris::Renderer::sDevice,
                                                 &layoutCI, nullptr, &layout);
       result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(iris::Renderer::make_error_code(result),
-                        "Cannot create descriptor set layout"));
+    return tl::unexpected(std::system_error(
+      iris::make_error_code(result), "Cannot create descriptor set layout"));
   }
 
   VkDescriptorSetAllocateInfo setAI = {};
@@ -115,9 +114,8 @@ CreateDescriptor() noexcept {
   if (auto result =
         vkAllocateDescriptorSets(iris::Renderer::sDevice, &setAI, &set);
       result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(iris::Renderer::make_error_code(result),
-                        "Cannot allocate descriptor set"));
+    return tl::unexpected(std::system_error(iris::make_error_code(result),
+                                            "Cannot allocate descriptor set"));
   }
 
   return std::make_tuple(pool, layout, set);
@@ -231,7 +229,7 @@ CreateBottomLevelAccelerationStructure(spdlog::logger& logger) noexcept {
   vkGetAccelerationStructureMemoryRequirementsNV(
     iris::Renderer::sDevice, &memoryRequirementsInfo, &memoryRequirements);
 
-  auto scratch = iris::Renderer::AllocateBuffer(
+  auto scratch = iris::AllocateBuffer(
     memoryRequirements.memoryRequirements.size,
     VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
   if (!scratch) {
@@ -295,7 +293,7 @@ CreateTopLevelAccelerationStructure(
                                               structure.error().what()));
   }
 
-  auto instanceBuffer = iris::Renderer::AllocateBuffer(
+  auto instanceBuffer = iris::AllocateBuffer(
     sizeof(iris::Renderer::GeometryInstance) * instances.size(),
     VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
   if (!instanceBuffer) {
@@ -335,7 +333,7 @@ CreateTopLevelAccelerationStructure(
 
   logger.info("Creating scratch buffer for topLevelAS sized: {}",
               memoryRequirements.memoryRequirements.size);
-  auto scratch = iris::Renderer::AllocateBuffer(
+  auto scratch = iris::AllocateBuffer(
     memoryRequirements.memoryRequirements.size,
     VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
   if (!scratch) {
@@ -468,7 +466,7 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  if (auto buf = iris::Renderer::CreateBuffer(
+  if (auto buf = iris::CreateBuffer(
         sCommandQueue.commandPool, sCommandQueue.queue,
         sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
@@ -495,7 +493,7 @@ int main(int argc, char** argv) {
         &topLevelInstance.accelerationStructureHandle);
       result != VK_SUCCESS) {
     logger.critical("cannot get bottom level acceleration structure handle: {}",
-                    iris::Renderer::to_string(result));
+                    iris::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
@@ -508,10 +506,10 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  iris::Renderer::Image outputImage;
+  iris::Image outputImage;
   VkImageView outputImageView;
 
-  if (auto img = iris::Renderer::AllocateImage(
+  if (auto img = iris::AllocateImage(
         VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
@@ -521,7 +519,7 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  if (auto view = iris::Renderer::CreateImageView(
+  if (auto view = iris::CreateImageView(
         outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     outputImageView = *view;
@@ -582,13 +580,13 @@ int main(int argc, char** argv) {
         shaderGroupHandles.data());
       result != VK_SUCCESS) {
     logger.critical("cannot get shader group handle: {}",
-                    iris::Renderer::to_string(result));
+                    iris::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
-  iris::Renderer::Buffer sbtBuffer;
+  iris::Buffer sbtBuffer;
 
-  if (auto buf = iris::Renderer::AllocateBuffer(
+  if (auto buf = iris::AllocateBuffer(
         rayTracingProperties.shaderGroupHandleSize * numGroups,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
     sbtBuffer = std::move(*buf);
@@ -597,11 +595,11 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  if (auto p = iris::Renderer::MapMemory<std::byte*>(sbtBuffer.allocation)) {
-    std::memcpy(shaderGroupHandles.data(), *p, sbtBuffer.size);
+  if (auto ptr = sbtBuffer.Map<std::byte*>()) {
+    std::memcpy(shaderGroupHandles.data(), *ptr, sbtBuffer.size);
     iris::Renderer::UnmapMemory(sbtBuffer.allocation);
   } else {
-    logger.critical("cannot map sbt: {}", p.error().what());
+    logger.critical("cannot map sbt: {}", ptr.error().what());
     std::exit(EXIT_FAILURE);
   }
 
@@ -625,7 +623,7 @@ int main(int argc, char** argv) {
         iris::Renderer::sDevice, &commandBufferAI, commandBuffers.data());
       result != VK_SUCCESS) {
     logger.error("Cannot allocate command buffers: {}",
-                 iris::Renderer::to_string(result));
+                 iris::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
@@ -638,8 +636,7 @@ int main(int argc, char** argv) {
     if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
                                     &traceCompleteFences[i]);
         result != VK_SUCCESS) {
-      logger.error("Error creating fence: {}",
-                   iris::Renderer::to_string(result));
+      logger.error("Error creating fence: {}", iris::to_string(result));
       std::exit(EXIT_FAILURE);
     }
   }
@@ -735,7 +732,7 @@ int main(int argc, char** argv) {
                                     traceCompleteFences[currentCBIndex]);
         result != VK_SUCCESS) {
       logger.error("Error submitting command buffer: {}",
-                   iris::Renderer::to_string(result));
+                   iris::to_string(result));
     }
 
     iris::Renderer::EndFrame(outputImage.image);

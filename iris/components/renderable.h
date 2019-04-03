@@ -4,6 +4,7 @@
 #include "absl/container/inlined_vector.h"
 #include "glm/mat4x4.hpp"
 #include "iris/buffer.h"
+#include "iris/image.h"
 #include "iris/renderer.h"
 #include "iris/vulkan.h"
 #include <cstdint>
@@ -26,10 +27,9 @@ struct Renderable {
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
-  absl::InlinedVector<VkImage, kMaxTextures> images;
-  absl::InlinedVector<VmaAllocation, kMaxTextures> imageAllocations;
-  absl::InlinedVector<VkImageView, kMaxTextures> imageViews;
-  absl::InlinedVector<VkSampler, kMaxTextures> imageSamplers;
+  absl::InlinedVector<Image, kMaxTextures> textures;
+  absl::InlinedVector<VkImageView, kMaxTextures> textureViews;
+  absl::InlinedVector<VkSampler, kMaxTextures> textureSamplers;
 
   absl::InlinedVector<Buffer, kMaxBuffers> buffers;
 

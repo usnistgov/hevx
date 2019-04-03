@@ -51,7 +51,7 @@ using PFN_vkCmdCopyBuffer = decltype(vkCmdCopyBuffer);
 #undef CreateWindow
 #endif
 
-namespace iris::Renderer {
+namespace iris {
 
 //! \brief Vulkan result codes.
 enum class VulkanResult {
@@ -170,12 +170,12 @@ inline std::error_code make_error_code(VkResult r) noexcept {
   return std::error_code(static_cast<int>(r), GetVulkanResultCategory());
 }
 
-} // namespace iris::Renderer
+} // namespace iris
 
 namespace std {
 
 template <>
-struct is_error_code_enum<iris::Renderer::VulkanResult> : public true_type {};
+struct is_error_code_enum<iris::VulkanResult> : public true_type {};
 
 } // namespace std
 
