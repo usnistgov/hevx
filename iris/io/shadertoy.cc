@@ -145,14 +145,15 @@ void main() {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
-  if (auto lp = Renderer::CreateGraphicsPipeline(
+  if (auto pipe = Renderer::CreateRasterizationPipeline(
         shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0, {})) {
-    std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
+    renderable.pipelineLayout = pipe->layout;
+    renderable.pipeline = pipe->pipeline;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(lp.error());
+    return tl::unexpected(pipe.error());
   }
 
   renderable.numVertices = 3;

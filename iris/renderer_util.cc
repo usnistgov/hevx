@@ -7,6 +7,7 @@
 #include "enumerate.h"
 #include "error.h"
 #include "io/read_file.h"
+#include "iris/renderer.h"
 #include "logging.h"
 #include "vulkan_util.h"
 
@@ -310,24 +311,19 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
                         "Unsupported texture format"));
   }
 
-  VkBuffer stagingBuffer = VK_NULL_HANDLE;
-  VmaAllocation stagingBufferAllocation = VK_NULL_HANDLE;
-  VkDeviceSize stagingBufferSize = 0;
-
-  if (auto bas = AllocateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(stagingBuffer, stagingBufferAllocation, stagingBufferSize) = *bas;
-  } else {
+  auto staging = AllocateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!staging) {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(bas.error().code(), "Cannot create staging buffer: "s +
-                                              bas.error().what()));
+    return tl::unexpected(std::system_error(staging.error().code(),
+                                            "Cannot create staging buffer: "s +
+                                              staging.error().what()));
   }
 
-  if (auto ptr = MapMemory<std::byte*>(stagingBufferAllocation)) {
+  if (auto ptr = staging->Map<std::byte*>()) {
     std::memcpy(*ptr, pixels, imageSize);
-    UnmapMemory(stagingBufferAllocation);
+    staging->Unmap();
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
@@ -384,7 +380,7 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
   region.imageOffset = {0, 0, 0};
   region.imageExtent = {extent.width, extent.height, 1};
 
-  vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image.image,
+  vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image.image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   if (auto result = EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
@@ -404,7 +400,7 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
     return tl::unexpected(result.error());
   }
 
-  DestroyBuffer(stagingBuffer, stagingBufferAllocation);
+  DestroyBuffer(*staging);
 
   Ensures(image.image != VK_NULL_HANDLE);
   Ensures(image.allocation != VK_NULL_HANDLE);
@@ -412,170 +408,6 @@ iris::Renderer::CreateImage(VkCommandPool commandPool, VkQueue queue,
   IRIS_LOG_LEAVE();
   return image;
 } // iris::Renderer::CreateImage
-
-tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-             std::system_error>
-iris::Renderer::AllocateBuffer(VkDeviceSize size,
-                               VkBufferUsageFlags bufferUsage,
-                               VmaMemoryUsage memoryUsage) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sAllocator != VK_NULL_HANDLE);
-  Expects(size > 0);
-
-  VkBufferCreateInfo bufferCI = {};
-  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferCI.size = size;
-  bufferCI.usage = bufferUsage;
-
-  VmaAllocationCreateInfo allocationCI = {};
-  allocationCI.usage = memoryUsage;
-
-  VkBuffer buffer = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
-
-  if (auto result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI,
-                                    &buffer, &allocation, nullptr);
-      result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create buffer"));
-  }
-
-  Ensures(buffer != VK_NULL_HANDLE);
-  Ensures(allocation != VK_NULL_HANDLE);
-
-  IRIS_LOG_LEAVE();
-  return std::make_tuple(buffer, allocation, size);
-} // iris::Renderer::AllocateBuffer
-
-tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-             std::system_error>
-iris::Renderer::ReallocateBuffer(VkBuffer buffer, VmaAllocation allocation,
-                                 VkDeviceSize oldSize, VkDeviceSize newSize,
-                                 VkBufferUsageFlags bufferUsage,
-                                 VmaMemoryUsage memoryUsage) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sAllocator != VK_NULL_HANDLE);
-  Expects(newSize > 0);
-
-  if (buffer != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE &&
-      oldSize >= newSize) {
-    IRIS_LOG_LEAVE();
-    return std::make_tuple(buffer, allocation, oldSize);
-  }
-
-  VkBufferCreateInfo bufferCI = {};
-  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferCI.size = newSize;
-  bufferCI.usage = bufferUsage;
-
-  VmaAllocationCreateInfo allocationCI = {};
-  allocationCI.usage = memoryUsage;
-
-  VkBuffer newBuffer;
-  VmaAllocation newAllocation;
-
-  if (auto result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI,
-                                    &newBuffer, &newAllocation, nullptr);
-      result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create buffer"));
-  }
-
-  if (buffer != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE) {
-    DestroyBuffer(buffer, allocation);
-  }
-
-  Ensures(newBuffer != VK_NULL_HANDLE);
-  Ensures(newAllocation != VK_NULL_HANDLE);
-
-  IRIS_LOG_LEAVE();
-  return std::make_tuple(newBuffer, newAllocation, newSize);
-} // iris::Renderer::ReallocateBuffer
-
-tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-             std::system_error>
-iris::Renderer::CreateBuffer(VkCommandPool commandPool, VkQueue queue,
-                             VkFence fence, VkBufferUsageFlags bufferUsage,
-                             VmaMemoryUsage memoryUsage, VkDeviceSize size,
-                             gsl::not_null<std::byte*> data) noexcept {
-  IRIS_LOG_ENTER();
-  Expects(sAllocator != VK_NULL_HANDLE);
-  Expects(commandPool != VK_NULL_HANDLE);
-  Expects(queue != VK_NULL_HANDLE);
-  Expects(fence != VK_NULL_HANDLE);
-  Expects(size > 0);
-
-  VkBuffer stagingBuffer = VK_NULL_HANDLE;
-  VmaAllocation stagingAllocation = VK_NULL_HANDLE;
-  VkDeviceSize stagingSize = 0;
-
-  if (auto bas = AllocateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-  } else {
-    using namespace std::string_literals;
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(bas.error().code(), "Cannot create staging buffer: "s +
-                                              bas.error().what()));
-  }
-
-  if (auto ptr = MapMemory<std::byte*>(stagingAllocation)) {
-    std::memcpy(*ptr, data, size);
-    UnmapMemory(stagingAllocation);
-  } else {
-    using namespace std::string_literals;
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
-  }
-
-  VkBufferCreateInfo bufferCI = {};
-  bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferCI.size = size;
-  bufferCI.usage = bufferUsage;
-
-  VmaAllocationCreateInfo allocationCI = {};
-  allocationCI.usage = memoryUsage;
-
-  VkBuffer buffer = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
-
-  if (auto result = vmaCreateBuffer(sAllocator, &bufferCI, &allocationCI,
-                                    &buffer, &allocation, nullptr);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot create buffer"));
-  }
-
-  VkCommandBuffer commandBuffer;
-  if (auto cb = BeginOneTimeSubmit(commandPool)) {
-    commandBuffer = *cb;
-  } else {
-    return tl::unexpected(cb.error());
-  }
-
-  VkBufferCopy region = {};
-  region.srcOffset = 0;
-  region.dstOffset = 0;
-  region.size = size;
-
-  vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &region);
-
-  if (auto result = EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
-      !result) {
-    return tl::unexpected(result.error());
-  }
-
-  DestroyBuffer(stagingBuffer, stagingAllocation);
-
-  Ensures(buffer != VK_NULL_HANDLE);
-  Ensures(allocation != VK_NULL_HANDLE);
-
-  IRIS_LOG_LEAVE();
-  return std::make_tuple(buffer, allocation, size);
-} // iris::Renderer::CreateBuffer
 
 namespace iris::Renderer {
 
@@ -920,18 +752,21 @@ iris::Renderer::LoadShaderFromFile(filesystem::path const& path,
 
 tl::expected<iris::Renderer::AccelerationStructure, std::system_error>
 iris::Renderer::CreateAccelerationStructure(
-  VkAccelerationStructureCreateInfoNV*
-    pAccelerationStructureCreateInfo) noexcept {
+  VkAccelerationStructureInfoNV const& accelerationStructureInfo,
+  VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
   Expects(sDevice != VK_NULL_HANDLE);
   Expects(sAllocator != VK_NULL_HANDLE);
-  Expects(pAccelerationStructureCreateInfo != nullptr);
+
+  VkAccelerationStructureCreateInfoNV accelerationStructureCI = {};
+  accelerationStructureCI.sType =
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
+  accelerationStructureCI.compactedSize = compactedSize;
+  accelerationStructureCI.info = accelerationStructureInfo;
 
   AccelerationStructure structure;
-
   if (auto result = vkCreateAccelerationStructureNV(
-        sDevice, pAccelerationStructureCreateInfo, nullptr,
-        &structure.structure);
+        sDevice, &accelerationStructureCI, nullptr, &structure.structure);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot create acceleration structure"));
@@ -991,8 +826,8 @@ iris::Renderer::CreateAccelerationStructure(
   return structure;
 } // iris::Renderer::CreateAccelerationStructure
 
-tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
-iris::Renderer::CreateGraphicsPipeline(
+tl::expected<iris::Renderer::Pipeline, std::system_error>
+iris::Renderer::CreateRasterizationPipeline(
   gsl::span<const Shader> shaders,
   gsl::span<const VkVertexInputBindingDescription>
     vertexInputBindingDescriptions,
@@ -1013,8 +848,7 @@ iris::Renderer::CreateGraphicsPipeline(
   Expects(sRenderPass != VK_NULL_HANDLE);
   Expects(sGlobalDescriptorSetLayout != VK_NULL_HANDLE);
 
-  VkPipelineLayout layout{VK_NULL_HANDLE};
-  VkPipeline pipeline{VK_NULL_HANDLE};
+  Pipeline pipeline;
 
   absl::InlinedVector<VkDescriptorSetLayout, 8> allDescriptorSetLayouts;
   allDescriptorSetLayouts.push_back(sGlobalDescriptorSetLayout);
@@ -1035,8 +869,8 @@ iris::Renderer::CreateGraphicsPipeline(
   pipelineLayoutCI.pushConstantRangeCount = 1;
   pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
 
-  if (auto result =
-        vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr, &layout);
+  if (auto result = vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr,
+                                           &pipeline.layout);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
@@ -1095,21 +929,114 @@ iris::Renderer::CreateGraphicsPipeline(
   graphicsPipelineCI.pDepthStencilState = &depthStencilStateCI;
   graphicsPipelineCI.pColorBlendState = &colorBlendStateCI;
   graphicsPipelineCI.pDynamicState = &dynamicStateCI;
-  graphicsPipelineCI.layout = layout;
+  graphicsPipelineCI.layout = pipeline.layout;
   graphicsPipelineCI.renderPass = sRenderPass;
   graphicsPipelineCI.subpass = renderPassSubpass;
 
-  if (auto result = vkCreateGraphicsPipelines(
-        sDevice, VK_NULL_HANDLE, 1, &graphicsPipelineCI, nullptr, &pipeline);
+  if (auto result = vkCreateGraphicsPipelines(sDevice, VK_NULL_HANDLE, 1,
+                                              &graphicsPipelineCI, nullptr,
+                                              &pipeline.pipeline);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
+    vkDestroyPipelineLayout(sDevice, pipeline.layout, nullptr);
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot create graphics pipeline"));
   }
 
-  Ensures(layout != VK_NULL_HANDLE);
-  Ensures(pipeline != VK_NULL_HANDLE);
+  Ensures(pipeline.layout != VK_NULL_HANDLE);
+  Ensures(pipeline.pipeline != VK_NULL_HANDLE);
 
   IRIS_LOG_LEAVE();
-  return std::make_pair(layout, pipeline);
-} // iris::Renderer::CreateGraphicsPipeline
+  return pipeline;
+} // iris::Renderer::CreateRasterizationPipeline
+
+tl::expected<iris::Renderer::Pipeline, std::system_error>
+iris::Renderer::CreateRayTracingPipeline(
+  gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+  std::uint32_t maxRecursionDepth) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(sGlobalDescriptorSetLayout != VK_NULL_HANDLE);
+
+  Pipeline pipeline;
+
+  absl::InlinedVector<VkDescriptorSetLayout, 8> allDescriptorSetLayouts;
+  allDescriptorSetLayouts.push_back(sGlobalDescriptorSetLayout);
+  std::copy_n(std::begin(descriptorSetLayouts), std::size(descriptorSetLayouts),
+              std::back_inserter(allDescriptorSetLayouts));
+
+  VkPushConstantRange pushConstantRange = {};
+  pushConstantRange.stageFlags =
+    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  pushConstantRange.offset = 0;
+  pushConstantRange.size = sizeof(PushConstants);
+
+  VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
+  pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutCI.setLayoutCount =
+    gsl::narrow_cast<std::uint32_t>(allDescriptorSetLayouts.size());
+  pipelineLayoutCI.pSetLayouts = allDescriptorSetLayouts.data();
+  pipelineLayoutCI.pushConstantRangeCount = 1;
+  pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
+
+  if (auto result = vkCreatePipelineLayout(sDevice, &pipelineLayoutCI, nullptr,
+                                           &pipeline.layout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create pipeline layout"));
+  }
+
+  absl::FixedArray<VkPipelineShaderStageCreateInfo> shaderStageCIs(
+    shaders.size());
+  std::transform(shaders.begin(), shaders.end(), shaderStageCIs.begin(),
+                 [](Shader const& shader) {
+                   return VkPipelineShaderStageCreateInfo{
+                     VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     shader.stage,
+                     shader.handle,
+                     "main",
+                     nullptr};
+                 });
+
+  absl::FixedArray<VkRayTracingShaderGroupCreateInfoNV> shaderGroupCIs(
+    groups.size());
+  std::transform(groups.begin(), groups.end(), shaderGroupCIs.begin(),
+                 [](ShaderGroup const& group) {
+                   return VkRayTracingShaderGroupCreateInfoNV{
+                     VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+                     nullptr,
+                     group.type,
+                     group.generalShaderIndex,
+                     group.closestHitShaderIndex,
+                     group.anyHitShaderIndex,
+                     group.intersectionShaderIndex};
+                 });
+
+  VkRayTracingPipelineCreateInfoNV pipelineCI = {};
+  pipelineCI.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
+  pipelineCI.stageCount = shaderStageCIs.size();
+  pipelineCI.pStages = shaderStageCIs.data();
+  pipelineCI.groupCount = shaderGroupCIs.size();
+  pipelineCI.pGroups = shaderGroupCIs.data();
+  pipelineCI.maxRecursionDepth = maxRecursionDepth;
+  pipelineCI.layout = pipeline.layout;
+
+  if (auto result = vkCreateRayTracingPipelinesNV(
+        iris::Renderer::sDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr,
+        &pipeline.pipeline);
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(
+      iris::Renderer::make_error_code(result), "Cannot create pipeline"));
+  }
+
+  Ensures(pipeline.layout != VK_NULL_HANDLE);
+  Ensures(pipeline.pipeline != VK_NULL_HANDLE);
+
+  IRIS_LOG_LEAVE();
+  return pipeline;
+} // iris::Renderer::CreateRayTracingPipeline
+

@@ -3,6 +3,8 @@
 
 #include "absl/container/inlined_vector.h"
 #include "glm/mat4x4.hpp"
+#include "iris/buffer.h"
+#include "iris/renderer.h"
 #include "iris/vulkan.h"
 #include <cstdint>
 
@@ -29,19 +31,13 @@ struct Renderable {
   absl::InlinedVector<VkImageView, kMaxTextures> imageViews;
   absl::InlinedVector<VkSampler, kMaxTextures> imageSamplers;
 
-  absl::InlinedVector<VkBuffer, kMaxBuffers> buffers;
-  absl::InlinedVector<VmaAllocation, kMaxBuffers> bufferAllocations;
-  absl::InlinedVector<VkDeviceSize, kMaxBuffers> bufferSizes;
+  absl::InlinedVector<Buffer, kMaxBuffers> buffers;
 
-  VkDeviceSize vertexBufferSize{0};
+  Buffer vertexBuffer;
   VkDeviceSize vertexBufferBindingOffset{0};
-  VkBuffer vertexBuffer{VK_NULL_HANDLE};
-  VmaAllocation vertexBufferAllocation{VK_NULL_HANDLE};
 
-  VkDeviceSize indexBufferSize{0};
+  Buffer indexBuffer;
   VkDeviceSize indexBufferBindingOffset{0};
-  VkBuffer indexBuffer{VK_NULL_HANDLE};
-  VmaAllocation indexBufferAllocation{VK_NULL_HANDLE};
 
   glm::mat4 modelMatrix{1.f};
 

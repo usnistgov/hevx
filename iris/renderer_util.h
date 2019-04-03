@@ -1,11 +1,17 @@
 #ifndef HEV_IRIS_RENDERER_UTIL_H_
 #define HEV_IRIS_RENDERER_UTIL_H_
 
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+#include "absl/container/inlined_vector.h"
 #include "glm/mat3x3.hpp"
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
 #include "iris/vulkan_util.h"
+#include <cstdint>
 
 namespace iris::Renderer {
 
@@ -16,6 +22,12 @@ extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
 extern VkRenderPass sRenderPass;
 
+// These are for use in window.cc
+extern std::uint32_t sQueueFamilyIndex;
+extern absl::InlinedVector<VkQueue, 16> sCommandQueues;
+extern absl::InlinedVector<VkCommandPool, 16> sCommandPools;
+extern absl::InlinedVector<VkFence, 16> sCommandFences;
+
 extern VkSurfaceFormatKHR const sSurfaceColorFormat;
 extern VkFormat const sSurfaceDepthStencilFormat;
 extern VkSampleCountFlagBits const sSurfaceSampleCount;
@@ -23,6 +35,12 @@ extern VkPresentModeKHR const sSurfacePresentMode;
 
 extern VkDescriptorPool sDescriptorPool;
 extern VkDescriptorSetLayout sGlobalDescriptorSetLayout;
+
+extern std::uint32_t const sNumRenderPassAttachments;
+extern std::uint32_t const sColorTargetAttachmentIndex;
+extern std::uint32_t const sColorResolveAttachmentIndex;
+extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
+extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
 
 [[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool) noexcept;
@@ -73,28 +91,6 @@ CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
             VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
             std::uint32_t bytesPerPixel) noexcept;
 
-[[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-                           std::system_error>
-AllocateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
-               VmaMemoryUsage memoryUsage) noexcept;
-
-[[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-                           std::system_error>
-ReallocateBuffer(VkBuffer buffer, VmaAllocation allocation,
-                 VkDeviceSize oldSize, VkDeviceSize newSize,
-                 VkBufferUsageFlags bufferUsage,
-                 VmaMemoryUsage memoryUsage) noexcept;
-
-[[nodiscard]] tl::expected<std::tuple<VkBuffer, VmaAllocation, VkDeviceSize>,
-                           std::system_error>
-CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
-             VkBufferUsageFlags bufferUsage, VmaMemoryUsage memoryUsage,
-             VkDeviceSize size, gsl::not_null<std::byte*> data) noexcept;
-
-inline void DestroyBuffer(VkBuffer buffer, VmaAllocation allocation) noexcept {
-  vmaDestroyBuffer(sAllocator, buffer, allocation);
-}
-
 struct Shader {
   VkShaderModule handle;
   VkShaderStageFlagBits stage;
@@ -113,9 +109,27 @@ struct AccelerationStructure {
   VmaAllocation allocation{VK_NULL_HANDLE};
 }; // struct AccelerationStructure
 
+struct GeometryInstance {
+  float transform[12];
+  std::uint32_t customIndex : 24;
+  std::uint32_t mask : 8;
+  std::uint32_t offset : 24;
+  std::uint32_t flags : 8;
+  std::uint64_t accelerationStructureHandle;
+
+  GeometryInstance(std::uint64_t handle = 0) noexcept
+    : accelerationStructureHandle(handle) {
+    customIndex = 0;
+    mask = 0xF;
+    offset = 0;
+    flags = 0;
+  }
+}; // GeometryInstance
+
 [[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
-CreateAccelerationStructure(VkAccelerationStructureCreateInfoNV*
-                              pAccelerationStructureCreateInfo) noexcept;
+CreateAccelerationStructure(
+  VkAccelerationStructureInfoNV const& accelerationStructureInfo,
+  VkDeviceSize compactedSize) noexcept;
 
 template <class T>
 void NameObject(VkObjectType objectType [[maybe_unused]],
@@ -161,8 +175,12 @@ struct LightsBuffer {
   int NumLights;
 }; // struct LightsBuffer
 
-tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
-CreateGraphicsPipeline(
+struct Pipeline {
+  VkPipelineLayout layout{VK_NULL_HANDLE};
+  VkPipeline pipeline{VK_NULL_HANDLE};
+}; // struct Pipeline
+
+tl::expected<Pipeline, std::system_error> CreateRasterizationPipeline(
   gsl::span<const Shader> shaders,
   gsl::span<const VkVertexInputBindingDescription>
     vertexInputBindingDescriptions,
@@ -179,10 +197,18 @@ CreateGraphicsPipeline(
   std::uint32_t renderPassSubpass,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
 
-tl::expected<std::pair<VkPipelineLayout, VkPipeline>, std::system_error>
-CreateRayTracingPipeline(
-  gsl::span<const Shader> shaders,
-  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
+struct ShaderGroup {
+  VkRayTracingShaderGroupTypeNV type;
+  std::uint32_t generalShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t closestHitShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t anyHitShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t intersectionShaderIndex{VK_SHADER_UNUSED_NV};
+}; // struct ShaderGroup
+
+tl::expected<Pipeline, std::system_error> CreateRayTracingPipeline(
+  gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
+  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
+  std::uint32_t maxRecursionDepth) noexcept;
 
 } // namespace iris::Renderer
 

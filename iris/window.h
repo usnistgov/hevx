@@ -7,11 +7,14 @@
 
 #include "absl/container/fixed_array.h"
 #include "expected.hpp"
+#include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
-#include "iris/components/renderable.h"
+#include "imgui.h"
 #include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
-#include "imgui.h"
+
+#include "iris/components/renderable.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -149,6 +152,18 @@ struct Window {
   ~Window() noexcept = default;
 }; // struct Window
 
+namespace Renderer {
+
+[[nodiscard]] tl::expected<Window, std::exception>
+CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
+             glm::vec4 const& clearColor, Window::Options const& options,
+             int display, std::uint32_t numFrames) noexcept;
+
+tl::expected<void, std::system_error>
+ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
+
+} // namespace Renderer
+
 /*!
 \brief bit-wise or of \ref Window::Options.
 */
@@ -186,38 +201,6 @@ inline Window::Options operator&=(Window::Options& lhs,
   lhs = lhs & rhs;
   return lhs;
 }
-
-inline Window::Window(Window&& other) noexcept
-  : title(std::move(other.title))
-  , clearColor(other.clearColor)
-  , resized(other.resized)
-  , showUI(other.showUI)
-  , platformWindow(std::move(other.platformWindow))
-  , surface(other.surface)
-  , extent(other.extent)
-  , viewport(other.viewport)
-  , scissor(other.scissor)
-  , swapchain(other.swapchain)
-  , colorImages(std::move(other.colorImages))
-  , colorImageViews(std::move(other.colorImageViews))
-  , depthStencilImage(other.depthStencilImage)
-  , depthStencilImageAllocation(other.depthStencilImageAllocation)
-  , depthStencilImageView(other.depthStencilImageView)
-  , colorTarget(other.colorTarget)
-  , colorTargetAllocation(other.colorTargetAllocation)
-  , colorTargetView(other.colorTargetView)
-  , depthStencilTarget(other.depthStencilTarget)
-  , depthStencilTargetAllocation(other.depthStencilTargetAllocation)
-  , depthStencilTargetView(other.depthStencilTargetView)
-  , frames(std::move(other.frames))
-  , frameIndex(other.frameIndex)
-  , imageAcquired(other.imageAcquired)
-  , uiContext(std::move(other.uiContext))
-  , uiRenderable(std::move(other.uiRenderable))
-  , lastMousePos(std::move(other.lastMousePos))
-  , projectionMatrix(std::move(other.projectionMatrix))
-  , projectionMatrixInverse(std::move(other.projectionMatrixInverse)) {
-} // Window::Window
 
 } // namespace iris
 

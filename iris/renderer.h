@@ -15,10 +15,10 @@ namespace filesystem = std::experimental::filesystem;
 #include <filesystem>
 namespace filesystem = std::filesystem;
 #endif
+#include "glm/vec4.hpp"
 #include "gsl/gsl"
-#include "iris/components/renderable.h"
+#include "iris/buffer.h"
 #include "iris/vulkan.h"
-#include "iris/window.h"
 #include "spdlog/sinks/sink.h"
 #include <chrono>
 #include <cstddef>
@@ -40,6 +40,10 @@ namespace iris {
 namespace Control {
 class Control;
 } // namespace Control
+
+namespace Renderer::Component {
+struct Renderable;
+} // namespace Renderer::Component
 
 /*!
 \namespace iris::Renderer
@@ -107,14 +111,6 @@ any window is closed.
 \brief Request the rendering system to shutdown.
 */
 void Terminate() noexcept;
-
-[[nodiscard]] tl::expected<Window, std::exception>
-CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
-             glm::vec4 const& clearColor, Window::Options const& options,
-             int display, std::uint32_t numFrames) noexcept;
-
-tl::expected<void, std::system_error>
-ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
 
 /*!
 \brief Begin the next rendering frame.

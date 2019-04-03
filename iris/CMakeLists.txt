@@ -101,6 +101,7 @@ endif()
 configure_file(config.h.in config.h)
 
 set(SOURCES
+  buffer.cc
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.h
   ${CMAKE_CURRENT_BINARY_DIR}/flextVk.cpp
   io/gltf.cc
@@ -111,6 +112,7 @@ set(SOURCES
   renderer_util.cc
   string_util.cc
   vulkan_util.cc
+  window.cc
   wsi/platform_window.cc
 )
 

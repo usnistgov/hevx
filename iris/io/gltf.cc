@@ -3,6 +3,7 @@
 #include "config.h"
 
 #include "error.h"
+#include "components/renderable.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -1341,33 +1342,31 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                    VK_DYNAMIC_STATE_SCISSOR};
 
-    if (auto lp = Renderer::CreateGraphicsPipeline(
+    if (auto pipe = Renderer::CreateRasterizationPipeline(
           shaders, vertexInputBindingDescriptions,
           vertexInputAttributeDescriptions, inputAssemblyStateCI,
           viewportStateCI, rasterizationStateCI, multisampleStateCI,
           depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
           gsl::make_span(&renderable.descriptorSetLayout, 1))) {
-      std::tie(renderable.pipelineLayout, renderable.pipeline) = *lp;
+      renderable.pipelineLayout = pipe->layout;
+      renderable.pipeline = pipe->pipeline;
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        iris::Error::kFileLoadFailed, "unable to create graphics pipeline"));
+      return tl::unexpected(
+        std::system_error(iris::Error::kFileLoadFailed,
+                          fmt::format("unable to create graphics pipeline: {}",
+                                      pipe.error().what())));
     }
 
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    VmaAllocation stagingAllocation = VK_NULL_HANDLE;
-    VkDeviceSize stagingSize = 0;
-
-    if (auto bas = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
+    auto staging = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
                                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                            VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-    } else {
+                                            VMA_MEMORY_USAGE_CPU_TO_GPU);
+    if (!staging) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(staging.error());
     }
 
-    if (auto ptr = Renderer::MapMemory<MaterialBuffer*>(stagingAllocation)) {
+    if (auto ptr = staging->Map<MaterialBuffer*>()) {
       if (primitive.material) {
         if (!materials ||
             materials->size() < static_cast<std::size_t>(*primitive.material)) {
@@ -1409,22 +1408,21 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           material.emissiveFactor.value_or(glm::vec3(0.f));
       }
 
-      Renderer::UnmapMemory(stagingAllocation);
+      staging->Unmap();
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(ptr.error());
     }
 
-    if (auto bas = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
+    if (auto buf = Renderer::AllocateBuffer(sizeof(MaterialBuffer),
                                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VMA_MEMORY_USAGE_GPU_ONLY)) {
-      renderable.buffers.push_back(std::get<0>(*bas));
-      renderable.bufferAllocations.push_back(std::get<1>(*bas));
-      renderable.bufferSizes.push_back(std::get<2>(*bas));
+      renderable.buffers.push_back(std::move(*buf));
     } else {
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(buf.error());
     }
 
     VkCommandBuffer commandBuffer;
@@ -1432,6 +1430,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(cb.error());
     }
@@ -1441,19 +1442,22 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     region.dstOffset = 0;
     region.size = sizeof(MaterialBuffer);
 
-    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.buffers[0], 1,
-                    &region);
+    vkCmdCopyBuffer(commandBuffer, staging->buffer,
+                    renderable.buffers.back().buffer, 1, &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
           commandBuffer, commandQueue.commandPool, commandQueue.queue,
           commandQueue.submitFence);
         !result) {
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
     }
 
     VkDescriptorBufferInfo materialBufferInfo = {};
-    materialBufferInfo.buffer = renderable.buffers[0];
+    materialBufferInfo.buffer = renderable.buffers.back().buffer;
     materialBufferInfo.offset = 0;
     materialBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -1476,19 +1480,23 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
 
-    if (auto bas = Renderer::ReallocateBuffer(
-          stagingBuffer, stagingAllocation, stagingSize, vertexBufferSize,
-          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-    } else {
+    staging = Renderer::ReallocateBuffer(*staging, vertexBufferSize,
+                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+    if (!staging) {
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(staging.error());
     }
 
     float* pVertexBuffer;
-    if (auto ptr = Renderer::MapMemory<float*>(stagingAllocation)) {
+    if (auto ptr = staging->Map<float*>()) {
       pVertexBuffer = *ptr;
     } else {
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(ptr.error());
     }
@@ -1514,22 +1522,28 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       }
     }
 
-    Renderer::UnmapMemory(stagingAllocation);
+    staging->Unmap();
 
-    if (auto bas = Renderer::AllocateBuffer(vertexBufferSize,
+    if (auto buf = Renderer::AllocateBuffer(vertexBufferSize,
                                             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VMA_MEMORY_USAGE_GPU_ONLY)) {
-      std::tie(renderable.vertexBuffer, renderable.vertexBufferAllocation,
-               renderable.vertexBufferSize) = *bas;
+      renderable.vertexBuffer = std::move(*buf);
     } else {
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(buf.error());
     }
 
     if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(cb.error());
     }
@@ -1539,13 +1553,17 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     region.dstOffset = 0;
     region.size = vertexBufferSize;
 
-    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.vertexBuffer, 1,
-                    &region);
+    vkCmdCopyBuffer(commandBuffer, staging->buffer,
+                    renderable.vertexBuffer.buffer, 1, &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
           commandBuffer, commandQueue.commandPool, commandQueue.queue,
           commandQueue.submitFence);
         !result) {
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
     }
@@ -1557,17 +1575,19 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                ? sizeof(std::uint16_t)
                                : sizeof(std::uint32_t));
 
-    if (auto bas = Renderer::ReallocateBuffer(
-          stagingBuffer, stagingAllocation, stagingSize, indexBufferSize,
-          VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-      std::tie(stagingBuffer, stagingAllocation, stagingSize) = *bas;
-    } else {
+    staging = Renderer::ReallocateBuffer(*staging, indexBufferSize,
+                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         VMA_MEMORY_USAGE_CPU_TO_GPU);
+    if (!staging) {
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(staging.error());
     }
 
     std::byte* pIndexBuffer;
-    if (auto ptr = Renderer::MapMemory<std::byte*>(stagingAllocation)) {
+    if (auto ptr = staging->Map<std::byte*>()) {
       pIndexBuffer = *ptr;
     } else {
       IRIS_LOG_LEAVE();
@@ -1582,22 +1602,30 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                   indexBufferView.byteOffset.value_or(0),
                 indexBufferSize);
 
-    Renderer::UnmapMemory(stagingAllocation);
+    staging->Unmap();
 
-    if (auto bas = Renderer::AllocateBuffer(indexBufferSize,
+    if (auto buf = Renderer::AllocateBuffer(indexBufferSize,
                                             VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VMA_MEMORY_USAGE_GPU_ONLY)) {
-      std::tie(renderable.indexBuffer, renderable.indexBufferAllocation,
-               renderable.indexBufferSize) = *bas;
+      renderable.indexBuffer = std::move(*buf);
     } else {
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(bas.error());
+      return tl::unexpected(buf.error());
     }
 
     if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
+      DestroyBuffer(renderable.indexBuffer);
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(cb.error());
     }
@@ -1607,13 +1635,18 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     region.dstOffset = 0;
     region.size = indexBufferSize;
 
-    vkCmdCopyBuffer(commandBuffer, stagingBuffer, renderable.indexBuffer, 1,
-                    &region);
+    vkCmdCopyBuffer(commandBuffer, staging->buffer,
+                    renderable.indexBuffer.buffer, 1, &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
           commandBuffer, commandQueue.commandPool, commandQueue.queue,
           commandQueue.submitFence);
         !result) {
+      DestroyBuffer(renderable.indexBuffer);
+      DestroyBuffer(renderable.vertexBuffer);
+      DestroyBuffer(renderable.buffers.back());
+      renderable.buffers.pop_back();
+      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
     }
