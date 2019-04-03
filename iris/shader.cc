@@ -1,5 +1,4 @@
 #include "shader.h"
-
 #include "config.h"
 
 #include "error.h"

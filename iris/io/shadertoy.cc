@@ -144,12 +144,11 @@ void main() {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
-  if (auto pipe = Renderer::CreateRasterizationPipeline(
+  if (auto pipe = CreateRasterizationPipeline(
         shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0, {})) {
-    renderable.pipelineLayout = pipe->layout;
-    renderable.pipeline = pipe->pipeline;
+    renderable.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(pipe.error());

@@ -21,7 +21,9 @@
 #include "io/gltf.h"
 #include "io/json.h"
 #include "io/shadertoy.h"
+#include "pipeline.h"
 #include "protos.h"
+#include "shader.h"
 #include "renderer_util.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -203,8 +205,7 @@ void main() {
   fColor = Color * texture(sampler2D(sTexture, sSampler), UV.st);
 })";
 
-static VkPipelineLayout sUIPipelineLayout{VK_NULL_HANDLE};
-static VkPipeline sUIPipeline{VK_NULL_HANDLE};
+static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
 
@@ -332,13 +333,13 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    renderable.pipeline);
+                    renderable.pipeline.pipeline);
 
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          renderable.pipelineLayout, 0 /* firstSet */, 1,
+                          renderable.pipeline.layout, 0 /* firstSet */, 1,
                           &sGlobalDescriptorSet, 0, nullptr);
 
-  vkCmdPushConstants(commandBuffer, renderable.pipelineLayout,
+  vkCmdPushConstants(commandBuffer, renderable.pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, pushConstants.size(), pushConstants.data());
 
@@ -347,7 +348,7 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            renderable.pipelineLayout, 1 /* firstSet */, 1,
+                            renderable.pipeline.layout, 1 /* firstSet */, 1,
                             &renderable.descriptorSet, 0, nullptr);
   }
 
@@ -1175,8 +1176,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
         gsl::make_span(&sUIDescriptorSetLayout, 1))) {
-    sUIPipelineLayout = pipe->layout;
-    sUIPipeline = pipe->pipeline;
+    sUIPipeline = std::move(*pipe);
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
@@ -1185,9 +1185,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                         "Cannot create UI pipeline: "s + pipe.error().what()));
   }
 
-  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sUIPipelineLayout,
-             "sUIPipelineLayout");
-  NameObject(VK_OBJECT_TYPE_PIPELINE, sUIPipeline, "sUIPipeline");
+  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sUIPipeline.layout,
+             "sUIPipeline.layout");
+  NameObject(VK_OBJECT_TYPE_PIPELINE, sUIPipeline.pipeline,
+             "sUIPipeline.pipeline");
 
   sRunning = true;
   IRIS_LOG_LEAVE();
@@ -1524,7 +1525,6 @@ void iris::Renderer::EndFrame(VkImage image,
 
             // TODO: this has to change: maybe not use Renderable for UI?
             Component::Renderable renderable = window.uiRenderable;
-            renderable.pipelineLayout = sUIPipelineLayout;
             renderable.pipeline = sUIPipeline;
             renderable.descriptorSet = sUIDescriptorSet;
             renderable.indexType = VK_INDEX_TYPE_UINT16;
@@ -1667,6 +1667,94 @@ tl::expected<void, std::system_error> iris::Renderer::ReleaseCommandQueue(
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ReleaseCommandQueue
+
+tl::expected<VkCommandBuffer, std::system_error>
+iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = commandPool;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffer"));
+  }
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot begin command buffer"));
+  }
+
+  IRIS_LOG_LEAVE();
+  return commandBuffer;
+} // iris::Renderer::BeginOneTimeSubmit
+
+tl::expected<void, std::system_error>
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
+                                 VkCommandPool commandPool, VkQueue queue,
+                                 VkFence fence) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(commandBuffer != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+  Expects(queue != VK_NULL_HANDLE);
+  Expects(fence != VK_NULL_HANDLE);
+
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.commandBufferCount = 1;
+  submitI.pCommandBuffers = &commandBuffer;
+
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot end command buffer"));
+  }
+
+  if (auto result = vkQueueSubmit(queue, 1, &submitI, fence);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot submit command buffer"));
+  }
+
+  if (auto result = vkWaitForFences(sDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot wait on one-time submit fence"));
+  }
+
+  if (auto result = vkResetFences(sDevice, 1, &fence); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot reset one-time submit fence"));
+  }
+
+  vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::EndOneTimeSubmit
 
 tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(filesystem::path const& path) noexcept {

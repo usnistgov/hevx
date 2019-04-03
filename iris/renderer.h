@@ -161,6 +161,13 @@ tl::expected<void, std::system_error> ReleaseCommandQueue(
   std::chrono::milliseconds timeout = std::chrono::milliseconds{
     INT64_MAX}) noexcept;
 
+[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
+BeginOneTimeSubmit(VkCommandPool commandPool) noexcept;
+
+tl::expected<void, std::system_error>
+EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkCommandPool commandPool,
+                 VkQueue queue, VkFence fence) noexcept;
+
 /*!
 \brief Load a file into the rendering system.
 

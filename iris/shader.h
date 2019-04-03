@@ -19,6 +19,14 @@ struct Shader {
   VkShaderStageFlagBits stage{VK_SHADER_STAGE_ALL};
 }; // struct Shader
 
+struct ShaderGroup {
+  VkRayTracingShaderGroupTypeNV type;
+  std::uint32_t generalShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t closestHitShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t anyHitShaderIndex{VK_SHADER_UNUSED_NV};
+  std::uint32_t intersectionShaderIndex{VK_SHADER_UNUSED_NV};
+}; // struct ShaderGroup
+
 [[nodiscard]] tl::expected<Shader, std::system_error>
 CompileShaderFromSource(std::string_view source,
                         VkShaderStageFlagBits stage) noexcept;

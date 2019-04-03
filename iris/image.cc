@@ -1,10 +1,10 @@
 #include "image.h"
-
 #include "config.h"
 
 #include "buffer.h"
 #include "error.h"
 #include "logging.h"
+#include "renderer.h"
 #include "renderer_util.h"
 
 tl::expected<void, std::system_error>

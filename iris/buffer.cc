@@ -1,9 +1,9 @@
 #include "buffer.h"
-
 #include "config.h"
 
 #include "error.h"
 #include "logging.h"
+#include "renderer.h"
 #include "renderer_util.h"
 
 template <>

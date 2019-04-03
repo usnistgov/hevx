@@ -10,7 +10,6 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
-#include "iris/shader.h"
 #include "iris/vulkan_util.h"
 #include <cstdint>
 
@@ -42,13 +41,6 @@ extern std::uint32_t const sColorTargetAttachmentIndex;
 extern std::uint32_t const sColorResolveAttachmentIndex;
 extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
-
-[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
-BeginOneTimeSubmit(VkCommandPool commandPool) noexcept;
-
-tl::expected<void, std::system_error>
-EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkCommandPool commandPool,
-                 VkQueue queue, VkFence fence) noexcept;
 
 struct AccelerationStructure {
   VkAccelerationStructureNV structure{VK_NULL_HANDLE};
@@ -120,41 +112,6 @@ struct LightsBuffer {
   Light Lights[MAX_LIGHTS];
   int NumLights;
 }; // struct LightsBuffer
-
-struct Pipeline {
-  VkPipelineLayout layout{VK_NULL_HANDLE};
-  VkPipeline pipeline{VK_NULL_HANDLE};
-}; // struct Pipeline
-
-tl::expected<Pipeline, std::system_error> CreateRasterizationPipeline(
-  gsl::span<const Shader> shaders,
-  gsl::span<const VkVertexInputBindingDescription>
-    vertexInputBindingDescriptions,
-  gsl::span<const VkVertexInputAttributeDescription>
-    vertexInputAttributeDescriptions,
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI,
-  VkPipelineViewportStateCreateInfo viewportStateCI,
-  VkPipelineRasterizationStateCreateInfo rasterizationStateCI,
-  VkPipelineMultisampleStateCreateInfo multisampleStateCI,
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI,
-  gsl::span<const VkPipelineColorBlendAttachmentState>
-    colorBlendAttachmentStates,
-  gsl::span<const VkDynamicState> dynamicStates,
-  std::uint32_t renderPassSubpass,
-  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
-
-struct ShaderGroup {
-  VkRayTracingShaderGroupTypeNV type;
-  std::uint32_t generalShaderIndex{VK_SHADER_UNUSED_NV};
-  std::uint32_t closestHitShaderIndex{VK_SHADER_UNUSED_NV};
-  std::uint32_t anyHitShaderIndex{VK_SHADER_UNUSED_NV};
-  std::uint32_t intersectionShaderIndex{VK_SHADER_UNUSED_NV};
-}; // struct ShaderGroup
-
-tl::expected<Pipeline, std::system_error> CreateRayTracingPipeline(
-  gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
-  gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
-  std::uint32_t maxRecursionDepth) noexcept;
 
 } // namespace iris::Renderer
 

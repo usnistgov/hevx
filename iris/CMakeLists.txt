@@ -109,6 +109,7 @@ set(SOURCES
   io/json.cc
   io/read_file.cc
   io/shadertoy.cc
+  pipeline.cc
   renderer.cc
   renderer_util.cc
   shader.cc

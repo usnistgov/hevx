@@ -10,6 +10,8 @@
 #include "iris/protos.h"
 #include "iris/renderer.h"
 #include "iris/renderer_util.h"
+#include "iris/pipeline.h"
+#include "iris/shader.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127)
@@ -34,7 +36,7 @@ static iris::Renderer::CommandQueue sCommandQueue;
 static VkDescriptorPool sDescriptorPool;
 static VkDescriptorSetLayout sDescriptorSetLayout;
 static VkDescriptorSet sDescriptorSet;
-static iris::Renderer::Pipeline sPipeline;
+static iris::Pipeline sPipeline;
 static iris::Renderer::AccelerationStructure sBottomLevelAS;
 static iris::Renderer::AccelerationStructure sTopLevelAS;
 
@@ -121,58 +123,60 @@ CreateDescriptor() noexcept {
   return std::make_tuple(pool, layout, set);
 }
 
-tl::expected<iris::Renderer::Pipeline, std::system_error>
+tl::expected<iris::Pipeline, std::system_error>
 CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
   using namespace std::string_literals;
 
-  auto rayGen = iris::LoadShaderFromFile(
-    iris::kIRISContentDirectory + "/assets/shaders/raytracing/raygen.glsl"s,
-    VK_SHADER_STAGE_RAYGEN_BIT_NV);
-  if (!rayGen) {
-    return tl::unexpected(
-      std::system_error(rayGen.error().code(),
-                        "Cannot load raygen.glsl: "s + rayGen.error().what()));
-  }
+  absl::FixedArray<iris::Shader> shaders(4);
 
-  auto miss = iris::LoadShaderFromFile(
-    iris::kIRISContentDirectory + "/assets/shaders/raytracing/miss.glsl"s,
-    VK_SHADER_STAGE_MISS_BIT_NV);
-  if (!miss) {
+  if (auto rgen = iris::LoadShaderFromFile(
+        iris::kIRISContentDirectory + "/assets/shaders/raytracing/raygen.glsl"s,
+        VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
+    shaders[0] = std::move(*rgen);
+  } else {
     return tl::unexpected(std::system_error(
-      miss.error().code(), "Cannot load miss.glsl: "s + miss.error().what()));
+      rgen.error().code(), "Cannot load raygen.glsl: "s + rgen.error().what()));
   }
 
-  auto closestHit =
-    iris::LoadShaderFromFile(iris::kIRISContentDirectory +
-                               "/assets/shaders/raytracing/closest_hit.glsl"s,
-                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-  if (!closestHit) {
-    return tl::unexpected(std::system_error(closestHit.error().code(),
+  if (auto rmiss = iris::LoadShaderFromFile(
+        iris::kIRISContentDirectory + "/assets/shaders/raytracing/miss.glsl"s,
+        VK_SHADER_STAGE_MISS_BIT_NV)) {
+    shaders[1] = std::move(*rmiss);
+  } else {
+    return tl::unexpected(std::system_error(
+      rmiss.error().code(), "Cannot load miss.glsl: "s + rmiss.error().what()));
+  }
+
+  if (auto rchit = iris::LoadShaderFromFile(
+        iris::kIRISContentDirectory +
+          "/assets/shaders/raytracing/closest_hit.glsl"s,
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+    shaders[2] = std::move(*rchit);
+  } else {
+    return tl::unexpected(std::system_error(rchit.error().code(),
                                             "Cannot load closest_hit.glsl: "s +
-                                              closestHit.error().what()));
+                                              rchit.error().what()));
   }
 
-  auto sphereIntersect = iris::LoadShaderFromFile(
-    iris::kIRISContentDirectory +
-      "/assets/shaders/raytracing/sphere_intersect.glsl"s,
-    VK_SHADER_STAGE_INTERSECTION_BIT_NV);
-  if (!sphereIntersect) {
+  if (auto rint = iris::LoadShaderFromFile(
+        iris::kIRISContentDirectory +
+          "/assets/shaders/raytracing/sphere_intersect.glsl"s,
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
+    shaders[3] = std::move(*rint);
+  } else {
     return tl::unexpected(std::system_error(
-      sphereIntersect.error().code(),
-      "Cannot load sphere_intersect.glsl: "s + sphereIntersect.error().what()));
+      rint.error().code(),
+      "Cannot load sphere_intersect.glsl: "s + rint.error().what()));
   }
 
-  absl::FixedArray<iris::Shader> shaders{*rayGen, *miss, *closestHit,
-                                         *sphereIntersect};
-
-  absl::FixedArray<iris::Renderer::ShaderGroup> groups{
+  absl::FixedArray<iris::ShaderGroup> groups{
     {VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV, 0, 0, 0, 0},
     {VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV, 1, 0, 0, 0},
     {VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV, 0, 2, 0, 3},
   };
 
-  return iris::Renderer::CreateRayTracingPipeline(
-    shaders, groups, gsl::make_span(&setLayout, 1), 2);
+  return iris::CreateRayTracingPipeline(shaders, groups,
+                                        gsl::make_span(&setLayout, 1), 2);
 } // CreatePipeline
 
 tl::expected<iris::Renderer::AccelerationStructure, std::system_error>

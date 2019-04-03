@@ -5,7 +5,7 @@
 #include "glm/mat4x4.hpp"
 #include "iris/buffer.h"
 #include "iris/image.h"
-#include "iris/renderer.h"
+#include "iris/pipeline.h"
 #include "iris/vulkan.h"
 #include <cstdint>
 
@@ -21,22 +21,21 @@ struct Renderable {
   static constexpr std::size_t const kMaxTextures = 8;
   static constexpr std::size_t const kMaxBuffers = 4;
 
-  VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-  VkPipeline pipeline{VK_NULL_HANDLE};
+  Pipeline pipeline{};
 
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
-  absl::InlinedVector<Image, kMaxTextures> textures;
-  absl::InlinedVector<VkImageView, kMaxTextures> textureViews;
-  absl::InlinedVector<VkSampler, kMaxTextures> textureSamplers;
+  absl::InlinedVector<Image, kMaxTextures> textures{};
+  absl::InlinedVector<VkImageView, kMaxTextures> textureViews{};
+  absl::InlinedVector<VkSampler, kMaxTextures> textureSamplers{};
 
-  absl::InlinedVector<Buffer, kMaxBuffers> buffers;
+  absl::InlinedVector<Buffer, kMaxBuffers> buffers{};
 
-  Buffer vertexBuffer;
+  Buffer vertexBuffer{};
   VkDeviceSize vertexBufferBindingOffset{0};
 
-  Buffer indexBuffer;
+  Buffer indexBuffer{};
   VkDeviceSize indexBufferBindingOffset{0};
 
   glm::mat4 modelMatrix{1.f};
