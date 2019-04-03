@@ -67,14 +67,17 @@ CreateRenderable(std::string_view code) {
   IRIS_LOG_ENTER();
   Renderer::Component::Renderable renderable;
 
-  auto vs = Renderer::CompileShaderFromSource(sVertexShaderSource,
-                                              VK_SHADER_STAGE_VERTEX_BIT);
-  if (!vs) {
+  absl::FixedArray<Shader> shaders(2);
+
+  if (auto vs = CompileShaderFromSource(sVertexShaderSource,
+                                        VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders[0] = std::move(*vs);
+  } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vs.error());
   }
 
-  Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, *vs,
+  Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shaders[0].module,
                        "iris-shadertoy::Renderable::VertexShader");
 
   std::ostringstream fragmentShaderSource;
@@ -84,20 +87,16 @@ void main() {
     mainImage(fragColor, fragCoord);
 })";
 
-  auto fs = Renderer::CompileShaderFromSource(
-    fragmentShaderSource.str(), VK_SHADER_STAGE_FRAGMENT_BIT);
-  if (!fs) {
+  if (auto fs = CompileShaderFromSource(fragmentShaderSource.str(),
+                                        VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    shaders[1] = std::move(*fs);
+  } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(fs.error());
   }
 
-  Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, *fs,
+  Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shaders[1].module,
                        "iris-shadertoy::Renderable::FragmentShader");
-
-  absl::FixedArray<Renderer::Shader> shaders{
-    {*vs, VK_SHADER_STAGE_VERTEX_BIT},
-    {*fs, VK_SHADER_STAGE_FRAGMENT_BIT},
-  };
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =

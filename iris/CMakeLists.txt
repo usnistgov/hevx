@@ -111,6 +111,7 @@ set(SOURCES
   io/shadertoy.cc
   renderer.cc
   renderer_util.cc
+  shader.cc
   string_util.cc
   vulkan_util.cc
   window.cc

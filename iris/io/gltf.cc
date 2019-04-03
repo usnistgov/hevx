@@ -1240,22 +1240,22 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                          renderable.descriptorSet,
                          (meshName + ":DescriptorSet").c_str());
 
-    absl::FixedArray<Renderer::Shader> shaders(2);
+    absl::FixedArray<Shader> shaders(2);
 
-    if (auto s = Renderer::LoadShaderFromFile("assets/shaders/gltf.vert",
-                                              VK_SHADER_STAGE_VERTEX_BIT)) {
-      shaders[0] = {*s, VK_SHADER_STAGE_VERTEX_BIT};
+    if (auto vs = LoadShaderFromFile("assets/shaders/gltf.vert",
+                                     VK_SHADER_STAGE_VERTEX_BIT)) {
+      shaders[0] = std::move(*vs);
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(s.error());
+      return tl::unexpected(vs.error());
     }
 
-    if (auto s = Renderer::LoadShaderFromFile("assets/shaders/gltf.frag",
-                                              VK_SHADER_STAGE_FRAGMENT_BIT)) {
-      shaders[1] = {*s, VK_SHADER_STAGE_FRAGMENT_BIT};
+    if (auto fs = LoadShaderFromFile("assets/shaders/gltf.frag",
+                                     VK_SHADER_STAGE_FRAGMENT_BIT)) {
+      shaders[1] = std::move(*fs);
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(s.error());
+      return tl::unexpected(fs.error());
     }
 
     std::uint32_t vertexSize = sizeof(glm::vec3) * 2;

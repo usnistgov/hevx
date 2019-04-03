@@ -125,7 +125,7 @@ tl::expected<iris::Renderer::Pipeline, std::system_error>
 CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
   using namespace std::string_literals;
 
-  auto rayGen = iris::Renderer::LoadShaderFromFile(
+  auto rayGen = iris::LoadShaderFromFile(
     iris::kIRISContentDirectory + "/assets/shaders/raytracing/raygen.glsl"s,
     VK_SHADER_STAGE_RAYGEN_BIT_NV);
   if (!rayGen) {
@@ -134,7 +134,7 @@ CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
                         "Cannot load raygen.glsl: "s + rayGen.error().what()));
   }
 
-  auto miss = iris::Renderer::LoadShaderFromFile(
+  auto miss = iris::LoadShaderFromFile(
     iris::kIRISContentDirectory + "/assets/shaders/raytracing/miss.glsl"s,
     VK_SHADER_STAGE_MISS_BIT_NV);
   if (!miss) {
@@ -142,17 +142,17 @@ CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
       miss.error().code(), "Cannot load miss.glsl: "s + miss.error().what()));
   }
 
-  auto closestHit = iris::Renderer::LoadShaderFromFile(
-    iris::kIRISContentDirectory +
-      "/assets/shaders/raytracing/closest_hit.glsl"s,
-    VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+  auto closestHit =
+    iris::LoadShaderFromFile(iris::kIRISContentDirectory +
+                               "/assets/shaders/raytracing/closest_hit.glsl"s,
+                             VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
   if (!closestHit) {
     return tl::unexpected(std::system_error(closestHit.error().code(),
                                             "Cannot load closest_hit.glsl: "s +
                                               closestHit.error().what()));
   }
 
-  auto sphereIntersect = iris::Renderer::LoadShaderFromFile(
+  auto sphereIntersect = iris::LoadShaderFromFile(
     iris::kIRISContentDirectory +
       "/assets/shaders/raytracing/sphere_intersect.glsl"s,
     VK_SHADER_STAGE_INTERSECTION_BIT_NV);
@@ -162,12 +162,8 @@ CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
       "Cannot load sphere_intersect.glsl: "s + sphereIntersect.error().what()));
   }
 
-  absl::FixedArray<iris::Renderer::Shader> shaders{
-    {*rayGen, VK_SHADER_STAGE_RAYGEN_BIT_NV},
-    {*miss, VK_SHADER_STAGE_MISS_BIT_NV},
-    {*closestHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV},
-    {*sphereIntersect, VK_SHADER_STAGE_INTERSECTION_BIT_NV},
-  };
+  absl::FixedArray<iris::Shader> shaders{*rayGen, *miss, *closestHit,
+                                         *sphereIntersect};
 
   absl::FixedArray<iris::Renderer::ShaderGroup> groups{
     {VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV, 0, 0, 0, 0},
@@ -597,7 +593,7 @@ int main(int argc, char** argv) {
 
   if (auto ptr = sbtBuffer.Map<std::byte*>()) {
     std::memcpy(shaderGroupHandles.data(), *ptr, sbtBuffer.size);
-    iris::Renderer::UnmapMemory(sbtBuffer.allocation);
+    sbtBuffer.Unmap();
   } else {
     logger.critical("cannot map sbt: {}", ptr.error().what());
     std::exit(EXIT_FAILURE);

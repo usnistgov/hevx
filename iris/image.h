@@ -1,7 +1,9 @@
 #ifndef HEV_IRIS_IMAGE_H_
 #define HEV_IRIS_IMAGE_H_
 
+#include "expected.hpp"
 #include "iris/vulkan.h"
+#include <system_error>
 
 namespace iris {
 

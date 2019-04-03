@@ -1091,20 +1091,20 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   absl::FixedArray<Shader> shaders(2);
 
-  if (auto s = CompileShaderFromSource(sUIVertexShaderSource,
-                                       VK_SHADER_STAGE_VERTEX_BIT)) {
-    shaders[0] = {*s, VK_SHADER_STAGE_VERTEX_BIT};
+  if (auto vs = CompileShaderFromSource(sUIVertexShaderSource,
+                                        VK_SHADER_STAGE_VERTEX_BIT)) {
+    shaders[0] = std::move(*vs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(s.error());
+    return tl::unexpected(vs.error());
   }
 
-  if (auto s = CompileShaderFromSource(sUIFragmentShaderSource,
-                                       VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    shaders[1] = {*s, VK_SHADER_STAGE_FRAGMENT_BIT};
+  if (auto fs = CompileShaderFromSource(sUIFragmentShaderSource,
+                                        VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    shaders[1] = std::move(*fs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(s.error());
+    return tl::unexpected(fs.error());
   }
 
   absl::FixedArray<VkPushConstantRange> pushConstantRanges{

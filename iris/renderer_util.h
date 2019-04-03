@@ -10,6 +10,7 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
+#include "iris/shader.h"
 #include "iris/vulkan_util.h"
 #include <cstdint>
 
@@ -48,35 +49,6 @@ BeginOneTimeSubmit(VkCommandPool commandPool) noexcept;
 tl::expected<void, std::system_error>
 EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkCommandPool commandPool,
                  VkQueue queue, VkFence fence) noexcept;
-
-template <class T>
-tl::expected<T, std::system_error>
-MapMemory(VmaAllocation allocation) noexcept {
-  void* ptr;
-  if (auto result = vmaMapMemory(sAllocator, allocation, &ptr);
-      result != VK_SUCCESS) {
-    return tl::unexpected(
-      std::system_error(make_error_code(result), "Cannot map memory"));
-  }
-  return reinterpret_cast<T>(ptr);
-}
-
-inline void UnmapMemory(VmaAllocation allocation) noexcept {
-  vmaUnmapMemory(sAllocator, allocation);
-}
-
-struct Shader {
-  VkShaderModule handle;
-  VkShaderStageFlagBits stage;
-}; // struct Shader
-
-[[nodiscard]] tl::expected<VkShaderModule, std::system_error>
-CompileShaderFromSource(std::string_view source,
-                        VkShaderStageFlagBits stage) noexcept;
-
-[[nodiscard]] tl::expected<VkShaderModule, std::system_error>
-LoadShaderFromFile(filesystem::path const& path,
-                   VkShaderStageFlagBits stage) noexcept;
 
 struct AccelerationStructure {
   VkAccelerationStructureNV structure{VK_NULL_HANDLE};
