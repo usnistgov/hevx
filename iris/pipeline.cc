@@ -1,6 +1,7 @@
 #include "pipeline.h"
 #include "config.h"
 
+#include "absl/container/fixed_array.h"
 #include "error.h"
 #include "logging.h"
 #include "renderer_util.h"

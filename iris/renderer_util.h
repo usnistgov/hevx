@@ -10,7 +10,7 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
-#include "iris/vulkan_util.h"
+#include "iris/vulkan.h"
 #include <cstdint>
 
 namespace iris::Renderer {
@@ -41,33 +41,6 @@ extern std::uint32_t const sColorTargetAttachmentIndex;
 extern std::uint32_t const sColorResolveAttachmentIndex;
 extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
-
-struct AccelerationStructure {
-  VkAccelerationStructureNV structure{VK_NULL_HANDLE};
-  VmaAllocation allocation{VK_NULL_HANDLE};
-}; // struct AccelerationStructure
-
-struct GeometryInstance {
-  float transform[12];
-  std::uint32_t customIndex : 24;
-  std::uint32_t mask : 8;
-  std::uint32_t offset : 24;
-  std::uint32_t flags : 8;
-  std::uint64_t accelerationStructureHandle;
-
-  GeometryInstance(std::uint64_t handle = 0) noexcept
-    : accelerationStructureHandle(handle) {
-    customIndex = 0;
-    mask = 0xF;
-    offset = 0;
-    flags = 0;
-  }
-}; // GeometryInstance
-
-[[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
-CreateAccelerationStructure(
-  VkAccelerationStructureInfoNV const& accelerationStructureInfo,
-  VkDeviceSize compactedSize) noexcept;
 
 template <class T>
 void NameObject(VkObjectType objectType [[maybe_unused]],

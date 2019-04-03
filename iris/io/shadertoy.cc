@@ -1,5 +1,6 @@
 #include "iris/config.h"
 
+#include "absl/container/fixed_array.h"
 #include "error.h"
 #include "io/shadertoy.h"
 #include "components/renderable.h"

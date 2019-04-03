@@ -8,6 +8,7 @@
 #include "logging.h"
 #include "renderer.h"
 #include "renderer_util.h"
+#include "vulkan_util.h"
 #include "wsi/input.h"
 #if PLATFORM_LINUX
 #include "wsi/platform_window_x11.h"

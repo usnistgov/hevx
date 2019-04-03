@@ -2,6 +2,7 @@
 #define HEV_IRIS_PIPELINE_H_
 
 #include "expected.hpp"
+#include "gsl/gsl"
 #include "iris/shader.h"
 #include "iris/vulkan.h"
 #include <system_error>

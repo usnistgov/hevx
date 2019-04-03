@@ -2,6 +2,7 @@
 
 #include "config.h"
 
+#include "absl/container/fixed_array.h"
 #include "error.h"
 #include "components/renderable.h"
 #include "fmt/format.h"

@@ -1,16 +1,18 @@
 #include "iris/config.h"
 
+#include "absl/container/fixed_array.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
 #include "fmt/format.h"
 #include "glm/mat4x4.hpp"
+#include "iris/acceleration_structure.h"
 #include "iris/buffer.h"
 #include "iris/image.h"
 #include "iris/io/read_file.h"
+#include "iris/pipeline.h"
 #include "iris/protos.h"
 #include "iris/renderer.h"
 #include "iris/renderer_util.h"
-#include "iris/pipeline.h"
 #include "iris/shader.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -31,14 +33,6 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
-
-static iris::Renderer::CommandQueue sCommandQueue;
-static VkDescriptorPool sDescriptorPool;
-static VkDescriptorSetLayout sDescriptorSetLayout;
-static VkDescriptorSet sDescriptorSet;
-static iris::Pipeline sPipeline;
-static iris::Renderer::AccelerationStructure sBottomLevelAS;
-static iris::Renderer::AccelerationStructure sTopLevelAS;
 
 struct Sphere {
   glm::vec3 aabbMin;
@@ -62,10 +56,32 @@ static absl::FixedArray<Sphere> sSpheres = {
 
 static iris::Buffer sSpheresBuffer;
 
-tl::expected<
-  std::tuple<VkDescriptorPool, VkDescriptorSetLayout, VkDescriptorSet>,
-  std::system_error>
-CreateDescriptor() noexcept {
+static iris::Renderer::CommandQueue sCommandQueue;
+static VkDescriptorPool sDescriptorPool;
+static VkDescriptorSetLayout sDescriptorSetLayout;
+static VkDescriptorSet sDescriptorSet;
+static iris::Pipeline sPipeline;
+static iris::AccelerationStructure sBottomLevelAS;
+static iris::AccelerationStructure sTopLevelAS;
+static iris::Image sOutputImage;
+static VkImageView sOutputImageView;
+static std::uint32_t sShaderGroupHandleSize;
+static iris::Buffer sShaderBindingTable;
+
+static tl::expected<void, std::system_error> AcquireCommandQueue() noexcept {
+  if (auto cq = iris::Renderer::AcquireCommandQueue()) {
+    sCommandQueue = std::move(*cq);
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(
+      std::system_error(cq.error().code(),
+                        "Cannot acquire command queue: "s + cq.error().what()));
+  }
+
+  return {};
+} // AcquireCommandQueue
+
+static tl::expected<void, std::system_error> CreateDescriptor() noexcept {
   absl::FixedArray<VkDescriptorPoolSize, 3> poolSizes{{
     {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 32},
     {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 32},
@@ -78,9 +94,8 @@ CreateDescriptor() noexcept {
   poolCI.poolSizeCount = gsl::narrow_cast<std::uint32_t>(poolSizes.size());
   poolCI.pPoolSizes = poolSizes.data();
 
-  VkDescriptorPool pool;
   if (auto result = vkCreateDescriptorPool(iris::Renderer::sDevice, &poolCI,
-                                           nullptr, &pool);
+                                           nullptr, &sDescriptorPool);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(iris::make_error_code(result),
                                             "Cannot create descriptor pool"));
@@ -91,6 +106,9 @@ CreateDescriptor() noexcept {
      VK_SHADER_STAGE_RAYGEN_BIT_NV, nullptr},
     {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_NV,
      nullptr},
+    {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+     VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV,
+     nullptr},
   }};
 
   VkDescriptorSetLayoutCreateInfo layoutCI = {};
@@ -98,9 +116,8 @@ CreateDescriptor() noexcept {
   layoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(bindings.size());
   layoutCI.pBindings = bindings.data();
 
-  VkDescriptorSetLayout layout = {};
-  if (auto result = vkCreateDescriptorSetLayout(iris::Renderer::sDevice,
-                                                &layoutCI, nullptr, &layout);
+  if (auto result = vkCreateDescriptorSetLayout(
+        iris::Renderer::sDevice, &layoutCI, nullptr, &sDescriptorSetLayout);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(
       iris::make_error_code(result), "Cannot create descriptor set layout"));
@@ -108,25 +125,22 @@ CreateDescriptor() noexcept {
 
   VkDescriptorSetAllocateInfo setAI = {};
   setAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  setAI.descriptorPool = pool;
+  setAI.descriptorPool = sDescriptorPool;
   setAI.descriptorSetCount = 1;
-  setAI.pSetLayouts = &layout;
+  setAI.pSetLayouts = &sDescriptorSetLayout;
 
-  VkDescriptorSet set;
-  if (auto result =
-        vkAllocateDescriptorSets(iris::Renderer::sDevice, &setAI, &set);
+  if (auto result = vkAllocateDescriptorSets(iris::Renderer::sDevice, &setAI,
+                                             &sDescriptorSet);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(iris::make_error_code(result),
                                             "Cannot allocate descriptor set"));
   }
 
-  return std::make_tuple(pool, layout, set);
-}
+  return {};
+} // CreateDescriptor
 
-tl::expected<iris::Pipeline, std::system_error>
-CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
+static tl::expected<void, std::system_error> CreatePipeline() noexcept {
   using namespace std::string_literals;
-
   absl::FixedArray<iris::Shader> shaders(4);
 
   if (auto rgen = iris::LoadShaderFromFile(
@@ -175,12 +189,62 @@ CreatePipeline(VkDescriptorSetLayout setLayout) noexcept {
     {VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV, 0, 2, 0, 3},
   };
 
-  return iris::CreateRayTracingPipeline(shaders, groups,
-                                        gsl::make_span(&setLayout, 1), 2);
+  if (auto pipe = iris::CreateRayTracingPipeline(
+        shaders, groups, gsl::make_span(&sDescriptorSetLayout, 1), 2)) {
+    sPipeline = std::move(*pipe);
+  } else {
+    return tl::unexpected(pipe.error());
+  }
+
+  return {};
 } // CreatePipeline
 
-tl::expected<iris::Renderer::AccelerationStructure, std::system_error>
-CreateBottomLevelAccelerationStructure(spdlog::logger& logger) noexcept {
+static tl::expected<void, std::system_error> CreateSpheres() noexcept {
+  if (auto buf = iris::CreateBuffer(
+        sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
+        reinterpret_cast<std::byte*>(sSpheres.data()))) {
+    sSpheresBuffer = std::move(*buf);
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(
+      std::system_error(buf.error().code(), "Cannot create spheres buffer: "s +
+                                              buf.error().what()));
+  }
+
+  return {};
+} // CreateSpheres
+
+static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
+  if (auto img = iris::AllocateImage(
+        VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
+    sOutputImage = std::move(*img);
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(
+      std::system_error(img.error().code(),
+                        "cannot create output image: "s + img.error().what()));
+  }
+
+  if (auto view = iris::CreateImageView(
+        sOutputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    sOutputImageView = *view;
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(std::system_error(
+      view.error().code(),
+      "cannot create output image view: "s + view.error().what()));
+  }
+
+  return {};
+} // CreateOutputImage
+
+static tl::expected<void, std::system_error>
+CreateBottomLevelAccelerationStructure() noexcept {
   using namespace std::string_literals;
 
   VkGeometryTrianglesNV triangles = {};
@@ -202,100 +266,44 @@ CreateBottomLevelAccelerationStructure(spdlog::logger& logger) noexcept {
   geometry.geometry.triangles = triangles;
   geometry.geometry.aabbs = spheres;
 
-  VkAccelerationStructureInfoNV asInfo = {};
-  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-  asInfo.flags = 0;
-  asInfo.instanceCount = 0;
-  asInfo.geometryCount = 1;
-  asInfo.pGeometries = &geometry;
-
-  auto structure = iris::Renderer::CreateAccelerationStructure(asInfo, 0);
-  if (!structure) {
+  if (auto structure =
+        iris::CreateAccelerationStructure(gsl::make_span(&geometry, 1), 0)) {
+    sBottomLevelAS = std::move(*structure);
+  } else {
     return tl::unexpected(std::system_error(structure.error().code(),
                                             "Cannot create bottom level AS: "s +
                                               structure.error().what()));
   }
 
-  VkMemoryRequirements2KHR memoryRequirements = {};
-  memoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-
-  VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
-  memoryRequirementsInfo.sType =
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-  memoryRequirementsInfo.accelerationStructure = structure->structure;
-  memoryRequirementsInfo.type =
-    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-  vkGetAccelerationStructureMemoryRequirementsNV(
-    iris::Renderer::sDevice, &memoryRequirementsInfo, &memoryRequirements);
-
-  auto scratch = iris::AllocateBuffer(
-    memoryRequirements.memoryRequirements.size,
-    VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
-  if (!scratch) {
-    return tl::unexpected(std::system_error(
-      scratch.error().code(), "Cannot allocate bottom level scratch memory: "s +
-                                scratch.error().what()));
-  }
-
-  VkCommandBuffer commandBuffer;
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(sCommandQueue.commandPool)) {
-    commandBuffer = *cb;
-  } else {
-    DestroyBuffer(*scratch);
-    return tl::unexpected(std::system_error(cb.error()));
-  }
-
-  logger.info("vkCmdBuildAccelerationStructureNV bottomLevelAS");
-  vkCmdBuildAccelerationStructureNV(commandBuffer, &asInfo,
-                                    VK_NULL_HANDLE,       // instanceData
-                                    0,                    // instanceOffset
-                                    VK_FALSE,             // update
-                                    structure->structure, // dst
-                                    VK_NULL_HANDLE,       // src
-                                    scratch->buffer,      // scratchBuffer
-                                    0                     // scratchOffset
-  );
-
-  logger.info("EndOneTimeSubmit bottomLevelAS");
-  if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, sCommandQueue.commandPool, sCommandQueue.queue,
+  if (auto result = iris::BuildAccelerationStructure(
+        sBottomLevelAS, sCommandQueue.commandPool, sCommandQueue.queue,
         sCommandQueue.submitFence);
       !result) {
-    DestroyBuffer(*scratch);
-    return tl::unexpected(std::system_error(
-      result.error().code(),
-      "Cannot build acceleration struture: "s + result.error().what()));
+    return tl::unexpected(
+      std::system_error(result.error().code(),
+                        "Cannot build topLevelAS: "s + result.error().what()));
   }
 
-  DestroyBuffer(*scratch);
-
-  return std::move(*structure);
+  return {};
 } // CreateBottomLevelAccelerationStructure
 
-tl::expected<iris::Renderer::AccelerationStructure, std::system_error>
-CreateTopLevelAccelerationStructure(
-  spdlog::logger& logger,
-  gsl::span<iris::Renderer::GeometryInstance> instances) noexcept {
+static tl::expected<void, std::system_error>
+CreateTopLevelAccelerationStructure() noexcept {
   using namespace std::string_literals;
 
-  VkAccelerationStructureInfoNV asInfo = {};
-  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
-  asInfo.instanceCount = 1;
-  asInfo.geometryCount = 0;
-  asInfo.pGeometries = nullptr;
+  iris::GeometryInstance topLevelInstance(sBottomLevelAS.handle);
 
-  auto structure = iris::Renderer::CreateAccelerationStructure(asInfo, 0);
-  if (!structure) {
+  if (auto structure = iris::CreateAccelerationStructure(1, 0)) {
+    sTopLevelAS = std::move(*structure);
+  } else {
     return tl::unexpected(std::system_error(structure.error().code(),
                                             "Cannot create top level AS: "s +
                                               structure.error().what()));
   }
 
-  auto instanceBuffer = iris::AllocateBuffer(
-    sizeof(iris::Renderer::GeometryInstance) * instances.size(),
-    VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
+  auto instanceBuffer = iris::AllocateBuffer(sizeof(iris::GeometryInstance),
+                                             VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
+                                             VMA_MEMORY_USAGE_GPU_ONLY);
   if (!instanceBuffer) {
     return tl::unexpected(
       std::system_error(instanceBuffer.error().code(),
@@ -303,14 +311,8 @@ CreateTopLevelAccelerationStructure(
                           instanceBuffer.error().what()));
   }
 
-  logger.info("Created instance buffer for topLevelAS sized: {}",
-              instanceBuffer->size);
-
-  if (auto ptr = instanceBuffer->Map<iris::Renderer::GeometryInstance*>()) {
-    for (auto&& instance : instances) {
-      std::memcpy(*ptr, &instance, sizeof(iris::Renderer::GeometryInstance));
-      (*ptr)++;
-    }
+  if (auto ptr = instanceBuffer->Map<iris::GeometryInstance*>()) {
+    **ptr = topLevelInstance;
     instanceBuffer->Unmap();
   } else {
     DestroyBuffer(*instanceBuffer);
@@ -319,65 +321,110 @@ CreateTopLevelAccelerationStructure(
                                               instanceBuffer.error().what()));
   }
 
-  VkMemoryRequirements2KHR memoryRequirements = {};
-  memoryRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR;
-
-  VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
-  memoryRequirementsInfo.sType =
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-  memoryRequirementsInfo.accelerationStructure = structure->structure;
-  memoryRequirementsInfo.type =
-    VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-  vkGetAccelerationStructureMemoryRequirementsNV(
-    iris::Renderer::sDevice, &memoryRequirementsInfo, &memoryRequirements);
-
-  logger.info("Creating scratch buffer for topLevelAS sized: {}",
-              memoryRequirements.memoryRequirements.size);
-  auto scratch = iris::AllocateBuffer(
-    memoryRequirements.memoryRequirements.size,
-    VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY);
-  if (!scratch) {
-    return tl::unexpected(std::system_error(scratch.error().code(),
-                                            "Cannot allocate build memory: "s +
-                                              scratch.error().what()));
-  }
-
-  VkCommandBuffer commandBuffer;
-  if (auto cb = iris::Renderer::BeginOneTimeSubmit(sCommandQueue.commandPool)) {
-    commandBuffer = *cb;
-  } else {
-    DestroyBuffer(*instanceBuffer);
-    DestroyBuffer(*scratch);
-    return tl::unexpected(std::system_error(cb.error()));
-  }
-
-  logger.info("vkCmdBuildAccelerationStructureNV topLevelAS");
-  vkCmdBuildAccelerationStructureNV(commandBuffer, &asInfo,
-                                    instanceBuffer->buffer, // instanceData
-                                    0,                      // instanceOffset
-                                    VK_FALSE,               // update
-                                    structure->structure,   // dst
-                                    VK_NULL_HANDLE,         // dst
-                                    scratch->buffer,        // scratchBuffer
-                                    0                       // scratchOffset
-  );
-
-  if (auto result = iris::Renderer::EndOneTimeSubmit(
-        commandBuffer, sCommandQueue.commandPool, sCommandQueue.queue,
-        sCommandQueue.submitFence);
+  if (auto result = iris::BuildAccelerationStructure(
+        sTopLevelAS, sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence, instanceBuffer->buffer);
       !result) {
     DestroyBuffer(*instanceBuffer);
-    DestroyBuffer(*scratch);
-    return tl::unexpected(std::system_error(
-      result.error().code(),
-      "Cannot build acceleration struture: "s + result.error().what()));
+    return tl::unexpected(
+      std::system_error(result.error().code(),
+                        "Cannot build topLevelAS: "s + result.error().what()));
   }
 
   DestroyBuffer(*instanceBuffer);
-  DestroyBuffer(*scratch);
 
-  return std::move(*structure);
-}
+  return {};
+} // CreateTopLevelAccelerationStructure
+
+static tl::expected<void, std::system_error> WriteDescriptorSets() noexcept {
+  absl::FixedArray<VkAccelerationStructureNV, 2> accelerationStructures{
+    sBottomLevelAS.structure, sTopLevelAS.structure};
+
+  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
+  writeDescriptorSetAS.sType =
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
+  writeDescriptorSetAS.accelerationStructureCount =
+    gsl::narrow_cast<std::uint32_t>(accelerationStructures.size());
+  writeDescriptorSetAS.pAccelerationStructures = accelerationStructures.data();
+
+  VkDescriptorImageInfo imageInfo = {};
+  imageInfo.imageView = sOutputImageView;
+  imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+  VkDescriptorBufferInfo bufferInfo = {};
+  bufferInfo.buffer = sSpheresBuffer.buffer;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(Sphere) * sSpheres.size();
+
+  absl::FixedArray<VkWriteDescriptorSet, 2> descriptorWrites{{
+    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &writeDescriptorSetAS,
+     sDescriptorSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV,
+     nullptr, nullptr, nullptr},
+    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sDescriptorSet, 1, 0, 1,
+     VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imageInfo, nullptr, nullptr},
+    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sDescriptorSet, 2, 0, 1,
+     VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &bufferInfo, nullptr},
+  }};
+
+  vkUpdateDescriptorSets(
+    iris::Renderer::sDevice,
+    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
+    descriptorWrites.data(), 0, nullptr);
+
+  return {};
+} // WriteDescriptorSets
+
+static tl::expected<void, std::system_error>
+CreateShaderBindingTable() noexcept {
+  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
+  rayTracingProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &rayTracingProperties;
+
+  vkGetPhysicalDeviceProperties2(iris::Renderer::sPhysicalDevice,
+                                 &physicalDeviceProperties);
+  sShaderGroupHandleSize = rayTracingProperties.shaderGroupHandleSize;
+
+  std::uint32_t numGroups = 3;
+
+  absl::FixedArray<std::byte> shaderGroupHandles(
+    rayTracingProperties.shaderGroupHandleSize * numGroups);
+
+  if (auto result = vkGetRayTracingShaderGroupHandlesNV(
+        iris::Renderer::sDevice, sPipeline.pipeline, 0 /* firstGroup */,
+        numGroups /* groupCount */, shaderGroupHandles.size(),
+        shaderGroupHandles.data());
+      result != VK_SUCCESS) {
+    return tl::unexpected(std::system_error(iris::make_error_code(result),
+                                            "Cannot get shader group handles"));
+  }
+
+  if (auto buf = iris::AllocateBuffer(sShaderGroupHandleSize * numGroups,
+                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                      VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+    sShaderBindingTable = std::move(*buf);
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(std::system_error(buf.error().code(),
+          "Cannot create shader binding table: "s + buf.error().what()));
+  }
+
+  if (auto ptr = sShaderBindingTable.Map<std::byte*>()) {
+    std::memcpy(shaderGroupHandles.data(), *ptr, sShaderBindingTable.size);
+    sShaderBindingTable.Unmap();
+  } else {
+    using namespace std::string_literals;
+    return tl::unexpected(std::system_error(
+      ptr.error().code(),
+      "Cannot map shader binding table: "s + ptr.error().what()));
+  }
+
+  return {};
+} // CreateShaderBindingTable
 
 #if PLATFORM_WINDOWS
 extern "C" {
@@ -426,180 +473,21 @@ int main(int argc, char** argv) {
   logger.info("Logging initialized");
 
   if (auto result = iris::Renderer::Initialize(
-        "iris-viewer",
-        iris::Renderer::Options::kReportDebugMessages |
-          iris::Renderer::Options::kUseValidationLayers,
-        {console_sink, file_sink}, 0);
+                      "iris-raytracer",
+                      iris::Renderer::Options::kReportDebugMessages |
+                        iris::Renderer::Options::kUseValidationLayers,
+                      {console_sink, file_sink}, 0)
+                      .and_then(AcquireCommandQueue)
+                      .and_then(CreateDescriptor)
+                      .and_then(CreatePipeline)
+                      .and_then(CreateSpheres)
+                      .and_then(CreateOutputImage)
+                      .and_then(CreateBottomLevelAccelerationStructure)
+                      .and_then(CreateTopLevelAccelerationStructure)
+                      .and_then(WriteDescriptorSets)
+                      .and_then(CreateShaderBindingTable);
       !result) {
-    logger.critical("cannot initialize renderer: {}", result.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if ((iris::Renderer::AvailableFeatures() &
-       iris::Renderer::Features::kRayTracing) !=
-      iris::Renderer::Features::kRayTracing) {
-    logger.critical("cannot initialize renderer: raytracing not supported");
-    std::exit(EXIT_FAILURE);
-  }
-
-  logger.info("Renderer initialized. {} files specified on command line.",
-              files.size());
-
-  if (auto cq = iris::Renderer::AcquireCommandQueue()) {
-    sCommandQueue = std::move(*cq);
-  } else {
-    logger.critical("cannot acquire command queue: {}", cq.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto pls = CreateDescriptor()) {
-    std::tie(sDescriptorPool, sDescriptorSetLayout, sDescriptorSet) = *pls;
-  } else {
-    logger.critical("cannot create descriptor: {}", pls.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto pipe = CreatePipeline(sDescriptorSetLayout)) {
-    sPipeline = std::move(*pipe);
-  } else {
-    logger.critical("cannot create pipeline: {}", pipe.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto buf = iris::CreateBuffer(
-        sCommandQueue.commandPool, sCommandQueue.queue,
-        sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
-        reinterpret_cast<std::byte*>(sSpheres.data()))) {
-    sSpheresBuffer = std::move(*buf);
-  } else {
-    logger.critical("cannot create spheres buffer: {}", buf.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto as = CreateBottomLevelAccelerationStructure(logger)) {
-    sBottomLevelAS = std::move(*as);
-  } else {
-    logger.critical("cannot create bottom level acceleration structure: {}",
-                    as.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  iris::Renderer::GeometryInstance topLevelInstance;
-
-  if (auto result = vkGetAccelerationStructureHandleNV(
-        iris::Renderer::sDevice, sBottomLevelAS.structure,
-        sizeof(topLevelInstance.accelerationStructureHandle),
-        &topLevelInstance.accelerationStructureHandle);
-      result != VK_SUCCESS) {
-    logger.critical("cannot get bottom level acceleration structure handle: {}",
-                    iris::to_string(result));
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto as = CreateTopLevelAccelerationStructure(
-        logger, gsl::make_span(&topLevelInstance, 1))) {
-    sTopLevelAS = std::move(*as);
-  } else {
-    logger.critical("cannot create top level acceleration structure: {}",
-                    as.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  iris::Image outputImage;
-  VkImageView outputImageView;
-
-  if (auto img = iris::AllocateImage(
-        VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
-    outputImage = std::move(*img);
-  } else {
-    logger.critical("cannot create output image: {}", img.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto view = iris::CreateImageView(
-        outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    outputImageView = *view;
-  } else {
-    logger.critical("cannot create output image view: {}", view.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  absl::FixedArray<VkAccelerationStructureNV, 2> accelerationStructures{
-    sBottomLevelAS.structure, sTopLevelAS.structure};
-
-  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
-  writeDescriptorSetAS.sType =
-    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
-  writeDescriptorSetAS.accelerationStructureCount =
-    gsl::narrow_cast<std::uint32_t>(accelerationStructures.size());
-  writeDescriptorSetAS.pAccelerationStructures = accelerationStructures.data();
-
-  VkDescriptorImageInfo imageInfo = {};
-  imageInfo.imageView = outputImageView;
-  imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-  absl::FixedArray<VkWriteDescriptorSet, 2> descriptorWrites{{
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &writeDescriptorSetAS,
-     sDescriptorSet, 0, 0, 1, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV,
-     nullptr, nullptr, nullptr},
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sDescriptorSet, 1, 0, 1,
-     VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imageInfo, nullptr, nullptr},
-  }};
-
-  vkUpdateDescriptorSets(
-    iris::Renderer::sDevice,
-    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
-    descriptorWrites.data(), 0, nullptr);
-
-  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
-  rayTracingProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
-
-  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
-  physicalDeviceProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-  physicalDeviceProperties.pNext = &rayTracingProperties;
-
-  vkGetPhysicalDeviceProperties2(iris::Renderer::sPhysicalDevice,
-                                 &physicalDeviceProperties);
-
-  logger.info("shaderGroupHandleSize: {}",
-              rayTracingProperties.shaderGroupHandleSize);
-  std::uint32_t numGroups = 3;
-
-  absl::FixedArray<std::byte> shaderGroupHandles(
-    rayTracingProperties.shaderGroupHandleSize * numGroups);
-
-  if (auto result = vkGetRayTracingShaderGroupHandlesNV(
-        iris::Renderer::sDevice, sPipeline.pipeline, 0 /* firstGroup */,
-        numGroups /* groupCount */, shaderGroupHandles.size(),
-        shaderGroupHandles.data());
-      result != VK_SUCCESS) {
-    logger.critical("cannot get shader group handle: {}",
-                    iris::to_string(result));
-    std::exit(EXIT_FAILURE);
-  }
-
-  iris::Buffer sbtBuffer;
-
-  if (auto buf = iris::AllocateBuffer(
-        rayTracingProperties.shaderGroupHandleSize * numGroups,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    sbtBuffer = std::move(*buf);
-  } else {
-    logger.critical("cannot create sbt: {}", buf.error().what());
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (auto ptr = sbtBuffer.Map<std::byte*>()) {
-    std::memcpy(shaderGroupHandles.data(), *ptr, sbtBuffer.size);
-    sbtBuffer.Unmap();
-  } else {
-    logger.critical("cannot map sbt: {}", ptr.error().what());
+    logger.critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);
   }
 
@@ -675,16 +563,12 @@ int main(int argc, char** argv) {
     readyBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
     readyBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
-    readyBarrier.image = outputImage.image;
+    readyBarrier.image = sOutputImage.image;
     readyBarrier.subresourceRange = sr;
 
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &readyBarrier);
-
-    cbLabel.pLabelName = "trace";
-    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
-    logger.info("trace");
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
                       sPipeline.pipeline);
@@ -693,18 +577,15 @@ int main(int argc, char** argv) {
                             nullptr);
 
     VkDeviceSize rayGenOffset = 0;
-    VkDeviceSize missOffset = rayTracingProperties.shaderGroupHandleSize;
-    VkDeviceSize missStride = rayTracingProperties.shaderGroupHandleSize;
-    VkDeviceSize hitGroupOffset = rayTracingProperties.shaderGroupHandleSize;
-    VkDeviceSize hitGroupStride = rayTracingProperties.shaderGroupHandleSize;
+    VkDeviceSize missOffset = sShaderGroupHandleSize;
+    VkDeviceSize missStride = sShaderGroupHandleSize;
+    VkDeviceSize hitGroupOffset = sShaderGroupHandleSize * 2;
+    VkDeviceSize hitGroupStride = sShaderGroupHandleSize;
 
-    vkCmdTraceRaysNV(cb, sbtBuffer.buffer, rayGenOffset, sbtBuffer.buffer,
-                     missOffset, missStride, sbtBuffer.buffer, hitGroupOffset,
-                     hitGroupStride, VK_NULL_HANDLE, 0, 0, 1000, 1000, 1);
-
-    cbLabel.pLabelName = "tracedBarrier";
-    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
-    logger.info("tracedBarrier");
+    vkCmdTraceRaysNV(cb, sShaderBindingTable.buffer, rayGenOffset,
+                     sShaderBindingTable.buffer, missOffset, missStride,
+                     sShaderBindingTable.buffer, hitGroupOffset, hitGroupStride,
+                     VK_NULL_HANDLE, 0, 0, 1000, 1000, 1);
 
     VkImageMemoryBarrier tracedBarrier = {};
     tracedBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -714,7 +595,7 @@ int main(int argc, char** argv) {
     tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     tracedBarrier.srcQueueFamilyIndex = tracedBarrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
-    tracedBarrier.image = outputImage.image;
+    tracedBarrier.image = sOutputImage.image;
     tracedBarrier.subresourceRange = sr;
 
     vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -722,7 +603,6 @@ int main(int argc, char** argv) {
                          nullptr, 1, &tracedBarrier);
     vkEndCommandBuffer(cb);
 
-    logger.info("submit");
     VkSubmitInfo submitI = {};
     submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitI.commandBufferCount = 1;
@@ -735,7 +615,7 @@ int main(int argc, char** argv) {
                    iris::to_string(result));
     }
 
-    iris::Renderer::EndFrame(outputImage.image);
+    iris::Renderer::EndFrame(sOutputImage.image);
     currentCBIndex = (currentCBIndex + 1) % 2;
     frameCount++;
   }
