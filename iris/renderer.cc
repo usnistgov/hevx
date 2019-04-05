@@ -335,9 +335,15 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     renderable.pipeline.pipeline);
 
-  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          renderable.pipeline.layout, 0 /* firstSet */, 1,
-                          &sGlobalDescriptorSet, 0, nullptr);
+  vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+                          renderable.pipeline.layout,      // layout
+                          0,                               // firstSet
+                          1,                               // descriptorSetCount
+                          &sGlobalDescriptorSet,           // pDescriptorSets
+                          0,                               // dynamicOffsetCount
+                          nullptr                          // pDynamicOffsets
+  );
 
   vkCmdPushConstants(commandBuffer, renderable.pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -926,16 +932,20 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       0,                                 // binding
       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
       1,                                 // descriptorCount
-      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
-      nullptr // pImmutableSamplers
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_RAYGEN_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
+      nullptr                               // pImmutableSamplers
     },
     // This is the LightsBuffer
     {
       1,                                 // binding
       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
       1,                                 // descriptorCount
-      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
-      nullptr // pImmutableSamplers
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
+        VK_SHADER_STAGE_RAYGEN_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
+      nullptr                               // pImmutableSamplers
     }};
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
@@ -1289,6 +1299,31 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
+void iris::Renderer::BindDescriptorSets(
+  VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+  VkPipelineLayout layout, gsl::span<VkDescriptorSet> descriptorSets) noexcept {
+
+  vkCmdBindDescriptorSets(commandBuffer,         // commandBuffer
+                          pipelineBindPoint,     // pipelineBindPoint
+                          layout,                // layout
+                          0,                     // firstSet
+                          1,                     // descriptorSetCount
+                          &sGlobalDescriptorSet, // pDescriptorSets
+                          0,                     // dynamicOffsetCount
+                          nullptr                // pDynamicOffsets
+  );
+
+  vkCmdBindDescriptorSets(commandBuffer,         // commandBuffer
+                          pipelineBindPoint,     // pipelineBindPoint
+                          layout,                // layout
+                          1,                     // firstSet
+                          descriptorSets.size(), // descriptorSetCount
+                          descriptorSets.data(), // pDescriptorSets
+                          0,                     // dynamicOffsetCount
+                          nullptr                // pDynamicOffsets
+  );
+} // iris::Renderer::BindDescriptorSets
+
 void iris::Renderer::EndFrame(VkImage image,
   gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
@@ -1358,7 +1393,13 @@ void iris::Renderer::EndFrame(VkImage image,
                          make_error_code(result).message());
     }
 
+    // FIXME: move this
+    glm::mat4 const viewMatrix = glm::lookAt(
+      glm::vec3(1.f, 1.f, -1.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
+
     if (auto ptr = sMatricesBuffer.Map<MatricesBuffer*>()) {
+      (*ptr)->ViewMatrix = viewMatrix;
+      (*ptr)->ViewMatrixInverse = glm::inverse(viewMatrix);
       (*ptr)->ProjectionMatrix = window.projectionMatrix;
       (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
       sMatricesBuffer.Unmap();
@@ -1424,8 +1465,6 @@ void iris::Renderer::EndFrame(VkImage image,
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
 
-    glm::mat4 const viewMatrix = glm::lookAt(
-      glm::vec3(1.f, 1.f, -1.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
     std::vector<Component::Renderable> renderables = sRenderables();
 
     for (auto&& renderable : renderables) {

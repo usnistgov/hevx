@@ -123,6 +123,11 @@ EndFrame.
 */
 VkRenderPass BeginFrame() noexcept;
 
+void BindDescriptorSets(VkCommandBuffer commandBuffer,
+                        VkPipelineBindPoint pipelineBindPoint,
+                        VkPipelineLayout layout,
+                        gsl::span<VkDescriptorSet> descriptorSets) noexcept;
+
 /*!
 \brief End the next rendering frame.
 

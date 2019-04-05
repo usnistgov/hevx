@@ -1,0 +1,51 @@
+#version 460 core
+#extension GL_NV_ray_tracing : require
+
+struct Sphere {
+  float aabbMinX;
+  float aabbMinY;
+  float aabbMinZ;
+  float aabbMaxX;
+  float aabbMaxY;
+  float aabbMaxZ;
+};
+
+layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
+  Sphere spheres[];
+};
+
+hitAttributeNV vec3 normalVector;
+
+void main() {
+  const vec3 origin = gl_WorldRayOriginNV;
+  const vec3 direction = normalize(gl_WorldRayDirectionNV);
+
+  Sphere sphere = spheres[gl_PrimitiveID];
+  const vec3 aabbMin = vec3(sphere.aabbMinX, sphere.aabbMinY, sphere.aabbMinZ);
+  const vec3 aabbMax = vec3(sphere.aabbMaxX, sphere.aabbMaxY, sphere.aabbMaxZ);
+
+  const vec3 center = (aabbMax + aabbMin) / vec3(2.f);
+  const float radius = (aabbMax.x - aabbMin.x) / 2.f;
+
+  vec3 oc = origin - center;
+  float a = dot(direction, direction);
+  float b = dot(oc, direction);
+  float c = dot(oc, oc) - (radius * radius);
+  float d = b * b - a * c;
+
+  if (d > 0.0) {
+    float t1 = (-b - sqrt(d)) / a;
+    float t2 = (-b + sqrt(d)) / a;
+
+    if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
+      vec3 hitValue = origin + direction * t1;
+      normalVector = normalize((hitValue - center) / radius);
+      reportIntersectionNV(t1, 0);
+    } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
+      vec3 hitValue = origin + direction * t2;
+      normalVector = normalize((hitValue - center) / radius);
+      reportIntersectionNV(t2, 0);
+    }
+  }
+}
+

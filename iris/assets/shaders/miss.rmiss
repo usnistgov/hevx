@@ -4,5 +4,6 @@
 layout(location = 0) rayPayloadInNV vec3 hitValue;
 
 void main() {
-  hitValue = vec3(0.0, 0.1, 0.3);
+  hitValue = vec3(0.f, 0.f, 0.f);
 }
+

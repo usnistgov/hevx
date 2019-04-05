@@ -70,6 +70,8 @@ struct PushConstants {
 }; // struct PushConstants
 
 struct MatricesBuffer {
+  glm::mat4 ViewMatrix;
+  glm::mat4 ViewMatrixInverse;
   glm::mat4 ProjectionMatrix;
   glm::mat4 ProjectionMatrixInverse;
 }; // struct MatricesBuffer
