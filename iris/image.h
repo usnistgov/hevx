@@ -12,6 +12,13 @@ struct Image {
   VmaAllocation allocation{VK_NULL_HANDLE};
 }; // struct Image
 
+void SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
+                    VkPipelineStageFlags srcStages,
+                    VkPipelineStageFlags dstStages, VkImageLayout oldLayout,
+                    VkImageLayout newLayout, VkImageAspectFlags aspectMask,
+                    std::uint32_t mipLevels,
+                    std::uint32_t arrayLayers) noexcept;
+
 tl::expected<void, std::system_error>
 TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                 VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,

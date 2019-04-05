@@ -253,7 +253,6 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
 
   VkCommandBufferInheritanceInfo commandBufferII = {};
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  commandBufferII.framebuffer = VK_NULL_HANDLE;
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -262,20 +261,10 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
 
-  VkImageMemoryBarrier barrier = {};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.srcAccessMask = 0;
-  barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
-    VK_QUEUE_FAMILY_IGNORED;
-  barrier.image = dst;
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-
-  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
-                       nullptr, 1, &barrier);
+  SetImageLayout(
+    commandBuffer, dst, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
   VkImageCopy copy = {};
   copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -287,14 +276,10 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  barrier.dstAccessMask = 0;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
-                       nullptr, 1, &barrier);
+  SetImageLayout(
+    commandBuffer, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
@@ -813,36 +798,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     nullptr                          // pPreserveAttachments
   };
 
-  absl::FixedArray<VkSubpassDependency> dependencies{
-    VkSubpassDependency{
-      VK_SUBPASS_EXTERNAL,                           // srcSubpass
-      0,                                             // dstSubpass
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // srcStageMask
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask
-      VK_ACCESS_MEMORY_READ_BIT,                     // srcAccessMask
-      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // dstAccessMask
-      VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
-    },
-    VkSubpassDependency{
-      0,                                             // srcSubpass
-      VK_SUBPASS_EXTERNAL,                           // dstSubpass
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,          // dstStageMask
-      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // srcAccessMask
-      VK_ACCESS_MEMORY_READ_BIT,              // dstAccessMask
-      VK_DEPENDENCY_BY_REGION_BIT             // dependencyFlags
-    }};
-
   VkRenderPassCreateInfo renderPassCI = {};
   renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   renderPassCI.attachmentCount = attachments.size();
   renderPassCI.pAttachments = attachments.data();
   renderPassCI.subpassCount = 1;
   renderPassCI.pSubpasses = &subpass;
-  renderPassCI.dependencyCount = dependencies.size();
-  renderPassCI.pDependencies = dependencies.data();
 
   if (auto result =
         vkCreateRenderPass(sDevice, &renderPassCI, nullptr, &sRenderPass);
@@ -1427,22 +1388,6 @@ void iris::Renderer::EndFrame(VkImage image,
     vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
     vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
 
-    if (image != VK_NULL_HANDLE) {
-      VkCommandBuffer commandBuffer =
-        CopyImage(window.colorImages[window.frameIndex], image,
-                  {window.extent.width, window.extent.height, 1});
-      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-    }
-
-    clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
-
-    renderPassBI.framebuffer = frame.framebuffer;
-    renderPassBI.renderArea.extent = window.extent;
-    renderPassBI.pClearValues = clearValues.data();
-
-    vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
-                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-
     PushConstants pushConstants;
     pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
                             0.f};
@@ -1465,9 +1410,23 @@ void iris::Renderer::EndFrame(VkImage image,
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
 
-    std::vector<Component::Renderable> renderables = sRenderables();
+    if (image != VK_NULL_HANDLE) {
+      VkCommandBuffer commandBuffer =
+        CopyImage(window.colorImages[window.frameIndex], image,
+                  {window.extent.width, window.extent.height, 1});
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+    }
 
-    for (auto&& renderable : renderables) {
+    clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
+
+    renderPassBI.framebuffer = frame.framebuffer;
+    renderPassBI.renderArea.extent = window.extent;
+    renderPassBI.pClearValues = clearValues.data();
+
+    vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
+                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+
+    for (auto&& renderable : sRenderables()) {
       pushConstants.ModelMatrix = renderable.modelMatrix;
       pushConstants.ModelViewMatrix = viewMatrix * renderable.modelMatrix;
       pushConstants.ModelViewMatrixInverse =

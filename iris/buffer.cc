@@ -58,21 +58,16 @@ tl::expected<iris::Buffer, std::system_error>
 iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
                        VkBufferUsageFlags bufferUsage,
                        VmaMemoryUsage memoryUsage) noexcept {
-  IRIS_LOG_ENTER();
   Expects(Renderer::sAllocator != VK_NULL_HANDLE);
   Expects(newSize > 0);
 
   if (oldBuffer.buffer != VK_NULL_HANDLE &&
       oldBuffer.allocation != VK_NULL_HANDLE) {
-    if (oldBuffer.size >= newSize) {
-      IRIS_LOG_LEAVE();
-      return oldBuffer;
-    }
+    if (oldBuffer.size >= newSize) return oldBuffer;
 
     if (auto result = vmaResizeAllocation(Renderer::sAllocator,
                                           oldBuffer.allocation, newSize);
         result == VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
       return oldBuffer;
     }
   }
@@ -101,7 +96,6 @@ iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
   Ensures(newBuffer.buffer != VK_NULL_HANDLE);
   Ensures(newBuffer.allocation != VK_NULL_HANDLE);
 
-  IRIS_LOG_LEAVE();
   return newBuffer;
 } // iris::ReallocateBuffer
 

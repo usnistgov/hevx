@@ -573,27 +573,35 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     return tl::unexpected(view.error());
   }
 
-  if (auto result =
-        TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-                        newColorTarget.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, 1);
-      !result) {
-    DestroyImage(newDepthStencilTarget);
-    vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);
-    DestroyImage(newColorTarget);
-    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    DestroyImage(newDepthStencilTarget);
-    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
-    for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
-    vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
+  VkCommandBuffer commandBuffer;
+  if (auto cb = Renderer::BeginOneTimeSubmit(sCommandPools[0])) {
+    commandBuffer = *cb;
+  } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return tl::unexpected(cb.error());
   }
 
-  if (auto result =
-        TransitionImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-                        newDepthStencilTarget.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+  for (auto&& image : newColorImages) {
+    SetImageLayout(commandBuffer, image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                   VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+  }
+
+  SetImageLayout(
+    commandBuffer, newColorTarget.image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+
+  SetImageLayout(commandBuffer, newDepthStencilTarget.image,
+                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                 VK_IMAGE_LAYOUT_UNDEFINED,
+                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_ASPECT_DEPTH_BIT, 1, 1);
+
+  if (auto result = Renderer::EndOneTimeSubmit(
+        commandBuffer, sCommandPools[0], sCommandQueues[0], sCommandFences[0]);
       !result) {
     DestroyImage(newDepthStencilTarget);
     vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);

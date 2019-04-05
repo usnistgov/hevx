@@ -35,6 +35,8 @@
 #include <system_error>
 #include <vector>
 
+static std::shared_ptr<spdlog::logger> sLogger;
+
 struct Sphere {
   glm::vec3 aabbMin;
   glm::vec3 aabbMax;
@@ -68,6 +70,10 @@ static iris::Image sOutputImage;
 static VkImageView sOutputImageView;
 static std::uint32_t sShaderGroupHandleSize;
 static iris::Buffer sShaderBindingTable;
+static VkDeviceSize sMissOffset;
+static VkDeviceSize sMissStride;
+static VkDeviceSize sHitGroupOffset;
+static VkDeviceSize sHitGroupStride;
 
 static tl::expected<void, std::system_error> AcquireCommandQueue() noexcept {
   if (auto cq = iris::Renderer::AcquireCommandQueue()) {
@@ -431,41 +437,56 @@ CreateShaderBindingTable() noexcept {
                                  &physicalDeviceProperties);
   sShaderGroupHandleSize = rayTracingProperties.shaderGroupHandleSize;
 
-  std::uint32_t numGroups = 3;
-
-  absl::FixedArray<std::byte> shaderGroupHandles(
-    rayTracingProperties.shaderGroupHandleSize * numGroups);
+  absl::FixedArray<std::byte> shaderGroupHandles(sShaderGroupHandleSize * 3);
 
   if (auto result = vkGetRayTracingShaderGroupHandlesNV(
-        iris::Renderer::sDevice, sPipeline.pipeline, 0 /* firstGroup */,
-        numGroups /* groupCount */, shaderGroupHandles.size(),
-        shaderGroupHandles.data());
+        iris::Renderer::sDevice,   // device
+        sPipeline.pipeline,        // pipeline
+        0,                         // firstGroup
+        3,                         // groupCount
+        shaderGroupHandles.size(), // dataSize
+        shaderGroupHandles.data()  // pData
+      );
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(iris::make_error_code(result),
                                             "Cannot get shader group handles"));
   }
 
-  if (auto buf = iris::AllocateBuffer(sShaderGroupHandleSize * numGroups,
-                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                      VMA_MEMORY_USAGE_CPU_TO_GPU)) {
+  if (auto buf = iris::CreateBuffer(
+        sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
+        VMA_MEMORY_USAGE_GPU_ONLY, sShaderGroupHandleSize * 3,
+        shaderGroupHandles.data())) {
     sShaderBindingTable = std::move(*buf);
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(buf.error().code(),
-          "Cannot create shader binding table: "s + buf.error().what()));
+    return tl::unexpected(std::system_error(
+      buf.error().code(),
+      "Cannot create shader binding table: "s + buf.error().what()));
   }
 
-  if (auto ptr = sShaderBindingTable.Map<std::byte*>()) {
-    std::memcpy(shaderGroupHandles.data(), *ptr, sShaderBindingTable.size);
-    sShaderBindingTable.Unmap();
-  } else {
-    using namespace std::string_literals;
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      ptr.error().code(),
-      "Cannot map shader binding table: "s + ptr.error().what()));
+  sMissOffset = sShaderGroupHandleSize;
+  sMissStride = sShaderGroupHandleSize;
+  sHitGroupOffset = sMissOffset + sMissStride;
+  sHitGroupStride = sShaderGroupHandleSize;
+
+  sLogger->info("sShaderGroupHandleSize: {}", sShaderGroupHandleSize);
+  sLogger->info("sMissOffset: {}", sMissOffset);
+  sLogger->info("sMissStride: {}", sMissStride);
+  sLogger->info("sHitGroupOffset: {}", sHitGroupOffset);
+  sLogger->info("sHitGroupStride: {}", sHitGroupStride);
+
+  for (int i = 0; i < 3; ++i) {
+    char handle[16];
+    for (std::uint32_t j = 0; j < sShaderGroupHandleSize; ++j) {
+      sprintf(handle + j, "%0x",
+              static_cast<char>(*(shaderGroupHandles.data() +
+                                  (i * sShaderGroupHandleSize) + j)));
+    }
+
+    sLogger->info("groupIndex: {} handle: 0x{}", i, handle);
   }
 
   IRIS_LOG_LEAVE();
@@ -513,10 +534,11 @@ int main(int argc, char** argv) {
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
 
-  spdlog::logger logger("iris-viewer", {console_sink, file_sink});
-  logger.set_level(spdlog::level::trace);
+  sLogger = std::shared_ptr<spdlog::logger>(
+    new spdlog::logger("iris-viewer", {console_sink, file_sink}));
+  sLogger->set_level(spdlog::level::trace);
 
-  logger.info("Logging initialized");
+  sLogger->info("Logging initialized");
 
   if (auto result = iris::Renderer::Initialize(
                       "iris-raytracer",
@@ -533,14 +555,14 @@ int main(int argc, char** argv) {
                       .and_then(WriteDescriptorSets)
                       .and_then(CreateShaderBindingTable);
       !result) {
-    logger.critical("initialization failed: {}", result.error().what());
+    sLogger->critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);
   }
 
   for (auto&& file : files) {
-    logger.info("Loading {}", file);
+    sLogger->info("Loading {}", file);
     if (auto result = iris::Renderer::LoadFile(file); !result) {
-      logger.error("Error loading {}: {}", file, result.error().what());
+      sLogger->error("Error loading {}: {}", file, result.error().what());
     }
   }
 
@@ -556,8 +578,8 @@ int main(int argc, char** argv) {
   if (auto result = vkAllocateCommandBuffers(
         iris::Renderer::sDevice, &commandBufferAI, commandBuffers.data());
       result != VK_SUCCESS) {
-    logger.error("Cannot allocate command buffers: {}",
-                 iris::to_string(result));
+    sLogger->error("Cannot allocate command buffers: {}",
+                   iris::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
@@ -570,7 +592,7 @@ int main(int argc, char** argv) {
     if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
                                     &traceCompleteFences[i]);
         result != VK_SUCCESS) {
-      logger.error("Error creating fence: {}", iris::to_string(result));
+      sLogger->error("Error creating fence: {}", iris::to_string(result));
       std::exit(EXIT_FAILURE);
     }
   }
@@ -592,29 +614,10 @@ int main(int argc, char** argv) {
     VkCommandBuffer cb = commandBuffers[currentCBIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
 
-    VkDebugUtilsLabelEXT cbLabel = {};
-    cbLabel.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
-
-    cbLabel.pLabelName = "readyBarrier";
-    vkCmdBeginDebugUtilsLabelEXT(cb, &cbLabel);
-    logger.info("readyBarrier");
-
-    VkImageSubresourceRange sr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-
-    VkImageMemoryBarrier readyBarrier = {};
-    readyBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    readyBarrier.srcAccessMask = 0;
-    readyBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    readyBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    readyBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    readyBarrier.srcQueueFamilyIndex = readyBarrier.dstQueueFamilyIndex =
-      VK_QUEUE_FAMILY_IGNORED;
-    readyBarrier.image = sOutputImage.image;
-    readyBarrier.subresourceRange = sr;
-
-    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &readyBarrier);
+    iris::SetImageLayout(
+      cb, sOutputImage.image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+      VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
                       sPipeline.pipeline);
@@ -626,31 +629,29 @@ int main(int argc, char** argv) {
       gsl::make_span(&sDescriptorSet, 1)     // descriptorSets
     );
 
-    VkDeviceSize rayGenOffset = 0;
-    VkDeviceSize missOffset = sShaderGroupHandleSize;
-    VkDeviceSize missStride = sShaderGroupHandleSize;
-    VkDeviceSize hitGroupOffset = sShaderGroupHandleSize * 2;
-    VkDeviceSize hitGroupStride = sShaderGroupHandleSize;
+    vkCmdTraceRaysNV(
+      cb,                         // commandBuffer
+      sShaderBindingTable.buffer, // raygenShaderBindingTableBuffer
+      0,                          // raygenShaderBindingOffset
+      sShaderBindingTable.buffer, // missShaderBindingTableBuffer
+      sMissOffset,                // missShaderBindingOffset
+      sMissStride,                // missShaderBindingStride
+      sShaderBindingTable.buffer, // hitShaderBindingTableBuffer
+      sHitGroupOffset,            // hitShaderBindingOffset
+      sHitGroupStride,            // hitShaderBindingStride
+      VK_NULL_HANDLE,             // callableShaderBindingTableBuffer
+      0,                          // callableShaderBindingOffset
+      0,                          // callableShaderBindingStride
+      1000,                       // width
+      1000,                       // height
+      1                           // depth
+    );
 
-    vkCmdTraceRaysNV(cb, sShaderBindingTable.buffer, rayGenOffset,
-                     sShaderBindingTable.buffer, missOffset, missStride,
-                     sShaderBindingTable.buffer, hitGroupOffset, hitGroupStride,
-                     VK_NULL_HANDLE, 0, 0, 1000, 1000, 1);
+    iris::SetImageLayout(
+      cb, sOutputImage.image, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_GENERAL,
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
-    VkImageMemoryBarrier tracedBarrier = {};
-    tracedBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    tracedBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    tracedBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    tracedBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    tracedBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    tracedBarrier.srcQueueFamilyIndex = tracedBarrier.dstQueueFamilyIndex =
-      VK_QUEUE_FAMILY_IGNORED;
-    tracedBarrier.image = sOutputImage.image;
-    tracedBarrier.subresourceRange = sr;
-
-    vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &tracedBarrier);
     vkEndCommandBuffer(cb);
 
     VkSubmitInfo submitI = {};
@@ -661,8 +662,8 @@ int main(int argc, char** argv) {
     if (auto result = vkQueueSubmit(sCommandQueue.queue, 1, &submitI,
                                     traceCompleteFences[currentCBIndex]);
         result != VK_SUCCESS) {
-      logger.error("Error submitting command buffer: {}",
-                   iris::to_string(result));
+      sLogger->error("Error submitting command buffer: {}",
+                     iris::to_string(result));
     }
 
     iris::Renderer::EndFrame(sOutputImage.image);
@@ -670,5 +671,5 @@ int main(int argc, char** argv) {
     frameCount++;
   }
 
-  logger.info("exiting");
+  sLogger->info("exiting");
 }
