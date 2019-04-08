@@ -204,7 +204,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->rect_.offset = std::move(offset);
   pWin->rect_.extent = std::move(extent);
 
-  for (std::size_t i = 0; i < pWin->keyLUT_.size(); ++i) {
+  for (int i = 0; i < gsl::narrow_cast<int>(pWin->keyLUT_.size()); ++i) {
     pWin->keyLUT_[i] = KeycodeToKeys(i);
   }
 

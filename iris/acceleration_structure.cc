@@ -125,7 +125,7 @@ iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
   asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
   asInfo.flags = 0;
   asInfo.instanceCount = 0;
-  asInfo.geometryCount = geometries.size();
+  asInfo.geometryCount = gsl::narrow_cast<std::uint32_t>(geometries.size());
   asInfo.pGeometries = geometries.data();
 
   IRIS_LOG_LEAVE();

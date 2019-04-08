@@ -870,7 +870,7 @@ struct TangentGenerator {
 
   static int GetNumFaces(SMikkTSpaceContext const* pContext) {
     auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
-    return pData->count / 3;
+    return gsl::narrow_cast<int>(pData->count / 3);
   }
 
   static int GetNumVerticesOfFace(SMikkTSpaceContext const*, int const) {
@@ -1385,23 +1385,23 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         auto&& material = (*materials)[*primitive.material];
 
         if (material.pbrMetallicRoughness) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.x =
-            material.pbrMetallicRoughness->metallicFactor.value_or(1.f);
-          (*ptr)->MetallicRoughnessNormalOcclusion.y =
-            material.pbrMetallicRoughness->roughnessFactor.value_or(1.f);
+          (*ptr)->MetallicRoughnessNormalOcclusion.x = gsl::narrow_cast<float>(
+            material.pbrMetallicRoughness->metallicFactor.value_or(1.0));
+          (*ptr)->MetallicRoughnessNormalOcclusion.y = gsl::narrow_cast<float>(
+            material.pbrMetallicRoughness->roughnessFactor.value_or(1.0));
           (*ptr)->BaseColorFactor =
             material.pbrMetallicRoughness->baseColorFactor.value_or(
               glm::vec4(1.f));
         }
 
         if (material.normalTexture) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.z =
-            material.normalTexture->scale.value_or(1.f);
+          (*ptr)->MetallicRoughnessNormalOcclusion.z = gsl::narrow_cast<float>(
+            material.normalTexture->scale.value_or(1.0));
         }
 
         if (material.occlusionTexture) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.w =
-            material.occlusionTexture->strength.value_or(1.f);
+          (*ptr)->MetallicRoughnessNormalOcclusion.w = gsl::narrow_cast<float>(
+            material.occlusionTexture->strength.value_or(1.0));
         }
 
         (*ptr)->EmissiveFactor =

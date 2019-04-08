@@ -137,7 +137,8 @@ public:
   virtual IncludeResult* includeLocal(char const* headerName,
                                       char const* includerName,
                                       std::size_t inclusionDepth) override {
-    return readLocalPath(headerName, includerName, inclusionDepth);
+    return readLocalPath(headerName, includerName,
+                         gsl::narrow_cast<int>(inclusionDepth));
   }
 
   virtual IncludeResult* includeSystem(char const* headerName,
@@ -157,7 +158,7 @@ public:
 
   virtual void pushExternalLocalDirectory(std::string const& dir) {
     dirStack_.push_back(dir);
-    numExternalLocalDirs_ = dirStack_.size();
+    numExternalLocalDirs_ = gsl::narrow_cast<int>(dirStack_.size());
   }
 
 private:
@@ -181,7 +182,7 @@ private:
                         std::ios_base::binary | std::ios_base::ate);
       if (ifs) {
         dirStack_.push_back(getDirectory(path));
-        return newIncludeResult(path, ifs, ifs.tellg());
+        return newIncludeResult(path, ifs, gsl::narrow_cast<int>(ifs.tellg()));
       }
     }
 

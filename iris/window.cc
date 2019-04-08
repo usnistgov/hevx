@@ -623,7 +623,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   VkFramebufferCreateInfo framebufferCI = {};
   framebufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   framebufferCI.renderPass = sRenderPass;
-  framebufferCI.attachmentCount = attachments.size();
+  framebufferCI.attachmentCount =
+    gsl::narrow_cast<std::uint32_t>(attachments.size());
   framebufferCI.width = newExtent.width;
   framebufferCI.height = newExtent.height;
   framebufferCI.layers = 1;
@@ -661,12 +662,12 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& frame : window.frames) {
       vkDestroyFramebuffer(sDevice, frame.framebuffer, nullptr);
     }
-    DestroyImage(newDepthStencilTarget);
-    vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);
-    DestroyImage(newColorTarget);
-    vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    DestroyImage(newDepthStencilTarget);
-    vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
+    DestroyImage(window.depthStencilTarget);
+    vkDestroyImageView(sDevice, window.depthStencilTargetView, nullptr);
+    DestroyImage(window.colorTarget);
+    vkDestroyImageView(sDevice, window.colorTargetView, nullptr);
+    DestroyImage(window.depthStencilTarget);
+    vkDestroyImageView(sDevice, window.depthStencilImageView, nullptr);
     for (auto&& view : window.colorImageViews) {
       vkDestroyImageView(sDevice, view, nullptr);
     }

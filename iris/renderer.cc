@@ -332,7 +332,8 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
 
   vkCmdPushConstants(commandBuffer, renderable.pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, pushConstants.size(), pushConstants.data());
+                     0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
+                     pushConstants.data());
 
   vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
@@ -800,7 +801,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   VkRenderPassCreateInfo renderPassCI = {};
   renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  renderPassCI.attachmentCount = attachments.size();
+  renderPassCI.attachmentCount =
+    gsl::narrow_cast<std::uint32_t>(attachments.size());
   renderPassCI.pAttachments = attachments.data();
   renderPassCI.subpassCount = 1;
   renderPassCI.pSubpasses = &subpass;
@@ -1274,14 +1276,15 @@ void iris::Renderer::BindDescriptorSets(
                           nullptr                // pDynamicOffsets
   );
 
-  vkCmdBindDescriptorSets(commandBuffer,         // commandBuffer
-                          pipelineBindPoint,     // pipelineBindPoint
-                          layout,                // layout
-                          1,                     // firstSet
-                          descriptorSets.size(), // descriptorSetCount
-                          descriptorSets.data(), // pDescriptorSets
-                          0,                     // dynamicOffsetCount
-                          nullptr                // pDynamicOffsets
+  vkCmdBindDescriptorSets(commandBuffer,     // commandBuffer
+                          pipelineBindPoint, // pipelineBindPoint
+                          layout,            // layout
+                          1,                 // firstSet
+                          gsl::narrow_cast<std::uint32_t>(
+                            descriptorSets.size()), // descriptorSetCount
+                          descriptorSets.data(),    // pDescriptorSets
+                          0,                        // dynamicOffsetCount
+                          nullptr                   // pDynamicOffsets
   );
 } // iris::Renderer::BindDescriptorSets
 
@@ -1309,7 +1312,8 @@ void iris::Renderer::EndFrame(VkImage image,
   VkRenderPassBeginInfo renderPassBI = {};
   renderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassBI.renderPass = sRenderPass;
-  renderPassBI.clearValueCount = clearValues.size();
+  renderPassBI.clearValueCount =
+    gsl::narrow_cast<std::uint32_t>(clearValues.size());
 
   for (auto&& [i, iter] : enumerate(windows)) {
     auto&& [title, window] = iter;
@@ -1402,8 +1406,8 @@ void iris::Renderer::EndFrame(VkImage image,
     }
 
     pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
-    pushConstants.iTime = ImGui::GetTime();
-    pushConstants.iFrame = ImGui::GetFrameCount();
+    pushConstants.iTime = gsl::narrow_cast<float>(ImGui::GetTime());
+    pushConstants.iFrame = gsl::narrow_cast<float>(ImGui::GetFrameCount());
     pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
     pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
     pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;

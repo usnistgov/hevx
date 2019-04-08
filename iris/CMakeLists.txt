@@ -52,7 +52,10 @@ target_compile_options(protos
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:__cplusplus>
-    #$<$<CXX_COMPILER_ID:MSVC>:/wd4100 /wd4125 /wd4127 /wd4201 /wd4996>
+    $<$<CXX_COMPILER_ID:MSVC>:
+      /wd4100 # unreferenced format parameter
+      /wd4125 # decimal digit terminates octal escape sequence
+    >
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
@@ -165,7 +168,9 @@ target_compile_definitions(iris
   PUBLIC
     GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_FORCE_EXPLICIT_CTOR GLM_FORCE_INLINE
     $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR VK_USE_PLATFORM_XCB_XRANDR_EXT>
-    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR WIN32_LEAN_AND_MEAN NOMINMAX>
+    $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS>
+    $<$<PLATFORM_ID:Windows>:_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING>
+    $<$<PLATFORM_ID:Windows>:_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING>
   PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
 )
@@ -176,8 +181,12 @@ target_compile_options(iris
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive- /Zc:__cplusplus>
-    #$<$<CXX_COMPILER_ID:MSVC>:/wd4127 /wd4201 /wd4996>
-    #$<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324 /wd4309> # absl::container_internal mess
+    $<$<CXX_COMPILER_ID:MSVC>:
+      /wd4127 # conditional expression is constant
+      /wd4201 # nonstandard extension used: nameless struct/union
+      /wd4245 # signed/unsigned mismatch (used in absl/container/internal)
+      /wd4324 # structure was padded due to alignment specifier (used in absl/container/internal)
+    >
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )

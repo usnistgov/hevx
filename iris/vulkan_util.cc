@@ -1,5 +1,5 @@
 #include "vulkan_util.h"
-#include "absl/container/inlined_vector.h"
+#include "absl/container/fixed_array.h"
 #include "enumerate.h"
 #include "error.h"
 #include "logging.h"
@@ -206,7 +206,7 @@ iris::Renderer::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
 
     if (qfProps.queueFlags & queueFlags) {
       IRIS_LOG_LEAVE();
-      return i;
+      return gsl::narrow_cast<std::uint32_t>(i);
     }
   }
 
@@ -557,7 +557,7 @@ iris::Renderer::CreateAllocator(VkPhysicalDevice physicalDevice,
   return allocator;
 } // iris::Renderer::CreateAllocator
 
-tl::expected<absl::FixedArray<VkSurfaceFormatKHR>, std::system_error>
+tl::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>, std::system_error>
 iris::Renderer::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                                 VkSurfaceKHR surface) {
   std::uint32_t numSurfaceFormats;
@@ -568,7 +568,8 @@ iris::Renderer::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
       make_error_code(result), "Cannot get physical device surface formats"));
   }
 
-  absl::FixedArray<VkSurfaceFormatKHR> surfaceFormats(numSurfaceFormats);
+  absl::InlinedVector<VkSurfaceFormatKHR, 128> surfaceFormats(
+    numSurfaceFormats);
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
         physicalDevice, surface, &numSurfaceFormats, surfaceFormats.data());
       result != VK_SUCCESS) {

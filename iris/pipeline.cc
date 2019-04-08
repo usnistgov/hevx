@@ -197,9 +197,11 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
 
   VkRayTracingPipelineCreateInfoNV pipelineCI = {};
   pipelineCI.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
-  pipelineCI.stageCount = shaderStageCIs.size();
+  pipelineCI.stageCount =
+    gsl::narrow_cast<std::uint32_t>(shaderStageCIs.size());
   pipelineCI.pStages = shaderStageCIs.data();
-  pipelineCI.groupCount = shaderGroupCIs.size();
+  pipelineCI.groupCount =
+    gsl::narrow_cast<std::uint32_t>(shaderGroupCIs.size());
   pipelineCI.pGroups = shaderGroupCIs.data();
   pipelineCI.maxRecursionDepth = maxRecursionDepth;
   pipelineCI.layout = pipeline.layout;

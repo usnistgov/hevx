@@ -3,7 +3,7 @@
 
 #include "iris/config.h"
 
-#include "absl/container/fixed_array.h"
+#include "absl/container/inlined_vector.h"
 #if STD_FS_IS_EXPERIMENTAL
 #include <experimental/filesystem>
 namespace filesystem = std::experimental::filesystem;
@@ -101,7 +101,7 @@ CreateDevice(VkPhysicalDevice physicalDevice,
 [[nodiscard]] tl::expected<VmaAllocator, std::system_error>
 CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 
-[[nodiscard]] tl::expected<absl::FixedArray<VkSurfaceFormatKHR>,
+[[nodiscard]] tl::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>,
                            std::system_error>
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);

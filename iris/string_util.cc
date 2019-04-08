@@ -1,6 +1,7 @@
 #include "string_util.h"
+#include "config.h"
 
-#include "iris/config.h"
+#include "gsl/gsl"
 
 #include <stdexcept>
 #include <vector>
@@ -16,8 +17,9 @@ std::wstring iris::string_to_wstring(std::string const& str) {
   if (size == 0) return {};
 
   std::vector<wchar_t> bytes(size);
-  int const count = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1,
-                                          bytes.data(), bytes.size());
+  int const count =
+    ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, bytes.data(),
+                          gsl::narrow_cast<int>(bytes.size()));
   if (count == 0) throw std::runtime_error("string_to_wstring");
 
   return bytes.data();
@@ -31,8 +33,9 @@ std::string iris::wstring_to_string(std::wstring const& wstr) {
   if (size == 0) return {};
 
   std::vector<char> bytes(size);
-  int const count = ::WideCharToMultiByte(
-    CP_UTF8, 0, wstr.c_str(), -1, bytes.data(), bytes.size(), NULL, NULL);
+  int const count =
+    ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, bytes.data(),
+                          gsl::narrow_cast<int>(bytes.size()), NULL, NULL);
   if (count == 0) throw std::runtime_error("wstring_to_string");
 
   return bytes.data();
