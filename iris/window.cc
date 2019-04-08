@@ -129,7 +129,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
 
   bool formatSupported = false;
   if (auto surfaceFormats =
-        GetPhysicalDeviceSurfaceFormats(sPhysicalDevice, window.surface)) {
+        vk::GetPhysicalDeviceSurfaceFormats(sPhysicalDevice, window.surface)) {
     if (surfaceFormats->size() == 1 &&
         (*surfaceFormats)[0].format == VK_FORMAT_UNDEFINED) {
       formatSupported = true;
@@ -582,23 +582,22 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   }
 
   for (auto&& image : newColorImages) {
-    SetImageLayout(commandBuffer, image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                   VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+    vk::SetImageLayout(
+      commandBuffer, image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
   }
 
   SetImageLayout(
-    commandBuffer, newColorTarget.image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    commandBuffer, newColorTarget, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
-  SetImageLayout(commandBuffer, newDepthStencilTarget.image,
-                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                 VK_IMAGE_LAYOUT_UNDEFINED,
-                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                 VK_IMAGE_ASPECT_DEPTH_BIT, 1, 1);
+  SetImageLayout(
+    commandBuffer, newDepthStencilTarget, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_DEPTH_BIT,
+    1, 1);
 
   if (auto result = Renderer::EndOneTimeSubmit(
         commandBuffer, sCommandPools[0], sCommandQueues[0], sCommandFences[0]);
@@ -607,7 +606,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);
     DestroyImage(newColorTarget);
     vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-    DestroyImage(newDepthStencilTarget);
+    DestroyImage(newDepthStencilImage);
     vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
@@ -642,7 +641,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);
       DestroyImage(newColorTarget);
       vkDestroyImageView(sDevice, newColorTargetView, nullptr);
-      DestroyImage(newDepthStencilTarget);
+      DestroyImage(newDepthStencilImage);
       vkDestroyImageView(sDevice, newDepthStencilImageView, nullptr);
       for (auto&& v : newColorImageViews)
         vkDestroyImageView(sDevice, v, nullptr);
@@ -666,7 +665,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     vkDestroyImageView(sDevice, window.depthStencilTargetView, nullptr);
     DestroyImage(window.colorTarget);
     vkDestroyImageView(sDevice, window.colorTargetView, nullptr);
-    DestroyImage(window.depthStencilTarget);
+    DestroyImage(window.depthStencilImage);
     vkDestroyImageView(sDevice, window.depthStencilImageView, nullptr);
     for (auto&& view : window.colorImageViews) {
       vkDestroyImageView(sDevice, view, nullptr);
@@ -696,21 +695,21 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
                fmt::format("{}.colorImageViews[{}]", window.title, i).c_str());
   }
 
-  window.depthStencilImage = std::move(newDepthStencilImage);
+  window.depthStencilImage = newDepthStencilImage;
   window.depthStencilImageView = newDepthStencilImageView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilImage.image,
              fmt::format("{}.depthStencilImage", window.title).c_str());
   NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.depthStencilImageView,
              fmt::format("{}.depthStencilImageView", window.title).c_str());
 
-  window.colorTarget = std::move(newColorTarget);
+  window.colorTarget = newColorTarget;
   window.colorTargetView = newColorTargetView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.colorTarget.image,
              fmt::format("{}.colorTarget", window.title).c_str());
   NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.colorTargetView,
              fmt::format("{}.colorTargetView", window.title).c_str());
 
-  window.depthStencilTarget = std::move(newDepthStencilTarget);
+  window.depthStencilTarget = newDepthStencilTarget;
   window.depthStencilTargetView = newDepthStencilTargetView;
   NameObject(VK_OBJECT_TYPE_IMAGE, window.depthStencilTarget.image,
              fmt::format("{}.depthStencilTarget", window.title).c_str());

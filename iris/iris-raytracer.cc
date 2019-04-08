@@ -614,10 +614,10 @@ int main(int argc, char** argv) {
     VkCommandBuffer cb = commandBuffers[currentCBIndex];
     vkBeginCommandBuffer(cb, &commandBufferBI);
 
-    iris::SetImageLayout(
-      cb, sOutputImage.image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-      VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, VK_IMAGE_LAYOUT_UNDEFINED,
-      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+    iris::SetImageLayout(cb, sOutputImage, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
+                         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                         VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
                       sPipeline.pipeline);
@@ -648,7 +648,7 @@ int main(int argc, char** argv) {
     );
 
     iris::SetImageLayout(
-      cb, sOutputImage.image, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
+      cb, sOutputImage, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_GENERAL,
       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 

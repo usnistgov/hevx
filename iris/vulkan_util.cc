@@ -2,15 +2,15 @@
 #include "absl/container/fixed_array.h"
 #include "enumerate.h"
 #include "error.h"
-#include "logging.h"
 #include "io/read_file.h"
+#include "logging.h"
 #include <string>
 
-tl::expected<VkInstance, std::system_error>
-iris::Renderer::CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion,
-               gsl::span<gsl::czstring<>> extensionNames,
-               gsl::span<gsl::czstring<>> layerNames,
-               PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept {
+tl::expected<VkInstance, std::system_error> iris::vk::CreateInstance(
+  gsl::czstring<> appName, std::uint32_t appVersion,
+  gsl::span<gsl::czstring<>> extensionNames,
+  gsl::span<gsl::czstring<>> layerNames,
+  PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept {
   IRIS_LOG_ENTER();
 
   VkApplicationInfo ai = {};
@@ -54,10 +54,10 @@ iris::Renderer::CreateInstance(gsl::czstring<> appName, std::uint32_t appVersion
   Ensures(instance != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return instance;
-} // iris::Renderer::CreateInstance
+} // iris::vk::CreateInstance
 
 tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
-iris::Renderer::CreateDebugUtilsMessenger(
+iris::vk::CreateDebugUtilsMessenger(
   VkInstance instance,
   PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept {
   IRIS_LOG_ENTER();
@@ -86,9 +86,9 @@ iris::Renderer::CreateDebugUtilsMessenger(
   Ensures(messenger != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return messenger;
-} // iris::Renderer::CreateDebugUtilsMessenger
+} // iris::vk::CreateDebugUtilsMessenger
 
-bool iris::Renderer::ComparePhysicalDeviceFeatures(
+bool iris::vk::ComparePhysicalDeviceFeatures(
   VkPhysicalDeviceFeatures2 a, VkPhysicalDeviceFeatures2 b) noexcept {
   bool result = false;
   result |= (a.features.robustBufferAccess == b.features.robustBufferAccess);
@@ -176,11 +176,11 @@ bool iris::Renderer::ComparePhysicalDeviceFeatures(
     (a.features.variableMultisampleRate == b.features.variableMultisampleRate);
   result |= (a.features.inheritedQueries == b.features.inheritedQueries);
   return result;
-} // iris::Renderer::ComparePhysicalDeviceFeatures
+} // iris::vk::ComparePhysicalDeviceFeatures
 
 tl::expected<std::uint32_t, std::system_error>
-iris::Renderer::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
-                                    VkQueueFlags queueFlags) noexcept {
+iris::vk::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
+                              VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
   Expects(physicalDevice != VK_NULL_HANDLE);
 
@@ -212,9 +212,9 @@ iris::Renderer::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
 
   IRIS_LOG_LEAVE();
   return UINT32_MAX;
-} // iris::Renderer::GetQueueFamilyIndex
+} // iris::vk::GetQueueFamilyIndex
 
-tl::expected<bool, std::system_error> iris::Renderer::IsPhysicalDeviceGood(
+tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
   VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
   gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
@@ -318,11 +318,11 @@ tl::expected<bool, std::system_error> iris::Renderer::IsPhysicalDeviceGood(
 
   IRIS_LOG_LEAVE();
   return true;
-} // iris::Renderer::IsPhysicalDeviceGood
+} // iris::vk::IsPhysicalDeviceGood
 
 tl::expected<void, std::system_error>
-iris::Renderer::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
-                                   char const* indent) noexcept {
+iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
+                             char const* indent) noexcept {
   IRIS_LOG_ENTER();
   Expects(physicalDevice != VK_NULL_HANDLE);
 
@@ -394,10 +394,10 @@ iris::Renderer::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
 
   IRIS_LOG_LEAVE();
   return {};
-} // iris::Renderer::DumpPhysicalDevice
+} // iris::vk::DumpPhysicalDevice
 
 tl::expected<void, std::system_error>
-iris::Renderer::DumpPhysicalDevices(VkInstance instance) noexcept {
+iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
   IRIS_LOG_ENTER();
   Expects(instance != VK_NULL_HANDLE);
 
@@ -429,13 +429,13 @@ iris::Renderer::DumpPhysicalDevices(VkInstance instance) noexcept {
 
   IRIS_LOG_LEAVE();
   return {};
-} // iris::Renderer::DumpPhysicalDevices
+} // iris::vk::DumpPhysicalDevices
 
 tl::expected<VkPhysicalDevice, std::system_error>
-iris::Renderer::ChoosePhysicalDevice(VkInstance instance,
-                                     VkPhysicalDeviceFeatures2 features,
-                                     gsl::span<gsl::czstring<>> extensionNames,
-                                     VkQueueFlags queueFlags) noexcept {
+iris::vk::ChoosePhysicalDevice(VkInstance instance,
+                               VkPhysicalDeviceFeatures2 features,
+                               gsl::span<gsl::czstring<>> extensionNames,
+                               VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
   Expects(instance != VK_NULL_HANDLE);
 
@@ -472,13 +472,13 @@ iris::Renderer::ChoosePhysicalDevice(VkInstance instance,
   IRIS_LOG_LEAVE();
   return tl::unexpected(std::system_error(Error::kNoPhysicalDevice,
                                           "No suitable physical device found"));
-} // iris::Renderer::ChoosePhysicalDevice
+} // iris::vk::ChoosePhysicalDevice
 
 tl::expected<std::tuple<VkDevice, std::uint32_t>, std::system_error>
-iris::Renderer::CreateDevice(VkPhysicalDevice physicalDevice,
-                             VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
-                             gsl::span<gsl::czstring<>> extensionNames,
-                             std::uint32_t queueFamilyIndex) noexcept {
+iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
+                       VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
+                       gsl::span<gsl::czstring<>> extensionNames,
+                       std::uint32_t queueFamilyIndex) noexcept {
   IRIS_LOG_ENTER();
   Expects(physicalDevice != VK_NULL_HANDLE);
 
@@ -530,11 +530,11 @@ iris::Renderer::CreateDevice(VkPhysicalDevice physicalDevice,
   Ensures(device != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return std::make_tuple(device, queueCreateInfos[0].queueCount);
-} // iris::Renderer::CreateDevice
+} // iris::vk::CreateDevice
 
 tl::expected<VmaAllocator, std::system_error>
-iris::Renderer::CreateAllocator(VkPhysicalDevice physicalDevice,
-                                VkDevice device) noexcept {
+iris::vk::CreateAllocator(VkPhysicalDevice physicalDevice,
+                          VkDevice device) noexcept {
   IRIS_LOG_ENTER();
   Expects(physicalDevice != VK_NULL_HANDLE);
   Expects(device != VK_NULL_HANDLE);
@@ -555,11 +555,11 @@ iris::Renderer::CreateAllocator(VkPhysicalDevice physicalDevice,
   Ensures(allocator != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
   return allocator;
-} // iris::Renderer::CreateAllocator
+} // iris::vk::CreateAllocator
 
 tl::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>, std::system_error>
-iris::Renderer::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
-                                                VkSurfaceKHR surface) {
+iris::vk::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
+                                          VkSurfaceKHR surface) {
   std::uint32_t numSurfaceFormats;
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
         physicalDevice, surface, &numSurfaceFormats, nullptr);
@@ -578,4 +578,72 @@ iris::Renderer::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
   }
 
   return surfaceFormats;
-} // iris::Renderer::GetPhysicalDeviceSurfaceFormats
+} // iris::vk::GetPhysicalDeviceSurfaceFormats
+
+void iris::vk::SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
+                              VkPipelineStageFlags srcStages,
+                              VkPipelineStageFlags dstStages,
+                              VkImageLayout oldLayout, VkImageLayout newLayout,
+                              VkImageAspectFlags aspectMask,
+                              std::uint32_t mipLevels,
+                              std::uint32_t arrayLayers) noexcept {
+  VkImageMemoryBarrier barrier = {};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = oldLayout;
+  barrier.newLayout = newLayout;
+  barrier.image = image;
+  barrier.subresourceRange.aspectMask = aspectMask;
+  barrier.subresourceRange.baseMipLevel = 0;
+  barrier.subresourceRange.levelCount = mipLevels;
+  barrier.subresourceRange.baseArrayLayer = 0;
+  barrier.subresourceRange.layerCount = arrayLayers;
+
+  switch (oldLayout) {
+  case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    break;
+  case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    break;
+  case VK_IMAGE_LAYOUT_PREINITIALIZED:
+    barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    break;
+  default: break;
+  }
+
+  switch (newLayout) {
+  case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    break;
+
+  case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    break;
+
+  case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    break;
+
+  case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    break;
+
+  case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    break;
+
+  default: break;
+  }
+
+  vkCmdPipelineBarrier(commandBuffer, // commandBuffer
+                       srcStages,     // srcStageMask
+                       dstStages,     // dstStageMask
+                       0,             // dependencyFlags
+                       0,             // memoryBarrierCount
+                       nullptr,       // pMemoryBarriers
+                       0,             // bufferMemoryBarrierCount
+                       nullptr,       // pBufferMemoryBarriers
+                       1,             // imageMemoryBarrierCount
+                       &barrier       // pImageMemoryBarriers
+  );
+} // iris::vk::SetImageLayout

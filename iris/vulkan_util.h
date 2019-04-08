@@ -20,7 +20,7 @@ namespace filesystem = std::filesystem;
 #include <system_error>
 #include <tuple>
 
-namespace iris::Renderer {
+namespace iris::vk {
 
 /*! \brief Create a Vulkan Instance.
 
@@ -106,6 +106,13 @@ CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);
 
+void SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
+                    VkPipelineStageFlags srcStages,
+                    VkPipelineStageFlags dstStages, VkImageLayout oldLayout,
+                    VkImageLayout newLayout, VkImageAspectFlags aspectMask,
+                    std::uint32_t mipLevels,
+                    std::uint32_t arrayLayers) noexcept;
+
 /*!
 \brief Convert a VkPhysicalDeviceType to a std::string.
 \return a std::string of a VkPhysicalDeviceType.
@@ -159,6 +166,6 @@ to_string(VkDebugUtilsMessageTypeFlagBitsEXT types) noexcept {
   return "{" + result.substr(0, result.size() - 3) + "}";
 }
 
-} // namespace iris::Renderer
+} // namespace iris::vk
 
 #endif // HEV_IRIS_VULKAN_UTIL_H_

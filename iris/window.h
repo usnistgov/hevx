@@ -62,17 +62,17 @@ struct Window {
   VkRect2D scissor{};
 
   VkSwapchainKHR swapchain{VK_NULL_HANDLE};
-  absl::FixedArray<VkImage> colorImages;
-  absl::FixedArray<VkImageView> colorImageViews;
+  absl::FixedArray<VkImage> colorImages{};
+  absl::FixedArray<VkImageView> colorImageViews{};
 
-  Image depthStencilImage;
-  VkImageView depthStencilImageView;
+  Image depthStencilImage{};
+  VkImageView depthStencilImageView{VK_NULL_HANDLE};
 
-  Image colorTarget;
-  VkImageView colorTargetView;
+  Image colorTarget{};
+  VkImageView colorTargetView{VK_NULL_HANDLE};
 
-  Image depthStencilTarget;
-  VkImageView depthStencilTargetView;
+  Image depthStencilTarget{};
+  VkImageView depthStencilTargetView{VK_NULL_HANDLE};
 
   /*!
   \brief Holds state that is duplicated for each rendered frame.
@@ -88,8 +88,9 @@ struct Window {
   std::uint32_t frameIndex{0};
   VkSemaphore imageAcquired{VK_NULL_HANDLE};
 
-  std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext;
-  Renderer::Component::Renderable uiRenderable;
+  std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext{
+    nullptr, ImGui::DestroyContext};
+  Renderer::Component::Renderable uiRenderable{};
   glm::vec2 lastMousePos{0.f, 0.f};
 
   glm::mat4 projectionMatrix{1.f};

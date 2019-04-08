@@ -7,84 +7,16 @@
 #include "renderer.h"
 #include "renderer_util.h"
 
-void iris::SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
-                          VkPipelineStageFlags srcStages,
-                          VkPipelineStageFlags dstStages,
-                          VkImageLayout oldLayout, VkImageLayout newLayout,
-                          VkImageAspectFlags aspectMask,
-                          std::uint32_t mipLevels,
-                          std::uint32_t arrayLayers) noexcept {
-  VkImageMemoryBarrier barrier = {};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  barrier.oldLayout = oldLayout;
-  barrier.newLayout = newLayout;
-  barrier.image = image;
-  barrier.subresourceRange.aspectMask = aspectMask;
-  barrier.subresourceRange.baseMipLevel = 0;
-  barrier.subresourceRange.levelCount = mipLevels;
-  barrier.subresourceRange.baseArrayLayer = 0;
-  barrier.subresourceRange.layerCount = arrayLayers;
-
-  switch (oldLayout) {
-  case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    break;
-  case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    break;
-  case VK_IMAGE_LAYOUT_PREINITIALIZED:
-    barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    break;
-  default: break;
-  }
-
-  switch (newLayout) {
-  case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    break;
-
-  case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    break;
-
-  case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    break;
-
-  case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    break;
-
-  case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-    barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    break;
-
-  default: break;
-  }
-
-  vkCmdPipelineBarrier(commandBuffer, // commandBuffer
-                       srcStages,     // srcStageMask
-                       dstStages,     // dstStageMask
-                       0,             // dependencyFlags
-                       0,             // memoryBarrierCount
-                       nullptr,       // pMemoryBarriers
-                       0,             // bufferMemoryBarrierCount
-                       nullptr,       // pBufferMemoryBarriers
-                       1,             // imageMemoryBarrierCount
-                       &barrier       // pImageMemoryBarriers
-  );
-} // iris::SetImageLayout
-
 tl::expected<void, std::system_error>
 iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
-                      VkImage image, VkImageLayout oldLayout,
+                      Image image, VkImageLayout oldLayout,
                       VkImageLayout newLayout, std::uint32_t mipLevels,
                       std::uint32_t arrayLayers) noexcept {
   IRIS_LOG_ENTER();
   Expects(commandPool != VK_NULL_HANDLE);
   Expects(queue != VK_NULL_HANDLE);
   Expects(fence != VK_NULL_HANDLE);
-  Expects(image != VK_NULL_HANDLE);
+  Expects(image.image != VK_NULL_HANDLE);
 
   VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
@@ -295,7 +227,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
-  if (auto result = TransitionImage(commandPool, queue, fence, image.image,
+  if (auto result = TransitionImage(commandPool, queue, fence, image,
                                     VK_IMAGE_LAYOUT_UNDEFINED,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
       !result) {
@@ -328,13 +260,12 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
     return tl::unexpected(result.error());
   }
 
-  if (auto result =
-        TransitionImage(commandPool, queue, fence, image.image,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
-                           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                           : VK_IMAGE_LAYOUT_GENERAL),
-                        1, 1);
+  if (auto result = TransitionImage(
+        commandPool, queue, fence, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
+           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+           : VK_IMAGE_LAYOUT_GENERAL),
+        1, 1);
       !result) {
     return tl::unexpected(result.error());
   }

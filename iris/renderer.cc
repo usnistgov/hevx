@@ -261,7 +261,7 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
 
-  SetImageLayout(
+  vk::SetImageLayout(
     commandBuffer, dst, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
@@ -276,7 +276,7 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-  SetImageLayout(
+  vk::SetImageLayout(
     commandBuffer, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
     VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
     VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
@@ -437,10 +437,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   using namespace std::string_literals;
 
   fmt::memory_buffer buf;
-  fmt::format_to(
-    buf, "{}: {}",
-    to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(messageTypes)),
-    pCallbackData->pMessage);
+  fmt::format_to(buf, "{}: {}",
+                 vk::to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(
+                   messageTypes)),
+                 pCallbackData->pMessage);
   std::string const msg(buf.data(), buf.size());
 
   buf.clear();
@@ -613,7 +613,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
-  if (auto instance = CreateInstance(
+  if (auto instance = vk::CreateInstance(
         appName,
         (appVersion == 0
            ? VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch)
@@ -630,12 +630,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   flextVkInitInstance(sInstance); // initialize instance function pointers
-  DumpPhysicalDevices(sInstance);
+  vk::DumpPhysicalDevices(sInstance);
 
   if ((options & Options::kReportDebugMessages) ==
       Options::kReportDebugMessages) {
-    if (auto messenger =
-          CreateDebugUtilsMessenger(sInstance, &DebugUtilsMessengerCallback)) {
+    if (auto messenger = vk::CreateDebugUtilsMessenger(
+          sInstance, &DebugUtilsMessengerCallback)) {
       sDebugUtilsMessenger = std::move(*messenger);
     } else {
       GetLogger()->warn("Cannot create DebugUtilsMessenger: {}",
@@ -643,7 +643,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
-  if (auto physicalDevice = ChoosePhysicalDevice(
+  if (auto physicalDevice = vk::ChoosePhysicalDevice(
         sInstance, physicalDeviceFeatures, physicalDeviceExtensionNames,
         VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
     sPhysicalDevice = std::move(*physicalDevice);
@@ -652,8 +652,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     return tl::unexpected(physicalDevice.error());
   }
 
-  if (auto qfi = GetQueueFamilyIndex(sPhysicalDevice, VK_QUEUE_GRAPHICS_BIT |
-                                                        VK_QUEUE_COMPUTE_BIT)) {
+  if (auto qfi = vk::GetQueueFamilyIndex(
+        sPhysicalDevice, VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
     sQueueFamilyIndex = *qfi;
   } else {
     IRIS_LOG_LEAVE();
@@ -661,8 +661,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   std::uint32_t numQueues;
-  if (auto dn = CreateDevice(sPhysicalDevice, physicalDeviceFeatures,
-                             physicalDeviceExtensionNames, sQueueFamilyIndex)) {
+  if (auto dn =
+        vk::CreateDevice(sPhysicalDevice, physicalDeviceFeatures,
+                         physicalDeviceExtensionNames, sQueueFamilyIndex)) {
     std::tie(sDevice, numQueues) = *dn;
   } else {
     IRIS_LOG_LEAVE();
@@ -715,7 +716,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                fmt::format("sCommandFences[{}]", i).c_str());
   }
 
-  if (auto allocator = CreateAllocator(sPhysicalDevice, sDevice)) {
+  if (auto allocator = vk::CreateAllocator(sPhysicalDevice, sDevice)) {
     sAllocator = std::move(*allocator);
   } else {
     IRIS_LOG_LEAVE();
