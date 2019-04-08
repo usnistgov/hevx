@@ -51,9 +51,15 @@ target_compile_options(protos
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wnon-virtual-dtor -Wno-unused-parameter -Wno-maybe-uninitialized -Wsuggest-final-types>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4100 /wd4125 /wd4127 /wd4201 /wd4996 /Zc:__cplusplus>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:__cplusplus>
+    #$<$<CXX_COMPILER_ID:MSVC>:/wd4100 /wd4125 /wd4127 /wd4201 /wd4996>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
+)
+
+target_compile_definitions(protos
+  PUBLIC
+    $<$<PLATFORM_ID:Windows>:_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING>
 )
 
 if(ENABLE_INCLUDE_WHAT_YOU_USE)
@@ -131,12 +137,13 @@ target_link_libraries(iris
   PUBLIC
     flags imgui vma
     GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
-    absl::base absl::strings absl::hash absl::fixed_array absl::flat_hash_map
+    absl::base absl::hash absl::fixed_array absl::flat_hash_map
     mikktspace stb glslang SPIRV Vulkan::Vulkan
     ${X11_XCB_LIBRARIES} ${XCB_XINPUT_LIBRARIES} ${XCB_ICCCM_LIBRARIES}
     ${XCB_RANDR_LIBRARIES} ${XCB_XKB_LIBRARIES} ${XCB_UTIL_LIBRARIES}
     ${XCB_CURSOR_LIBRARIES}
-    protobuf::libprotobuf cpprestsdk::cpprest
+    protobuf::libprotobuf
+    cpprestsdk::cpprest
     TBB::tbb Threads::Threads
     $<$<CXX_COMPILER_ID:GNU>:-lstdc++fs>
     $<$<CXX_COMPILER_ID:Clang>:-lc++fs>
@@ -168,8 +175,9 @@ target_compile_options(iris
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Werror>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /wd4127 /wd4201 /wd4996 /permissive- /Zc:__cplusplus>
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324 /wd4309> # absl::container_internal mess
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive- /Zc:__cplusplus>
+    #$<$<CXX_COMPILER_ID:MSVC>:/wd4127 /wd4201 /wd4996>
+    #$<$<CXX_COMPILER_ID:MSVC>:/wd4244 /wd4245 /wd4267 /wd4324 /wd4309> # absl::container_internal mess
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Debug>>:/Od>
     $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2 /GL /Gw>
 )
