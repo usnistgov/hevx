@@ -28,6 +28,8 @@ struct GeometryInstance {
 
   GeometryInstance(std::uint64_t handle = 0) noexcept
     : accelerationStructureHandle(handle) {
+    std::memset(transform, 0, sizeof(float) * 12);
+    transform[0] = transform[4] = transform[8] = 1.f;
     customIndex = 0;
     mask = 0xF;
     offset = 0;

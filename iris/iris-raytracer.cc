@@ -333,8 +333,6 @@ CreateTopLevelAccelerationStructure() noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
-  iris::GeometryInstance topLevelInstance(sBottomLevelAS.handle);
-
   if (auto structure = iris::CreateAccelerationStructure(1, 0)) {
     sTopLevelAS = std::move(*structure);
   } else {
@@ -343,6 +341,8 @@ CreateTopLevelAccelerationStructure() noexcept {
                                             "Cannot create top level AS: "s +
                                               structure.error().what()));
   }
+
+  iris::GeometryInstance topLevelInstance(sBottomLevelAS.handle);
 
   auto instanceBuffer = iris::AllocateBuffer(sizeof(iris::GeometryInstance),
                                              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
@@ -356,7 +356,7 @@ CreateTopLevelAccelerationStructure() noexcept {
   }
 
   if (auto ptr = instanceBuffer->Map<iris::GeometryInstance*>()) {
-    **ptr = topLevelInstance;
+    std::memcpy(*ptr, &topLevelInstance, sizeof(iris::GeometryInstance));
     instanceBuffer->Unmap();
   } else {
     DestroyBuffer(*instanceBuffer);
@@ -479,9 +479,9 @@ CreateShaderBindingTable() noexcept {
   sLogger->info("sHitGroupStride: {}", sHitGroupStride);
 
   for (int i = 0; i < 3; ++i) {
-    char handle[16];
+    std::string handle(sShaderGroupHandleSize, '\0');
     for (std::uint32_t j = 0; j < sShaderGroupHandleSize; ++j) {
-      sprintf(handle + j, "%0x",
+      sprintf(handle.data() + j, "%0x",
               static_cast<char>(*(shaderGroupHandles.data() +
                                   (i * sShaderGroupHandleSize) + j)));
     }

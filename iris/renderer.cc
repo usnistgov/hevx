@@ -1417,7 +1417,7 @@ void iris::Renderer::EndFrame(VkImage image,
 
     if (image != VK_NULL_HANDLE) {
       VkCommandBuffer commandBuffer =
-        CopyImage(window.colorImages[window.frameIndex], image,
+        CopyImage(window.colorTarget.image, image,
                   {window.extent.width, window.extent.height, 1});
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
     }
