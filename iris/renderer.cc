@@ -255,8 +255,8 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
 
   vk::SetImageLayout(
-    commandBuffer, dst, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    commandBuffer, dst, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
   VkImageCopy copy = {};
@@ -269,10 +269,11 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
   vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-  vk::SetImageLayout(
-    commandBuffer, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+  vk::SetImageLayout(commandBuffer, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                     VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;

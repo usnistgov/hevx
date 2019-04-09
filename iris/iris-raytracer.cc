@@ -244,7 +244,8 @@ static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   IRIS_LOG_ENTER();
 
   if (auto img = iris::AllocateImage(
-        VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+        VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1,
+        iris::Renderer::sSurfaceSampleCount,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
     sOutputImage = std::move(*img);

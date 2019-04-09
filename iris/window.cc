@@ -511,8 +511,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
 
   if (auto img = AllocateImage(
         sSurfaceColorFormat.format, newExtent, 1, 1, sSurfaceSampleCount,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-          VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
     newColorTarget = std::move(*img);
   } else {
@@ -591,7 +590,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   SetImageLayout(
     commandBuffer, newColorTarget, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
 
   SetImageLayout(
     commandBuffer, newDepthStencilTarget, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
