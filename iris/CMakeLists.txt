@@ -1,6 +1,5 @@
 option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
 
-#find_package(Filesystem REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
 
@@ -177,7 +176,10 @@ target_compile_definitions(iris
 
 target_compile_options(iris
   PUBLIC
-    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Werror>
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wsuggest-final-types -Werror>
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
+      -Wno-maybe-uninitialized # used in protobuf
+    >
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive- /Zc:__cplusplus>

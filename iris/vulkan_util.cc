@@ -474,7 +474,7 @@ iris::vk::ChoosePhysicalDevice(VkInstance instance,
                                           "No suitable physical device found"));
 } // iris::vk::ChoosePhysicalDevice
 
-tl::expected<std::tuple<VkDevice, std::uint32_t>, std::system_error>
+tl::expected<std::pair<VkDevice, std::uint32_t>, std::system_error>
 iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
                        VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                        gsl::span<gsl::czstring<>> extensionNames,
@@ -529,7 +529,7 @@ iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
 
   Ensures(device != VK_NULL_HANDLE);
   IRIS_LOG_LEAVE();
-  return std::make_tuple(device, queueCreateInfos[0].queueCount);
+  return std::make_pair(device, queueCreateInfos[0].queueCount);
 } // iris::vk::CreateDevice
 
 tl::expected<VmaAllocator, std::system_error>

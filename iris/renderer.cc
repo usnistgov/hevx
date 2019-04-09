@@ -5,18 +5,18 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "renderer.h"
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
 #include "absl/container/inlined_vector.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
 #if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 #include "glslang/Public/ShaderLang.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 #include "gsl/gsl"
 #include "io/gltf.h"
 #include "io/json.h"
@@ -25,14 +25,7 @@
 #include "protos.h"
 #include "shader.h"
 #include "renderer_util.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4127)
-#endif
 #include "spdlog/spdlog.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
 #include "tbb/concurrent_queue.h"
 #include "tbb/task.h"
 #include "tbb/task_scheduler_init.h"
@@ -1760,12 +1753,12 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
 } // iris::Renderer::EndOneTimeSubmit
 
 tl::expected<void, std::system_error>
-iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
+iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   class IOTask : public tbb::task {
   public:
-    IOTask(filesystem::path p) noexcept(noexcept(std::move(p)))
+    IOTask(std::filesystem::path p) noexcept(noexcept(std::move(p)))
       : path_(std::move(p)) {}
 
     tbb::task* execute() override {
@@ -1788,7 +1781,7 @@ iris::Renderer::LoadFile(filesystem::path const& path) noexcept {
     }
 
   private:
-    filesystem::path path_;
+    std::filesystem::path path_;
   }; // struct IOTask
 
   try {

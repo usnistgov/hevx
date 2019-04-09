@@ -1,10 +1,6 @@
 #ifndef HEV_IRIS_RENDERER_UTIL_H_
 #define HEV_IRIS_RENDERER_UTIL_H_
 
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
 #include "absl/container/inlined_vector.h"
 #include "glm/mat3x3.hpp"
 #include "glm/mat4x4.hpp"

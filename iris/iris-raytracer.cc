@@ -15,17 +15,10 @@
 #include "iris/renderer.h"
 #include "iris/renderer_util.h"
 #include "iris/shader.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4127)
-#endif
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
 #include "flags.h"
 #include <cstdlib>
 #include <exception>

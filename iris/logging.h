@@ -3,19 +3,7 @@
 
 #include "iris/config.h"
 
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
-#pragma warning(disable : 4127)
-#endif
 #include "spdlog/spdlog.h"
-#if PLATFORM_COMPILER_MSVC
-#pragma warning(pop)
-#endif
-
-#if PLATFORM_COMPILER_GCC
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
 
 namespace iris {
 

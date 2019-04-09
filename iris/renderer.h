@@ -8,13 +8,7 @@
 #include "iris/config.h"
 
 #include "expected.hpp"
-#if STD_FS_IS_EXPERIMENTAL
-#include <experimental/filesystem>
-namespace filesystem = std::experimental::filesystem;
-#else
 #include <filesystem>
-namespace filesystem = std::filesystem;
-#endif
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
 #include "iris/buffer.h"
@@ -185,7 +179,7 @@ operation failed to be enqueued.
 enqueued.
 */
 [[nodiscard]] tl::expected<void, std::system_error>
-LoadFile(filesystem::path const& path) noexcept;
+LoadFile(std::filesystem::path const& path) noexcept;
 
 /*!
 \brief Execute a control message.
