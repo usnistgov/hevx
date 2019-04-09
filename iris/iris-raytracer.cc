@@ -219,27 +219,6 @@ static tl::expected<void, std::system_error> CreatePipeline() noexcept {
   return {};
 } // CreatePipeline
 
-static tl::expected<void, std::system_error> CreateSpheres() noexcept {
-  IRIS_LOG_ENTER();
-
-  if (auto buf = iris::CreateBuffer(
-        sCommandQueue.commandPool, sCommandQueue.queue,
-        sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
-        reinterpret_cast<std::byte*>(sSpheres.data()))) {
-    sSpheresBuffer = std::move(*buf);
-  } else {
-    IRIS_LOG_LEAVE();
-    using namespace std::string_literals;
-    return tl::unexpected(
-      std::system_error(buf.error().code(), "Cannot create spheres buffer: "s +
-                                              buf.error().what()));
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateSpheres
-
 static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   IRIS_LOG_ENTER();
 
@@ -272,6 +251,27 @@ static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // CreateOutputImage
+
+static tl::expected<void, std::system_error> CreateSpheres() noexcept {
+  IRIS_LOG_ENTER();
+
+  if (auto buf = iris::CreateBuffer(
+        sCommandQueue.commandPool, sCommandQueue.queue,
+        sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
+        reinterpret_cast<std::byte*>(sSpheres.data()))) {
+    sSpheresBuffer = std::move(*buf);
+  } else {
+    IRIS_LOG_LEAVE();
+    using namespace std::string_literals;
+    return tl::unexpected(
+      std::system_error(buf.error().code(), "Cannot create spheres buffer: "s +
+                                              buf.error().what()));
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // CreateSpheres
 
 static tl::expected<void, std::system_error>
 CreateBottomLevelAccelerationStructure() noexcept {
@@ -542,8 +542,8 @@ int main(int argc, char** argv) {
                       .and_then(AcquireCommandQueue)
                       .and_then(CreateDescriptor)
                       .and_then(CreatePipeline)
-                      .and_then(CreateSpheres)
                       .and_then(CreateOutputImage)
+                      .and_then(CreateSpheres)
                       .and_then(CreateBottomLevelAccelerationStructure)
                       .and_then(CreateTopLevelAccelerationStructure)
                       .and_then(WriteDescriptorSets)
