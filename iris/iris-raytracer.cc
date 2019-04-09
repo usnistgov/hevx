@@ -636,8 +636,8 @@ int main(int argc, char** argv) {
       VK_NULL_HANDLE,             // callableShaderBindingTableBuffer
       0,                          // callableShaderBindingOffset
       0,                          // callableShaderBindingStride
-      1000,                       // width
-      1000,                       // height
+      2000,                       // width
+      2000,                       // height
       1                           // depth
     );
 
