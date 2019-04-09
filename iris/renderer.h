@@ -128,12 +128,12 @@ void BindDescriptorSets(VkCommandBuffer commandBuffer,
 This must be called each time through the rendering loop after calling \ref
 BeginFrame.
 
-\param[in] image a VkImage that will be copied into the current framebuffer of
-each \ref Window.
+\param[in] view a VkImageView that will be blitted into the current
+framebuffer of each \ref Window.
 \param[in] secondaryCBs a list of secondary command buffers that will be
 executed into the primary command buffer for each \ref Window.
 */
-void EndFrame(VkImage image = VK_NULL_HANDLE,
+void EndFrame(VkImageView view = VK_NULL_HANDLE,
               gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
 /*!

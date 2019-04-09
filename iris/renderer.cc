@@ -167,8 +167,28 @@ static tbb::task_scheduler_init sTaskSchedulerInit{
 static tbb::concurrent_queue<std::function<std::system_error(void)>>
   sIOContinuations{};
 
-static char const* sUIVertexShaderSource = R"(
-#version 450 core
+static char const* sImageBlitVertexShaderSource = R"(#version 460 core
+layout(location = 0) out vec2 UV;
+void main() {
+    UV = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
+    gl_Position = vec4(UV * 2.0 - 1.0, 0.f, 1.0);
+})";
+
+static char const* sImageBlitFragmentShaderSource = R"(#version 460 core
+layout(location = 0) in vec2 UV;
+layout(location = 0) out vec4 Color;
+layout(set = 1, binding = 0) uniform sampler sSampler;
+layout(set = 1, binding = 1) uniform texture2D sTexture;
+void main() {
+  Color = texture(sampler2D(sTexture, sSampler), UV.st);
+})";
+
+static VkSampler sImageBlitSampler;
+static Pipeline sImageBlitPipeline;
+static VkDescriptorSetLayout sImageBlitDescriptorSetLayout{VK_NULL_HANDLE};
+static VkDescriptorSet sImageBlitDescriptorSet{VK_NULL_HANDLE};
+
+static char const* sUIVertexShaderSource = R"(#version 460 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec4 aColor;
@@ -187,8 +207,7 @@ void main() {
   gl_Position = vec4(aPos * uScale + uTranslate, 0.f, 1.f);
 })";
 
-static char const* sUIFragmentShaderSource = R"(
-#version 450 core
+static char const* sUIFragmentShaderSource = R"(#version 460 core
 layout(set = 1, binding = 0) uniform sampler sSampler;
 layout(set = 1, binding = 1) uniform texture2D sTexture;
 layout(location = 0) in vec4 Color;
@@ -227,8 +246,42 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   }
 } // CreateEmplaceWindow
 
-static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
-                                 VkExtent3D const& extent) noexcept {
+static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
+                                 VkRect2D* pScissor,
+                                 gsl::span<std::byte> pushConstants) noexcept {
+  VkDescriptorImageInfo samplerInfo = {};
+  samplerInfo.sampler = sImageBlitSampler;
+
+  VkDescriptorImageInfo textureInfo = {};
+  textureInfo.imageView = src;
+  textureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  absl::FixedArray<VkWriteDescriptorSet> writeDescriptorSets(2);
+  writeDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            sImageBlitDescriptorSet,
+                            0,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLER,
+                            &samplerInfo,
+                            nullptr,
+                            nullptr};
+  writeDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            nullptr,
+                            sImageBlitDescriptorSet,
+                            1,
+                            0,
+                            1,
+                            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                            &textureInfo,
+                            nullptr,
+                            nullptr};
+
+  vkUpdateDescriptorSets(
+    sDevice, gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
+    writeDescriptorSets.data(), 0, nullptr);
+
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sCommandPools[0];
@@ -246,38 +299,54 @@ static VkCommandBuffer CopyImage(VkImage dst, VkImage src,
 
   VkCommandBufferInheritanceInfo commandBufferII = {};
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = sRenderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
   commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
 
-  vk::SetImageLayout(
-    commandBuffer, dst, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    sImageBlitPipeline.pipeline);
 
-  VkImageCopy copy = {};
-  copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-  copy.srcOffset = {0, 0, 0};
-  copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-  copy.dstOffset = {0, 0, 0};
-  copy.extent = extent;
+  vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+                          sImageBlitPipeline.layout,       // layout
+                          0,                               // firstSet
+                          1,                               // descriptorSetCount
+                          &sGlobalDescriptorSet,           // pDescriptorSets
+                          0,                               // dynamicOffsetCount
+                          nullptr                          // pDynamicOffsets
+  );
 
-  vkCmdCopyImage(commandBuffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
-                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+  vkCmdPushConstants(commandBuffer, sImageBlitPipeline.layout,
+                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
+                     pushConstants.data());
 
-  vk::SetImageLayout(commandBuffer, dst, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                     VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+  vkCmdSetViewport(commandBuffer, 0, 1, pViewport);
+  vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
+
+  vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+                          sImageBlitPipeline.layout,       // layout
+                          1,                               // firstSet
+                          1,                               // descriptorSetCount
+                          &sImageBlitDescriptorSet,        // pDescriptorSets
+                          0,                               // dynamicOffsetCount
+                          nullptr                          // pDynamicOffsets
+  );
+
+  vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
-} // CopyImage
+} // BlitImage
 
 static VkCommandBuffer
 RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
@@ -333,9 +402,16 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   vkCmdSetScissor(commandBuffer, 0, 1, pScissor);
 
   if (renderable.descriptorSet != VK_NULL_HANDLE) {
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            renderable.pipeline.layout, 1 /* firstSet */, 1,
-                            &renderable.descriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(
+      commandBuffer,                   // commandBuffer
+      VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+      renderable.pipeline.layout,      // layout
+      1,                               // firstSet
+      1,                               // descriptorSetCount
+      &renderable.descriptorSet,       // pDescriptorSets
+      0,                               // dynamicOffsetCount
+      nullptr                          // pDynamicOffsets
+    );
   }
 
   if (renderable.vertexBuffer.buffer != VK_NULL_HANDLE) {
@@ -1003,6 +1079,178 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   /////
   //
+  // Create the Image Blit Pipeline and shared state
+  //
+  /////
+
+  VkSamplerCreateInfo imageBlitSamplerCI = {};
+  imageBlitSamplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  imageBlitSamplerCI.magFilter = VK_FILTER_LINEAR;
+  imageBlitSamplerCI.minFilter = VK_FILTER_LINEAR;
+  imageBlitSamplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  imageBlitSamplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  imageBlitSamplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  imageBlitSamplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  imageBlitSamplerCI.mipLodBias = 0.f;
+  imageBlitSamplerCI.anisotropyEnable = VK_FALSE;
+  imageBlitSamplerCI.maxAnisotropy = 1;
+  imageBlitSamplerCI.compareEnable = VK_FALSE;
+  imageBlitSamplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+  imageBlitSamplerCI.minLod = -1000.f;
+  imageBlitSamplerCI.maxLod = 1000.f;
+  imageBlitSamplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+  imageBlitSamplerCI.unnormalizedCoordinates = VK_FALSE;
+
+  if (auto result =
+        vkCreateSampler(sDevice, &imageBlitSamplerCI, nullptr, &sImageBlitSampler);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create sampler"));
+  }
+
+  NameObject(VK_OBJECT_TYPE_SAMPLER, sImageBlitSampler, "sImageBlitSampler");
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding>
+    imageBlitDescriptorSetLayoutBindings{
+      {
+        0,                            // binding
+        VK_DESCRIPTOR_TYPE_SAMPLER,   // descriptorType
+        1,                            // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
+        nullptr                       // pImmutableSamplers
+      },
+      {
+        1,                                // binding
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, // descriptorType
+        1,                                // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,     // stageFlags
+        nullptr                           // pImmutableSamplers
+      }};
+
+  VkDescriptorSetLayoutCreateInfo imageBlitDescriptorSetLayoutCI = {};
+  imageBlitDescriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  imageBlitDescriptorSetLayoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(
+    imageBlitDescriptorSetLayoutBindings.size());
+  imageBlitDescriptorSetLayoutCI.pBindings =
+    imageBlitDescriptorSetLayoutBindings.data();
+
+  if (auto result =
+        vkCreateDescriptorSetLayout(sDevice, &imageBlitDescriptorSetLayoutCI,
+                                    nullptr, &sImageBlitDescriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result),
+                        "Cannot create Image Blit descriptor set layout"));
+  }
+
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+             sImageBlitDescriptorSetLayout, "sImageBlitDescriptorSetLayout");
+
+  VkDescriptorSetAllocateInfo imageBlitDescriptorSetAI = {};
+  imageBlitDescriptorSetAI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  imageBlitDescriptorSetAI.descriptorPool = sDescriptorPool;
+  imageBlitDescriptorSetAI.descriptorSetCount = 1;
+  imageBlitDescriptorSetAI.pSetLayouts = &sImageBlitDescriptorSetLayout;
+
+  if (auto result = vkAllocateDescriptorSets(sDevice, &imageBlitDescriptorSetAI,
+                                             &sImageBlitDescriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot allocate Image Blit descriptor set"));
+  }
+
+  NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, sImageBlitDescriptorSet,
+             "sImageBlitDescriptorSet");
+
+  absl::FixedArray<Shader> imageBlitShaders(2);
+
+  if (auto vs = CompileShaderFromSource(sImageBlitVertexShaderSource,
+                                        VK_SHADER_STAGE_VERTEX_BIT)) {
+    imageBlitShaders[0] = std::move(*vs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
+  }
+
+  if (auto fs = CompileShaderFromSource(sImageBlitFragmentShaderSource,
+                                        VK_SHADER_STAGE_FRAGMENT_BIT)) {
+    imageBlitShaders[1] = std::move(*fs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
+  }
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+  inputAssemblyStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+  VkPipelineViewportStateCreateInfo viewportStateCI = {};
+  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportStateCI.viewportCount = 1;
+  viewportStateCI.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+  rasterizationStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizationStateCI.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+  multisampleStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleStateCI.rasterizationSamples = sSurfaceSampleCount;
+  multisampleStateCI.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+  depthStencilStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_FALSE,                            // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
+
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+  if (auto pipe = CreateRasterizationPipeline(
+        imageBlitShaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0,
+        gsl::make_span(&sImageBlitDescriptorSetLayout, 1))) {
+    sImageBlitPipeline = std::move(*pipe);
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      pipe.error().code(),
+      "Cannot create Image Blit pipeline: "s + pipe.error().what()));
+  }
+
+  NameObject(VK_OBJECT_TYPE_PIPELINE_LAYOUT, sImageBlitPipeline.layout,
+             "sImageBlitPipeline.layout");
+  NameObject(VK_OBJECT_TYPE_PIPELINE, sImageBlitPipeline.pipeline,
+             "sImageBlitPipeline.pipeline");
+
+  /////
+  //
   // Create UI Pipeline and other shared state
   //
   /////
@@ -1058,11 +1306,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, sUIDescriptorSet,
              "sUIDescriptorSet");
 
-  absl::FixedArray<Shader> shaders(2);
+  absl::FixedArray<Shader> uiShaders(2);
 
   if (auto vs = CompileShaderFromSource(sUIVertexShaderSource,
                                         VK_SHADER_STAGE_VERTEX_BIT)) {
-    shaders[0] = std::move(*vs);
+    uiShaders[0] = std::move(*vs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(vs.error());
@@ -1070,7 +1318,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto fs = CompileShaderFromSource(sUIFragmentShaderSource,
                                         VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    shaders[1] = std::move(*fs);
+    uiShaders[1] = std::move(*fs);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(fs.error());
@@ -1093,6 +1341,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   vertexInputAttributeDescriptions[2] = {2, 0, VK_FORMAT_R8G8B8A8_UNORM,
                                          offsetof(ImDrawVert, col)};
 
+#if 0
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
   inputAssemblyStateCI.sType =
     VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1137,9 +1386,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
+#else
+  colorBlendAttachmentStates[0].blendEnable = VK_TRUE;
+#endif
 
   if (auto pipe = CreateRasterizationPipeline(
-        shaders, vertexInputBindingDescriptions,
+        uiShaders, vertexInputBindingDescriptions,
         vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
@@ -1283,7 +1535,7 @@ void iris::Renderer::BindDescriptorSets(
   );
 } // iris::Renderer::BindDescriptorSets
 
-void iris::Renderer::EndFrame(VkImage image,
+void iris::Renderer::EndFrame(VkImageView view,
   gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
 
@@ -1409,13 +1661,6 @@ void iris::Renderer::EndFrame(VkImage image,
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
 
-    if (image != VK_NULL_HANDLE) {
-      VkCommandBuffer commandBuffer =
-        CopyImage(window.colorTarget.image, image,
-                  {window.extent.width, window.extent.height, 1});
-      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-    }
-
     clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
 
     renderPassBI.framebuffer = frame.framebuffer;
@@ -1425,13 +1670,19 @@ void iris::Renderer::EndFrame(VkImage image,
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
                          VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 
+    if (view != VK_NULL_HANDLE) {
+      VkCommandBuffer commandBuffer = BlitImage(
+        view, &window.viewport, &window.scissor,
+        gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                                  sizeof(PushConstants)));
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+    }
+
     for (auto&& renderable : sRenderables()) {
       pushConstants.ModelMatrix = renderable.modelMatrix;
       pushConstants.ModelViewMatrix = viewMatrix * renderable.modelMatrix;
       pushConstants.ModelViewMatrixInverse =
         glm::inverse(pushConstants.ModelViewMatrix);
-      //pushConstants.NormalMatrix =
-        //glm::transpose(glm::inverse(glm::mat3(renderable.modelMatrix)));
 
       VkCommandBuffer commandBuffer = RenderRenderable(
         renderable, &window.viewport, &window.scissor,

@@ -20,7 +20,7 @@
 
 namespace iris::io {
 
-static char const* sVertexShaderSource = R"(#version 450
+static char const* sVertexShaderSource = R"(#version 460 core
 layout(push_constant) uniform uPC {
     vec4 iMouse;
     float iTime;
@@ -31,7 +31,6 @@ layout(push_constant) uniform uPC {
     float padding0;
     mat4 ModelViewMatrix;
     mat4 ModelViewMatrixInverse;
-    mat3 NormalMatrix;
 };
 
 layout(location = 0) out vec2 fragCoord;
@@ -39,6 +38,7 @@ layout(location = 0) out vec2 fragCoord;
 void main() {
     fragCoord = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
     gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
+
     // flip to match shadertoy
     fragCoord.y *= -1;
     fragCoord.y += 1;
@@ -47,7 +47,7 @@ void main() {
     fragCoord *= iResolution.xy;
 })";
 
-static char const* sFragmentShaderHeader = R"(#version 450
+static char const* sFragmentShaderHeader = R"(#version 460 core
 #extension GL_GOOGLE_include_directive : require
 layout(push_constant) uniform uPC {
     vec4 iMouse;

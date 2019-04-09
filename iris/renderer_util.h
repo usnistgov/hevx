@@ -62,7 +62,6 @@ struct PushConstants {
     glm::mat4 ModelMatrix;
     glm::mat4 ModelViewMatrix;
     glm::mat4 ModelViewMatrixInverse;
-    //glm::mat3 NormalMatrix;
 }; // struct PushConstants
 
 struct MatricesBuffer {

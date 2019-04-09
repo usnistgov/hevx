@@ -38,7 +38,6 @@ layout(push_constant) uniform PushConstants {
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
   mat4 ModelViewMatrixInverse;
-  //mat3 NormalMatrix;
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {

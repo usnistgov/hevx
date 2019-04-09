@@ -223,9 +223,9 @@ static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   IRIS_LOG_ENTER();
 
   if (auto img = iris::AllocateImage(
-        VK_FORMAT_R8G8B8A8_UNORM, {1000, 1000}, 1, 1,
-        iris::Renderer::sSurfaceSampleCount,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        VK_FORMAT_B8G8R8A8_UNORM, {1000, 1000}, 1, 1, VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+          VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
     sOutputImage = std::move(*img);
   } else {
@@ -636,15 +636,22 @@ int main(int argc, char** argv) {
       VK_NULL_HANDLE,             // callableShaderBindingTableBuffer
       0,                          // callableShaderBindingOffset
       0,                          // callableShaderBindingStride
-      2000,                       // width
-      2000,                       // height
+      1000,                       // width
+      1000,                       // height
       1                           // depth
     );
 
     iris::SetImageLayout(
-      cb, sOutputImage, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV,
-      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_IMAGE_LAYOUT_GENERAL,
-      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+      cb,                                          // commandBuffer
+      sOutputImage,                                // image
+      VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
+      VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
+      VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
+      VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
+      1,                                           // mipLevels
+      1                                            // arrayLayers
+    );
 
     vkEndCommandBuffer(cb);
 
@@ -660,10 +667,11 @@ int main(int argc, char** argv) {
                      iris::to_string(result));
     }
 
-    iris::Renderer::EndFrame(sOutputImage.image);
+    iris::Renderer::EndFrame(sOutputImageView);
     currentCBIndex = (currentCBIndex + 1) % 2;
     frameCount++;
   }
 
   sLogger->info("exiting");
 }
+
