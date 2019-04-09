@@ -208,7 +208,7 @@ static tl::expected<void, std::system_error> CreatePipeline() noexcept {
     iris::ShaderGroup::ProceduralHit(3, 2)};
 
   if (auto pipe = iris::CreateRayTracingPipeline(
-        shaders, groups, gsl::make_span(&sDescriptorSetLayout, 1), 2)) {
+        shaders, groups, gsl::make_span(&sDescriptorSetLayout, 1), 4)) {
     sPipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
