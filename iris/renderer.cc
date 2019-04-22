@@ -677,7 +677,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }};
 
   for (auto&& prop : extensionProperties) {
-    if (std::strcmp(prop.extensionName, VK_NV_RAY_TRACING_EXTENSION_NAME)) {
+    if (std::strcmp(prop.extensionName, VK_NV_RAY_TRACING_EXTENSION_NAME) ==
+        0) {
       physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
       sFeatures |= Features::kRayTracing;
     }
