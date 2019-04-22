@@ -5,23 +5,36 @@
 #ifndef HEV_IRIS_WINDOW_H_
 #define HEV_IRIS_WINDOW_H_
 
-#include "absl/container/fixed_array.h"
-#include "expected.hpp"
-#include "glm/mat4x4.hpp"
-#include "glm/vec4.hpp"
-#include "imgui.h"
+#include "iris/config.h"
+
 #include "iris/image.h"
 #include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
 
 #include "iris/components/renderable.h"
 
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
+
+#include "absl/container/fixed_array.h"
+#include "expected.hpp"
+#include "glm/mat4x4.hpp"
+#include "glm/vec4.hpp"
+#include "imgui.h"
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
 #include <system_error>
 #include <type_traits>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 namespace iris {
 

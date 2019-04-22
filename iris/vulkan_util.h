@@ -3,21 +3,26 @@
 
 #include "iris/config.h"
 
-#include "absl/container/inlined_vector.h"
-#if STD_FS_IS_EXPERIMENTAL
-#include <experimental/filesystem>
-namespace filesystem = std::experimental::filesystem;
-#else
-#include <filesystem>
-namespace filesystem = std::filesystem;
+#include "iris/vulkan.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
 #endif
+
+#include "absl/container/inlined_vector.h"
 #include "expected.hpp"
 #include "gsl/gsl"
-#include "iris/vulkan.h"
 #include <cstdint>
 #include <exception>
 #include <string>
 #include <system_error>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 namespace iris::vk {
 

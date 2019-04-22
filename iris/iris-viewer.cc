@@ -2,11 +2,18 @@
  * \brief main rendering application
  */
 #include "iris/config.h"
+#include "iris/renderer.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
 
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
 #include "fmt/format.h"
-#include "iris/renderer.h"
 #include "iris/protos.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"
@@ -21,6 +28,10 @@
 #include <system_error>
 #include <vector>
 
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
+
 #if PLATFORM_WINDOWS
 extern "C" {
 _declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
@@ -29,7 +40,7 @@ _declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 #include <Windows.h>
 #include <shellapi.h>
 
-int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
   // Oh my goodness
   char* cmdLine = ::GetCommandLineA();
   int argc = 1;
@@ -91,7 +102,10 @@ int main(int argc, char** argv) {
   if (shadertoy_url) {
     iris::Control::Control message;
     message.mutable_shadertoy()->set_url(*shadertoy_url);
-    iris::Renderer::Control(message);
+    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
+      logger.error("Error loading {}: {}", *shadertoy_url,
+                   result.error().what());
+    }
   }
 
   while (iris::Renderer::IsRunning()) {

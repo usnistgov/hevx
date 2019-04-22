@@ -17,7 +17,7 @@
 #include "mikktspace.h"
 #include "nlohmann/json.hpp"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 #include "stb_image.h"
 #include <map>
 #include <optional>

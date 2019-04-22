@@ -7,12 +7,20 @@
 
 #include "iris/config.h"
 
+#include "iris/buffer.h"
+#include "iris/vulkan.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
+
 #include "expected.hpp"
 #include <filesystem>
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
-#include "iris/buffer.h"
-#include "iris/vulkan.h"
 #include "spdlog/sinks/sink.h"
 #include <chrono>
 #include <cstddef>
@@ -21,6 +29,10 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 /*!
 \namespace iris
@@ -189,7 +201,7 @@ This is a synchronous execution step.
 \return std::system_error> indicating if the message failed.
 */
 tl::expected<void, std::system_error>
-Control(iris::Control::Control const& control) noexcept;
+ProcessControlMessage(iris::Control::Control const& control) noexcept;
 
 /*!
 \brief bit-wise or of \ref Renderer::Options.

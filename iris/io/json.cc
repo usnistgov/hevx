@@ -41,7 +41,7 @@ iris::io::LoadJSON(filesystem::path const& path) noexcept {
       status.ok()) {
     IRIS_LOG_LEAVE();
     return [cMsg]() {
-      if (auto result = Renderer::Control(cMsg)) {
+      if (auto result = Renderer::ProcessControlMessage(cMsg)) {
         return std::system_error(Error::kNone);
       } else {
         return result.error();

@@ -5,7 +5,7 @@
 #include "error.h"
 #include "logging.h"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 
 tl::expected<void, std::system_error>
 iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,

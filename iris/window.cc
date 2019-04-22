@@ -7,7 +7,7 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "logging.h"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 #include "vulkan_util.h"
 #include "wsi/input.h"
 #if PLATFORM_LINUX

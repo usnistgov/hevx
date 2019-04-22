@@ -13,7 +13,7 @@
 #include "iris/pipeline.h"
 #include "iris/protos.h"
 #include "iris/renderer.h"
-#include "iris/renderer_util.h"
+#include "iris/renderer_private.h"
 #include "iris/shader.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"

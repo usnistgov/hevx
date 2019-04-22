@@ -1,13 +1,27 @@
 #ifndef HEV_IRIS_RENDERER_UTIL_H_
 #define HEV_IRIS_RENDERER_UTIL_H_
 
+#include "iris/config.h"
+
+#include "iris/vulkan.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
+
 #include "absl/container/inlined_vector.h"
 #include "glm/mat3x3.hpp"
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
-#include "iris/vulkan.h"
 #include <cstdint>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 namespace iris::Renderer {
 

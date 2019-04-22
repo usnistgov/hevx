@@ -24,7 +24,7 @@
 #include "pipeline.h"
 #include "protos.h"
 #include "shader.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 #include "spdlog/spdlog.h"
 #include "tbb/concurrent_queue.h"
 #include "tbb/task.h"
@@ -746,10 +746,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
              "sPhysicalDevice");
   NameObject(VK_OBJECT_TYPE_DEVICE, sDevice, "sDevice");
 
-  sCommandQueues.resize(numQueues);
-  sCommandPools.resize(numQueues);
-  sCommandFences.resize(numQueues);
-
   VkCommandPoolCreateInfo commandPoolCI = {};
   commandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -758,12 +754,16 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   VkFenceCreateInfo fenceCI = {};
   fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
-  for (std::uint32_t i = 0; i < numQueues; ++i) {
-    vkGetDeviceQueue(sDevice, sQueueFamilyIndex, i, &sCommandQueues[i]);
-
-    NameObject(VK_OBJECT_TYPE_QUEUE, sCommandQueues[i],
+  sCommandQueues.resize(numQueues);
+  for (auto&& [i, commandQueue] : enumerate(sCommandQueues)) {
+    vkGetDeviceQueue(sDevice, sQueueFamilyIndex,
+                     gsl::narrow_cast<std::uint32_t>(i), &commandQueue);
+    NameObject(VK_OBJECT_TYPE_QUEUE, commandQueue,
                fmt::format("sCommandQueue[{}]", i).c_str());
+  }
 
+  sCommandPools.resize(numQueues);
+  for (auto&& [i, commandPool] : enumerate(sCommandPools)) {
     if (auto result = vkCreateCommandPool(sDevice, &commandPoolCI, nullptr,
                                           &sCommandPools[i]);
         result != VK_SUCCESS) {
@@ -772,18 +772,20 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         make_error_code(result), "Cannot create graphics command pool"));
     }
 
-    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, &sCommandPools[i],
+    NameObject(VK_OBJECT_TYPE_COMMAND_POOL, commandPool,
                fmt::format("sCommandPools[{}]", i).c_str());
+  }
 
-    if (auto result =
-          vkCreateFence(sDevice, &fenceCI, nullptr, &sCommandFences[i]);
+  sCommandFences.resize(numQueues);
+  for (auto&& [i, commandFence] : enumerate(sCommandFences)) {
+    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &commandFence);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return tl::unexpected(std::system_error(
         make_error_code(result), "Cannot create graphics submit fence"));
     }
 
-    NameObject(VK_OBJECT_TYPE_FENCE, &sCommandFences[i],
+    NameObject(VK_OBJECT_TYPE_FENCE, commandFence,
                fmt::format("sCommandFences[{}]", i).c_str());
   }
 
@@ -2052,7 +2054,7 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
 } // iris::Renderer::LoadFile
 
 tl::expected<void, std::system_error>
-iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
+iris::Renderer::ProcessControlMessage(iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_ENTER();
 
   switch (controlMessage.type_case()) {
@@ -2080,5 +2082,5 @@ iris::Renderer::Control(iris::Control::Control const& controlMessage) noexcept {
 
   IRIS_LOG_LEAVE();
   return {};
-} // iris::Renderer::Control
+} // iris::Renderer::ProcessControlMessage
 

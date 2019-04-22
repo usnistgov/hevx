@@ -3,14 +3,26 @@
 
 #include "iris/config.h"
 
+#include "iris/flextVk.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
+
 #include "expected.hpp"
 #include "gsl/gsl"
-#include "iris/flextVk.h"
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <string>
 #include <system_error>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 // TODO: vma needs these, flextGL should probably generate them
 using PFN_vkGetPhysicalDeviceProperties =

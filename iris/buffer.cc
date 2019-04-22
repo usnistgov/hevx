@@ -4,7 +4,7 @@
 #include "error.h"
 #include "logging.h"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 
 template <>
 tl::expected<void*, std::system_error> iris::Buffer::Map() noexcept {

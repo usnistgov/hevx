@@ -4,7 +4,7 @@
 #include "error.h"
 #include "io/read_file.h"
 #include "logging.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push

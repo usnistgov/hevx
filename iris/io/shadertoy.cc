@@ -14,7 +14,7 @@
 #include "glm/vec3.hpp"
 #include "io/read_file.h"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 #include "string_util.h"
 #include "tbb/task.h"
 

@@ -1,16 +1,24 @@
 #ifndef HEV_IRIS_SHADER_H_
 #define HEV_IRIS_SHADER_H_
 
-#include "expected.hpp"
-#if STD_FS_IS_EXPERIMENTAL
-#include <experimental/filesystem>
-namespace filesystem = std::experimental::filesystem;
-#else
-#include <filesystem>
-namespace filesystem = std::filesystem;
-#endif
+#include "iris/config.h"
+
 #include "iris/vulkan.h"
+
+#if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#endif
+
+#include "expected.hpp"
+#include <filesystem>
 #include <system_error>
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif
 
 namespace iris {
 
@@ -45,7 +53,7 @@ CompileShaderFromSource(std::string_view source,
                         VkShaderStageFlagBits stage) noexcept;
 
 [[nodiscard]] tl::expected<Shader, std::system_error>
-LoadShaderFromFile(filesystem::path const& path,
+LoadShaderFromFile(std::filesystem::path const& path,
                    VkShaderStageFlagBits stage) noexcept;
 
 } // namespace iris

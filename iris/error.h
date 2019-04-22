@@ -4,6 +4,8 @@
  * \brief \ref iris::Error definition.
  */
 
+#include "iris/config.h"
+
 #include <string>
 #include <system_error>
 

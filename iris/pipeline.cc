@@ -4,7 +4,7 @@
 #include "absl/container/fixed_array.h"
 #include "error.h"
 #include "logging.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 
 tl::expected<iris::Pipeline, std::system_error>
 iris::CreateRasterizationPipeline(

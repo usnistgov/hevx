@@ -4,12 +4,19 @@
 #include "iris/config.h"
 
 #if PLATFORM_COMPILER_MSVC
+#include <codeanalysis/warnings.h>
+
 #pragma warning(push)
 #pragma warning(disable : 4100)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+
 #elif PLATFORM_COMPILER_GCC
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+
 #endif
 
 #include "iris/protos/control.pb.h"

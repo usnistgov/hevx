@@ -4,7 +4,7 @@
 #include "error.h"
 #include "logging.h"
 #include "renderer.h"
-#include "renderer_util.h"
+#include "renderer_private.h"
 
 tl::expected<iris::AccelerationStructure, std::system_error>
 iris::CreateAccelerationStructure(VkAccelerationStructureInfoNV info,
