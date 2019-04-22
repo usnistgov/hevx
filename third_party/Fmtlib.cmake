@@ -7,7 +7,6 @@ message(STATUS "Populating fmtlib")
   FetchContent_Populate(fmtlib
   GIT_REPOSITORY https://github.com/fmtlib/fmt
   GIT_SHALLOW TRUE GIT_TAG ${_fmtlib_git_tag}
-  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/fmtlib
   QUIET
 )

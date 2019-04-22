@@ -1,11 +1,5 @@
-option(ENABLE_INCLUDE_WHAT_YOU_USE "Use include-what-you-use if found" OFF)
-
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED)
-
-if(WIN32)
-  find_package(cpprestsdk REQUIRED)
-endif()
 
 if(UNIX)
   find_package(PkgConfig REQUIRED)
@@ -47,7 +41,10 @@ target_include_directories(protos PRIVATE ${PROTOBUF_INCLUDE_DIR})
 
 target_compile_options(protos
   PRIVATE
-    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wnon-virtual-dtor -Wno-unused-parameter -Wno-maybe-uninitialized -Wsuggest-final-types>
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
+      -Wall -Wnon-virtual-dtor
+      -Wno-unused-parameter -Wno-maybe-uninitialized
+    >
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Release>>:-O2>
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /Zc:__cplusplus>
@@ -63,13 +60,6 @@ target_compile_definitions(protos
   PUBLIC
     $<$<PLATFORM_ID:Windows>:_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING>
 )
-
-if(ENABLE_INCLUDE_WHAT_YOU_USE)
-  find_program(IWYU_EXECUTABLE include-what-you-use)
-  if(IWYU_EXECUTABLE)
-    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_EXECUTABLE})
-  endif()
-endif()
 
 if(WIN32)
   set(_flextvk_profile vk_win32_khr.txt)
@@ -176,8 +166,8 @@ target_compile_definitions(iris
 
 target_compile_options(iris
   PUBLIC
-    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wall -Wextra -Wshadow -Wnon-virtual-dtor -Wsuggest-final-types -Werror>
     $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
+      -Wall -Wextra -Wshadow -Wnon-virtual-dtor
       -Wno-maybe-uninitialized # used in protobuf
     >
     $<$<AND:$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>,$<CONFIG:Debug>>:-g -Og>

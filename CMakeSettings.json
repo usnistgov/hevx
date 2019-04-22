@@ -5,11 +5,11 @@
       "generator": "Ninja",
       "configurationType": "Debug",
       "inheritEnvironments": [
-        "msvc_x64"
+        "msvc_x64_x64"
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON -DCMAKE_TOOLCHAIN_FILE=${env.USERPROFILE}\\Active\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -18,11 +18,11 @@
       "generator": "Ninja",
       "configurationType": "Release",
       "inheritEnvironments": [
-        "msvc_x64"
+        "msvc_x64_x64"
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON -DCMAKE_TOOLCHAIN_FILE=${env.USERPROFILE}\\Active\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -32,22 +32,20 @@
       "remoteMachineName": "${defaultRemoteMachineName}",
       "configurationType": "Debug",
       "remoteCMakeListsRoot": "/var/tmp/src/hevx/${name}",
-      "cmakeExecutable": "/usr/bin/cmake",
+      "cmakeExecutable": "/usr/bin/cmake3",
       "buildRoot": "${env.LOCALAPPDATA}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.LOCALAPPDATA}\\CMakeBuilds\\hevx\\install\\${name}",
       "remoteBuildRoot": "/var/tmp/build/hevx/build/${name}",
       "remoteInstallRoot": "/var/tmp/build/hevx/install/${name}",
       "remoteCopySources": true,
-      "remoteCopySourcesOutputVerbosity": "Normal",
-      "remoteCopySourcesConcurrentCopies": "10",
       "remoteCopySourcesMethod": "rsync",
       "remoteCopySourcesExclusionList": [".vs", ".git"],
       "rsyncCommandArgs" : "-t --delete --delete-excluded",
       "remoteCopyBuildOutput" : false,
-      "cmakeCommandArgs": "-DPYTHON_EXECUTABLE=/usr/bin/python3 -DBUILD_TESTING=OFF",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DPYTHON_EXECUTABLE=/usr/bin/python3",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
-      "inheritEnvironments": [ "linux-x64" ]
+      "inheritEnvironments": [ "linux_x64" ]
     },
     {
       "name": "Linux-Release",
@@ -55,22 +53,20 @@
       "remoteMachineName": "${defaultRemoteMachineName}",
       "configurationType": "RelWithDebInfo",
       "remoteCMakeListsRoot": "/var/tmp/src/hevx/${name}",
-      "cmakeExecutable": "/usr/bin/cmake",
+      "cmakeExecutable": "/usr/bin/cmake3",
       "buildRoot": "${env.LOCALAPPDATA}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.LOCALAPPDATA}\\CMakeBuilds\\hevx\\install\\${name}",
       "remoteBuildRoot": "/var/tmp/build/hevx/build/${name}",
       "remoteInstallRoot": "/var/tmp/build/hevx/install/${name}",
       "remoteCopySources": true,
-      "remoteCopySourcesOutputVerbosity": "Normal",
-      "remoteCopySourcesConcurrentCopies": "10",
       "remoteCopySourcesMethod": "rsync",
       "remoteCopySourcesExclusionList": [".vs", ".git"],
       "rsyncCommandArgs" : "-t --delete --delete-excluded",
       "remoteCopyBuildOutput" : false,
-      "cmakeCommandArgs": "-DPYTHON_EXECUTABLE=/usr/bin/python3 -DBUILD_TESTING=OFF",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DPYTHON_EXECUTABLE=/usr/bin/python3",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
-      "inheritEnvironments": [ "linux-x64" ]
+      "inheritEnvironments": [ "linux_x64" ]
     }
   ]
 }

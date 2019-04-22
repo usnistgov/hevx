@@ -5,7 +5,6 @@ message(STATUS "Populating expected")
 FetchContent_Populate(expected
   GIT_REPOSITORY https://github.com/TartanLlama/expected
   GIT_SHALLOW TRUE # Expected "should be" stable at HEAD
-  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   PATCH_COMMAND
     ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/ExpectedPatch.cmake
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/expected

@@ -620,9 +620,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   absl::InlinedVector<gsl::czstring<>, 1> layerNames;
-  if ((options & Options::kUseValidationLayers) ==
-      Options::kUseValidationLayers) {
-    layerNames.push_back("VK_LAYER_LUNARG_standard_validation");
+  if ((options & Options::kEnableValidation) ==
+      Options::kEnableValidation) {
+    layerNames.push_back("VK_LAYER_KHRONOS_validation");
   }
 
   // These are the extensions that we require from the instance.
@@ -1608,7 +1608,7 @@ void iris::Renderer::EndFrame(VkImageView view,
                          make_error_code(result).message());
     }
 
-    // FIXME: move this
+    // TODO: move this
     glm::mat4 const viewMatrix = glm::lookAt(
       glm::vec3(1.f, 1.f, -1.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
 

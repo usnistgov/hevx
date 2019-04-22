@@ -27,9 +27,6 @@ endif()
 CMAKE_DEPENDENT_OPTION(BUILD_DEPENDENCY_TESTING "Build tests in dependencies"
   ON "BUILD_TESTING" OFF)
 
-option(THIRD_PARTY_UPDATE_DISCONNECTED
-  "Disable updating third-party repositories" OFF)
-
 ##
 # HEVx configuration
 ##
@@ -41,6 +38,11 @@ include(GNUInstallDirs)
 ##
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(Git REQUIRED)
+
+##
+# Required libraries
+##
+add_subdirectory(third_party)
 
 ##
 # HEV Documentation
@@ -55,11 +57,6 @@ endif()
 if(BUILD_TESTING)
   enable_testing()
 endif()
-
-##
-# Required libraries
-##
-add_subdirectory(third_party)
 
 ##
 # HEV components

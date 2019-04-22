@@ -2,7 +2,6 @@ message(STATUS "Populating stb")
 FetchContent_Populate(stb
   GIT_REPOSITORY https://github.com/nothings/stb
   GIT_SHALLOW TRUE # stb HEAD "should be" stable
-  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/stb
   QUIET
 )

@@ -71,7 +71,7 @@ Rendering initialization options.
 */
 enum class Options {
   kReportDebugMessages = (1 << 0), //<! Report API debug messages.
-  kUseValidationLayers = (1 << 1), //<! Use API validation layers.
+  kEnableValidation = (1 << 1),    //<! Enable API validation.
 };
 
 /*!

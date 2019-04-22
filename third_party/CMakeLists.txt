@@ -7,7 +7,6 @@ include(Vulkan.cmake)
 
 # These packages can be included in any order
 include(Abseil.cmake)
-include(Cpprestsdk.cmake)
 include(Expected.cmake)
 include(Flags.cmake)
 include(FlextGL.cmake)
@@ -21,5 +20,9 @@ include(Spdlog.cmake)
 include(STB.cmake)
 include(TBB.cmake)
 include(VulkanMemoryAllocator.cmake)
+include(Websocketpp.cmake)
+
+# These packages must be included last
+include(Cpprestsdk.cmake)
 
 add_subdirectory(mikktspace)

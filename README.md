@@ -21,7 +21,6 @@ Build Requirements
 - X11 XCB development libraries
 - Boost development libraries
 - Vulkan SDK
-- cpprestsdk (Windows only)
 
 ### Vulkan SDK ###
 Ensure the VULKAN_SDK environment variable is set before building HEVx.

@@ -6,7 +6,6 @@ message(STATUS "Populating glm")
 FetchContent_Populate(glm
   GIT_REPOSITORY https://github.com/g-truc/glm
   GIT_SHALLOW TRUE GIT_TAG ${_glm_git_tag}
-  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/glm
   QUIET
 )

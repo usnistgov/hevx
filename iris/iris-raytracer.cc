@@ -537,7 +537,7 @@ int main(int argc, char** argv) {
   if (auto result = iris::Renderer::Initialize(
                       "iris-raytracer",
                       iris::Renderer::Options::kReportDebugMessages |
-                        iris::Renderer::Options::kUseValidationLayers,
+                        iris::Renderer::Options::kEnableValidation,
                       {console_sink, file_sink}, 0)
                       .and_then(AcquireCommandQueue)
                       .and_then(CreateDescriptor)
