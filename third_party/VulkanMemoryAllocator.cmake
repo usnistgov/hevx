@@ -4,6 +4,7 @@ message(STATUS "Populating build dependency: VulkanMemoryAllocator")
 FetchContent_Populate(VulkanMemoryAllocator
   GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
   GIT_SHALLOW TRUE GIT_TAG ${_vulkanmemoryallocator_git_tag}
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

@@ -9,6 +9,7 @@ FetchContent_Populate(cpprestsdk
   GIT_REPOSITORY https://github.com/Microsoft/cpprestsdk
   GIT_SHALLOW TRUE GIT_TAG ${_cpprestsdk_git_tag}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpprestsdk
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

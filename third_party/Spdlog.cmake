@@ -9,6 +9,7 @@ FetchContent_Populate(spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog
   GIT_SHALLOW TRUE GIT_TAG ${_spdlog_git_tag}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/spdlog
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

@@ -3,6 +3,7 @@ FetchContent_Populate(imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui
   GIT_SHALLOW TRUE # imgui "should" be stable at head
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/imgui
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

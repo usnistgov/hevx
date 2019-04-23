@@ -6,6 +6,7 @@ FetchContent_Populate(abseil
   GIT_REPOSITORY https://github.com/abseil/abseil-cpp
   GIT_SHALLOW TRUE # Abseil adheres to live-at-head
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/abseil
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

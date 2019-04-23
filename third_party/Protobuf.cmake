@@ -11,6 +11,7 @@ FetchContent_Populate(protobuf
   GIT_SHALLOW TRUE GIT_TAG ${_protobuf_git_tag}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/protobuf
   SOURCE_SUBDIR cmake
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 

@@ -7,6 +7,7 @@ FetchContent_Populate(websocketpp
   GIT_REPOSITORY https://github.com/zaphoyd/websocketpp
   GIT_SHALLOW TRUE GIT_TAG ${_websocketpp_git_tag}
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/websocketpp
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
   QUIET
 )
 
