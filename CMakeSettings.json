@@ -9,7 +9,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=OFF",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -22,7 +22,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=OFF",
+      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },

@@ -39,7 +39,11 @@ iris::Window::Window(Window&& other) noexcept
   , frameIndex(other.frameIndex)
   , imageAcquired(other.imageAcquired)
   , uiContext(std::move(other.uiContext))
-  , uiRenderable(std::move(other.uiRenderable))
+  , uiFontTexture(std::move(other.uiFontTexture))
+  , uiFontTextureView(other.uiFontTextureView)
+  , uiFontTextureSampler(other.uiFontTextureSampler)
+  , uiVertexBuffer(std::move(other.uiVertexBuffer))
+  , uiIndexBuffer(std::move(other.uiIndexBuffer))
   , lastMousePos(std::move(other.lastMousePos))
   , projectionMatrix(std::move(other.projectionMatrix))
   , projectionMatrixInverse(std::move(other.projectionMatrixInverse)) {
@@ -228,9 +232,6 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   int width, height, bytesPerPixel;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytesPerPixel);
 
-  Image fontTexture;
-  VkImageView fontTextureView;
-
   if (auto img =
         CreateImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
                     VK_FORMAT_R8G8B8A8_UNORM,
@@ -239,28 +240,26 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                     VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
                     gsl::not_null(reinterpret_cast<std::byte*>(pixels)),
                     gsl::narrow_cast<std::uint32_t>(bytesPerPixel))) {
-    fontTexture = std::move(*img);
+    window.uiFontTexture = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(img.error());
   }
 
-  if (auto view = CreateImageView(fontTexture, VK_IMAGE_VIEW_TYPE_2D,
+  if (auto view = CreateImageView(window.uiFontTexture, VK_IMAGE_VIEW_TYPE_2D,
                                   VK_FORMAT_R8G8B8A8_UNORM,
                                   {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    fontTextureView = std::move(*view);
+    window.uiFontTextureView = std::move(*view);
   } else {
     IRIS_LOG_LEAVE();
-    vmaDestroyImage(sAllocator, fontTexture.image, fontTexture.allocation);
+    DestroyImage(window.uiFontTexture);
     return tl::unexpected(view.error());
   }
 
-  NameObject(
-    VK_OBJECT_TYPE_IMAGE, fontTexture.image,
-    fmt::format("{}.uiRenderable.textures[0] (fontTexture)", title).c_str());
-  NameObject(
-    VK_OBJECT_TYPE_IMAGE_VIEW, fontTextureView,
-    fmt::format("{}.uiRenderable.views[0] (fontTextureView)", title).c_str());
+  NameObject(VK_OBJECT_TYPE_IMAGE, window.uiFontTexture.image,
+             fmt::format("{}.uiFontTexture", title).c_str());
+  NameObject(VK_OBJECT_TYPE_IMAGE_VIEW, window.uiFontTextureView,
+             fmt::format("{}.uiFontTextureView", title).c_str());
 
   VkSamplerCreateInfo samplerCI = {};
   samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -280,25 +279,18 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   samplerCI.unnormalizedCoordinates = VK_FALSE;
 
-  VkSampler fontTextureSampler;
-  if (auto result =
-        vkCreateSampler(sDevice, &samplerCI, nullptr, &fontTextureSampler);
+  if (auto result = vkCreateSampler(sDevice, &samplerCI, nullptr,
+                                    &window.uiFontTextureSampler);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    vkDestroyImageView(sDevice, fontTextureView, nullptr);
-    DestroyImage(fontTexture);
+    vkDestroyImageView(sDevice, window.uiFontTextureView, nullptr);
+    DestroyImage(window.uiFontTexture);
     return tl::unexpected(
       std::system_error(make_error_code(result), "Cannot create sampler"));
   }
 
-  NameObject(
-    VK_OBJECT_TYPE_SAMPLER, fontTextureSampler,
-    fmt::format("{}.uiRenderable.samplers[0] (fontTextureSampler)", title)
-      .c_str());
-
-  window.uiRenderable.textures.push_back(std::move(fontTexture));
-  window.uiRenderable.textureViews.push_back(fontTextureView);
-  window.uiRenderable.textureSamplers.push_back(fontTextureSampler);
+  NameObject(VK_OBJECT_TYPE_SAMPLER, window.uiFontTextureSampler,
+             fmt::format("{}.uiFontTextureSampler", title).c_str());
 
   io.KeyMap[ImGuiKey_Tab] = static_cast<int>(wsi::Keys::kTab);
   io.KeyMap[ImGuiKey_LeftArrow] = static_cast<int>(wsi::Keys::kLeft);

@@ -16,8 +16,8 @@
 #if PLATFORM_COMPILER_MSVC
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
-#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#pragma warning(disable : ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
 #include "absl/container/fixed_array.h"
@@ -103,7 +103,12 @@ struct Window {
 
   std::unique_ptr<ImGuiContext, decltype(&ImGui::DestroyContext)> uiContext{
     nullptr, ImGui::DestroyContext};
-  Renderer::Component::Renderable uiRenderable{};
+  Image uiFontTexture{};
+  VkImageView uiFontTextureView{VK_NULL_HANDLE};
+  VkSampler uiFontTextureSampler{VK_NULL_HANDLE};
+  Buffer uiVertexBuffer{};
+  Buffer uiIndexBuffer{};
+
   glm::vec2 lastMousePos{0.f, 0.f};
 
   glm::mat4 projectionMatrix{1.f};

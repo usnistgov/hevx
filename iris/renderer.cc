@@ -438,31 +438,33 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   return commandBuffer;
 } // RenderRenderable
 
-static void UpdateUIRenderable(Component::Renderable& renderable,
-                               ImDrawData* drawData,
-                               std::string const& title) noexcept {
+static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
+  ImGui::Render();
+  ImDrawData* drawData = ImGui::GetDrawData();
+  if (!drawData || drawData->TotalVtxCount == 0) return;
+
   if (auto vb = ReallocateBuffer(
-        renderable.vertexBuffer, drawData->TotalVtxCount * sizeof(ImDrawVert),
+        window.uiVertexBuffer, drawData->TotalVtxCount * sizeof(ImDrawVert),
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    renderable.vertexBuffer = std::move(*vb);
-    NameObject(VK_OBJECT_TYPE_BUFFER, renderable.vertexBuffer.buffer,
-               (title + "::uiRenderable.vertexBuffer").c_str());
+    window.uiVertexBuffer = std::move(*vb);
+    NameObject(VK_OBJECT_TYPE_BUFFER, window.uiVertexBuffer.buffer,
+               (window.title + "::uiVertexBuffer").c_str());
   } else {
     GetLogger()->warn(
-      "Unable to create/resize ui vertex buffer for window {}: {}", title,
-      vb.error().what());
+      "Unable to create/resize ui vertex buffer for window {}: {}",
+      window.title, vb.error().what());
     return;
   }
 
   if (auto ib = ReallocateBuffer(
-        renderable.indexBuffer, drawData->TotalIdxCount * sizeof(ImDrawIdx),
+        window.uiIndexBuffer, drawData->TotalIdxCount * sizeof(ImDrawIdx),
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    renderable.indexBuffer = std::move(*ib);
-    NameObject(VK_OBJECT_TYPE_BUFFER, renderable.indexBuffer.buffer,
-               (title + "::uiRenderable.indexBuffer").c_str());
+    window.uiIndexBuffer = std::move(*ib);
+    NameObject(VK_OBJECT_TYPE_BUFFER, window.uiIndexBuffer.buffer,
+               (window.title + "::uiIndexBuffer").c_str());
   } else {
     GetLogger()->warn(
-      "Unable to create/resize ui index buffer for window {}: {}", title,
+      "Unable to create/resize ui index buffer for window {}: {}", window.title,
       ib.error().what());
     return;
   }
@@ -470,19 +472,19 @@ static void UpdateUIRenderable(Component::Renderable& renderable,
   ImDrawVert* pVertices;
   ImDrawIdx* pIndices;
 
-  if (auto ptr = renderable.vertexBuffer.Map<ImDrawVert*>()) {
+  if (auto ptr = window.uiVertexBuffer.Map<ImDrawVert*>()) {
     pVertices = std::move(*ptr);
   } else {
-    GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}", title,
-                      ptr.error().what());
+    GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}",
+                      window.title, ptr.error().what());
     return;
   }
 
-  if (auto ptr = renderable.indexBuffer.Map<ImDrawIdx*>()) {
+  if (auto ptr = window.uiIndexBuffer.Map<ImDrawIdx*>()) {
     pIndices = std::move(*ptr);
   } else {
-    GetLogger()->warn("Unable to map ui index buffer for window {}: {}", title,
-                      ptr.error().what());
+    GetLogger()->warn("Unable to map ui index buffer for window {}: {}",
+                      window.title, ptr.error().what());
     return;
   }
 
@@ -496,9 +498,97 @@ static void UpdateUIRenderable(Component::Renderable& renderable,
     pIndices += cmdList->IdxBuffer.Size;
   }
 
-  renderable.vertexBuffer.Unmap();
-  renderable.indexBuffer.Unmap();
-} // UpdateUIRenderable
+  window.uiVertexBuffer.Unmap();
+  window.uiIndexBuffer.Unmap();
+
+  VkDescriptorImageInfo uiSamplerInfo = {};
+  uiSamplerInfo.sampler = window.uiFontTextureSampler;
+
+  VkDescriptorImageInfo uiTextureInfo = {};
+  uiTextureInfo.imageView = window.uiFontTextureView;
+  uiTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  absl::FixedArray<VkWriteDescriptorSet> uiWriteDescriptorSets(2);
+  uiWriteDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                              nullptr,
+                              sUIDescriptorSet,
+                              0,
+                              0,
+                              1,
+                              VK_DESCRIPTOR_TYPE_SAMPLER,
+                              &uiSamplerInfo,
+                              nullptr,
+                              nullptr};
+  uiWriteDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                              nullptr,
+                              sUIDescriptorSet,
+                              1,
+                              0,
+                              1,
+                              VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                              &uiTextureInfo,
+                              nullptr,
+                              nullptr};
+
+  vkUpdateDescriptorSets(
+    sDevice, gsl::narrow_cast<std::uint32_t>(uiWriteDescriptorSets.size()),
+    uiWriteDescriptorSets.data(), 0, nullptr);
+
+  glm::vec2 const displaySize = drawData->DisplaySize;
+  glm::vec2 const displayPos = drawData->DisplayPos;
+
+  VkViewport viewport = {0.f, 0.f, displaySize.x, displaySize.y, 0.f, 1.f};
+
+  absl::FixedArray<glm::vec2> uiPushConstants(2);
+  uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
+  uiPushConstants[1] = glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
+
+  for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount; ++j) {
+    ImDrawList* cmdList = drawData->CmdLists[j];
+
+    for (int k = 0; k < cmdList->CmdBuffer.size(); ++k) {
+      ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[k];
+
+      VkRect2D scissor;
+      scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
+                           ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
+                           : 0;
+      scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
+                           ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
+                           : 0;
+      scissor.extent.width =
+        (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+      scissor.extent.height =
+        (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
+      // TODO: why + 1 above?
+
+      Component::Renderable renderable;
+      renderable.pipeline = sUIPipeline;
+      renderable.descriptorSetLayout = sUIDescriptorSetLayout;
+      renderable.descriptorSet = sUIDescriptorSet;
+      renderable.textures.push_back(window.uiFontTexture);
+      renderable.textureViews.push_back(window.uiFontTextureView);
+      renderable.textureSamplers.push_back(window.uiFontTextureSampler);
+      renderable.vertexBuffer = window.uiVertexBuffer;
+      renderable.indexBuffer = window.uiIndexBuffer;
+      renderable.indexType = VK_INDEX_TYPE_UINT16;
+      renderable.numIndices = drawCmd->ElemCount;
+      renderable.firstIndex = idOff;
+      renderable.firstVertex = vtOff;
+
+      VkCommandBuffer cb =
+        RenderRenderable(renderable, &viewport, &scissor,
+                         gsl::make_span<std::byte>(
+                           reinterpret_cast<std::byte*>(uiPushConstants.data()),
+                           uiPushConstants.size() * sizeof(glm::vec2)));
+      vkCmdExecuteCommands(commandBuffer, 1, &cb);
+
+      idOff += drawCmd->ElemCount;
+    }
+
+    vtOff += cmdList->VtxBuffer.Size;
+  }
+} // RenderUI
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -1700,103 +1790,7 @@ void iris::Renderer::EndFrame(VkImageView view,
                            secondaryCBs.data());
     }
 
-    if (window.showUI) {
-      ImGui::Render();
-      ImDrawData* drawData = ImGui::GetDrawData();
-
-      if (drawData && drawData->TotalVtxCount > 0) {
-        UpdateUIRenderable(window.uiRenderable, drawData, title);
-
-        // TODO: update uiRenderable uniform buffer
-
-        VkDescriptorImageInfo uiSamplerInfo = {};
-        uiSamplerInfo.sampler = window.uiRenderable.textureSamplers[0];
-
-        VkDescriptorImageInfo uiTextureInfo = {};
-        uiTextureInfo.imageView = window.uiRenderable.textureViews[0];
-        uiTextureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        absl::FixedArray<VkWriteDescriptorSet> uiWriteDescriptorSets(2);
-        uiWriteDescriptorSets[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                    nullptr,
-                                    sUIDescriptorSet,
-                                    0,
-                                    0,
-                                    1,
-                                    VK_DESCRIPTOR_TYPE_SAMPLER,
-                                    &uiSamplerInfo,
-                                    nullptr,
-                                    nullptr};
-        uiWriteDescriptorSets[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                    nullptr,
-                                    sUIDescriptorSet,
-                                    1,
-                                    0,
-                                    1,
-                                    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                    &uiTextureInfo,
-                                    nullptr,
-                                    nullptr};
-
-        vkUpdateDescriptorSets(
-          sDevice,
-          gsl::narrow_cast<std::uint32_t>(uiWriteDescriptorSets.size()),
-          uiWriteDescriptorSets.data(), 0, nullptr);
-
-        glm::vec2 const displaySize = drawData->DisplaySize;
-        glm::vec2 const displayPos = drawData->DisplayPos;
-
-        VkViewport viewport = {0.f,           0.f, displaySize.x,
-                               displaySize.y, 0.f, 1.f};
-
-        absl::FixedArray<glm::vec2> uiPushConstants(2);
-        uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
-        uiPushConstants[1] =
-          glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
-
-        for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount;
-             ++j) {
-          ImDrawList* cmdList = drawData->CmdLists[j];
-
-          for (int k = 0; k < cmdList->CmdBuffer.size(); ++k) {
-            ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[k];
-
-            VkRect2D scissor;
-            scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
-                                 ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
-                                 : 0;
-            scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
-                                 ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
-                                 : 0;
-            scissor.extent.width =
-              (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
-            scissor.extent.height =
-              (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
-            // TODO: why + 1 above?
-
-            // TODO: this has to change: maybe not use Renderable for UI?
-            Component::Renderable renderable = window.uiRenderable;
-            renderable.pipeline = sUIPipeline;
-            renderable.descriptorSet = sUIDescriptorSet;
-            renderable.indexType = VK_INDEX_TYPE_UINT16;
-            renderable.numIndices = drawCmd->ElemCount;
-            renderable.firstIndex = idOff;
-            renderable.firstVertex = vtOff;
-
-            VkCommandBuffer commandBuffer = RenderRenderable(
-              renderable, &viewport, &scissor,
-              gsl::make_span<std::byte>(
-                reinterpret_cast<std::byte*>(uiPushConstants.data()),
-                uiPushConstants.size() * sizeof(glm::vec2)));
-            vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-
-            idOff += drawCmd->ElemCount;
-          }
-
-          vtOff += cmdList->VtxBuffer.Size;
-        }
-      }
-    }
+    if (window.showUI) RenderUI(frame.commandBuffer, window);
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);
