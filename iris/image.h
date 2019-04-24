@@ -24,6 +24,10 @@ namespace iris {
 struct Image {
   VkImage image{VK_NULL_HANDLE};
   VmaAllocation allocation{VK_NULL_HANDLE};
+
+  explicit operator bool() const noexcept {
+    return image != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE;
+  }
 }; // struct Image
 
 inline void SetImageLayout(VkCommandBuffer commandBuffer, Image image,

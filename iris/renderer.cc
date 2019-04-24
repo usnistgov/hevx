@@ -1873,8 +1873,82 @@ void iris::Renderer::EndFrame(
 
 iris::Renderer::RenderableID
 iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
-  return sRenderables.Insert(std::move(renderable));
+  IRIS_LOG_ENTER();
+  auto&& id = sRenderables.Insert(std::move(renderable));
+  IRIS_LOG_LEAVE();
+  return id;
 } // iris::Renderer::AddRenderable
+
+tl::expected<void, std::system_error>
+iris::Renderer::RemoveRenderable(RenderableID const& id) noexcept {
+  IRIS_LOG_ENTER();
+
+  class ReleaseTask : public tbb::task {
+  public:
+    ReleaseTask(Component::Renderable r) noexcept
+      : renderable_(std::move(r)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      if (renderable_.indexBuffer) DestroyBuffer(renderable_.indexBuffer);
+      if (renderable_.vertexBuffer) DestroyBuffer(renderable_.vertexBuffer);
+
+      for (auto&& buffer : renderable_.buffers) {
+        if (buffer) DestroyBuffer(buffer);
+      }
+
+      for (auto&& sampler : renderable_.textureSamplers) {
+        if (sampler != VK_NULL_HANDLE) {
+          vkDestroySampler(sDevice, sampler, nullptr);
+        }
+      }
+
+      for (auto&& view : renderable_.textureViews) {
+        if (view != VK_NULL_HANDLE) {
+          vkDestroyImageView(sDevice, view, nullptr);
+        }
+      }
+
+      for (auto&& image : renderable_.textures) {
+        if (image) DestroyImage(image);
+      }
+
+      if (renderable_.descriptorSet != VK_NULL_HANDLE) {
+        vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
+                             &renderable_.descriptorSet);
+      }
+
+      if (renderable_.descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(sDevice, renderable_.descriptorSetLayout,
+                                     nullptr);
+      }
+
+      if (renderable_.pipeline) DestroyPipeline(renderable_.pipeline);
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
+  private:
+    Component::Renderable renderable_;
+  }; // struct IOTask
+
+  if (auto old = sRenderables.Remove(id)) {
+    try {
+      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
+      tbb::task::enqueue(*task);
+    } catch (std::exception const& e) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(
+        std::system_error(make_error_code(Error::kEnqueueError),
+                          fmt::format("Enqueing release task: {}", e.what())));
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::RemoveRenderable
 
 tl::expected<iris::Renderer::CommandQueue, std::system_error>
 iris::Renderer::AcquireCommandQueue(
@@ -2055,7 +2129,7 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(
-      make_error_code(Error::kFileLoadFailed),
+      make_error_code(Error::kEnqueueError),
       fmt::format("Enqueing IO task for {}: {}", path.string(), e.what())));
   }
 

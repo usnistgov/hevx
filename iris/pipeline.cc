@@ -117,8 +117,8 @@ iris::CreateRasterizationPipeline(
                                               1, &graphicsPipelineCI, nullptr,
                                               &pipeline.pipeline);
       result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
     vkDestroyPipelineLayout(Renderer::sDevice, pipeline.layout, nullptr);
+    IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(make_error_code(result),
                                             "Cannot create graphics pipeline"));
   }
@@ -210,6 +210,8 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
         vkCreateRayTracingPipelinesNV(Renderer::sDevice, VK_NULL_HANDLE, 1,
                                       &pipelineCI, nullptr, &pipeline.pipeline);
       result != VK_SUCCESS) {
+    vkDestroyPipelineLayout(Renderer::sDevice, pipeline.layout, nullptr);
+    IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(iris::make_error_code(result),
                                             "Cannot create pipeline"));
   }
@@ -221,3 +223,7 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
   return pipeline;
 } // iris::CreateRayTracingPipeline
 
+void iris::DestroyPipeline(Pipeline pipeline) noexcept {
+  vkDestroyPipeline(Renderer::sDevice, pipeline.pipeline, nullptr);
+  vkDestroyPipelineLayout(Renderer::sDevice, pipeline.layout, nullptr);
+} // iris::DestroyPipeline

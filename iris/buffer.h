@@ -33,6 +33,10 @@ struct Buffer {
   }
 
   void Unmap() noexcept;
+
+  explicit operator bool() const noexcept {
+    return buffer != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE;
+  }
 }; // struct Buffer
 
 template <>

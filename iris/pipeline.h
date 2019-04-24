@@ -26,6 +26,10 @@ namespace iris {
 struct Pipeline {
   VkPipelineLayout layout{VK_NULL_HANDLE};
   VkPipeline pipeline{VK_NULL_HANDLE};
+
+  explicit operator bool() const noexcept {
+    return layout != VK_NULL_HANDLE && pipeline != VK_NULL_HANDLE;
+  }
 }; // struct Pipeline
 
 tl::expected<Pipeline, std::system_error> CreateRasterizationPipeline(
@@ -49,6 +53,8 @@ tl::expected<Pipeline, std::system_error> CreateRayTracingPipeline(
   gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
   std::uint32_t maxRecursionDepth) noexcept;
+
+void DestroyPipeline(Pipeline pipeline) noexcept;
 
 } // namespace iris
 

@@ -25,6 +25,8 @@ namespace iris {
 struct Shader {
   VkShaderModule module{VK_NULL_HANDLE};
   VkShaderStageFlagBits stage{VK_SHADER_STAGE_ALL};
+
+  explicit operator bool() const noexcept { return module != VK_NULL_HANDLE; }
 }; // struct Shader
 
 struct ShaderGroup {

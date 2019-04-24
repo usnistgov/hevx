@@ -27,6 +27,7 @@ enum class Error {
   kShaderCompileFailed,   //!< Shader compilation failed.
   kNoCommandQueuesFree,   //!< All command queues are in use.
   kTimeout,               //!< A timeout occured.
+  kEnqueueError,          //!< Enqueing a task failed.
   kNotImplemented,        //!< Not implemented
 };
 
@@ -36,9 +37,7 @@ public:
   virtual ~ErrorCategory() noexcept {}
 
   //! \brief Get the name of this category.
-  virtual const char* name() const noexcept override {
-    return "iris::Error";
-  }
+  virtual const char* name() const noexcept override { return "iris::Error"; }
 
   //! \brief Convert an int representing an Error into a std::string.
   virtual std::string message(int code) const override {
@@ -58,6 +57,7 @@ public:
     case Error::kShaderCompileFailed: return "shader compile failed"s;
     case Error::kNoCommandQueuesFree: return "no command queues free"s;
     case Error::kTimeout: return "timed out"s;
+    case Error::kEnqueueError: return "enqueue error"s;
     case Error::kNotImplemented: return "not implemented";
     }
     return "unknown"s;
@@ -91,4 +91,3 @@ struct is_error_code_enum<iris::Error> : public true_type {};
 } // namespace std
 
 #endif // HEV_IRIS_ERROR_H_
-

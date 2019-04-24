@@ -30,6 +30,10 @@ struct AccelerationStructure {
   VmaAllocation allocation{VK_NULL_HANDLE};
   std::uint64_t handle{UINT64_MAX};
   VkAccelerationStructureInfoNV info{};
+
+  explicit operator bool() const noexcept {
+    return structure != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE;
+  }
 }; // struct AccelerationStructure
 
 struct GeometryInstance {

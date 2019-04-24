@@ -177,10 +177,18 @@ private:
 \brief Add a \ref Component::Renderable for rendering each frame.
 
 \param[in] renderable the Component::Renderable to add.
-\return the RenderableID of the added renderable.
+\return the \ref RenderableID of the added renderable.
 */
 RenderableID
 AddRenderable(Component::Renderable renderable) noexcept;
+
+/*!
+\brief Remove a \ref Component::Renderable by its \ref RenderableID.
+
+\param[in] id the RenderableID to remove.
+*/
+tl::expected<void, std::system_error>
+RemoveRenderable(RenderableID const& id) noexcept;
 
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};
