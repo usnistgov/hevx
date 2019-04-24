@@ -196,11 +196,3 @@ endif()
 
 add_executable(iris-raytracer WIN32 iris-raytracer.cc)
 target_link_libraries(iris-raytracer iris absl::failure_signal_handler)
-if(WIN32)
-  file(GLOB tbb_dlls ${TBB_BINARY_DIR}/*.dll)
-  foreach(dll ${tbb_dlls})
-    add_custom_command(TARGET iris-raytracer POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy ${dll} $<TARGET_FILE_DIR:iris-raytracer>)
-  endforeach()
-  unset(tbb_dlls)
-endif()

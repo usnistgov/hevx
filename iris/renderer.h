@@ -13,12 +13,11 @@
 #if PLATFORM_COMPILER_MSVC
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
-#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#pragma warning(disable : ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
 #include "expected.hpp"
-#include <filesystem>
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
 #include "spdlog/sinks/sink.h"
@@ -26,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <string>
 #include <system_error>
 #include <type_traits>
@@ -148,12 +148,37 @@ executed into the primary command buffer for each \ref Window.
 void EndFrame(VkImageView view = VK_NULL_HANDLE,
               gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
+struct RenderableID {
+public:
+  using id_type = std::uint32_t;
+
+  constexpr RenderableID() noexcept = default;
+  constexpr RenderableID(id_type id) noexcept
+    : id_(std::move(id)) {}
+
+  id_type& operator()() noexcept { return id_; }
+  id_type const& operator()() const noexcept { return id_; }
+
+  friend bool operator==(RenderableID const& lhs,
+                         RenderableID const& rhs) noexcept {
+    return lhs.id_ == rhs.id_;
+  }
+
+  friend bool operator<(RenderableID const& lhs,
+                        RenderableID const& rhs) noexcept {
+    return lhs.id_ < rhs.id_;
+  }
+
+private:
+  id_type id_{UINT32_MAX};
+}; // struct RenderableID
+
 /*!
 \brief Add a \ref Component::Renderable for rendering each frame.
 
 \param[in] renderable the Component::Renderable to add
 */
-void AddRenderable(Component::Renderable renderable) noexcept;
+RenderableID AddRenderable(Component::Renderable renderable) noexcept;
 
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};
@@ -270,5 +295,14 @@ inline Features operator&=(Features& lhs, Features const& rhs) noexcept {
 } // namespace Renderer
 
 } // namespace iris
+
+namespace std {
+template <>
+struct hash<iris::Renderer::RenderableID> {
+  std::size_t operator()(iris::Renderer::RenderableID const& v) const noexcept {
+    return std::hash<iris::Renderer::RenderableID::id_type>{}(v());
+  }
+};
+} // namespace std
 
 #endif // HEV_IRIS_RENDERER_H_
