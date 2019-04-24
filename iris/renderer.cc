@@ -8,6 +8,8 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/quaternion.hpp"
+#include "glm/gtx/quaternion.hpp"
 #include "renderer.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -1680,8 +1682,19 @@ void iris::Renderer::EndFrame(
       // update the camera
     }
 
-    glm::mat4 const viewMatrix = glm::lookAt(
-      glm::vec3(1.f, 1.f, -1.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
+    // clang-format off
+    glm::mat4 const worldMatrix(
+         1.1547f, 0.f,     0.f,     0.f,
+         0.f,     1.1547f, 0.f,     0.f, 
+         0.f,     0.f,     1.1547f, 0.f,
+         0.f,     2.f,     0.f,     1.f
+    );
+    // clang-format on
+
+    glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
+    glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
+    glm::mat4 const viewMatrix =
+      glm::lookAt(glm::vec3(0.f, 0.f, 0.f), center, up);
 
     ImGui::EndFrame();
 
@@ -1785,8 +1798,8 @@ void iris::Renderer::EndFrame(
     { // this block locks sRenderables so that we can iterate over them safely
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
-        pushConstants.ModelMatrix = renderable.modelMatrix;
-        pushConstants.ModelViewMatrix = viewMatrix * renderable.modelMatrix;
+        pushConstants.ModelMatrix = worldMatrix * renderable.modelMatrix;
+        pushConstants.ModelViewMatrix = viewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
 

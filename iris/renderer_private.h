@@ -57,7 +57,7 @@ void NameObject(VkObjectType objectType [[maybe_unused]],
                 T objectHandle [[maybe_unused]],
                 gsl::czstring<> objectName [[maybe_unused]]) noexcept {
   Expects(sDevice != VK_NULL_HANDLE);
-#if 0 // doesn't work with 1.1.101 validation layers??
+#if 0 // this doesn't work outside the debugger?
   VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
     VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, nullptr, objectType,
     reinterpret_cast<std::uint64_t>(objectHandle), objectName};

@@ -644,8 +644,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   }
 
   glm::mat4 const newProjectionMatrix =
-    glm::perspectiveFov(60.f, static_cast<float>(newExtent.width),
-                        static_cast<float>(newExtent.height), .001f, 1000.f);
+    glm::perspectiveFov(glm::radians(60.f), static_cast<float>(newExtent.width),
+                        static_cast<float>(newExtent.height), .01f, 1000.f);
 
   if (window.swapchain != VK_NULL_HANDLE) {
     GetLogger()->trace("ResizeWindow: releasing old resources");

@@ -6,8 +6,8 @@
         "is_stereo": false,
         "x": 320,
         "y": 320,
-        "width": 1000,
-        "height": 1000,
+        "width": 720,
+        "height": 720,
         "show_system_decoration": true,
         "background_color": {
           "r": 0.25,
