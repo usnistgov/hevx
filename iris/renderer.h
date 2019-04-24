@@ -176,9 +176,11 @@ private:
 /*!
 \brief Add a \ref Component::Renderable for rendering each frame.
 
-\param[in] renderable the Component::Renderable to add
+\param[in] renderable the Component::Renderable to add.
+\return the RenderableID of the added renderable.
 */
-RenderableID AddRenderable(Component::Renderable renderable) noexcept;
+RenderableID
+AddRenderable(Component::Renderable renderable) noexcept;
 
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};

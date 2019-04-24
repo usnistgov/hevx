@@ -141,6 +141,17 @@ struct Renderables {
     return RenderableID(newID);
   }
 
+  std::optional<Component::Renderable> Remove(RenderableID const& id) {
+    std::lock_guard<decltype(mutex)> lck(mutex);
+    if (auto pos = renderables.find(id); pos == renderables.end()) {
+      return {};
+    } else {
+      auto old = pos->second;
+      renderables.erase(pos);
+      return old;
+    }
+  }
+
   std::mutex mutex{};
   RenderableID::id_type nextID{0};
   absl::flat_hash_map<RenderableID, Component::Renderable> renderables;
@@ -1898,186 +1909,187 @@ iris::Renderer::AcquireCommandQueue(
 
 tl::expected<void, std::system_error> iris::Renderer::ReleaseCommandQueue(
   CommandQueue& queue, std::chrono::milliseconds timeout) noexcept {
-    IRIS_LOG_ENTER();
-    std::unique_lock<std::timed_mutex> lock(sCommandQueueMutex, timeout);
-    if (!lock) return tl::unexpected(std::system_error(Error::kTimeout));
+  IRIS_LOG_ENTER();
+  std::unique_lock<std::timed_mutex> lock(sCommandQueueMutex, timeout);
+  if (!lock) return tl::unexpected(std::system_error(Error::kTimeout));
 
-    if (queue.id == sCommandQueues.size() - 1) {
-      queue.id = UINT32_MAX;
-      queue.queueFamilyIndex = UINT32_MAX;
-      queue.queue = VK_NULL_HANDLE;
-      queue.commandPool = VK_NULL_HANDLE;
-      queue.submitFence = VK_NULL_HANDLE;
-      sCommandQueueHead--;
-    } else {
-      GetLogger()->critical("not implemented");
-      std::abort();
-    }
+  if (queue.id == sCommandQueues.size() - 1) {
+    queue.id = UINT32_MAX;
+    queue.queueFamilyIndex = UINT32_MAX;
+    queue.queue = VK_NULL_HANDLE;
+    queue.commandPool = VK_NULL_HANDLE;
+    queue.submitFence = VK_NULL_HANDLE;
+    sCommandQueueHead--;
+  } else {
+    GetLogger()->critical("not implemented");
+    std::abort();
+  }
 
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::ReleaseCommandQueue
+
+tl::expected<VkCommandBuffer, std::system_error>
+iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = commandPool;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return {};
-  } // iris::Renderer::ReleaseCommandQueue
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate command buffer"));
+  }
 
-  tl::expected<VkCommandBuffer, std::system_error>
-  iris::Renderer::BeginOneTimeSubmit(VkCommandPool commandPool) noexcept {
-    IRIS_LOG_ENTER();
-    Expects(sDevice != VK_NULL_HANDLE);
-    Expects(commandPool != VK_NULL_HANDLE);
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    VkCommandBufferAllocateInfo commandBufferAI = {};
-    commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAI.commandPool = commandPool;
-    commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAI.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    if (auto result =
-          vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
-        result != VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot allocate command buffer"));
-    }
-
-    VkCommandBufferBeginInfo commandBufferBI = {};
-    commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-        result != VK_SUCCESS) {
-      vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot begin command buffer"));
-    }
-
-    IRIS_LOG_LEAVE();
-    return commandBuffer;
-  } // iris::Renderer::BeginOneTimeSubmit
-
-  tl::expected<void, std::system_error> iris::Renderer::EndOneTimeSubmit(
-    VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue,
-    VkFence fence) noexcept {
-    IRIS_LOG_ENTER();
-    Expects(sDevice != VK_NULL_HANDLE);
-    Expects(commandBuffer != VK_NULL_HANDLE);
-    Expects(commandPool != VK_NULL_HANDLE);
-    Expects(queue != VK_NULL_HANDLE);
-    Expects(fence != VK_NULL_HANDLE);
-
-    VkSubmitInfo submitI = {};
-    submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitI.commandBufferCount = 1;
-    submitI.pCommandBuffers = &commandBuffer;
-
-    if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
-      vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot end command buffer"));
-    }
-
-    if (auto result = vkQueueSubmit(queue, 1, &submitI, fence);
-        result != VK_SUCCESS) {
-      vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot submit command buffer"));
-    }
-
-    if (auto result = vkWaitForFences(sDevice, 1, &fence, VK_TRUE, UINT64_MAX);
-        result != VK_SUCCESS) {
-      vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot wait on one-time submit fence"));
-    }
-
-    if (auto result = vkResetFences(sDevice, 1, &fence); result != VK_SUCCESS) {
-      vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot reset one-time submit fence"));
-    }
-
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
     vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
     IRIS_LOG_LEAVE();
-    return {};
-  } // iris::Renderer::EndOneTimeSubmit
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot begin command buffer"));
+  }
 
-  tl::expected<void, std::system_error> iris::Renderer::LoadFile(
-    std::filesystem::path const& path) noexcept {
-    IRIS_LOG_ENTER();
+  IRIS_LOG_LEAVE();
+  return commandBuffer;
+} // iris::Renderer::BeginOneTimeSubmit
 
-    class IOTask : public tbb::task {
-    public:
-      IOTask(std::filesystem::path p) noexcept
-        : path_(std::move(p)) {}
+tl::expected<void, std::system_error>
+iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
+                                 VkCommandPool commandPool, VkQueue queue,
+                                 VkFence fence) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(sDevice != VK_NULL_HANDLE);
+  Expects(commandBuffer != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+  Expects(queue != VK_NULL_HANDLE);
+  Expects(fence != VK_NULL_HANDLE);
 
-      tbb::task* execute() override {
-        IRIS_LOG_ENTER();
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.commandBufferCount = 1;
+  submitI.pCommandBuffers = &commandBuffer;
 
-        GetLogger()->debug("Loading {}", path_.string());
-        auto const& ext = path_.extension();
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot end command buffer"));
+  }
 
-        if (ext.compare(".json") == 0) {
-          sIOContinuations.push(io::LoadJSON(path_));
-        } else if (ext.compare(".gltf") == 0) {
-          sIOContinuations.push(io::LoadGLTF(path_));
-        } else {
-          GetLogger()->error("Unhandled file extension '{}' for {}",
-                             ext.string(), path_.string());
-        }
+  if (auto result = vkQueueSubmit(queue, 1, &submitI, fence);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot submit command buffer"));
+  }
 
-        IRIS_LOG_LEAVE();
-        return nullptr;
+  if (auto result = vkWaitForFences(sDevice, 1, &fence, VK_TRUE, UINT64_MAX);
+      result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot wait on one-time submit fence"));
+  }
+
+  if (auto result = vkResetFences(sDevice, 1, &fence); result != VK_SUCCESS) {
+    vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot reset one-time submit fence"));
+  }
+
+  vkFreeCommandBuffers(sDevice, commandPool, 1, &commandBuffer);
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::EndOneTimeSubmit
+
+tl::expected<void, std::system_error>
+iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
+  IRIS_LOG_ENTER();
+
+  class IOTask : public tbb::task {
+  public:
+    IOTask(std::filesystem::path p) noexcept
+      : path_(std::move(p)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      GetLogger()->debug("Loading {}", path_.string());
+      auto const& ext = path_.extension();
+
+      if (ext.compare(".json") == 0) {
+        sIOContinuations.push(io::LoadJSON(path_));
+      } else if (ext.compare(".gltf") == 0) {
+        sIOContinuations.push(io::LoadGLTF(path_));
+      } else {
+        GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
+                           path_.string());
       }
 
-    private:
-      std::filesystem::path path_;
-    }; // struct IOTask
-
-    try {
-      IOTask* task = new (tbb::task::allocate_root()) IOTask(path);
-      tbb::task::enqueue(*task);
-    } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(Error::kFileLoadFailed),
-        fmt::format("Enqueing IO task for {}: {}", path.string(), e.what())));
+      return nullptr;
     }
 
+  private:
+    std::filesystem::path path_;
+  }; // struct IOTask
+
+  try {
+    IOTask* task = new (tbb::task::allocate_root()) IOTask(path);
+    tbb::task::enqueue(*task);
+  } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
-    return {};
-  } // iris::Renderer::LoadFile
+    return tl::unexpected(std::system_error(
+      make_error_code(Error::kFileLoadFailed),
+      fmt::format("Enqueing IO task for {}: {}", path.string(), e.what())));
+  }
 
-  tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
-    iris::Control::Control const& controlMessage) noexcept {
-    IRIS_LOG_ENTER();
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::LoadFile
 
-    switch (controlMessage.type_case()) {
-    case iris::Control::Control::TypeCase::kDisplays:
-      for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
-        CreateEmplaceWindow(controlMessage.displays().windows(i));
-      }
-      break;
-    case iris::Control::Control::TypeCase::kWindow:
-      CreateEmplaceWindow(controlMessage.window());
-      break;
-    case iris::Control::Control::TypeCase::kShaderToy:
-      sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy()));
-      break;
-    default:
-      GetLogger()->error("Unsupported controlMessage message type {}",
-                         controlMessage.type_case());
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(
-        std::system_error(Error::kControlMessageInvalid,
-                          fmt::format("Unsupported controlMessage type {}",
-                                      controlMessage.type_case())));
-      break;
+tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
+  iris::Control::Control const& controlMessage) noexcept {
+  IRIS_LOG_ENTER();
+
+  switch (controlMessage.type_case()) {
+  case iris::Control::Control::TypeCase::kDisplays:
+    for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
+      CreateEmplaceWindow(controlMessage.displays().windows(i));
     }
-
+    break;
+  case iris::Control::Control::TypeCase::kWindow:
+    CreateEmplaceWindow(controlMessage.window());
+    break;
+  case iris::Control::Control::TypeCase::kShaderToy:
+    sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy()));
+    break;
+  default:
+    GetLogger()->error("Unsupported controlMessage message type {}",
+                       controlMessage.type_case());
     IRIS_LOG_LEAVE();
-    return {};
-  } // iris::Renderer::ProcessControlMessage
+    return tl::unexpected(
+      std::system_error(Error::kControlMessageInvalid,
+                        fmt::format("Unsupported controlMessage type {}",
+                                    controlMessage.type_case())));
+    break;
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::ProcessControlMessage
