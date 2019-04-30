@@ -161,6 +161,11 @@ struct Renderables {
 
 static Renderables sRenderables{};
 
+// TODO: move this
+static glm::vec2 sPrevMouseWheel(0.f, 0.f);
+static glm::vec3 sNavScale(1.f, 1.f, 1.f);
+static glm::mat4 sNavMatrix(1.f);
+
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
 
@@ -1671,16 +1676,38 @@ void iris::Renderer::EndFrame(
     // TODO: how to handle this at application scope?
     if (window.showUI) {
       ImGui::Begin("Status");
-      ImGui::Text("Last Frame %.3f ms", ImGui::GetIO().DeltaTime);
-      ImGui::Text("Average %.3f ms/frame (%.1f FPS)",
-                  1000.f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+      ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
+      ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
+                  io.Framerate);
+      ImGui::Text("MouseWheel: %.3f Previous: %.3f delta: %.3f", io.MouseWheel,
+                  sPrevMouseWheel.y, sPrevMouseWheel.y - io.MouseWheel);
+      ImGui::Text("nav scale: %.6f %.6f %.6f", sNavScale.x, sNavScale.y, sNavScale.z);
+      // clang-format off
+      ImGui::Text("nav: "
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
+        sNavMatrix[0][0], sNavMatrix[0][1], sNavMatrix[0][2], sNavMatrix[0][3],
+        sNavMatrix[1][0], sNavMatrix[1][1], sNavMatrix[1][2], sNavMatrix[1][3],
+        sNavMatrix[2][0], sNavMatrix[2][1], sNavMatrix[2][2], sNavMatrix[2][3],
+        sNavMatrix[3][0], sNavMatrix[3][1], sNavMatrix[3][2], sNavMatrix[3][3]);
+      // clang-format on
       ImGui::End();
     }
 
     // TODO: move this
     if (!io.WantCaptureMouse) {
-      // update the camera
+      if (sPrevMouseWheel.y != io.MouseWheel) {
+        if (sPrevMouseWheel.y - io.MouseWheel < 0) {
+          sNavScale *= glm::vec3(1.05f, 1.f, 1.05f);
+        } else {
+          sNavScale /= glm::vec3(1.05f, 1.f, 1.05f);
+        }
+
+        sNavMatrix = glm::scale(sNavMatrix, sNavScale);
+        sPrevMouseWheel = glm::vec2(io.MouseWheelH, io.MouseWheel);
+      }
     }
+
+    ImGui::EndFrame();
 
     // clang-format off
     glm::mat4 const worldMatrix(
@@ -1695,8 +1722,6 @@ void iris::Renderer::EndFrame(
     glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
     glm::mat4 const viewMatrix =
       glm::lookAt(glm::vec3(0.f, 0.f, 0.f), center, up);
-
-    ImGui::EndFrame();
 
     // currentFrame is still the previous frame, use that imageAvailable
     // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
@@ -1798,7 +1823,8 @@ void iris::Renderer::EndFrame(
     { // this block locks sRenderables so that we can iterate over them safely
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
-        pushConstants.ModelMatrix = worldMatrix * renderable.modelMatrix;
+        pushConstants.ModelMatrix =
+          sNavMatrix * worldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = viewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
@@ -2104,6 +2130,7 @@ iris::Renderer::EndOneTimeSubmit(VkCommandBuffer commandBuffer,
   return {};
 } // iris::Renderer::EndOneTimeSubmit
 
+// TODO: Would it be better to return a future instead of void?
 tl::expected<void, std::system_error>
 iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
