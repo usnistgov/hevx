@@ -65,11 +65,14 @@ iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
       oldBuffer.allocation != VK_NULL_HANDLE) {
     if (oldBuffer.size >= newSize) return oldBuffer;
 
+#if 0 // this doesn't seem to work right
     if (auto result = vmaResizeAllocation(Renderer::sAllocator,
                                           oldBuffer.allocation, newSize);
         result == VK_SUCCESS) {
+      oldBuffer.size = newSize;
       return oldBuffer;
     }
+#endif
   }
 
   Buffer newBuffer;

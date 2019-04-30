@@ -557,20 +557,18 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount; ++j) {
     ImDrawList* cmdList = drawData->CmdLists[j];
 
-    for (int k = 0; k < cmdList->CmdBuffer.size(); ++k) {
-      ImDrawCmd const* drawCmd = &cmdList->CmdBuffer[k];
-
+    for (auto&& drawCmd : cmdList->CmdBuffer) {
       VkRect2D scissor;
-      scissor.offset.x = (int32_t)(drawCmd->ClipRect.x - displayPos.x) > 0
-                           ? (int32_t)(drawCmd->ClipRect.x - displayPos.x)
+      scissor.offset.x = (int32_t)(drawCmd.ClipRect.x - displayPos.x) > 0
+                           ? (int32_t)(drawCmd.ClipRect.x - displayPos.x)
                            : 0;
-      scissor.offset.y = (int32_t)(drawCmd->ClipRect.y - displayPos.y) > 0
-                           ? (int32_t)(drawCmd->ClipRect.y - displayPos.y)
+      scissor.offset.y = (int32_t)(drawCmd.ClipRect.y - displayPos.y) > 0
+                           ? (int32_t)(drawCmd.ClipRect.y - displayPos.y)
                            : 0;
       scissor.extent.width =
-        (uint32_t)(drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+        (uint32_t)(drawCmd.ClipRect.z - drawCmd.ClipRect.x);
       scissor.extent.height =
-        (uint32_t)(drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
+        (uint32_t)(drawCmd.ClipRect.w - drawCmd.ClipRect.y + 1);
       // TODO: why + 1 above?
 
       Component::Renderable renderable;
@@ -583,7 +581,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
       renderable.vertexBuffer = window.uiVertexBuffer;
       renderable.indexBuffer = window.uiIndexBuffer;
       renderable.indexType = VK_INDEX_TYPE_UINT16;
-      renderable.numIndices = drawCmd->ElemCount;
+      renderable.numIndices = drawCmd.ElemCount;
       renderable.firstIndex = idOff;
       renderable.firstVertex = vtOff;
 
@@ -594,7 +592,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
                            uiPushConstants.size() * sizeof(glm::vec2)));
       vkCmdExecuteCommands(commandBuffer, 1, &cb);
 
-      idOff += drawCmd->ElemCount;
+      idOff += drawCmd.ElemCount;
     }
 
     vtOff += cmdList->VtxBuffer.Size;
