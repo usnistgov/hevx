@@ -8,7 +8,9 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "glm/gtc/quaternion.hpp"
+#include "glm/gtx/matrix_decompose.hpp"
 #include "glm/gtx/quaternion.hpp"
 #include "renderer.h"
 #if PLATFORM_COMPILER_GCC
@@ -1674,8 +1676,7 @@ void iris::Renderer::EndFrame(
     ImGuiIO& io = ImGui::GetIO();
 
     // TODO: how to handle this at application scope?
-    if (window.showUI) {
-      ImGui::Begin("Status");
+    if (window.showUI && ImGui::Begin("Status")) {
       ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
@@ -1709,6 +1710,7 @@ void iris::Renderer::EndFrame(
         sViewMatrix[2][0], sViewMatrix[2][1], sViewMatrix[2][2], sViewMatrix[2][3],
         sViewMatrix[3][0], sViewMatrix[3][1], sViewMatrix[3][2], sViewMatrix[3][3]);
       // clang-format on
+
       ImGui::End();
     }
 
@@ -1722,9 +1724,9 @@ void iris::Renderer::EndFrame(
       }
     }
 
-    ImGui::EndFrame();
-
     sNavMatrix = glm::scale(glm::mat4(1.f), sNavScale);
+
+    ImGui::EndFrame();
 
     glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
     glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
