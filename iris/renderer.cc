@@ -162,7 +162,6 @@ struct Renderables {
 static Renderables sRenderables{};
 
 // TODO: move this
-static glm::vec2 sPrevMouseWheel(0.f, 0.f);
 static glm::vec3 sNavScale(1.f, 1.f, 1.f);
 static glm::mat4 sNavMatrix(1.f);
 
@@ -1679,8 +1678,7 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
-      ImGui::Text("MouseWheel: %.3f Previous: %.3f delta: %.3f", io.MouseWheel,
-                  sPrevMouseWheel.y, sPrevMouseWheel.y - io.MouseWheel);
+      ImGui::Text("MouseWheel: %.3f", io.MouseWheel);
       ImGui::Text("nav scale: %.6f %.6f %.6f", sNavScale.x, sNavScale.y, sNavScale.z);
       // clang-format off
       ImGui::Text("nav: "
@@ -1695,15 +1693,12 @@ void iris::Renderer::EndFrame(
 
     // TODO: move this
     if (!io.WantCaptureMouse) {
-      if (sPrevMouseWheel.y != io.MouseWheel) {
-        if (sPrevMouseWheel.y - io.MouseWheel < 0) {
-          sNavScale *= glm::vec3(1.05f, 1.f, 1.05f);
-        } else {
-          sNavScale /= glm::vec3(1.05f, 1.f, 1.05f);
-        }
-
+      if (io.MouseWheel > 0) {
+        sNavScale *= 1.05f;
         sNavMatrix = glm::scale(sNavMatrix, sNavScale);
-        sPrevMouseWheel = glm::vec2(io.MouseWheelH, io.MouseWheel);
+      } else if (io.MouseWheel < 0) {
+        sNavScale /= 1.05f;
+        sNavMatrix = glm::scale(sNavMatrix, sNavScale);
       }
     }
 
