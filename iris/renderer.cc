@@ -164,6 +164,9 @@ static Renderables sRenderables{};
 // TODO: move this
 static glm::vec3 sNavScale(1.f, 1.f, 1.f);
 static glm::mat4 sNavMatrix(1.f);
+static glm::mat4 sWorldMatrix(1.1547f, 0.f, 0.f, 0.f, 0.f, 1.1547f, 0.f, 0.f,
+                              0.f, 0.f, 1.1547f, 0.f, 0.f, 2.f, 0.f, 1.f);
+static glm::mat4 sViewMatrix(1.f);
 
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
@@ -1677,6 +1680,7 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
       ImGui::Text("MouseWheel: %.3f", io.MouseWheel);
+
       ImGui::Text("nav scale: %.6f %.6f %.6f", sNavScale.x, sNavScale.y, sNavScale.z);
       // clang-format off
       ImGui::Text("nav: "
@@ -1685,36 +1689,46 @@ void iris::Renderer::EndFrame(
         sNavMatrix[1][0], sNavMatrix[1][1], sNavMatrix[1][2], sNavMatrix[1][3],
         sNavMatrix[2][0], sNavMatrix[2][1], sNavMatrix[2][2], sNavMatrix[2][3],
         sNavMatrix[3][0], sNavMatrix[3][1], sNavMatrix[3][2], sNavMatrix[3][3]);
+      ImGui::Text("world: "
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
+        sWorldMatrix[0][0], sWorldMatrix[0][1], sWorldMatrix[0][2], sWorldMatrix[0][3],
+        sWorldMatrix[1][0], sWorldMatrix[1][1], sWorldMatrix[1][2], sWorldMatrix[1][3],
+        sWorldMatrix[2][0], sWorldMatrix[2][1], sWorldMatrix[2][2], sWorldMatrix[2][3],
+        sWorldMatrix[3][0], sWorldMatrix[3][1], sWorldMatrix[3][2], sWorldMatrix[3][3]);
+      auto const navWorld = sNavMatrix * sWorldMatrix;
+      ImGui::Text("nav*world: "
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
+        navWorld[0][0], navWorld[0][1], navWorld[0][2], navWorld[0][3],
+        navWorld[1][0], navWorld[1][1], navWorld[1][2], navWorld[1][3],
+        navWorld[2][0], navWorld[2][1], navWorld[2][2], navWorld[2][3],
+        navWorld[3][0], navWorld[3][1], navWorld[3][2], navWorld[3][3]);
+      ImGui::Text("view: "
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
+        sViewMatrix[0][0], sViewMatrix[0][1], sViewMatrix[0][2], sViewMatrix[0][3],
+        sViewMatrix[1][0], sViewMatrix[1][1], sViewMatrix[1][2], sViewMatrix[1][3],
+        sViewMatrix[2][0], sViewMatrix[2][1], sViewMatrix[2][2], sViewMatrix[2][3],
+        sViewMatrix[3][0], sViewMatrix[3][1], sViewMatrix[3][2], sViewMatrix[3][3]);
       // clang-format on
       ImGui::End();
     }
 
     // TODO: move this
+
     if (!io.WantCaptureMouse) {
       if (io.MouseWheel > 0) {
         sNavScale *= 1.05f;
-        sNavMatrix = glm::scale(sNavMatrix, sNavScale);
       } else if (io.MouseWheel < 0) {
         sNavScale /= 1.05f;
-        sNavMatrix = glm::scale(sNavMatrix, sNavScale);
       }
     }
 
     ImGui::EndFrame();
 
-    // clang-format off
-    glm::mat4 const worldMatrix(
-         1.1547f, 0.f,     0.f,     0.f,
-         0.f,     1.1547f, 0.f,     0.f, 
-         0.f,     0.f,     1.1547f, 0.f,
-         0.f,     2.f,     0.f,     1.f
-    );
-    // clang-format on
+    sNavMatrix = glm::scale(glm::mat4(1.f), sNavScale);
 
     glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
     glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
-    glm::mat4 const viewMatrix =
-      glm::lookAt(glm::vec3(0.f, 0.f, 0.f), center, up);
+    sViewMatrix = glm::lookAt(glm::vec3(0.f, 0.f, 0.f), center, up);
 
     // currentFrame is still the previous frame, use that imageAvailable
     // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
@@ -1745,8 +1759,8 @@ void iris::Renderer::EndFrame(
     }
 
     if (auto ptr = sMatricesBuffer.Map<MatricesBuffer*>()) {
-      (*ptr)->ViewMatrix = viewMatrix;
-      (*ptr)->ViewMatrixInverse = glm::inverse(viewMatrix);
+      (*ptr)->ViewMatrix = sViewMatrix;
+      (*ptr)->ViewMatrixInverse = glm::inverse(sViewMatrix);
       (*ptr)->ProjectionMatrix = window.projectionMatrix;
       (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
       sMatricesBuffer.Unmap();
@@ -1817,10 +1831,41 @@ void iris::Renderer::EndFrame(
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
         pushConstants.ModelMatrix =
-          sNavMatrix * worldMatrix * renderable.modelMatrix;
-        pushConstants.ModelViewMatrix = viewMatrix * pushConstants.ModelMatrix;
+          sNavMatrix * sWorldMatrix * renderable.modelMatrix;
+        pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
+
+        GetLogger()->debug("model: "
+          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+          renderable.modelMatrix[0][0], renderable.modelMatrix[0][1],
+          renderable.modelMatrix[0][2], renderable.modelMatrix[0][3],
+          renderable.modelMatrix[1][0], renderable.modelMatrix[1][1],
+          renderable.modelMatrix[1][2], renderable.modelMatrix[1][3],
+          renderable.modelMatrix[2][0], renderable.modelMatrix[2][1],
+          renderable.modelMatrix[2][2], renderable.modelMatrix[2][3],
+          renderable.modelMatrix[3][0], renderable.modelMatrix[3][1],
+          renderable.modelMatrix[3][2], renderable.modelMatrix[3][3]);
+        GetLogger()->debug("Model: "
+          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+          pushConstants.ModelMatrix[0][0], pushConstants.ModelMatrix[0][1],
+          pushConstants.ModelMatrix[0][2], pushConstants.ModelMatrix[0][3],
+          pushConstants.ModelMatrix[1][0], pushConstants.ModelMatrix[1][1],
+          pushConstants.ModelMatrix[1][2], pushConstants.ModelMatrix[1][3],
+          pushConstants.ModelMatrix[2][0], pushConstants.ModelMatrix[2][1],
+          pushConstants.ModelMatrix[2][2], pushConstants.ModelMatrix[2][3],
+          pushConstants.ModelMatrix[3][0], pushConstants.ModelMatrix[3][1],
+          pushConstants.ModelMatrix[3][2], pushConstants.ModelMatrix[3][3]);
+        GetLogger()->debug("ModelView: "
+          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+          pushConstants.ModelViewMatrix[0][0], pushConstants.ModelViewMatrix[0][1],
+          pushConstants.ModelViewMatrix[0][2], pushConstants.ModelViewMatrix[0][3],
+          pushConstants.ModelViewMatrix[1][0], pushConstants.ModelViewMatrix[1][1],
+          pushConstants.ModelViewMatrix[1][2], pushConstants.ModelViewMatrix[1][3],
+          pushConstants.ModelViewMatrix[2][0], pushConstants.ModelViewMatrix[2][1],
+          pushConstants.ModelViewMatrix[2][2], pushConstants.ModelViewMatrix[2][3],
+          pushConstants.ModelViewMatrix[3][0], pushConstants.ModelViewMatrix[3][1],
+          pushConstants.ModelViewMatrix[3][2], pushConstants.ModelViewMatrix[3][3]);
 
         VkCommandBuffer commandBuffer =
           RenderRenderable(renderable, &window.viewport, &window.scissor,

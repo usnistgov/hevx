@@ -461,11 +461,9 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
     switch (ev->detail) {
     case 1: button = 0; break;
     case 3: button = 1; break;
-    case 2:
-      button = 2;
-      break;
+    case 2: button = 2; break;
     case 4: ImGui::GetIO().MouseWheel += 1.f; break;
-    case 5: ImGui::GetIO().MouseWheelH -= 1.f; break;
+    case 5: ImGui::GetIO().MouseWheel -= 1.f; break;
     }
 
     ImGui::GetIO().MouseDown[button] = true;
