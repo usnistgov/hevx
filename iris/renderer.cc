@@ -164,8 +164,18 @@ static Renderables sRenderables{};
 
 // TODO: move this
 static Trackball sTrackball;
-static glm::vec3 sNavPosition{}, sNavAttitude{}, sNavScale{1.f, 1.f, 1.f};
-static glm::mat4 sNavMatrix{1.f};
+
+namespace Nav {
+
+static glm::vec3 sPosition{};
+static glm::vec3 sAttitude{};
+static glm::vec3 sScale{1.f, 1.f, 1.f};
+static glm::mat4 sMatrix{1.f};
+
+static glm::vec3 sPivotPoint{};
+
+} // namespace Nav
+
 static glm::mat4 sWorldMatrix{1.1547f, 0.f, 0.f, 0.f, 0.f, 1.1547f, 0.f, 0.f,
                               0.f, 0.f, 1.1547f, 0.f, 0.f, 2.f, 0.f, 1.f};
 static glm::mat4 sViewMatrix{1.f};
@@ -237,8 +247,28 @@ static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
 
+static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
+  IRIS_LOG_ENTER();
+
+  std::string const nodeName =
+    examineMessage.node().empty() ? "world" : examineMessage.node();
+  if (nodeName != "world") {
+    GetLogger()->warn("EXAMINE only currently implements 'world' node");
+  }
+
+  glm::vec3 s, t, k;
+  glm::quat o;
+  glm::vec4 p;
+
+  glm::decompose(Nav::sMatrix * sWorldMatrix, s, o, t, k, p);
+  Nav::sPivotPoint = -t;
+
+  IRIS_LOG_LEAVE();
+} // ExamineNode
+
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
+  IRIS_LOG_ENTER();
   auto const& bg = windowMessage.background_color();
 
   Window::Options options = Window::Options::kNone;
@@ -260,6 +290,8 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   } else {
     GetLogger()->warn("Creating window failed: {}", win.error().what());
   }
+
+  IRIS_LOG_LEAVE();
 } // CreateEmplaceWindow
 
 static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
@@ -1683,29 +1715,39 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
-      // clang-format off
-      ImGui::Text("nav: "
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
-        sNavMatrix[0][0], sNavMatrix[0][1], sNavMatrix[0][2], sNavMatrix[0][3],
-        sNavMatrix[1][0], sNavMatrix[1][1], sNavMatrix[1][2], sNavMatrix[1][3],
-        sNavMatrix[2][0], sNavMatrix[2][1], sNavMatrix[2][2], sNavMatrix[2][3],
-        sNavMatrix[3][0], sNavMatrix[3][1], sNavMatrix[3][2], sNavMatrix[3][3]);
-      ImGui::Text("world: "
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
-        sWorldMatrix[0][0], sWorldMatrix[0][1], sWorldMatrix[0][2], sWorldMatrix[0][3],
-        sWorldMatrix[1][0], sWorldMatrix[1][1], sWorldMatrix[1][2], sWorldMatrix[1][3],
-        sWorldMatrix[2][0], sWorldMatrix[2][1], sWorldMatrix[2][2], sWorldMatrix[2][3],
-        sWorldMatrix[3][0], sWorldMatrix[3][1], sWorldMatrix[3][2], sWorldMatrix[3][3]);
-      ImGui::Text("view: "
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
-        sViewMatrix[0][0], sViewMatrix[0][1], sViewMatrix[0][2], sViewMatrix[0][3],
-        sViewMatrix[1][0], sViewMatrix[1][1], sViewMatrix[1][2], sViewMatrix[1][3],
-        sViewMatrix[2][0], sViewMatrix[2][1], sViewMatrix[2][2], sViewMatrix[2][3],
-        sViewMatrix[3][0], sViewMatrix[3][1], sViewMatrix[3][2], sViewMatrix[3][3]);
-      // clang-format on
 
-      ImGui::End();
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::Text("Nav");
+      if (ImGui::Button("Reset")) Nav::Reset();
+      ImGui::Text("Pivot Point (%.3f, %.3f, %.3f)", Nav::sPivotPoint.x,
+                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
+      ImGui::Text(
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
+        "%.3f %.3f",
+        Nav::sMatrix[0][0], Nav::sMatrix[0][1], Nav::sMatrix[0][2],
+        Nav::sMatrix[0][3], Nav::sMatrix[1][0], Nav::sMatrix[1][1],
+        Nav::sMatrix[1][2], Nav::sMatrix[1][3], Nav::sMatrix[2][0],
+        Nav::sMatrix[2][1], Nav::sMatrix[2][2], Nav::sMatrix[2][3],
+        Nav::sMatrix[3][0], Nav::sMatrix[3][1], Nav::sMatrix[3][2],
+        Nav::sMatrix[3][3]);
+      ImGui::EndGroup();
+
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::Text("World");
+      ImGui::Text(
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
+        "%.3f %.3f",
+        sWorldMatrix[0][0], sWorldMatrix[0][1], sWorldMatrix[0][2],
+        sWorldMatrix[0][3], sWorldMatrix[1][0], sWorldMatrix[1][1],
+        sWorldMatrix[1][2], sWorldMatrix[1][3], sWorldMatrix[2][0],
+        sWorldMatrix[2][1], sWorldMatrix[2][2], sWorldMatrix[2][3],
+        sWorldMatrix[3][0], sWorldMatrix[3][1], sWorldMatrix[3][2],
+        sWorldMatrix[3][3]);
+      ImGui::EndGroup();
     }
+    ImGui::End(); // Status
 
     ImGui::EndFrame();
 
@@ -1749,6 +1791,15 @@ void iris::Renderer::EndFrame(
       sMatricesBuffer.Unmap();
     } else {
       GetLogger()->error("Cannot update matrices buffer: {}",
+                         ptr.error().what());
+    }
+
+    if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
+      (*ptr)->Lights[0].direction = glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
+      (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
+      (*ptr)->NumLights = 1;
+    } else {
+      GetLogger()->error("Cannot update lights buffer: {}",
                          ptr.error().what());
     }
 
@@ -1814,7 +1865,7 @@ void iris::Renderer::EndFrame(
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
         pushConstants.ModelMatrix =
-          sNavMatrix * sWorldMatrix * renderable.modelMatrix;
+          Nav::sMatrix * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
@@ -2177,6 +2228,9 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
       CreateEmplaceWindow(controlMessage.displays().windows(i));
     }
     break;
+  case iris::Control::Control::TypeCase::kExamine:
+    ExamineNode(controlMessage.examine());
+    break;
   case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());
     break;
@@ -2201,35 +2255,51 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
 namespace iris::Renderer::Nav {
 
 void UpdateMatrix() noexcept {
-  sNavMatrix = glm::mat4_cast(glm::quat(sNavAttitude)) *
-               glm::scale(glm::mat4(1.f), sNavScale);
-  sNavMatrix = glm::translate(sNavMatrix, sNavPosition);
+  sMatrix = glm::mat4_cast(glm::quat(sAttitude)) *
+               glm::scale(glm::mat4(1.f), sScale);
+  sMatrix = glm::translate(sMatrix, sPosition);
 } // UpdateMatrix
 
 } // namespace iris::Renderer::Nav
 
 glm::vec3 iris::Renderer::Nav::Position() noexcept {
-  return sNavPosition;
+  return sPosition;
 } // iris::Renderer::Nav::Position
 
-void iris::Renderer::Nav::Position(glm::vec3 const& position) noexcept {
-  sNavPosition = position;
+void iris::Renderer::Nav::Position(glm::vec3 position) noexcept {
+  sPosition = std::move(position);
   UpdateMatrix();
 } // iris::Renderer::Nav::Position
 
 glm::vec3 iris::Renderer::Nav::Attitude() noexcept {
-  return sNavAttitude;
+  return sAttitude;
 } // iris::Renderer::Nav::Attitude
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
-  sNavMatrix = glm::translate(sNavMatrix, -sNavPosition);
-  sNavMatrix *= glm::mat4_cast(pivot);
-  sNavMatrix = glm::translate(sNavMatrix, sNavPosition);
+  sMatrix = glm::translate(sMatrix, -sPivotPoint);
+  sMatrix *= glm::mat4_cast(pivot);
+  sMatrix = glm::translate(sMatrix, sPivotPoint);
 
   glm::quat orientation;
   glm::vec3 skew;
   glm::vec4 perspective;
-  glm::decompose(sNavMatrix, sNavScale, orientation, sNavPosition, skew,
-                 perspective);
-  sNavAttitude = glm::eulerAngles(orientation);
+  glm::decompose(sMatrix, sScale, orientation, sPosition, skew, perspective);
+
+  sAttitude = glm::eulerAngles(orientation);
 } // iris::Renderer::Nav::Pivot
+
+glm::vec3 iris::Renderer::Nav::PivotPoint() noexcept {
+  return sPivotPoint;
+} // iris::Renderer::Nav::PivotPoint
+
+void iris::Renderer::Nav::PivotPoint(glm::vec3 point) noexcept {
+  sPivotPoint = std::move(point);
+} // iris::Renderer::Nav::PivotPoint
+
+void iris::Renderer::Nav::Reset() noexcept {
+  sPosition = glm::vec3(0.f, 0.f, 0.f);
+  sAttitude = glm::vec3(0.f, 0.f, 0.f);
+  sScale = glm::vec3(1.f, 1.f, 1.f);
+  UpdateMatrix();
+} // iris::Renderer::Nav::Reset
+

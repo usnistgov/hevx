@@ -208,7 +208,7 @@ void main() {
   vec3 reflection = -normalize(reflect(v, n));
 
   float roughnessSq = alphaRoughness * alphaRoughness;
-  vec3 color = vec3(0.3) * diffuseColor; // ambient
+  vec3 color = vec3(0.2) * diffuseColor; // ambient
 
   for (int i = 0; i < NumLights; ++i) {
     if (Lights[i].color.a > 0) {

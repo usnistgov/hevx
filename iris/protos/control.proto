@@ -2,13 +2,15 @@ syntax = "proto3";
 package iris.Control;
 
 import "displays.proto";
+import "examine.proto";
 import "window.proto";
 import "shadertoy.proto";
 
 message Control {
   oneof type {
     Displays displays = 2;
-    Window window = 3;
+    Examine examine = 3;
+    Window window = 4;
 	  ShaderToy shaderToy = 20;
   }
 }

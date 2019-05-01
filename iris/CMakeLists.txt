@@ -11,6 +11,7 @@ set(protos_PROTOS
   protos/color.proto
   protos/control.proto
   protos/displays.proto
+  protos/examine.proto
   protos/shadertoy.proto
   protos/window.proto
 )

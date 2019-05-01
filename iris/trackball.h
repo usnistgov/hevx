@@ -57,8 +57,8 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
     glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
     position_ = glm::vec3(delta.x, 0.f, delta.y);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
-    glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
-    attitude_ = glm::vec3(-delta.y, delta.x, 0.f);
+    glm::vec2 const delta = deltaMouse * kTwist / io.DeltaTime;
+    attitude_ = glm::vec3(-delta.y, 0.f, delta.x);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
     glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
     position_.y = delta.y;

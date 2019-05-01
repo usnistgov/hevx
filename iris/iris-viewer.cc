@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
 
   flags::args const args(argc, argv);
   auto const shadertoy_url = args.get<std::string>("shadertoy-url");
+  auto const examine_node = args.get<std::string>("examine");
   auto const& files = args.positional();
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
@@ -104,6 +105,15 @@ int main(int argc, char** argv) {
     message.mutable_shadertoy()->set_url(*shadertoy_url);
     if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
       logger.error("Error loading {}: {}", *shadertoy_url,
+                   result.error().what());
+    }
+  }
+
+  if (examine_node) {
+    iris::Control::Control message;
+    message.mutable_examine()->set_node(*examine_node);
+    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
+      logger.error("Error examining {}: {}", *examine_node,
                    result.error().what());
     }
   }
