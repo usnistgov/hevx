@@ -256,9 +256,15 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
   case WM_XBUTTONDOWN:
   case WM_XBUTTONDBLCLK: {
     int button = 0;
-    if (uMsg == WM_LBUTTONDOWN || uMsg == WM_LBUTTONDBLCLK) button = 0;
-    if (uMsg == WM_RBUTTONDOWN || uMsg == WM_RBUTTONDBLCLK) button = 1;
-    if (uMsg == WM_MBUTTONDOWN || uMsg == WM_MBUTTONDBLCLK) button = 2;
+    if (uMsg == WM_LBUTTONDOWN || uMsg == WM_LBUTTONDBLCLK) {
+      button = kButtonLeft;
+    }
+    if (uMsg == WM_RBUTTONDOWN || uMsg == WM_RBUTTONDBLCLK) {
+      button = kButtonRight;
+    }
+    if (uMsg == WM_MBUTTONDOWN || uMsg == WM_MBUTTONDBLCLK) {
+      button = kButtonMiddle;
+    }
     if (uMsg == WM_XBUTTONDOWN || uMsg == WM_XBUTTONDBLCLK) {
       switch (GET_XBUTTON_WPARAM(wParam)) {
       case XBUTTON1: button = 3;

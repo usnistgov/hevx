@@ -8,10 +8,8 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-#include "glm/gtc/quaternion.hpp"
 #include "glm/gtx/matrix_decompose.hpp"
-#include "glm/gtx/quaternion.hpp"
+#include "glm/gtc/type_ptr.hpp"
 #include "renderer.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -33,6 +31,7 @@
 #include "tbb/concurrent_queue.h"
 #include "tbb/task.h"
 #include "tbb/task_scheduler_init.h"
+#include "trackball.h"
 #include "vulkan.h"
 #include "vulkan_util.h"
 #include "window.h"
@@ -164,11 +163,12 @@ struct Renderables {
 static Renderables sRenderables{};
 
 // TODO: move this
-static glm::vec3 sNavScale(1.f, 1.f, 1.f);
-static glm::mat4 sNavMatrix(1.f);
-static glm::mat4 sWorldMatrix(1.1547f, 0.f, 0.f, 0.f, 0.f, 1.1547f, 0.f, 0.f,
-                              0.f, 0.f, 1.1547f, 0.f, 0.f, 2.f, 0.f, 1.f);
-static glm::mat4 sViewMatrix(1.f);
+static Trackball sTrackball;
+static glm::vec3 sNavPosition{}, sNavAttitude{}, sNavScale{1.f, 1.f, 1.f};
+static glm::mat4 sNavMatrix{1.f};
+static glm::mat4 sWorldMatrix{1.1547f, 0.f, 0.f, 0.f, 0.f, 1.1547f, 0.f, 0.f,
+                              0.f, 0.f, 1.1547f, 0.f, 0.f, 2.f, 0.f, 1.f};
+static glm::mat4 sViewMatrix{1.f};
 
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
@@ -1675,14 +1675,14 @@ void iris::Renderer::EndFrame(
     ImGui::SetCurrentContext(window.uiContext.get());
     ImGuiIO& io = ImGui::GetIO();
 
+    // TODO: move this ??
+    sTrackball.Update(io);
+
     // TODO: how to handle this at application scope?
     if (window.showUI && ImGui::Begin("Status")) {
       ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
-      ImGui::Text("MouseWheel: %.3f", io.MouseWheel);
-
-      ImGui::Text("nav scale: %.6f %.6f %.6f", sNavScale.x, sNavScale.y, sNavScale.z);
       // clang-format off
       ImGui::Text("nav: "
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
@@ -1696,13 +1696,6 @@ void iris::Renderer::EndFrame(
         sWorldMatrix[1][0], sWorldMatrix[1][1], sWorldMatrix[1][2], sWorldMatrix[1][3],
         sWorldMatrix[2][0], sWorldMatrix[2][1], sWorldMatrix[2][2], sWorldMatrix[2][3],
         sWorldMatrix[3][0], sWorldMatrix[3][1], sWorldMatrix[3][2], sWorldMatrix[3][3]);
-      auto const navWorld = sNavMatrix * sWorldMatrix;
-      ImGui::Text("nav*world: "
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
-        navWorld[0][0], navWorld[0][1], navWorld[0][2], navWorld[0][3],
-        navWorld[1][0], navWorld[1][1], navWorld[1][2], navWorld[1][3],
-        navWorld[2][0], navWorld[2][1], navWorld[2][2], navWorld[2][3],
-        navWorld[3][0], navWorld[3][1], navWorld[3][2], navWorld[3][3]);
       ImGui::Text("view: "
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
         sViewMatrix[0][0], sViewMatrix[0][1], sViewMatrix[0][2], sViewMatrix[0][3],
@@ -1713,18 +1706,6 @@ void iris::Renderer::EndFrame(
 
       ImGui::End();
     }
-
-    // TODO: move this
-
-    if (!io.WantCaptureMouse) {
-      if (io.MouseWheel > 0) {
-        sNavScale *= 1.05f;
-      } else if (io.MouseWheel < 0) {
-        sNavScale /= 1.05f;
-      }
-    }
-
-    sNavMatrix = glm::scale(glm::mat4(1.f), sNavScale);
 
     ImGui::EndFrame();
 
@@ -1837,37 +1818,6 @@ void iris::Renderer::EndFrame(
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
-
-        GetLogger()->debug("model: "
-          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-          renderable.modelMatrix[0][0], renderable.modelMatrix[0][1],
-          renderable.modelMatrix[0][2], renderable.modelMatrix[0][3],
-          renderable.modelMatrix[1][0], renderable.modelMatrix[1][1],
-          renderable.modelMatrix[1][2], renderable.modelMatrix[1][3],
-          renderable.modelMatrix[2][0], renderable.modelMatrix[2][1],
-          renderable.modelMatrix[2][2], renderable.modelMatrix[2][3],
-          renderable.modelMatrix[3][0], renderable.modelMatrix[3][1],
-          renderable.modelMatrix[3][2], renderable.modelMatrix[3][3]);
-        GetLogger()->debug("Model: "
-          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-          pushConstants.ModelMatrix[0][0], pushConstants.ModelMatrix[0][1],
-          pushConstants.ModelMatrix[0][2], pushConstants.ModelMatrix[0][3],
-          pushConstants.ModelMatrix[1][0], pushConstants.ModelMatrix[1][1],
-          pushConstants.ModelMatrix[1][2], pushConstants.ModelMatrix[1][3],
-          pushConstants.ModelMatrix[2][0], pushConstants.ModelMatrix[2][1],
-          pushConstants.ModelMatrix[2][2], pushConstants.ModelMatrix[2][3],
-          pushConstants.ModelMatrix[3][0], pushConstants.ModelMatrix[3][1],
-          pushConstants.ModelMatrix[3][2], pushConstants.ModelMatrix[3][3]);
-        GetLogger()->debug("ModelView: "
-          "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-          pushConstants.ModelViewMatrix[0][0], pushConstants.ModelViewMatrix[0][1],
-          pushConstants.ModelViewMatrix[0][2], pushConstants.ModelViewMatrix[0][3],
-          pushConstants.ModelViewMatrix[1][0], pushConstants.ModelViewMatrix[1][1],
-          pushConstants.ModelViewMatrix[1][2], pushConstants.ModelViewMatrix[1][3],
-          pushConstants.ModelViewMatrix[2][0], pushConstants.ModelViewMatrix[2][1],
-          pushConstants.ModelViewMatrix[2][2], pushConstants.ModelViewMatrix[2][3],
-          pushConstants.ModelViewMatrix[3][0], pushConstants.ModelViewMatrix[3][1],
-          pushConstants.ModelViewMatrix[3][2], pushConstants.ModelViewMatrix[3][3]);
 
         VkCommandBuffer commandBuffer =
           RenderRenderable(renderable, &window.viewport, &window.scissor,
@@ -2247,3 +2197,39 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ProcessControlMessage
+
+namespace iris::Renderer::Nav {
+
+void UpdateMatrix() noexcept {
+  sNavMatrix = glm::mat4_cast(glm::quat(sNavAttitude)) *
+               glm::scale(glm::mat4(1.f), sNavScale);
+  sNavMatrix = glm::translate(sNavMatrix, sNavPosition);
+} // UpdateMatrix
+
+} // namespace iris::Renderer::Nav
+
+glm::vec3 iris::Renderer::Nav::Position() noexcept {
+  return sNavPosition;
+} // iris::Renderer::Nav::Position
+
+void iris::Renderer::Nav::Position(glm::vec3 const& position) noexcept {
+  sNavPosition = position;
+  UpdateMatrix();
+} // iris::Renderer::Nav::Position
+
+glm::vec3 iris::Renderer::Nav::Attitude() noexcept {
+  return sNavAttitude;
+} // iris::Renderer::Nav::Attitude
+
+void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
+  sNavMatrix = glm::translate(sNavMatrix, -sNavPosition);
+  sNavMatrix *= glm::mat4_cast(pivot);
+  sNavMatrix = glm::translate(sNavMatrix, sNavPosition);
+
+  glm::quat orientation;
+  glm::vec3 skew;
+  glm::vec4 perspective;
+  glm::decompose(sNavMatrix, sNavScale, orientation, sNavPosition, skew,
+                 perspective);
+  sNavAttitude = glm::eulerAngles(orientation);
+} // iris::Renderer::Nav::Pivot

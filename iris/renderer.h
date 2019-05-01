@@ -18,6 +18,7 @@
 #endif
 
 #include "expected.hpp"
+#include "glm/gtc/quaternion.hpp"
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
 #include "spdlog/sinks/sink.h"
@@ -237,6 +238,20 @@ This is a synchronous execution step.
 */
 tl::expected<void, std::system_error>
 ProcessControlMessage(iris::Control::Control const& control) noexcept;
+
+namespace Nav {
+
+// all of these are currently not thread safe
+
+glm::vec3 Position() noexcept;
+void Position(glm::vec3 const& position) noexcept;
+
+// Pitch, Yaw (Head), Roll order
+glm::vec3 Attitude() noexcept;
+
+void Pivot(glm::quat const& pivot) noexcept;
+
+} // namespace Nav
 
 /*!
 \brief bit-wise or of \ref Renderer::Options.

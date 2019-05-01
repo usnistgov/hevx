@@ -459,9 +459,9 @@ void iris::wsi::PlatformWindow::Impl::Dispatch(
     if (ev->event != handle_.window) break;
     int button = 0;
     switch (ev->detail) {
-    case 1: button = 0; break;
-    case 3: button = 1; break;
-    case 2: button = 2; break;
+    case 1: button = kButtonLeft; break;
+    case 3: button = kButtonRight; break;
+    case 2: button = kButtonMiddle; break;
     case 4: ImGui::GetIO().MouseWheel += 1.f; break;
     case 5: ImGui::GetIO().MouseWheel -= 1.f; break;
     }
