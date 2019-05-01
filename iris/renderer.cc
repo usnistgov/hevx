@@ -1798,6 +1798,7 @@ void iris::Renderer::EndFrame(
       (*ptr)->Lights[0].direction = glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
       (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
       (*ptr)->NumLights = 1;
+      sLightsBuffer.Unmap();
     } else {
       GetLogger()->error("Cannot update lights buffer: {}",
                          ptr.error().what());
