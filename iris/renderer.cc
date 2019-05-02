@@ -274,7 +274,7 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
   sWorldMatrix = examineMat;
 
   Nav::sPivotMatrix = examineMat;
-  Nav::sPivotPoint = -examineOffset;
+  Nav::sPivotPoint = examineOffset;
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -2339,6 +2339,10 @@ glm::vec3 iris::Renderer::Nav::Attitude() noexcept {
 } // iris::Renderer::Nav::Attitude
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
+  GetLogger()->debug("Nav::Pivot point: ({}, {}, {}), pivot: ({}, {}, {}, {})",
+    sPivotPoint.x, sPivotPoint.y, sPivotPoint.z, pivot.x, pivot.y, pivot.z,
+    pivot.w);
+
   sMatrix = glm::translate(sMatrix, -sPivotPoint);
   sMatrix *= glm::mat4_cast(pivot);
   sMatrix = glm::translate(sMatrix, sPivotPoint);
