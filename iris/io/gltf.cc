@@ -15,6 +15,7 @@
 #include "io/read_file.h"
 #include "logging.h"
 #include "mikktspace.h"
+#include "Miniball.hpp"
 #include "nlohmann/json.hpp"
 #include "renderer.h"
 #include "renderer_private.h"
@@ -1657,6 +1658,34 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     renderable.numIndices = indexAccessor.count;
 
     renderable.modelMatrix = nodeMat;
+
+    // Compute the bounding sphere
+    struct CoordAccessor {
+      using Pit = decltype(positions)::const_iterator;
+      using Cit = float const*;
+      inline Cit operator() (Pit it) const { return glm::value_ptr(*it); }
+    };
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(push)
+#pragma warning(disable : 4458)
+
+    Miniball::Miniball<CoordAccessor> mb(3, positions.begin(), positions.end());
+
+#endif // PLATFORM_COMPILER_MSVC
+
+    renderable.boundingSphere =
+      glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
+                std::sqrt(mb.squared_radius()));
+    GetLogger()->debug("boundingSphere: ({} {} {}), {}",
+                       renderable.boundingSphere.x, renderable.boundingSphere.y,
+                       renderable.boundingSphere.z,
+                       renderable.boundingSphere.w);
+
+#if PLATFORM_COMPILER_MSVC
+#pragma warning(pop)
+#endif // PLATFORM_COMPILER_MSVC
+
     renderables.push_back(renderable);
   }
 

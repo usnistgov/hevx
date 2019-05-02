@@ -3,6 +3,7 @@
 
 #include "absl/container/inlined_vector.h"
 #include "glm/mat4x4.hpp"
+#include "glm/vec4.hpp"
 #include "iris/buffer.h"
 #include "iris/image.h"
 #include "iris/pipeline.h"
@@ -51,6 +52,8 @@ struct Renderable {
   std::uint32_t firstVertex{0};
 
   std::uint32_t numTextures{0};
+
+  glm::vec4 boundingSphere{};
 }; // struct Renderable
 
 } // namespace iris::Renderer::Component

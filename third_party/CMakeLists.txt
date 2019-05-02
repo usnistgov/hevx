@@ -15,6 +15,8 @@ include(Glslang.cmake)
 include(GSL.cmake)
 include(ImGui.cmake)
 include(JSON.cmake)
+add_subdirectory(mikktspace)
+add_subdirectory(miniball)
 include(Protobuf.cmake)
 include(Spdlog.cmake)
 include(STB.cmake)
@@ -24,5 +26,3 @@ include(Websocketpp.cmake)
 
 # These packages must be included last
 include(Cpprestsdk.cmake)
-
-add_subdirectory(mikktspace)

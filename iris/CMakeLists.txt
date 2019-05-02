@@ -128,7 +128,7 @@ add_library(iris STATIC ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC
-    flags imgui vma
+    flags imgui miniball vma
     GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::hash absl::fixed_array absl::flat_hash_map
     mikktspace stb glslang SPIRV Vulkan::Vulkan

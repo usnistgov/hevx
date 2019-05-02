@@ -172,12 +172,13 @@ static glm::vec3 sAttitude{};
 static glm::vec3 sScale{1.f, 1.f, 1.f};
 static glm::mat4 sMatrix{1.f};
 
+static glm::mat4 sPivotMatrix{1.f};
 static glm::vec3 sPivotPoint{};
 
 } // namespace Nav
 
-static glm::mat4 sWorldMatrix{1.1547f, 0.f, 0.f, 0.f, 0.f, 1.1547f, 0.f, 0.f,
-                              0.f, 0.f, 1.1547f, 0.f, 0.f, 2.f, 0.f, 1.f};
+static glm::vec4 sWorldBoundingSphere{0.f, 0.f, 0.f, 0.f};
+static glm::mat4 sWorldMatrix{1.f};
 static glm::mat4 sViewMatrix{1.f};
 
 static Buffer sMatricesBuffer;
@@ -256,12 +257,24 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
     GetLogger()->warn("EXAMINE only currently implements 'world' node");
   }
 
-  glm::vec3 s, t, k;
-  glm::quat o;
-  glm::vec4 p;
+  if (sWorldBoundingSphere.w <= 0.f) sWorldBoundingSphere.w = 1.f;
+  glm::vec3 const boundingSphereCenter(
+    sWorldBoundingSphere.x, sWorldBoundingSphere.y, sWorldBoundingSphere.z);
 
-  glm::decompose(Nav::sMatrix * sWorldMatrix, s, o, t, k, p);
-  Nav::sPivotPoint = -t;
+  float const examineScale = 1.f / sWorldBoundingSphere.w;
+
+  glm::vec3 const examineCenter(0.f, 2.f, 0.f);
+  glm::vec3 const examineOffset =
+    examineCenter - boundingSphereCenter * examineScale;
+
+  glm::mat4 examineMat = glm::scale(
+    glm::mat4{1.f}, glm::vec3(examineScale, examineScale, examineScale));
+  examineMat = glm::translate(examineMat, examineOffset);
+
+  sWorldMatrix = examineMat;
+
+  Nav::sPivotMatrix = examineMat;
+  Nav::sPivotPoint = -examineOffset;
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -1718,10 +1731,10 @@ void iris::Renderer::EndFrame(
 
       ImGui::Separator();
       ImGui::BeginGroup();
+
       ImGui::Text("Nav");
       if (ImGui::Button("Reset")) Nav::Reset();
-      ImGui::Text("Pivot Point (%.3f, %.3f, %.3f)", Nav::sPivotPoint.x,
-                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
+
       ImGui::Text(
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
         "%.3f %.3f",
@@ -1731,11 +1744,31 @@ void iris::Renderer::EndFrame(
         Nav::sMatrix[2][1], Nav::sMatrix[2][2], Nav::sMatrix[2][3],
         Nav::sMatrix[3][0], Nav::sMatrix[3][1], Nav::sMatrix[3][2],
         Nav::sMatrix[3][3]);
+
+      ImGui::Separator();
+      ImGui::Text("Pivot");
+      ImGui::Text("Point (%.3f, %.3f, %.3f)", Nav::sPivotPoint.x,
+                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
+      ImGui::Text(
+        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
+        "%.3f %.3f",
+        Nav::sPivotMatrix[0][0], Nav::sPivotMatrix[0][1],
+        Nav::sPivotMatrix[0][2], Nav::sPivotMatrix[0][3],
+        Nav::sPivotMatrix[1][0], Nav::sPivotMatrix[1][1],
+        Nav::sPivotMatrix[1][2], Nav::sPivotMatrix[1][3],
+        Nav::sPivotMatrix[2][0], Nav::sPivotMatrix[2][1],
+        Nav::sPivotMatrix[2][2], Nav::sPivotMatrix[2][3],
+        Nav::sPivotMatrix[3][0], Nav::sPivotMatrix[3][1],
+        Nav::sPivotMatrix[3][2], Nav::sPivotMatrix[3][3]);
+
       ImGui::EndGroup();
 
       ImGui::Separator();
       ImGui::BeginGroup();
       ImGui::Text("World");
+      ImGui::Text("Bounding Sphere: (%.3f %.3f %.3f), %.3f",
+                  sWorldBoundingSphere.x, sWorldBoundingSphere.y,
+                  sWorldBoundingSphere.z, sWorldBoundingSphere.w);
       ImGui::Text(
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
         "%.3f %.3f",
@@ -1955,7 +1988,36 @@ void iris::Renderer::EndFrame(
 iris::Renderer::RenderableID
 iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   IRIS_LOG_ENTER();
+
+  glm::vec3 const renderableBSCenter(renderable.boundingSphere.x,
+                                     renderable.boundingSphere.y,
+                                     renderable.boundingSphere.z);
+  float const renderableBSRadius = renderable.boundingSphere.w;
+
+  glm::vec3 const worldBSCenter(sWorldBoundingSphere.x, sWorldBoundingSphere.y,
+                                sWorldBoundingSphere.z);
+  float const worldBSRadius = sWorldBoundingSphere.w;
+
+  float const rwBSLength = glm::length(renderableBSCenter - worldBSCenter);
+  float const wrBSLength = glm::length(worldBSCenter - renderableBSCenter);
+
+  if (rwBSLength + renderableBSRadius < worldBSRadius) {
+    // do nothing, world encompasses renderable
+  } else if (wrBSLength + worldBSRadius < renderableBSRadius) {
+    sWorldBoundingSphere = renderable.boundingSphere;
+  } else {
+    float const r = (renderableBSRadius + worldBSRadius + rwBSLength) / 2.f;
+    glm::vec3 const c =
+      glm::mix(renderableBSCenter, worldBSCenter - renderableBSCenter,
+               r - renderableBSRadius);
+    //glm::vec3 const c =
+      //renderableBSCenter + (worldBSCenter - renderableBSCenter) *
+                             //(r - renderableBSRadius) / wrBSLength;
+    sWorldBoundingSphere = glm::vec4(c, r);
+  }
+
   auto&& id = sRenderables.Insert(std::move(renderable));
+
   IRIS_LOG_LEAVE();
   return id;
 } // iris::Renderer::AddRenderable
