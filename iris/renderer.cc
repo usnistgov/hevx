@@ -188,6 +188,7 @@ static absl::FixedArray<VkFence> sFrameFinishedFences(sNumFramesBuffered);
 
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 static std::uint32_t sFrameIndex{0};
+static absl::InlinedVector<VkCommandBuffer, 128> sOldCommandBuffers;
 
 static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
@@ -499,10 +500,11 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   return commandBuffer;
 } // RenderRenderable
 
-static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
+static absl::InlinedVector<VkCommandBuffer, 32> RenderUI(
+  VkCommandBuffer commandBuffer, Window& window) {
   ImGui::Render();
   ImDrawData* drawData = ImGui::GetDrawData();
-  if (!drawData || drawData->TotalVtxCount == 0) return;
+  if (!drawData || drawData->TotalVtxCount == 0) return {};
 
   if (auto vb = ReallocateBuffer(
         window.uiVertexBuffer, drawData->TotalVtxCount * sizeof(ImDrawVert),
@@ -514,7 +516,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
     GetLogger()->warn(
       "Unable to create/resize ui vertex buffer for window {}: {}",
       window.title, vb.error().what());
-    return;
+    return {};
   }
 
   if (auto ib = ReallocateBuffer(
@@ -527,7 +529,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
     GetLogger()->warn(
       "Unable to create/resize ui index buffer for window {}: {}", window.title,
       ib.error().what());
-    return;
+    return {};
   }
 
   ImDrawVert* pVertices;
@@ -538,7 +540,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}",
                       window.title, ptr.error().what());
-    return;
+    return {};
   }
 
   if (auto ptr = window.uiIndexBuffer.Map<ImDrawIdx*>()) {
@@ -546,7 +548,7 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     GetLogger()->warn("Unable to map ui index buffer for window {}: {}",
                       window.title, ptr.error().what());
-    return;
+    return {};
   }
 
   for (int i = 0; i < drawData->CmdListsCount; ++i) {
@@ -604,6 +606,8 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
   uiPushConstants[1] = glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
 
+  absl::InlinedVector<VkCommandBuffer, 32> commandBuffers;
+
   for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount; ++j) {
     ImDrawList* cmdList = drawData->CmdLists[j];
 
@@ -641,12 +645,15 @@ static void RenderUI(VkCommandBuffer commandBuffer, Window& window) {
                            reinterpret_cast<std::byte*>(uiPushConstants.data()),
                            uiPushConstants.size() * sizeof(glm::vec2)));
       vkCmdExecuteCommands(commandBuffer, 1, &cb);
+      commandBuffers.push_back(cb);
 
       idOff += drawCmd.ElemCount;
     }
 
     vtOff += cmdList->VtxBuffer.Size;
   }
+
+  return commandBuffers;
 } // RenderUI
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
@@ -655,11 +662,18 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
   using namespace std::string_literals;
 
+  // TODO: this is probably not good to rely on
+  // Try not to print out object tracker messages
+  if (std::strcmp(pCallbackData->pMessageIdName,
+        "UNASSIGNED-ObjectTracker-Info") == 0) {
+    return VK_FALSE;
+  }
+
   fmt::memory_buffer buf;
-  fmt::format_to(buf, "{}: {}",
+  fmt::format_to(buf, "{}: {} ({})",
                  vk::to_string(static_cast<VkDebugUtilsMessageTypeFlagBitsEXT>(
                    messageTypes)),
-                 pCallbackData->pMessage);
+                 pCallbackData->pMessage, pCallbackData->pMessageIdName);
   std::string const msg(buf.data(), buf.size());
 
   buf.clear();
@@ -1692,6 +1706,9 @@ void iris::Renderer::EndFrame(
   VkImageView view, gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
 
+  auto previousFrameOldCBs = sOldCommandBuffers;
+  sOldCommandBuffers.clear();
+
   auto&& windows = Windows();
   std::size_t const numWindows = windows.size();
 
@@ -1893,6 +1910,7 @@ void iris::Renderer::EndFrame(
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                                   sizeof(PushConstants)));
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+      sOldCommandBuffers.push_back(commandBuffer);
     }
 
     { // this block locks sRenderables so that we can iterate over them safely
@@ -1910,6 +1928,7 @@ void iris::Renderer::EndFrame(
                              reinterpret_cast<std::byte*>(&pushConstants),
                              sizeof(PushConstants)));
         vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+        sOldCommandBuffers.push_back(commandBuffer);
       }
     }
 
@@ -1919,7 +1938,11 @@ void iris::Renderer::EndFrame(
                            secondaryCBs.data());
     }
 
-    if (window.showUI) RenderUI(frame.commandBuffer, window);
+    if (window.showUI) {
+      auto uiCBs = RenderUI(frame.commandBuffer, window);
+      sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
+                                uiCBs.end());
+    }
 
     vkCmdEndRenderPass(frame.commandBuffer);
     if (result = vkEndCommandBuffer(frame.commandBuffer);
@@ -1979,6 +2002,10 @@ void iris::Renderer::EndFrame(
                          iris::to_string(result));
     }
   }
+
+  vkFreeCommandBuffers(sDevice, sCommandPools[0],
+      gsl::narrow_cast<std::uint32_t>(previousFrameOldCBs.size()),
+      previousFrameOldCBs.data());
 
   sFrameNum += 1;
   sFrameIndex = sFrameNum % sNumFramesBuffered;

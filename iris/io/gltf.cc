@@ -15,7 +15,14 @@
 #include "io/read_file.h"
 #include "logging.h"
 #include "mikktspace.h"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 #include "Miniball.hpp"
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 #include "nlohmann/json.hpp"
 #include "renderer.h"
 #include "renderer_private.h"
@@ -1669,10 +1676,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4458)
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
 
     Miniball::Miniball<CoordAccessor> mb(3, positions.begin(), positions.end());
-
-#endif // PLATFORM_COMPILER_MSVC
 
     renderable.boundingSphere =
       glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
@@ -1684,7 +1693,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
-#endif // PLATFORM_COMPILER_MSVC
+#elif PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic pop
+#endif
 
     renderables.push_back(renderable);
   }
