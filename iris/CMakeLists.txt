@@ -197,3 +197,7 @@ endif()
 
 add_executable(iris-raytracer WIN32 iris-raytracer.cc)
 target_link_libraries(iris-raytracer iris absl::failure_signal_handler)
+
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()

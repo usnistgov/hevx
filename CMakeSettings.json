@@ -9,7 +9,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
+      "cmakeCommandArgs": "",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -22,7 +22,7 @@
       ],
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\hevx\\install\\${name}",
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DTHIRD_PARTY_UPDATE_DISCONNECTED=ON",
+      "cmakeCommandArgs": "",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": ""
     },
@@ -42,7 +42,7 @@
       "remoteCopySourcesExclusionList": [".vs", ".git"],
       "rsyncCommandArgs" : "-t --delete --delete-excluded",
       "remoteCopyBuildOutput" : false,
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DPYTHON_EXECUTABLE=/usr/bin/python3",
+      "cmakeCommandArgs": "-DPYTHON_EXECUTABLE=/usr/bin/python3",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "linux_x64" ]
@@ -63,7 +63,7 @@
       "remoteCopySourcesExclusionList": [".vs", ".git"],
       "rsyncCommandArgs" : "-t --delete --delete-excluded",
       "remoteCopyBuildOutput" : false,
-      "cmakeCommandArgs": "-DBUILD_TESTING=OFF -DPYTHON_EXECUTABLE=/usr/bin/python3",
+      "cmakeCommandArgs": "-DPYTHON_EXECUTABLE=/usr/bin/python3",
       "buildCommandArgs": "-v",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "linux_x64" ]

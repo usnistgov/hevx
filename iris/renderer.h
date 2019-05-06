@@ -8,6 +8,7 @@
 #include "iris/config.h"
 
 #include "iris/buffer.h"
+#include "iris/types.h"
 #include "iris/vulkan.h"
 
 #if PLATFORM_COMPILER_MSVC
@@ -246,13 +247,12 @@ namespace Nav {
 glm::vec3 Position() noexcept;
 void Position(glm::vec3 position) noexcept;
 
-// Pitch, Yaw (Head), Roll order
-glm::vec3 Attitude() noexcept;
+EulerAngles Attitude() noexcept;
+void Attitude(EulerAngles eulerAngles) noexcept;
+
+glm::mat4 Matrix() noexcept;
 
 void Pivot(glm::quat const& pivot) noexcept;
-
-glm::vec3 PivotPoint() noexcept;
-void PivotPoint(glm::vec3 point) noexcept;
 
 void Reset() noexcept;
 

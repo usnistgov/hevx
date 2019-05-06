@@ -1,8 +1,9 @@
 #ifndef HEV_IRIS_ERROR_H_
 #define HEV_IRIS_ERROR_H_
-/*! \file
- * \brief \ref iris::Error definition.
- */
+/*!
+\file
+\brief \ref iris::Error definition.
+*/
 
 #include "iris/config.h"
 
@@ -68,14 +69,14 @@ public:
 inline ErrorCategory const gErrorCategory;
 
 /*! \brief Get the global instance of the ErrorCategory.
- * \return \ref gErrorCategory
+\return \ref gErrorCategory
  */
 inline std::error_category const& GetErrorCategory() {
   return gErrorCategory;
 }
 
 /*! \brief Make a std::error_code from a \ref Error.
- * \return std::error_code
+\return std::error_code
  */
 inline std::error_code make_error_code(Error e) noexcept {
   return std::error_code(static_cast<int>(e), GetErrorCategory());

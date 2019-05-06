@@ -168,12 +168,8 @@ static Trackball sTrackball;
 namespace Nav {
 
 static glm::vec3 sPosition{};
-static glm::vec3 sAttitude{};
-static glm::vec3 sScale{1.f, 1.f, 1.f};
-static glm::mat4 sMatrix{1.f};
-
-static glm::mat4 sPivotMatrix{1.f};
-static glm::vec3 sPivotPoint{};
+static glm::quat sOrientation{};
+static float sScale{1.f};
 
 } // namespace Nav
 
@@ -273,9 +269,6 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
   examineMat = glm::translate(examineMat, examineOffset);
 
   sWorldMatrix = examineMat;
-
-  Nav::sPivotMatrix = examineMat;
-  Nav::sPivotPoint = examineOffset;
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -1755,28 +1748,12 @@ void iris::Renderer::EndFrame(
       ImGui::Text(
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
         "%.3f %.3f",
-        Nav::sMatrix[0][0], Nav::sMatrix[0][1], Nav::sMatrix[0][2],
-        Nav::sMatrix[0][3], Nav::sMatrix[1][0], Nav::sMatrix[1][1],
-        Nav::sMatrix[1][2], Nav::sMatrix[1][3], Nav::sMatrix[2][0],
-        Nav::sMatrix[2][1], Nav::sMatrix[2][2], Nav::sMatrix[2][3],
-        Nav::sMatrix[3][0], Nav::sMatrix[3][1], Nav::sMatrix[3][2],
-        Nav::sMatrix[3][3]);
-
-      ImGui::Separator();
-      ImGui::Text("Pivot");
-      ImGui::Text("Point (%.3f, %.3f, %.3f)", Nav::sPivotPoint.x,
-                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
-      ImGui::Text(
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
-        "%.3f %.3f",
-        Nav::sPivotMatrix[0][0], Nav::sPivotMatrix[0][1],
-        Nav::sPivotMatrix[0][2], Nav::sPivotMatrix[0][3],
-        Nav::sPivotMatrix[1][0], Nav::sPivotMatrix[1][1],
-        Nav::sPivotMatrix[1][2], Nav::sPivotMatrix[1][3],
-        Nav::sPivotMatrix[2][0], Nav::sPivotMatrix[2][1],
-        Nav::sPivotMatrix[2][2], Nav::sPivotMatrix[2][3],
-        Nav::sPivotMatrix[3][0], Nav::sPivotMatrix[3][1],
-        Nav::sPivotMatrix[3][2], Nav::sPivotMatrix[3][3]);
+        Nav::Matrix()[0][0], Nav::Matrix()[0][1], Nav::Matrix()[0][2],
+        Nav::Matrix()[0][3], Nav::Matrix()[1][0], Nav::Matrix()[1][1],
+        Nav::Matrix()[1][2], Nav::Matrix()[1][3], Nav::Matrix()[2][0],
+        Nav::Matrix()[2][1], Nav::Matrix()[2][2], Nav::Matrix()[2][3],
+        Nav::Matrix()[3][0], Nav::Matrix()[3][1], Nav::Matrix()[3][2],
+        Nav::Matrix()[3][3]);
 
       ImGui::EndGroup();
 
@@ -1917,7 +1894,7 @@ void iris::Renderer::EndFrame(
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
         pushConstants.ModelMatrix =
-          Nav::sMatrix * sWorldMatrix * renderable.modelMatrix;
+          Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
@@ -2342,58 +2319,42 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   return {};
 } // iris::Renderer::ProcessControlMessage
 
-namespace iris::Renderer::Nav {
-
-void UpdateMatrix() noexcept {
-  sMatrix = glm::mat4_cast(glm::quat(sAttitude)) *
-               glm::scale(glm::mat4(1.f), sScale);
-  sMatrix = glm::translate(sMatrix, sPosition);
-} // UpdateMatrix
-
-} // namespace iris::Renderer::Nav
-
 glm::vec3 iris::Renderer::Nav::Position() noexcept {
   return sPosition;
 } // iris::Renderer::Nav::Position
 
 void iris::Renderer::Nav::Position(glm::vec3 position) noexcept {
   sPosition = std::move(position);
-  UpdateMatrix();
 } // iris::Renderer::Nav::Position
 
-glm::vec3 iris::Renderer::Nav::Attitude() noexcept {
-  return sAttitude;
+iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
+  // GLM keeps euler angles in Pitch, Yaw (Heading), Roll order
+  glm::vec3 const eulerAngles = glm::eulerAngles(sOrientation);
+  return {EulerAngles::Roll(eulerAngles.z), EulerAngles::Pitch(eulerAngles.x),
+          EulerAngles::Heading(eulerAngles.y)};
 } // iris::Renderer::Nav::Attitude
 
+void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
+  sOrientation = glm::normalize(glm::quat(glm::vec3(eulerAngles)));
+} // iris::Renderer::Nav::Attitude
+
+glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
+  // Uniform scaling commutes with rotation, so scaling the rotation matrix
+  // should save a few cycles over scaling an identity matrix and then rotating.
+  return glm::translate(
+    glm::scale(glm::mat4_cast(sOrientation), glm::vec3(sScale, sScale, sScale)),
+    sPosition);
+} // iris::Renderer::Nav::Matrix
+
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
-  GetLogger()->debug("Nav::Pivot point: ({}, {}, {}), pivot: ({}, {}, {}, {})",
-    sPivotPoint.x, sPivotPoint.y, sPivotPoint.z, pivot.x, pivot.y, pivot.z,
-    pivot.w);
-
-  sMatrix = glm::translate(sMatrix, -sPivotPoint);
-  sMatrix *= glm::mat4_cast(pivot);
-  sMatrix = glm::translate(sMatrix, sPivotPoint);
-
-  glm::quat orientation;
-  glm::vec3 skew;
-  glm::vec4 perspective;
-  glm::decompose(sMatrix, sScale, orientation, sPosition, skew, perspective);
-
-  sAttitude = glm::eulerAngles(orientation);
+  GetLogger()->debug("Nav::Pivot: ({}, {}, {}, {})", pivot.x, pivot.y, pivot.z,
+                     pivot.w);
+  sOrientation = glm::normalize(sOrientation * pivot);
 } // iris::Renderer::Nav::Pivot
-
-glm::vec3 iris::Renderer::Nav::PivotPoint() noexcept {
-  return sPivotPoint;
-} // iris::Renderer::Nav::PivotPoint
-
-void iris::Renderer::Nav::PivotPoint(glm::vec3 point) noexcept {
-  sPivotPoint = std::move(point);
-} // iris::Renderer::Nav::PivotPoint
 
 void iris::Renderer::Nav::Reset() noexcept {
   sPosition = glm::vec3(0.f, 0.f, 0.f);
-  sAttitude = glm::vec3(0.f, 0.f, 0.f);
-  sScale = glm::vec3(1.f, 1.f, 1.f);
-  UpdateMatrix();
+  sOrientation = glm::quat();
+  sScale = 1.f;
 } // iris::Renderer::Nav::Reset
 

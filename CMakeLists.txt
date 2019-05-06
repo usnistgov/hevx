@@ -18,7 +18,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BUILD_DOCS "Build the documentation" ON)
 CMAKE_DEPENDENT_OPTION(BUILD_DOCS_INTERNAL "Build developer documentation"
   ON "BUILD_DOCS" OFF)
-option(THIRD_PART_UPDATE_DICONNECTED "Update third party dependencies" ON)
+option(THIRD_PARTY_UPDATE_DISCONNECTED "Update third party dependencies" ON)
 
 # CTest adds a BUILD_TESTING option (default: ON) and calls enable_testing
 if(PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -50,13 +50,6 @@ add_subdirectory(third_party)
 ##
 if(BUILD_DOCS AND (PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR))
   add_subdirectory(docs)
-endif()
-
-##
-# Unit testing
-##
-if(BUILD_TESTING)
-  enable_testing()
 endif()
 
 ##
