@@ -1745,15 +1745,23 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Nav");
       if (ImGui::Button("Reset")) Nav::Reset();
 
+      auto const navAttitude = Nav::Attitude();
+      auto const navMatrix = Nav::Matrix();
+
+      ImGui::Text(
+        "Position: (%.3f, %.3f, %.3f) Attitude: (%.3f, %.3f, %.3f) "
+        "Orientation: (%.3f, %.3f, %.3f, %.3f)",
+        Nav::sPosition.x, Nav::sPosition.y, Nav::sPosition.z,
+        float(navAttitude.heading), float(navAttitude.pitch),
+        float(navAttitude.roll), Nav::sOrientation.x, Nav::sOrientation.y,
+        Nav::sOrientation.z, Nav::sOrientation.w);
       ImGui::Text(
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
         "%.3f %.3f",
-        Nav::Matrix()[0][0], Nav::Matrix()[0][1], Nav::Matrix()[0][2],
-        Nav::Matrix()[0][3], Nav::Matrix()[1][0], Nav::Matrix()[1][1],
-        Nav::Matrix()[1][2], Nav::Matrix()[1][3], Nav::Matrix()[2][0],
-        Nav::Matrix()[2][1], Nav::Matrix()[2][2], Nav::Matrix()[2][3],
-        Nav::Matrix()[3][0], Nav::Matrix()[3][1], Nav::Matrix()[3][2],
-        Nav::Matrix()[3][3]);
+        navMatrix[0][0], navMatrix[0][1], navMatrix[0][2], navMatrix[0][3],
+        navMatrix[1][0], navMatrix[1][1], navMatrix[1][2], navMatrix[1][3],
+        navMatrix[2][0], navMatrix[2][1], navMatrix[2][2], navMatrix[2][3],
+        navMatrix[3][0], navMatrix[3][1], navMatrix[3][2], navMatrix[3][3]);
 
       ImGui::EndGroup();
 
@@ -2328,10 +2336,9 @@ void iris::Renderer::Nav::Position(glm::vec3 position) noexcept {
 } // iris::Renderer::Nav::Position
 
 iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
-  // GLM keeps euler angles in Pitch, Yaw (Heading), Roll order
-  glm::vec3 const eulerAngles = glm::eulerAngles(sOrientation);
-  return {EulerAngles::Roll(eulerAngles.z), EulerAngles::Pitch(eulerAngles.x),
-          EulerAngles::Heading(eulerAngles.y)};
+  return {EulerAngles::Heading(glm::yaw(sOrientation)),
+          EulerAngles::Pitch(glm::pitch(sOrientation)),
+          EulerAngles::Roll(glm::roll(sOrientation))};
 } // iris::Renderer::Nav::Attitude
 
 void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
@@ -2341,15 +2348,15 @@ void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
 glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
   // Uniform scaling commutes with rotation, so scaling the rotation matrix
   // should save a few cycles over scaling an identity matrix and then rotating.
-  return glm::translate(
-    glm::scale(glm::mat4_cast(sOrientation), glm::vec3(sScale, sScale, sScale)),
-    sPosition);
+  return glm::translate(glm::scale(glm::mat4_cast(sOrientation),
+                                   glm::vec3(sScale, sScale, sScale)),
+                        sPosition);
 } // iris::Renderer::Nav::Matrix
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
   GetLogger()->debug("Nav::Pivot: ({}, {}, {}, {})", pivot.x, pivot.y, pivot.z,
                      pivot.w);
-  sOrientation = glm::normalize(sOrientation * pivot);
+  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
 } // iris::Renderer::Nav::Pivot
 
 void iris::Renderer::Nav::Reset() noexcept {

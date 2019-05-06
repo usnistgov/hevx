@@ -15,23 +15,23 @@ are angles that represent a sequence of model axis rotations.
 We are using 'Heading' in place of 'Yaw'.
 */
 struct EulerAngles {
-  //! \brief Rotation amount around the forward model axis.
-  using Roll = SafeNumeric<float, struct RollTag>;
-  //! \brief Rotation amount around the side model axis.
-  using Pitch = SafeNumeric<float, struct PitchTag>;
   //! \brief Rotation amount around the vertical model axis.
   using Heading = SafeNumeric<float, struct HeadingTag>;
+  //! \brief Rotation amount around the side model axis.
+  using Pitch = SafeNumeric<float, struct PitchTag>;
+  //! \brief Rotation amount around the forward model axis.
+  using Roll = SafeNumeric<float, struct RollTag>;
 
-  Roll roll{};
-  Pitch pitch{};
-  Heading heading{};
+  Heading heading{0.f};
+  Pitch pitch{0.f};
+  Roll roll{0.f};
 
   constexpr EulerAngles() noexcept = default;
 
-  constexpr EulerAngles(Roll r, Pitch p, Heading h) noexcept
-    : roll(std::move(r))
+  constexpr EulerAngles(Heading h, Pitch p, Roll r) noexcept
+    : heading(std::move(h))
     , pitch(std::move(p))
-    , heading(std::move(h)) {}
+    , roll(std::move(r)) {}
 
   // GLM wants euler angles in Pitch, Yaw (Heading), Roll order
   explicit operator glm::vec3() const noexcept {
