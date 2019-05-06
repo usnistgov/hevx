@@ -170,6 +170,7 @@ namespace Nav {
 static glm::vec3 sPosition{};
 static glm::quat sOrientation{};
 static float sScale{1.f};
+static glm::vec3 sPivotPoint{};
 
 } // namespace Nav
 
@@ -269,6 +270,7 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
   examineMat = glm::translate(examineMat, examineOffset);
 
   sWorldMatrix = examineMat;
+  Nav::sPivotPoint = -examineOffset;
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -1762,6 +1764,8 @@ void iris::Renderer::EndFrame(
         navMatrix[1][0], navMatrix[1][1], navMatrix[1][2], navMatrix[1][3],
         navMatrix[2][0], navMatrix[2][1], navMatrix[2][2], navMatrix[2][3],
         navMatrix[3][0], navMatrix[3][1], navMatrix[3][2], navMatrix[3][3]);
+      ImGui::Text("Pivot Point: (%.3f, %.3f, %.3f", Nav::sPivotPoint.x,
+                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
 
       ImGui::EndGroup();
 
@@ -2346,11 +2350,16 @@ void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
 } // iris::Renderer::Nav::Attitude
 
 glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
+  glm::mat4 mat = glm::scale(glm::mat4(1.f), glm::vec3(sScale, sScale, sScale));
+  mat = glm::translate(mat, -sPivotPoint);
+  mat *= glm::mat4_cast(sOrientation);
+  mat = glm::translate(mat, sPivotPoint + sPosition);
+  return mat;
   // Uniform scaling commutes with rotation, so scaling the rotation matrix
   // should save a few cycles over scaling an identity matrix and then rotating.
-  return glm::translate(glm::scale(glm::mat4_cast(sOrientation),
-                                   glm::vec3(sScale, sScale, sScale)),
-                        sPosition);
+  //return glm::translate(glm::scale(glm::mat4_cast(sOrientation),
+                                   //glm::vec3(sScale, sScale, sScale)),
+                        //sPosition);
 } // iris::Renderer::Nav::Matrix
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
