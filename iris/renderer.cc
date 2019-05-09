@@ -170,7 +170,6 @@ namespace Nav {
 static glm::vec3 sPosition{};
 static glm::quat sOrientation{};
 static float sScale{1.f};
-static glm::vec3 sPivotPoint{};
 
 } // namespace Nav
 
@@ -245,35 +244,6 @@ void main() {
 static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
-
-static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
-  IRIS_LOG_ENTER();
-
-  std::string const nodeName =
-    examineMessage.node().empty() ? "world" : examineMessage.node();
-  if (nodeName != "world") {
-    GetLogger()->warn("EXAMINE only currently implements 'world' node");
-  }
-
-  if (sWorldBoundingSphere.w <= 0.f) sWorldBoundingSphere.w = 1.f;
-  glm::vec3 const boundingSphereCenter(
-    sWorldBoundingSphere.x, sWorldBoundingSphere.y, sWorldBoundingSphere.z);
-
-  float const examineScale = 1.f / sWorldBoundingSphere.w;
-
-  glm::vec3 const examineCenter(0.f, 2.f, 0.f);
-  glm::vec3 const examineOffset =
-    examineCenter - boundingSphereCenter * examineScale;
-
-  glm::mat4 examineMat = glm::scale(
-    glm::mat4{1.f}, glm::vec3(examineScale, examineScale, examineScale));
-  examineMat = glm::translate(examineMat, examineOffset);
-
-  sWorldMatrix = examineMat;
-  Nav::sPivotPoint = -examineOffset;
-
-  IRIS_LOG_LEAVE();
-} // ExamineNode
 
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
@@ -1764,8 +1734,6 @@ void iris::Renderer::EndFrame(
         navMatrix[1][0], navMatrix[1][1], navMatrix[1][2], navMatrix[1][3],
         navMatrix[2][0], navMatrix[2][1], navMatrix[2][2], navMatrix[2][3],
         navMatrix[3][0], navMatrix[3][1], navMatrix[3][2], navMatrix[3][3]);
-      ImGui::Text("Pivot Point: (%.3f, %.3f, %.3f", Nav::sPivotPoint.x,
-                  Nav::sPivotPoint.y, Nav::sPivotPoint.z);
 
       ImGui::EndGroup();
 
@@ -2308,7 +2276,11 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     }
     break;
   case iris::Control::Control::TypeCase::kExamine:
-    ExamineNode(controlMessage.examine());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(Error::kControlMessageInvalid,
+                        fmt::format("Examine not yet implemented {}",
+                                    controlMessage.type_case())));
     break;
   case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());
@@ -2351,9 +2323,7 @@ void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
 
 glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
   glm::mat4 mat = glm::scale(glm::mat4(1.f), glm::vec3(sScale, sScale, sScale));
-  mat = glm::translate(mat, -sPivotPoint);
   mat *= glm::mat4_cast(sOrientation);
-  mat = glm::translate(mat, sPivotPoint + sPosition);
   return mat;
   // Uniform scaling commutes with rotation, so scaling the rotation matrix
   // should save a few cycles over scaling an identity matrix and then rotating.
@@ -2363,8 +2333,6 @@ glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
 } // iris::Renderer::Nav::Matrix
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
-  GetLogger()->debug("Nav::Pivot: ({}, {}, {}, {})", pivot.x, pivot.y, pivot.z,
-                     pivot.w);
   sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
 } // iris::Renderer::Nav::Pivot
 

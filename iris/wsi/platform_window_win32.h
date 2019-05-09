@@ -182,6 +182,11 @@ public:
   Impl() noexcept
     : keyLUT_(256) {}
 
+  Impl(Impl const&) = default;
+  Impl(Impl&&) = default;
+  Impl& operator=(Impl const&) = default;
+  Impl& operator=(Impl&&) = default;
+
   /*!
   \brief Destructor.
   */

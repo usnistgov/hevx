@@ -47,6 +47,8 @@ iris::Window::Window(Window&& other) noexcept
   , lastMousePos(std::move(other.lastMousePos))
   , projectionMatrix(std::move(other.projectionMatrix))
   , projectionMatrixInverse(std::move(other.projectionMatrixInverse)) {
+  platformWindow.OnResize(
+    [this](wsi::Extent2D const&) { this->resized = true; });
 } // Window::Window
 
 tl::expected<iris::Window, std::exception>
