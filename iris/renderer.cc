@@ -245,6 +245,33 @@ static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
 
+static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
+  IRIS_LOG_ENTER();
+
+  std::string const nodeName =
+    examineMessage.node().empty() ? "world" : examineMessage.node();
+  if (nodeName != "world") {
+    GetLogger()->warn("EXAMINE only currently supports 'world' node");
+  }
+
+  if (sWorldBoundingSphere.w <= 0.f) sWorldBoundingSphere.w = 1.f;
+  glm::vec3 const boundingSphereCenter(
+    sWorldBoundingSphere.x, sWorldBoundingSphere.y, sWorldBoundingSphere.z);
+
+  float const examineScale = 1.f / sWorldBoundingSphere.w;
+
+  glm::vec3 const examineCenter(0.f, 2.f, 0.f);
+  glm::vec3 const examineOffset =
+    examineCenter - boundingSphereCenter * examineScale;
+
+  sWorldMatrix = glm::translate(
+    glm::scale(glm::mat4{1.f},
+               glm::vec3(examineScale, examineScale, examineScale)),
+    examineOffset);
+
+  IRIS_LOG_LEAVE();
+} // ExamineNode
+
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   IRIS_LOG_ENTER();
@@ -2276,11 +2303,7 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     }
     break;
   case iris::Control::Control::TypeCase::kExamine:
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kControlMessageInvalid,
-                        fmt::format("Examine not yet implemented {}",
-                                    controlMessage.type_case())));
+    ExamineNode(controlMessage.examine());
     break;
   case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());
@@ -2322,14 +2345,15 @@ void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
 } // iris::Renderer::Nav::Attitude
 
 glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
-  glm::mat4 mat = glm::scale(glm::mat4(1.f), glm::vec3(sScale, sScale, sScale));
-  mat *= glm::mat4_cast(sOrientation);
+  glm::mat4 const worldInverse = glm::inverse(sWorldMatrix);
+  glm::vec3 const pivotPoint(worldInverse[3]);
+
+  glm::mat4 mat = glm::translate(glm::mat4(1.f), -pivotPoint);
+  mat = glm::scale(mat, glm::vec3(sScale, sScale, sScale));
+  mat = glm::translate(mat * glm::mat4_cast(sOrientation), sPosition);
+  mat = glm::translate(mat, pivotPoint);
+
   return mat;
-  // Uniform scaling commutes with rotation, so scaling the rotation matrix
-  // should save a few cycles over scaling an identity matrix and then rotating.
-  //return glm::translate(glm::scale(glm::mat4_cast(sOrientation),
-                                   //glm::vec3(sScale, sScale, sScale)),
-                        //sPosition);
 } // iris::Renderer::Nav::Matrix
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {

@@ -5,6 +5,7 @@
 \brief \ref iris::SafeNumeric definition.
 */
 
+#include <utility>
 
 namespace iris {
 
