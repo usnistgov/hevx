@@ -165,17 +165,28 @@ static Renderables sRenderables{};
 // TODO: move this
 static Trackball sTrackball;
 
+static glm::vec4 sWorldBoundingSphere{0.f, 0.f, 0.f, 0.f};
+static glm::mat4 sWorldMatrix{1.f};
+static glm::mat4 sViewMatrix{1.f};
+
 namespace Nav {
 
 static glm::vec3 sPosition{};
 static glm::quat sOrientation{};
 static float sScale{1.f};
+static glm::mat4 sMatrix{1.f}; // store the matrix as well to save cycles
+
+static void UpdateMatrix() noexcept {
+  glm::mat4 const worldInverse = glm::inverse(sWorldMatrix);
+  glm::vec3 const pivotPoint(worldInverse[3]);
+
+  sMatrix = glm::translate(glm::mat4(1.f), -pivotPoint);
+  sMatrix = glm::scale(sMatrix, glm::vec3(sScale, sScale, sScale));
+  sMatrix = glm::translate(sMatrix * glm::mat4_cast(sOrientation), sPosition);
+  sMatrix = glm::translate(sMatrix, pivotPoint);
+} // UpdateMatrix
 
 } // namespace Nav
-
-static glm::vec4 sWorldBoundingSphere{0.f, 0.f, 0.f, 0.f};
-static glm::mat4 sWorldMatrix{1.f};
-static glm::mat4 sViewMatrix{1.f};
 
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
@@ -264,10 +275,9 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
   glm::vec3 const examineOffset =
     examineCenter - boundingSphereCenter * examineScale;
 
-  sWorldMatrix = glm::translate(
-    glm::scale(glm::mat4{1.f},
-               glm::vec3(examineScale, examineScale, examineScale)),
-    examineOffset);
+  sWorldMatrix = glm::scale(
+    glm::mat4(1.f), glm::vec3(examineScale, examineScale, examineScale));
+  sWorldMatrix = glm::translate(sWorldMatrix, examineOffset);
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -1745,7 +1755,6 @@ void iris::Renderer::EndFrame(
       if (ImGui::Button("Reset")) Nav::Reset();
 
       auto const navAttitude = Nav::Attitude();
-      auto const navMatrix = Nav::Matrix();
 
       ImGui::Text(
         "Position: (%.3f, %.3f, %.3f) Attitude: (%.3f, %.3f, %.3f) "
@@ -1757,10 +1766,12 @@ void iris::Renderer::EndFrame(
       ImGui::Text(
         "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
         "%.3f %.3f",
-        navMatrix[0][0], navMatrix[0][1], navMatrix[0][2], navMatrix[0][3],
-        navMatrix[1][0], navMatrix[1][1], navMatrix[1][2], navMatrix[1][3],
-        navMatrix[2][0], navMatrix[2][1], navMatrix[2][2], navMatrix[2][3],
-        navMatrix[3][0], navMatrix[3][1], navMatrix[3][2], navMatrix[3][3]);
+        Nav::sMatrix[0][0], Nav::sMatrix[0][1], Nav::sMatrix[0][2],
+        Nav::sMatrix[0][3], Nav::sMatrix[1][0], Nav::sMatrix[1][1],
+        Nav::sMatrix[1][2], Nav::sMatrix[1][3], Nav::sMatrix[2][0],
+        Nav::sMatrix[2][1], Nav::sMatrix[2][2], Nav::sMatrix[2][3],
+        Nav::sMatrix[3][0], Nav::sMatrix[3][1], Nav::sMatrix[3][2],
+        Nav::sMatrix[3][3]);
 
       ImGui::EndGroup();
 
@@ -1901,7 +1912,7 @@ void iris::Renderer::EndFrame(
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
         pushConstants.ModelMatrix =
-          Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
+          Nav::sMatrix * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);
@@ -2332,6 +2343,7 @@ glm::vec3 iris::Renderer::Nav::Position() noexcept {
 
 void iris::Renderer::Nav::Position(glm::vec3 position) noexcept {
   sPosition = std::move(position);
+  UpdateMatrix();
 } // iris::Renderer::Nav::Position
 
 iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
@@ -2342,27 +2354,22 @@ iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
 
 void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
   sOrientation = glm::normalize(glm::quat(glm::vec3(eulerAngles)));
+  UpdateMatrix();
 } // iris::Renderer::Nav::Attitude
 
 glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
-  glm::mat4 const worldInverse = glm::inverse(sWorldMatrix);
-  glm::vec3 const pivotPoint(worldInverse[3]);
-
-  glm::mat4 mat = glm::translate(glm::mat4(1.f), -pivotPoint);
-  mat = glm::scale(mat, glm::vec3(sScale, sScale, sScale));
-  mat = glm::translate(mat * glm::mat4_cast(sOrientation), sPosition);
-  mat = glm::translate(mat, pivotPoint);
-
-  return mat;
+  return sMatrix;
 } // iris::Renderer::Nav::Matrix
 
 void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
   sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
+  UpdateMatrix();
 } // iris::Renderer::Nav::Pivot
 
 void iris::Renderer::Nav::Reset() noexcept {
   sPosition = glm::vec3(0.f, 0.f, 0.f);
   sOrientation = glm::quat();
   sScale = 1.f;
+  UpdateMatrix();
 } // iris::Renderer::Nav::Reset
 
