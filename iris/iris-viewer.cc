@@ -30,7 +30,7 @@
 #include <vector>
 
 ABSL_FLAG(std::string, shadertoy_url, "", "ShaderToy URL to load");
-ABSL_FLAG(std::string, examine_node, "", "Node to examine");
+ABSL_FLAG(std::string, examine, "", "Node to examine");
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
 
   auto const positional = absl::ParseCommandLine(argc, argv);
   auto const shadertoy_url = absl::GetFlag(FLAGS_shadertoy_url);
-  auto const examine_node = absl::GetFlag(FLAGS_examine_node);
+  auto const examine_node = absl::GetFlag(FLAGS_examine);
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
     "iris-viewer.log", true);
