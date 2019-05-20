@@ -128,7 +128,7 @@ add_library(iris STATIC ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC
-    flags imgui miniball vma
+    imgui miniball vma
     GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::hash absl::fixed_array absl::flat_hash_map
     mikktspace stb glslang SPIRV Vulkan::Vulkan
@@ -185,7 +185,8 @@ target_compile_options(iris
 )
 
 add_executable(iris-viewer WIN32 iris-viewer.cc)
-target_link_libraries(iris-viewer iris absl::failure_signal_handler)
+target_link_libraries(iris-viewer iris
+  absl::failure_signal_handler absl::flags absl::flags_parse)
 if(WIN32)
   file(GLOB tbb_dlls ${TBB_BINARY_DIR}/*.dll)
   foreach(dll ${tbb_dlls})
@@ -196,7 +197,8 @@ if(WIN32)
 endif()
 
 add_executable(iris-raytracer WIN32 iris-raytracer.cc)
-target_link_libraries(iris-raytracer iris absl::failure_signal_handler)
+target_link_libraries(iris-raytracer iris
+  absl::failure_signal_handler absl::flags absl::flags_parse)
 
 if(BUILD_TESTING)
   add_subdirectory(test)

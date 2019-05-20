@@ -13,13 +13,14 @@
 
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
 #include "fmt/format.h"
 #include "iris/protos.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "flags.h"
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -27,6 +28,9 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+ABSL_FLAG(std::string, shadertoy_url, "", "ShaderToy URL to load");
+ABSL_FLAG(std::string, examine_node, "", "Node to examine");
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -63,10 +67,9 @@ int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
-  flags::args const args(argc, argv);
-  auto const shadertoy_url = args.get<std::string>("shadertoy-url");
-  auto const examine_node = args.get<std::string>("examine");
-  auto const& files = args.positional();
+  auto const positional = absl::ParseCommandLine(argc, argv);
+  auto const shadertoy_url = absl::GetFlag(FLAGS_shadertoy_url);
+  auto const examine_node = absl::GetFlag(FLAGS_examine_node);
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
     "iris-viewer.log", true);
@@ -91,29 +94,30 @@ int main(int argc, char** argv) {
   }
 
   logger.info("Renderer initialized. {} files specified on command line.",
-              files.size());
+    positional.size() - 1);
 
-  for (auto&& file : files) {
-    logger.info("Loading {}", file);
-    if (auto result = iris::Renderer::LoadFile(file); !result) {
-      logger.error("Error loading {}: {}", file, result.error().what());
-    }
-  }
-
-  if (shadertoy_url) {
-    iris::Control::Control message;
-    message.mutable_shadertoy()->set_url(*shadertoy_url);
-    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
-      logger.error("Error loading {}: {}", *shadertoy_url,
+  for (size_t i = 1; i < positional.size(); ++i) {
+    logger.info("Loading {}", positional[i]);
+    if (auto result = iris::Renderer::LoadFile(positional[i]); !result) {
+      logger.error("Error loading {}: {}", positional[i],
                    result.error().what());
     }
   }
 
-  if (examine_node) {
+  if (!shadertoy_url.empty()) {
     iris::Control::Control message;
-    message.mutable_examine()->set_node(*examine_node);
+    message.mutable_shadertoy()->set_url(shadertoy_url);
     if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
-      logger.error("Error examining {}: {}", *examine_node,
+      logger.error("Error loading {}: {}", shadertoy_url,
+                   result.error().what());
+    }
+  }
+
+  if (!examine_node.empty()) {
+    iris::Control::Control message;
+    message.mutable_examine()->set_node(examine_node);
+    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
+      logger.error("Error examining {}: {}", examine_node,
                    result.error().what());
     }
   }

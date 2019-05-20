@@ -90,7 +90,6 @@ The following packages are fetched and managed with CMake:
 - [protocolbuffers/protobuf](https://github.com/protocolbuffers/protobuf)
 - [nlohmann/json](https://github.com/nlohmann/json)
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
-- [sailormoon/flags](https://github.com/sailormoon/flags)
 
 Developers
 ----------

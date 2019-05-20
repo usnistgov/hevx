@@ -3,6 +3,7 @@
 #include "absl/container/fixed_array.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
+#include "absl/flags/parse.h"
 #include "fmt/format.h"
 #include "glm/mat4x4.hpp"
 #include "iris/acceleration_structure.h"
@@ -19,7 +20,6 @@
 #include "spdlog/sinks/ansicolor_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "flags.h"
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -518,8 +518,7 @@ int main(int argc, char** argv) {
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
-  flags::args const args(argc, argv);
-  auto const& files = args.positional();
+  auto const positional = absl::ParseCommandLine(argc, argv);
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
     "iris-raytracer.log", true);
@@ -553,10 +552,11 @@ int main(int argc, char** argv) {
     std::exit(EXIT_FAILURE);
   }
 
-  for (auto&& file : files) {
-    sLogger->info("Loading {}", file);
-    if (auto result = iris::Renderer::LoadFile(file); !result) {
-      sLogger->error("Error loading {}: {}", file, result.error().what());
+  for (size_t i = 1; i < positional.size(); ++i) {
+    sLogger->info("Loading {}", positional[i]);
+    if (auto result = iris::Renderer::LoadFile(positional[i]); !result) {
+      sLogger->error("Error loading {}: {}", positional[i],
+                   result.error().what());
     }
   }
 
