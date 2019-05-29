@@ -3,7 +3,7 @@
 
 #include "glm/vec3.hpp"
 #include "glm/gtc/quaternion.hpp"
-#include "safe_numeric.h"
+#include "iris/safe_numeric.h"
 
 namespace iris {
 
@@ -33,9 +33,8 @@ struct EulerAngles {
     , pitch(std::move(p))
     , roll(std::move(r)) {}
 
-  // GLM wants euler angles in Pitch, Yaw (Heading), Roll order
-  explicit operator glm::vec3() const noexcept {
-    return glm::vec3(pitch, heading, roll);
+  explicit operator glm::quat() const noexcept {
+    return glm::quat(glm::vec3(float(pitch), float(roll), float(heading)));
   }
 }; // struct EulerAngles
 

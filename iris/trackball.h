@@ -7,7 +7,8 @@
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "imgui.h"
-#include "renderer.h"
+#include "iris/renderer.h"
+#include "iris/types.h"
 #include "wsi/input.h"
 
 namespace iris {
@@ -21,7 +22,7 @@ public:
 
 private:
   float scale_{1.f};
-  glm::vec3 attitude_{0.f, 0.f, 0.f};
+  EulerAngles attitude_{};
   glm::vec3 position_{0.f, 0.f, 0.f};
   glm::vec2 prevMouse_;
 }; // class Trackball
@@ -41,14 +42,14 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
       ImGui::IsMouseClicked(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseClicked(wsi::Buttons::kButtonRight)) {
     position_ = glm::vec3(0.f, 0.f, 0.f);
-    attitude_ = glm::vec3(0.f, 0.f, 0.f);
+    attitude_ = {};
     return;
   } else if (ImGui::IsMouseReleased(wsi::Buttons::kButtonLeft) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonRight)) {
     if (glm::length2(deltaMouse) < .00001f) {
       position_ = glm::vec3(0.f, 0.f, 0.f);
-      attitude_ = glm::vec3(0.f, 0.f, 0.f);
+      attitude_ = {};
     }
     return;
   }
@@ -57,8 +58,9 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
     glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
     position_ = glm::vec3(delta.x, 0.f, delta.y);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
-    glm::vec2 const delta = deltaMouse * kTwist / io.DeltaTime;
-    attitude_ = glm::vec3(-delta.y, 0.f, delta.x);
+    glm::vec2 const delta = deltaMouse * kTwist;
+    attitude_.heading = EulerAngles::Heading(delta.x); // * Nav::Response()
+    attitude_.pitch = EulerAngles::Pitch(-delta.y); // * Nav::Response()
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
     glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
     position_.y = delta.y;
@@ -77,7 +79,7 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
     Renderer::Nav::Position(Renderer::Nav::Position() + m);
   }
 
-  glm::quat const o(attitude_ * io.DeltaTime); // * Nav::Response
+  glm::quat const o(attitude_);
   if (glm::angle(o) != 0.0f) {
     Renderer::Nav::Pivot(o);
   }

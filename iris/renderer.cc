@@ -1512,54 +1512,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   vertexInputAttributeDescriptions[2] = {2, 0, VK_FORMAT_R8G8B8A8_UNORM,
                                          offsetof(ImDrawVert, col)};
 
-#if 0
-  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
-  inputAssemblyStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-  VkPipelineViewportStateCreateInfo viewportStateCI = {};
-  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportStateCI.viewportCount = 1;
-  viewportStateCI.scissorCount = 1;
-
-  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
-  rasterizationStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
-  rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizationStateCI.lineWidth = 1.f;
-
-  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
-  multisampleStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampleStateCI.rasterizationSamples = sSurfaceSampleCount;
-  multisampleStateCI.minSampleShading = 1.f;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
-  depthStencilStateCI.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
-  absl::FixedArray<VkPipelineColorBlendAttachmentState>
-    colorBlendAttachmentStates(1);
-  colorBlendAttachmentStates[0] = {
-    VK_TRUE,                             // blendEnable
-    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
-    VK_BLEND_OP_ADD,                     // colorBlendOp
-    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
-    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
-    VK_BLEND_OP_ADD,                     // alphaBlendOp
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
-  };
-
-  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
-                                                 VK_DYNAMIC_STATE_SCISSOR};
-#else
   colorBlendAttachmentStates[0].blendEnable = VK_TRUE;
-#endif
 
   if (auto pipe = CreateRasterizationPipeline(
         uiShaders, vertexInputBindingDescriptions,
@@ -1754,44 +1707,116 @@ void iris::Renderer::EndFrame(
       ImGui::BeginGroup();
 
       ImGui::Text("Nav");
+      ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
+      char label[32];
       auto const navAttitude = Nav::Attitude();
 
-      ImGui::Text(
-        "Position: (%.3f, %.3f, %.3f) Attitude: (%.3f, %.3f, %.3f) "
-        "Orientation: (%.3f, %.3f, %.3f, %.3f)",
-        Nav::sPosition.x, Nav::sPosition.y, Nav::sPosition.z,
-        float(navAttitude.heading), float(navAttitude.pitch),
-        float(navAttitude.roll), Nav::sOrientation.x, Nav::sOrientation.y,
-        Nav::sOrientation.z, Nav::sOrientation.w);
-      ImGui::Text(
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
-        "%.3f %.3f",
-        Nav::sMatrix[0][0], Nav::sMatrix[0][1], Nav::sMatrix[0][2],
-        Nav::sMatrix[0][3], Nav::sMatrix[1][0], Nav::sMatrix[1][1],
-        Nav::sMatrix[1][2], Nav::sMatrix[1][3], Nav::sMatrix[2][0],
-        Nav::sMatrix[2][1], Nav::sMatrix[2][2], Nav::sMatrix[2][3],
-        Nav::sMatrix[3][0], Nav::sMatrix[3][1], Nav::sMatrix[3][2],
-        Nav::sMatrix[3][3]);
+      ImGui::Columns(5, NULL, false);
+      ImGui::Text("Position");
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sPosition.x);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sPosition.y);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sPosition.z);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      ImGui::Text("Attitude");
+      std::sprintf(label, "%+.3f", float(navAttitude.heading));
+      ImGui::NextColumn();
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", float(navAttitude.pitch));
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", float(navAttitude.roll));
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      ImGui::Text("Orientation");
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sOrientation.x);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sOrientation.y);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sOrientation.z);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", Nav::sOrientation.w);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      for (int i = 0; i < 4; ++i) {
+        if (i == 0) {
+          ImGui::Text("Matrix");
+          ImGui::NextColumn();
+        } else {
+          ImGui::Text("  ");
+          ImGui::NextColumn();
+        }
+
+        for (int j = 0; j < 4; ++j) {
+          std::sprintf(label, "%+.3f", Nav::sMatrix[i][j]);
+          ImGui::Text(label);
+          ImGui::NextColumn();
+        }
+      }
+      ImGui::Columns(1);
 
       ImGui::EndGroup();
 
       ImGui::Separator();
       ImGui::BeginGroup();
       ImGui::Text("World");
-      ImGui::Text("Bounding Sphere: (%.3f %.3f %.3f), %.3f",
-                  sWorldBoundingSphere.x, sWorldBoundingSphere.y,
-                  sWorldBoundingSphere.z, sWorldBoundingSphere.w);
-      ImGui::Text(
-        "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f "
-        "%.3f %.3f",
-        sWorldMatrix[0][0], sWorldMatrix[0][1], sWorldMatrix[0][2],
-        sWorldMatrix[0][3], sWorldMatrix[1][0], sWorldMatrix[1][1],
-        sWorldMatrix[1][2], sWorldMatrix[1][3], sWorldMatrix[2][0],
-        sWorldMatrix[2][1], sWorldMatrix[2][2], sWorldMatrix[2][3],
-        sWorldMatrix[3][0], sWorldMatrix[3][1], sWorldMatrix[3][2],
-        sWorldMatrix[3][3]);
+
+      ImGui::Columns(5, NULL, false);
+      ImGui::Text("BSphere");
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", sWorldBoundingSphere.x);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", sWorldBoundingSphere.y);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", sWorldBoundingSphere.z);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      std::sprintf(label, "%+.3f", sWorldBoundingSphere.w);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      for (int i = 0; i < 4; ++i) {
+        if (i == 0) {
+          ImGui::Text("Matrix");
+          ImGui::NextColumn();
+        } else {
+          ImGui::Text("  ");
+          ImGui::NextColumn();
+        }
+
+        for (int j = 0; j < 4; ++j) {
+          std::sprintf(label, "%+.3f", sWorldMatrix[i][j]);
+          ImGui::Text(label);
+          ImGui::NextColumn();
+        }
+      }
+      ImGui::Columns(1);
+
       ImGui::EndGroup();
     }
     ImGui::End(); // Status
@@ -2355,7 +2380,7 @@ iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
 } // iris::Renderer::Nav::Attitude
 
 void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
-  sOrientation = glm::normalize(glm::quat(glm::vec3(eulerAngles)));
+  sOrientation = glm::normalize(glm::quat(eulerAngles));
   UpdateMatrix();
 } // iris::Renderer::Nav::Attitude
 
