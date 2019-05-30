@@ -244,6 +244,9 @@ namespace Nav {
 
 // all of these are currently not thread safe
 
+float Scale() noexcept;
+void Scale(float scale) noexcept;
+
 glm::vec3 Position() noexcept;
 void Position(glm::vec3 position) noexcept;
 

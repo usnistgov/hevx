@@ -15,13 +15,13 @@ namespace iris {
 
 class Trackball {
 public:
-  static constexpr float const kSpeed = .5f;
-  static constexpr float const kTwist = glm::radians(45.f);
+  // These values are tuned to match the old HEV response
+  static constexpr float const kSpeed = 1.1f;
+  static constexpr float const kTwist = glm::radians(120.f);
 
   void Update(ImGuiIO const& io) noexcept;
 
 private:
-  float scale_{1.f};
   EulerAngles attitude_{};
   glm::vec3 position_{0.f, 0.f, 0.f};
   glm::vec2 prevMouse_;
@@ -59,19 +59,17 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
     position_ = glm::vec3(delta.x, 0.f, delta.y);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
     glm::vec2 const delta = deltaMouse * kTwist;
-    attitude_.heading = EulerAngles::Heading(delta.x); // * Nav::Response()
-    attitude_.pitch = EulerAngles::Pitch(-delta.y); // * Nav::Response()
+    attitude_.heading = EulerAngles::Heading(-delta.x); // * Nav::Response()
+    attitude_.pitch = EulerAngles::Pitch(delta.y); // * Nav::Response()
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
     glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
     position_.y = delta.y;
   }
 
   if (io.MouseWheel > 0) {
-    // Nav::SetScale(Nav::GetScale * 1.05f);
-    scale_ *= 1.05f;
+    Renderer::Nav::Scale(Renderer::Nav::Scale() / 1.05f);
   } else if (io.MouseWheel < 0) {
-    // Nav::SetScale(Nav::GetScale / 1.05f);
-    scale_ /= 1.05f;
+    Renderer::Nav::Scale(Renderer::Nav::Scale() * 1.05f);
   }
 
   glm::vec3 const m = position_ * io.DeltaTime; // * Nav::Response

@@ -177,14 +177,64 @@ static float sScale{1.f};
 static glm::mat4 sMatrix{1.f}; // store the matrix as well to save cycles
 
 static void UpdateMatrix() noexcept {
-  glm::mat4 const worldInverse = glm::inverse(sWorldMatrix);
-  glm::vec3 const pivotPoint(worldInverse[3]);
-
+  glm::vec3 const pivotPoint(-sWorldMatrix[3]);
   sMatrix = glm::translate(glm::mat4(1.f), -pivotPoint);
   sMatrix = glm::scale(sMatrix, glm::vec3(sScale, sScale, sScale));
-  sMatrix = glm::translate(sMatrix * glm::mat4_cast(sOrientation), sPosition);
+  sMatrix = glm::translate(sMatrix * glm::inverse(glm::mat4_cast(sOrientation)),
+                           sPosition);
   sMatrix = glm::translate(sMatrix, pivotPoint);
 } // UpdateMatrix
+
+/////
+//
+// Publicly declared API
+//
+/////
+
+float Scale() noexcept {
+  return sScale;
+} // Scale
+
+void Scale(float scale) noexcept {
+  sScale = scale;
+  UpdateMatrix();
+} // Scale
+
+glm::vec3 Position() noexcept {
+  return sPosition;
+} // Position
+
+void Position(glm::vec3 position) noexcept {
+  sPosition = std::move(position);
+  UpdateMatrix();
+} // Position
+
+iris::EulerAngles Attitude() noexcept {
+  return {EulerAngles::Heading(glm::yaw(sOrientation)),
+          EulerAngles::Pitch(glm::pitch(sOrientation)),
+          EulerAngles::Roll(glm::roll(sOrientation))};
+} // Attitude
+
+void Attitude(EulerAngles eulerAngles) noexcept {
+  sOrientation = glm::normalize(glm::quat(eulerAngles));
+  UpdateMatrix();
+} // Attitude
+
+glm::mat4 Matrix() noexcept {
+  return sMatrix;
+} // Matrix
+
+void Pivot(glm::quat const& pivot) noexcept {
+  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
+  UpdateMatrix();
+} // Pivot
+
+void Reset() noexcept {
+  sPosition = {};
+  sOrientation = {};
+  sScale = 1.f;
+  UpdateMatrix();
+} // Reset
 
 } // namespace Nav
 
@@ -1689,6 +1739,39 @@ void iris::Renderer::EndFrame(
   renderPassBI.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(clearValues.size());
 
+  auto TextVector = [](char const* name, char const* componentFormat,
+      int numComponents, float* components) {
+    ImGui::Text(name);
+    ImGui::NextColumn();
+
+    char label[32];
+    for (int i = 0; i < numComponents; ++i) {
+      std::snprintf(label, 32, componentFormat, components[i]);
+      ImGui::Text(label);
+      ImGui::NextColumn();
+    }
+  };
+
+  auto TextMatrix = [](char const* name, char const* componentFormat,
+      int numRows, int numCols, float* components) {
+    char label[32];
+    for (int i = 0; i < numRows; ++i) {
+      if (i == 0) {
+        ImGui::Text(name);
+        ImGui::NextColumn();
+      } else {
+        ImGui::Text("  ");
+        ImGui::NextColumn();
+      }
+
+      for (int j = 0; j < numCols; ++j) {
+        std::snprintf(label, 32, componentFormat, components[i * numCols + j]);
+        ImGui::Text(label);
+        ImGui::NextColumn();
+      }
+    }
+  };
+
   for (auto&& [i, iter] : enumerate(windows)) {
     auto&& [title, window] = iter;
     ImGui::SetCurrentContext(window.uiContext.get());
@@ -1710,70 +1793,25 @@ void iris::Renderer::EndFrame(
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
-      char label[32];
       auto const navAttitude = Nav::Attitude();
 
       ImGui::Columns(5, NULL, false);
-      ImGui::Text("Position");
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sPosition.x);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sPosition.y);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sPosition.z);
-      ImGui::Text(label);
-      ImGui::NextColumn();
+      TextVector("Position", "%+.3f", 3, glm::value_ptr(Nav::sPosition));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      ImGui::Text("Attitude");
-      std::sprintf(label, "%+.3f", float(navAttitude.heading));
-      ImGui::NextColumn();
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", float(navAttitude.pitch));
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", float(navAttitude.roll));
-      ImGui::Text(label);
-      ImGui::NextColumn();
+      float navAttitudeComponents[] = {float(navAttitude.heading),
+                                       float(navAttitude.pitch),
+                                       float(navAttitude.roll)};
+      TextVector("Attitude", "%+.3f", 3, navAttitudeComponents);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      ImGui::Text("Orientation");
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sOrientation.x);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sOrientation.y);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sOrientation.z);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", Nav::sOrientation.w);
-      ImGui::Text(label);
-      ImGui::NextColumn();
+      TextVector("Orientation", "%+.3f", 4, glm::value_ptr(Nav::sOrientation));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      for (int i = 0; i < 4; ++i) {
-        if (i == 0) {
-          ImGui::Text("Matrix");
-          ImGui::NextColumn();
-        } else {
-          ImGui::Text("  ");
-          ImGui::NextColumn();
-        }
-
-        for (int j = 0; j < 4; ++j) {
-          std::sprintf(label, "%+.3f", Nav::sMatrix[i][j]);
-          ImGui::Text(label);
-          ImGui::NextColumn();
-        }
-      }
+      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(Nav::sMatrix));
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -1783,38 +1821,11 @@ void iris::Renderer::EndFrame(
       ImGui::Text("World");
 
       ImGui::Columns(5, NULL, false);
-      ImGui::Text("BSphere");
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", sWorldBoundingSphere.x);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", sWorldBoundingSphere.y);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", sWorldBoundingSphere.z);
-      ImGui::Text(label);
-      ImGui::NextColumn();
-      std::sprintf(label, "%+.3f", sWorldBoundingSphere.w);
-      ImGui::Text(label);
-      ImGui::NextColumn();
+      TextVector("BSphere", "%+.3f", 4, glm::value_ptr(sWorldBoundingSphere));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      for (int i = 0; i < 4; ++i) {
-        if (i == 0) {
-          ImGui::Text("Matrix");
-          ImGui::NextColumn();
-        } else {
-          ImGui::Text("  ");
-          ImGui::NextColumn();
-        }
-
-        for (int j = 0; j < 4; ++j) {
-          std::sprintf(label, "%+.3f", sWorldMatrix[i][j]);
-          ImGui::Text(label);
-          ImGui::NextColumn();
-        }
-      }
+      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(sWorldMatrix));
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -2363,40 +2374,4 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ProcessControlMessage
-
-glm::vec3 iris::Renderer::Nav::Position() noexcept {
-  return sPosition;
-} // iris::Renderer::Nav::Position
-
-void iris::Renderer::Nav::Position(glm::vec3 position) noexcept {
-  sPosition = std::move(position);
-  UpdateMatrix();
-} // iris::Renderer::Nav::Position
-
-iris::EulerAngles iris::Renderer::Nav::Attitude() noexcept {
-  return {EulerAngles::Heading(glm::yaw(sOrientation)),
-          EulerAngles::Pitch(glm::pitch(sOrientation)),
-          EulerAngles::Roll(glm::roll(sOrientation))};
-} // iris::Renderer::Nav::Attitude
-
-void iris::Renderer::Nav::Attitude(EulerAngles eulerAngles) noexcept {
-  sOrientation = glm::normalize(glm::quat(eulerAngles));
-  UpdateMatrix();
-} // iris::Renderer::Nav::Attitude
-
-glm::mat4 iris::Renderer::Nav::Matrix() noexcept {
-  return sMatrix;
-} // iris::Renderer::Nav::Matrix
-
-void iris::Renderer::Nav::Pivot(glm::quat const& pivot) noexcept {
-  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
-  UpdateMatrix();
-} // iris::Renderer::Nav::Pivot
-
-void iris::Renderer::Nav::Reset() noexcept {
-  sPosition = glm::vec3(0.f, 0.f, 0.f);
-  sOrientation = glm::quat();
-  sScale = 1.f;
-  UpdateMatrix();
-} // iris::Renderer::Nav::Reset
 
