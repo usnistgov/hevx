@@ -244,6 +244,9 @@ namespace Nav {
 
 // all of these are currently not thread safe
 
+float Response() noexcept;
+void Response(float response) noexcept;
+
 float Scale() noexcept;
 void Scale(float scale) noexcept;
 

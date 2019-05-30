@@ -171,6 +171,7 @@ static glm::mat4 sViewMatrix{1.f};
 
 namespace Nav {
 
+static float sResponse{1.f};
 static glm::vec3 sPosition{};
 static glm::quat sOrientation{};
 static float sScale{1.f};
@@ -190,6 +191,14 @@ static void UpdateMatrix() noexcept {
 // Publicly declared API
 //
 /////
+
+float Response() noexcept {
+  return sResponse;
+} // Response
+
+void Response(float response) noexcept {
+  sResponse = response;
+} // Response
 
 float Scale() noexcept {
   return sScale;
@@ -1794,6 +1803,12 @@ void iris::Renderer::EndFrame(
       if (ImGui::Button("Reset")) Nav::Reset();
 
       auto const navAttitude = Nav::Attitude();
+
+      ImGui::Columns(5, NULL, false);
+      TextVector("Response", "%+.3f", 1, &Nav::sResponse);
+      ImGui::NextColumn();
+      TextVector("Scale", "%+.3f", 1, &Nav::sScale);
+      ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
       TextVector("Position", "%+.3f", 3, glm::value_ptr(Nav::sPosition));
