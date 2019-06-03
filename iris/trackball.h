@@ -55,8 +55,16 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   }
 
   if (ImGui::IsMouseDragging(wsi::Buttons::kButtonLeft)) {
-    glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
-    position_ = glm::vec3(delta.x, 0.f, delta.y);
+    if (ImGui::IsKeyDown(wsi::Keys::kLeftControl)) {
+      // Emulate Middle Button with Left Ctrl + Right Button
+      float const response = Renderer::Nav::Response();
+      glm::vec2 const delta = deltaMouse * kTwist;
+      attitude_.heading = EulerAngles::Heading(-delta.x * response);
+      attitude_.pitch = EulerAngles::Pitch(delta.y * response);
+    } else {
+      glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
+      position_ = glm::vec3(delta.x, 0.f, delta.y);
+    }
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
     float const response = Renderer::Nav::Response();
     glm::vec2 const delta = deltaMouse * kTwist;
@@ -68,14 +76,14 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   }
 
   if (io.MouseWheel > 0) {
-    Renderer::Nav::Scale(Renderer::Nav::Scale() / 1.05f);
+    Renderer::Nav::Rescale(Renderer::Nav::Scale() / 1.05f);
   } else if (io.MouseWheel < 0) {
-    Renderer::Nav::Scale(Renderer::Nav::Scale() * 1.05f);
+    Renderer::Nav::Rescale(Renderer::Nav::Scale() * 1.05f);
   }
 
   glm::vec3 const m = position_ * io.DeltaTime; // * Nav::Response
   if (m != glm::vec3(0.f, 0.f, 0.f)) {
-    Renderer::Nav::Position(Renderer::Nav::Position() + m);
+    Renderer::Nav::Reposition(Renderer::Nav::Position() + m);
   }
 
   glm::quat const o(attitude_);

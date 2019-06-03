@@ -179,10 +179,11 @@ static glm::mat4 sMatrix{1.f}; // store the matrix as well to save cycles
 
 static void UpdateMatrix() noexcept {
   glm::vec3 const pivotPoint(-sWorldMatrix[3]);
+
   sMatrix = glm::translate(glm::mat4(1.f), -pivotPoint);
   sMatrix = glm::scale(sMatrix, glm::vec3(sScale, sScale, sScale));
-  sMatrix = glm::translate(sMatrix * glm::inverse(glm::mat4_cast(sOrientation)),
-                           sPosition);
+  sMatrix *= glm::inverse(glm::mat4_cast(sOrientation));
+  sMatrix = glm::translate(sMatrix, sPosition);
   sMatrix = glm::translate(sMatrix, pivotPoint);
 } // UpdateMatrix
 
@@ -204,30 +205,30 @@ float Scale() noexcept {
   return sScale;
 } // Scale
 
-void Scale(float scale) noexcept {
+void Rescale(float scale) noexcept {
   sScale = scale;
   UpdateMatrix();
-} // Scale
+} // Rescale
 
 glm::vec3 Position() noexcept {
   return sPosition;
 } // Position
 
-void Position(glm::vec3 position) noexcept {
+void Reposition(glm::vec3 position) noexcept {
   sPosition = std::move(position);
   UpdateMatrix();
-} // Position
+} // Reposition
 
-iris::EulerAngles Attitude() noexcept {
+iris::EulerAngles Orientation() noexcept {
   return {EulerAngles::Heading(glm::yaw(sOrientation)),
           EulerAngles::Pitch(glm::pitch(sOrientation)),
           EulerAngles::Roll(glm::roll(sOrientation))};
-} // Attitude
+} // Orientation
 
-void Attitude(EulerAngles eulerAngles) noexcept {
+void Reorient(EulerAngles eulerAngles) noexcept {
   sOrientation = glm::normalize(glm::quat(eulerAngles));
   UpdateMatrix();
-} // Attitude
+} // Reorient
 
 glm::mat4 Matrix() noexcept {
   return sMatrix;
@@ -1802,7 +1803,7 @@ void iris::Renderer::EndFrame(
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
-      auto const navAttitude = Nav::Attitude();
+      auto const navAttitude = Nav::Orientation();
 
       ImGui::Columns(5, NULL, false);
       TextVector("Response", "%+.3f", 1, &Nav::sResponse);

@@ -248,13 +248,13 @@ float Response() noexcept;
 void Response(float response) noexcept;
 
 float Scale() noexcept;
-void Scale(float scale) noexcept;
+void Rescale(float scale) noexcept;
 
 glm::vec3 Position() noexcept;
-void Position(glm::vec3 position) noexcept;
+void Reposition(glm::vec3 position) noexcept;
 
-EulerAngles Attitude() noexcept;
-void Attitude(EulerAngles eulerAngles) noexcept;
+EulerAngles Orientation() noexcept;
+void Reorient(EulerAngles eulerAngles) noexcept;
 
 glm::mat4 Matrix() noexcept;
 

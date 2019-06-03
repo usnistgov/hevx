@@ -116,17 +116,17 @@ static Keys KeycodeToKeys(int keycode) noexcept {
   case VK_DECIMAL: return Keys::kKeypadDecimal;
   case VK_DIVIDE: return Keys::kKeypadDivide;
   case VK_MULTIPLY: return Keys::kKeypadMultiply;
-  case VK_SUBTRACT: Keys::kKeypadSubtract;
-  case VK_ADD: Keys::kKeypadAdd;
+  case VK_SUBTRACT: return Keys::kKeypadSubtract;
+  case VK_ADD: return Keys::kKeypadAdd;
   // case Keys::kKeypadEnter: return 0; // TODO
   // case Keys::kKeypadEqual: return 0; // TODO
-  // case Keys::kLeftShift: return VK_LSHIFT;
-  // case Keys::kLeftControl: return VK_LCONTROL;
-  // case Keys::kLeftAlt: return VK_LMENU;
+  case VK_SHIFT: return Keys::kLeftShift;
+  case VK_CONTROL: return Keys::kLeftControl;
+  case VK_MENU: return Keys::kLeftAlt;
   // case Keys::kLeftSuper: return 0; // TODO
-  // case Keys::kRightShift: return VK_RSHIFT;
-  // case Keys::kRightControl: return VK_RCONTROL;
-  // case Keys::kRightAlt: return VK_RMENU;
+  case VK_RSHIFT: return Keys::kRightShift;
+  case VK_RCONTROL: return Keys::kRightControl;
+  case VK_RMENU: return Keys::kRightAlt;
   // case Keys::kRightSuper: return 0; // TODO
   // case Keys::kMenu: return 0; // TODO
   default: return Keys::kUnknown; // TODO
