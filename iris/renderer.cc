@@ -172,20 +172,10 @@ static glm::mat4 sViewMatrix{1.f};
 namespace Nav {
 
 static float sResponse{1.f};
+static float sScale{1.f};
 static glm::vec3 sPosition{};
 static glm::quat sOrientation{};
-static float sScale{1.f};
-static glm::mat4 sMatrix{1.f}; // store the matrix as well to save cycles
-
-static void UpdateMatrix() noexcept {
-  glm::vec3 const pivotPoint(-sWorldMatrix[3]);
-
-  sMatrix = glm::translate(glm::mat4(1.f), -pivotPoint);
-  sMatrix = glm::scale(sMatrix, glm::vec3(sScale, sScale, sScale));
-  sMatrix *= glm::inverse(glm::mat4_cast(sOrientation));
-  sMatrix = glm::translate(sMatrix, sPosition);
-  sMatrix = glm::translate(sMatrix, pivotPoint);
-} // UpdateMatrix
+static glm::vec3 sPivotPoint{};
 
 /////
 //
@@ -207,7 +197,6 @@ float Scale() noexcept {
 
 void Rescale(float scale) noexcept {
   sScale = scale;
-  UpdateMatrix();
 } // Rescale
 
 glm::vec3 Position() noexcept {
@@ -216,7 +205,6 @@ glm::vec3 Position() noexcept {
 
 void Reposition(glm::vec3 position) noexcept {
   sPosition = std::move(position);
-  UpdateMatrix();
 } // Reposition
 
 iris::EulerAngles Orientation() noexcept {
@@ -227,23 +215,37 @@ iris::EulerAngles Orientation() noexcept {
 
 void Reorient(EulerAngles eulerAngles) noexcept {
   sOrientation = glm::normalize(glm::quat(eulerAngles));
-  UpdateMatrix();
 } // Reorient
 
-glm::mat4 Matrix() noexcept {
-  return sMatrix;
-} // Matrix
+glm::vec3 PivotPoint() noexcept {
+  return sPivotPoint;
+} // PivotPoint
+
+void SetPivotPoint(glm::vec3 pivotPoint) noexcept {
+  sPivotPoint = std::move(pivotPoint);
+} // SetPivotPoint
 
 void Pivot(glm::quat const& pivot) noexcept {
   sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
-  UpdateMatrix();
 } // Pivot
+
+glm::mat4 Matrix() noexcept {
+  auto const npm = glm::translate(glm::mat4(1.f), sPivotPoint) * sWorldMatrix;
+  glm::vec3 const pivotPoint(-npm[3]);
+
+  glm::mat4 matrix = glm::translate(glm::mat4(1.f), -pivotPoint);
+  matrix = glm::scale(matrix, glm::vec3(sScale, sScale, sScale));
+  matrix *= glm::inverse(glm::mat4_cast(sOrientation));
+  matrix = glm::translate(matrix, sPosition);
+  matrix = glm::translate(matrix, pivotPoint);
+
+  return matrix;
+} // Matrix
 
 void Reset() noexcept {
   sPosition = {};
   sOrientation = {};
   sScale = 1.f;
-  UpdateMatrix();
 } // Reset
 
 } // namespace Nav
@@ -338,6 +340,7 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
   sWorldMatrix = glm::scale(
     glm::mat4(1.f), glm::vec3(examineScale, examineScale, examineScale));
   sWorldMatrix = glm::translate(sWorldMatrix, examineOffset);
+  Nav::SetPivotPoint(boundingSphereCenter);
 
   IRIS_LOG_LEAVE();
 } // ExamineNode
@@ -1750,7 +1753,7 @@ void iris::Renderer::EndFrame(
     gsl::narrow_cast<std::uint32_t>(clearValues.size());
 
   auto TextVector = [](char const* name, char const* componentFormat,
-      int numComponents, float* components) {
+      int numComponents, float const* components) {
     ImGui::Text(name);
     ImGui::NextColumn();
 
@@ -1763,7 +1766,7 @@ void iris::Renderer::EndFrame(
   };
 
   auto TextMatrix = [](char const* name, char const* componentFormat,
-      int numRows, int numCols, float* components) {
+      int numRows, int numCols, float const* components) {
     char label[32];
     for (int i = 0; i < numRows; ++i) {
       if (i == 0) {
@@ -1804,6 +1807,7 @@ void iris::Renderer::EndFrame(
       if (ImGui::Button("Reset")) Nav::Reset();
 
       auto const navAttitude = Nav::Orientation();
+      auto const navMatrix = Nav::Matrix();
 
       ImGui::Columns(5, NULL, false);
       TextVector("Response", "%+.3f", 1, &Nav::sResponse);
@@ -1827,7 +1831,7 @@ void iris::Renderer::EndFrame(
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(Nav::sMatrix));
+      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(navMatrix));
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -1966,7 +1970,7 @@ void iris::Renderer::EndFrame(
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
       for (auto&& [id, renderable] : sRenderables.renderables) {
         pushConstants.ModelMatrix =
-          Nav::sMatrix * sWorldMatrix * renderable.modelMatrix;
+          Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
         pushConstants.ModelViewMatrixInverse =
           glm::inverse(pushConstants.ModelViewMatrix);

@@ -256,9 +256,12 @@ void Reposition(glm::vec3 position) noexcept;
 EulerAngles Orientation() noexcept;
 void Reorient(EulerAngles eulerAngles) noexcept;
 
-glm::mat4 Matrix() noexcept;
+glm::vec3 PivotPoint() noexcept;
+void SetPivotPoint(glm::vec3 pivotPoint) noexcept;
 
 void Pivot(glm::quat const& pivot) noexcept;
+
+glm::mat4 Matrix() noexcept;
 
 void Reset() noexcept;
 
