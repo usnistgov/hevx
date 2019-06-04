@@ -223,7 +223,7 @@ void SetPivotPoint(glm::vec3 pivotPoint) noexcept {
 } // SetPivotPoint
 
 static glm::mat4 getNormalizedPivotTransformation() noexcept {
-  glm::mat4 npm = sMatrixTransform.computeLocalToWorld(glm::mat4(1.f));
+  glm::mat4 npm = sMatrixTransform.computeLocalToWorld(sWorldMatrix);
   npm = glm::translate(glm::mat4(1.f), sPivotPoint) * npm;
 
   glm::vec3 scale, position, skew;
@@ -231,7 +231,7 @@ static glm::mat4 getNormalizedPivotTransformation() noexcept {
   glm::vec4 perspective;
   glm::decompose(npm, scale, attitude, position, skew, perspective);
 
-  return glm::translate(glm::mat4(1.f), position) * glm::mat4_cast(attitude);
+  return glm::translate(glm::mat4_cast(attitude), position);
 } // getNormalizedPivotTransformation
 
 static glm::vec3 getNormalizedPivotPoint() noexcept {
@@ -335,14 +335,13 @@ static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
     examineMessage.node().empty() ? "world" : examineMessage.node();
   if (nodeName != "world") {
     GetLogger()->warn("EXAMINE only currently supports 'world' node");
+    return;
   }
 
   if (sWorldBoundingSphere.w <= 0.f) sWorldBoundingSphere.w = 1.f;
-  glm::vec3 const boundingSphereCenter(
-    sWorldBoundingSphere.x, sWorldBoundingSphere.y, sWorldBoundingSphere.z);
+  glm::vec3 const boundingSphereCenter(sWorldBoundingSphere);
 
   float const examineScale = 1.f / sWorldBoundingSphere.w;
-
   glm::vec3 const examineCenter(0.f, 2.f, 0.f);
   glm::vec3 const examineOffset =
     examineCenter - boundingSphereCenter * examineScale;

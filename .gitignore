@@ -1,5 +1,7 @@
 .vs/
 build/
+iris-viewer.log
+imgui.ini
 *.sublime-workspace
 *.sublime-project
 *.nsight-gfxproj

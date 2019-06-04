@@ -37,13 +37,7 @@ public:
   }
 
   glm::mat4 computeLocalToWorld(glm::mat4 const& matrix) const noexcept {
-    // matrix.preMult(matrix_); // iris/lib/MatrixTransform.cpp::34 RELATIVE
-    return matrix_ * matrix;
-  }
-
-  glm::mat4 computeWorldToLocalMatrix(glm::mat4 const& matrix) const noexcept {
-    // matrix.PostMult(inverse); // iris/lib/MatrixTransform.cpp::48 RELATIVE
-    return matrix * glm::inverse(matrix_);
+    return matrix * matrix_;
   }
 
 private:
