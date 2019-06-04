@@ -16,13 +16,13 @@ namespace iris {
 class Trackball {
 public:
   // These values are tuned to match the old HEV response
-  static constexpr float const kSpeed = 1.1f;
-  static constexpr float const kTwist = glm::radians(120.f);
+  static constexpr float const kSpeed = .5f;  // ether units / s
+  static constexpr float const kTwist = 45.f; // degrees / s
 
   void Update(ImGuiIO const& io) noexcept;
 
 private:
-  EulerAngles attitude_{};
+  glm::vec3 attitude_{0.f, 0.f, 0.f};
   glm::vec3 position_{0.f, 0.f, 0.f};
   glm::vec2 prevMouse_;
 }; // class Trackball
@@ -41,52 +41,50 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   if (ImGui::IsMouseClicked(wsi::Buttons::kButtonLeft) ||
       ImGui::IsMouseClicked(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseClicked(wsi::Buttons::kButtonRight)) {
-    position_ = glm::vec3(0.f, 0.f, 0.f);
-    attitude_ = {};
+    position_ = {0.f, 0.f, 0.f};
+    attitude_ = {0.f, 0.f, 0.f};
     return;
   } else if (ImGui::IsMouseReleased(wsi::Buttons::kButtonLeft) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonRight)) {
     if (glm::length2(deltaMouse) < .00001f) {
-      position_ = glm::vec3(0.f, 0.f, 0.f);
-      attitude_ = {};
+      position_ = {0.f, 0.f, 0.f};
+      attitude_ = {0.f, 0.f, 0.f};
     }
     return;
   }
 
   if (ImGui::IsMouseDragging(wsi::Buttons::kButtonLeft)) {
-    if (ImGui::IsKeyDown(wsi::Keys::kLeftControl)) {
-      // Emulate Middle Button with Left Ctrl + Right Button
-      float const response = Renderer::Nav::Response();
-      glm::vec2 const delta = deltaMouse * kTwist;
-      attitude_.heading = EulerAngles::Heading(-delta.x * response);
-      attitude_.pitch = EulerAngles::Pitch(delta.y * response);
-    } else {
-      glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
-      position_ = glm::vec3(delta.x, 0.f, delta.y);
-    }
+    float const dx = deltaMouse.x * kSpeed / io.DeltaTime;
+    float const dz = deltaMouse.y * kSpeed / io.DeltaTime;
+    position_ = glm::vec3(dx, 0.f, dz);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
-    float const response = Renderer::Nav::Response();
-    glm::vec2 const delta = deltaMouse * kTwist;
-    attitude_.heading = EulerAngles::Heading(-delta.x * response);
-    attitude_.pitch = EulerAngles::Pitch(delta.y * response);
+    float const dh = deltaMouse.x * kTwist / io.DeltaTime;
+    float const dp = -deltaMouse.y * kTwist / io.DeltaTime;
+    attitude_ = glm::vec3(dh, dp, 0.f);
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
-    glm::vec2 const delta = deltaMouse * kSpeed / io.DeltaTime;
-    position_.y = delta.y;
+    float const dy = deltaMouse.y * kSpeed / io.DeltaTime;
+    position_ = glm::vec3(0.f, dy, 0.f);
   }
 
-  if (io.MouseWheel > 0) {
-    Renderer::Nav::Rescale(Renderer::Nav::Scale() / 1.05f);
-  } else if (io.MouseWheel < 0) {
-    Renderer::Nav::Rescale(Renderer::Nav::Scale() * 1.05f);
-  }
+  //if (io.MouseWheel > 0) {
+    //Renderer::Nav::RescaleAtPivot(Renderer::Nav::Scale() / 1.05f);
+  //} else if (io.MouseWheel < 0) {
+    //Renderer::Nav::RescaleAtPivot(Renderer::Nav::Scale() * 1.05f);
+  //}
 
-  glm::vec3 const m = position_ * io.DeltaTime; // * Nav::Response
+  glm::vec3 const m = position_ * io.DeltaTime * Renderer::Nav::Response();
   if (m != glm::vec3(0.f, 0.f, 0.f)) {
     Renderer::Nav::Reposition(Renderer::Nav::Position() + m);
   }
 
-  glm::quat const o(attitude_);
+  auto const a = attitude_ * io.DeltaTime * Renderer::Nav::Response();
+
+  auto const qh = glm::angleAxis(glm::radians(a.x), glm::vec3(0.f, 0.f, 1.f));
+  auto const qp = glm::angleAxis(glm::radians(a.y), glm::vec3(1.f, 0.f, 0.f));
+  auto const qr = glm::angleAxis(glm::radians(a.z), glm::vec3(0.f, 1.f, 0.f));
+
+  auto const o = qr * qp * qh;
   if (glm::angle(o) != 0.0f) {
     Renderer::Nav::Pivot(o);
   }

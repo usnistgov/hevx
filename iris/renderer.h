@@ -245,7 +245,7 @@ namespace Nav {
 // all of these are currently not thread safe
 
 float Response() noexcept;
-void Response(float response) noexcept;
+void SetResponse(float response) noexcept;
 
 float Scale() noexcept;
 void Rescale(float scale) noexcept;
@@ -253,8 +253,8 @@ void Rescale(float scale) noexcept;
 glm::vec3 Position() noexcept;
 void Reposition(glm::vec3 position) noexcept;
 
-EulerAngles Orientation() noexcept;
-void Reorient(EulerAngles eulerAngles) noexcept;
+glm::quat Attitude() noexcept;
+void SetAttitude(glm::quat attitude) noexcept;
 
 glm::vec3 PivotPoint() noexcept;
 void SetPivotPoint(glm::vec3 pivotPoint) noexcept;

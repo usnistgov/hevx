@@ -23,6 +23,7 @@
 #include "io/gltf.h"
 #include "io/json.h"
 #include "io/shadertoy.h"
+#include "matrix_transform.h"
 #include "pipeline.h"
 #include "protos.h"
 #include "renderer_private.h"
@@ -172,9 +173,7 @@ static glm::mat4 sViewMatrix{1.f};
 namespace Nav {
 
 static float sResponse{1.f};
-static float sScale{1.f};
-static glm::vec3 sPosition{};
-static glm::quat sOrientation{};
+static MatrixTransform sMatrixTransform{};
 static glm::vec3 sPivotPoint{};
 
 /////
@@ -187,35 +186,33 @@ float Response() noexcept {
   return sResponse;
 } // Response
 
-void Response(float response) noexcept {
+void SetResponse(float response) noexcept {
   sResponse = response;
-} // Response
+} // SetResponse
 
 float Scale() noexcept {
-  return sScale;
+  return sMatrixTransform.getScale()[0];
 } // Scale
 
 void Rescale(float scale) noexcept {
-  sScale = scale;
+  sMatrixTransform.setScale(glm::vec3(scale, scale, scale));
 } // Rescale
 
 glm::vec3 Position() noexcept {
-  return sPosition;
+  return sMatrixTransform.getPosition();
 } // Position
 
 void Reposition(glm::vec3 position) noexcept {
-  sPosition = std::move(position);
+  sMatrixTransform.setPosition(std::move(position));
 } // Reposition
 
-iris::EulerAngles Orientation() noexcept {
-  return {EulerAngles::Heading(glm::yaw(sOrientation)),
-          EulerAngles::Pitch(glm::pitch(sOrientation)),
-          EulerAngles::Roll(glm::roll(sOrientation))};
-} // Orientation
+glm::quat Attitude() noexcept {
+  return sMatrixTransform.getAttitude();
+} // Attitude
 
-void Reorient(EulerAngles eulerAngles) noexcept {
-  sOrientation = glm::normalize(glm::quat(eulerAngles));
-} // Reorient
+void SetAttitude(glm::quat attitude) noexcept {
+  sMatrixTransform.setAttitude(std::move(attitude));
+} // SetAttitude
 
 glm::vec3 PivotPoint() noexcept {
   return sPivotPoint;
@@ -225,27 +222,40 @@ void SetPivotPoint(glm::vec3 pivotPoint) noexcept {
   sPivotPoint = std::move(pivotPoint);
 } // SetPivotPoint
 
+static glm::mat4 getNormalizedPivotTransformation() noexcept {
+  glm::mat4 npm = sMatrixTransform.computeLocalToWorld(glm::mat4(1.f));
+  npm = glm::translate(glm::mat4(1.f), sPivotPoint) * npm;
+
+  glm::vec3 scale, position, skew;
+  glm::quat attitude;
+  glm::vec4 perspective;
+  glm::decompose(npm, scale, attitude, position, skew, perspective);
+
+  return glm::translate(glm::mat4(1.f), position) * glm::mat4_cast(attitude);
+} // getNormalizedPivotTransformation
+
+static glm::vec3 getNormalizedPivotPoint() noexcept {
+  glm::mat4 const npm = getNormalizedPivotTransformation();
+  return glm::vec3(npm[3]);
+} // getNormalizedPivotPoint
+
 void Pivot(glm::quat const& pivot) noexcept {
-  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
+  glm::mat4 mat = sMatrixTransform.getMatrix();
+  glm::vec3 npp = getNormalizedPivotPoint();
+
+  mat = glm::translate(mat, -npp);
+  mat *= glm::mat4_cast(pivot);
+  mat = glm::translate(mat, npp);
+
+  sMatrixTransform.setMatrix(mat);
 } // Pivot
 
 glm::mat4 Matrix() noexcept {
-  auto const npm = glm::translate(glm::mat4(1.f), sPivotPoint) * sWorldMatrix;
-  glm::vec3 const pivotPoint(-npm[3]);
-
-  glm::mat4 matrix = glm::translate(glm::mat4(1.f), -pivotPoint);
-  matrix = glm::scale(matrix, glm::vec3(sScale, sScale, sScale));
-  matrix *= glm::inverse(glm::mat4_cast(sOrientation));
-  matrix = glm::translate(matrix, sPosition);
-  matrix = glm::translate(matrix, pivotPoint);
-
-  return matrix;
+  return sMatrixTransform.getMatrix();
 } // Matrix
 
 void Reset() noexcept {
-  sPosition = {};
-  sOrientation = {};
-  sScale = 1.f;
+  sMatrixTransform.setMatrix(glm::mat4(1.f));
 } // Reset
 
 } // namespace Nav
@@ -1805,7 +1815,7 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Nav");
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
-
+#if 0
       auto const navAttitude = Nav::Orientation();
       auto const navMatrix = Nav::Matrix();
 
@@ -1833,7 +1843,7 @@ void iris::Renderer::EndFrame(
       ImGui::Columns(5, NULL, false);
       TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(navMatrix));
       ImGui::Columns(1);
-
+#endif
       ImGui::EndGroup();
 
       ImGui::Separator();
