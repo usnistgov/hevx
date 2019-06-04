@@ -223,7 +223,7 @@ void SetPivotPoint(glm::vec3 pivotPoint) noexcept {
 } // SetPivotPoint
 
 static glm::mat4 getNormalizedPivotTransformation() noexcept {
-  glm::mat4 npm = sMatrixTransform.computeLocalToWorld(sWorldMatrix);
+  glm::mat4 npm = sWorldMatrix;
   npm = glm::translate(glm::mat4(1.f), sPivotPoint) * npm;
 
   glm::vec3 scale, position, skew;
@@ -1814,35 +1814,46 @@ void iris::Renderer::EndFrame(
       ImGui::Text("Nav");
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
-#if 0
-      auto const navAttitude = Nav::Orientation();
-      auto const navMatrix = Nav::Matrix();
+
+      float const navResponse = Nav::Response();
+      float const navScale = Nav::Scale();
+      glm::vec3 const navPosition = Nav::Position();
+      glm::quat const navAttitude = Nav::Attitude();
+      glm::vec3 const navPivotPoint = Nav::PivotPoint();
+      glm::mat4 const npp = Nav::getNormalizedPivotTransformation();
+      glm::vec3 const np = Nav::getNormalizedPivotPoint();
+      glm::mat4 const navMatrix = Nav::Matrix();
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Response", "%+.3f", 1, &Nav::sResponse);
+      TextVector("Response", "%+.3f", 1, &navResponse);
       ImGui::NextColumn();
-      TextVector("Scale", "%+.3f", 1, &Nav::sScale);
+      TextVector("Scale", "%+.3f", 1, &navScale);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Position", "%+.3f", 3, glm::value_ptr(Nav::sPosition));
+      TextVector("Position", "%+.3f", 3, glm::value_ptr(navPosition));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      float navAttitudeComponents[] = {float(navAttitude.heading),
-                                       float(navAttitude.pitch),
-                                       float(navAttitude.roll)};
-      TextVector("Attitude", "%+.3f", 3, navAttitudeComponents);
+      TextVector("Attitude", "%+.3f", 4, glm::value_ptr(navAttitude));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Orientation", "%+.3f", 4, glm::value_ptr(Nav::sOrientation));
+      TextVector("PivotPoint", "%+.3f", 3, glm::value_ptr(navPivotPoint));
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      TextVector("nPivotPoint", "%+.3f", 3, glm::value_ptr(np));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
       TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(navMatrix));
       ImGui::Columns(1);
-#endif
+
+      ImGui::Columns(5, NULL, false);
+      TextMatrix("npp", "%+.3f", 4, 4, glm::value_ptr(npp));
+      ImGui::Columns(1);
+
       ImGui::EndGroup();
 
       ImGui::Separator();
