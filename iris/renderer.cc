@@ -220,16 +220,24 @@ void Pivot(glm::quat const& pivot) noexcept {
 
 glm::mat4 Matrix() noexcept {
   // Uniform scaling commutes with rotation in this case.
-  return glm::translate(
-    glm::scale(glm::mat4_cast(sOrientation), glm::vec3(sScale, sScale, sScale)),
-    sPosition);
-#if 0
-  glm::mat4 matrix(1.f);
-  matrix = glm::scale(matrix, glm::vec3(sScale, sScale, sScale));
-  matrix *= glm::mat4_cast(sOrientation);
-  matrix = glm::translate(matrix, sPosition);
+
+  glm::mat4 matrix = glm::mat4_cast(sOrientation);
+
+  matrix[0][0] *= sScale;
+  matrix[0][1] *= sScale;
+  matrix[0][2] *= sScale;
+  matrix[1][0] *= sScale;
+  matrix[1][1] *= sScale;
+  matrix[1][2] *= sScale;
+  matrix[2][0] *= sScale;
+  matrix[2][1] *= sScale;
+  matrix[2][2] *= sScale;
+
+  matrix[3][0] = sPosition.x;
+  matrix[3][1] = sPosition.y;
+  matrix[3][2] = sPosition.z;
+
   return matrix;
-#endif
 } // Matrix
 
 void Reset() noexcept {
@@ -1720,17 +1728,14 @@ void iris::Renderer::EndFrame(
     ImGui::Text(name);
     ImGui::NextColumn();
 
-    char label[32];
     for (int i = 0; i < numComponents; ++i) {
-      std::snprintf(label, 32, componentFormat, components[i]);
-      ImGui::Text(label);
+      ImGui::Text(componentFormat, components[i]);
       ImGui::NextColumn();
     }
   };
 
   auto TextMatrix = [](char const* name, char const* componentFormat,
       int numRows, int numCols, float const* components) {
-    char label[32];
     for (int i = 0; i < numRows; ++i) {
       if (i == 0) {
         ImGui::Text(name);
@@ -1741,8 +1746,7 @@ void iris::Renderer::EndFrame(
       }
 
       for (int j = 0; j < numCols; ++j) {
-        std::snprintf(label, 32, componentFormat, components[i * numCols + j]);
-        ImGui::Text(label);
+        ImGui::Text(componentFormat, components[i * numCols + j]);
         ImGui::NextColumn();
       }
     }
@@ -1769,8 +1773,7 @@ void iris::Renderer::EndFrame(
 
       ImGui::Separator();
       ImGui::BeginGroup();
-
-      ImGui::Text("View");
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
 
       ImGui::Columns(5, NULL, false);
       TextVector("Position", "%+.3f", 3, glm::value_ptr(position));
@@ -1792,8 +1795,7 @@ void iris::Renderer::EndFrame(
 
       ImGui::Separator();
       ImGui::BeginGroup();
-
-      ImGui::Text("Nav");
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
@@ -1825,7 +1827,7 @@ void iris::Renderer::EndFrame(
 
       ImGui::Separator();
       ImGui::BeginGroup();
-      ImGui::Text("World");
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
 
       ImGui::Columns(5, NULL, false);
       TextVector("BSphere", "%+.3f", 4, glm::value_ptr(sWorldBoundingSphere));
