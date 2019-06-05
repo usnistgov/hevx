@@ -241,11 +241,40 @@ static glm::vec3 getNormalizedPivotPoint() noexcept {
 
 void Pivot(glm::quat const& pivot) noexcept {
   glm::mat4 mat = sMatrixTransform.getMatrix();
+  GetLogger()->debug(
+    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
+    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
+    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
+    mat[3][2], mat[3][3]);
+
   glm::vec3 npp = getNormalizedPivotPoint();
+  GetLogger()->debug("Nav::Pivot npp: {:+.3f} {:+.3f} {:+.3f}", npp.x, npp.y,
+                     npp.z);
 
   mat = glm::translate(mat, -npp);
+  GetLogger()->debug(
+    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
+    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
+    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
+    mat[3][2], mat[3][3]);
+
   mat *= glm::mat4_cast(pivot);
+  GetLogger()->debug(
+    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
+    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
+    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
+    mat[3][2], mat[3][3]);
+
   mat = glm::translate(mat, npp);
+  GetLogger()->debug(
+    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
+    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
+    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
+    mat[3][2], mat[3][3]);
 
   sMatrixTransform.setMatrix(mat);
 } // Pivot
@@ -1802,11 +1831,39 @@ void iris::Renderer::EndFrame(
     // TODO: move this ??
     sTrackball.Update(io);
 
+    glm::vec3 const position = glm::vec3(0.f, 0.f, 0.f);
+    glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
+    glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
+    sViewMatrix = glm::lookAt(position, center, up);
+
     // TODO: how to handle this at application scope?
     if (window.showUI && ImGui::Begin("Status")) {
       ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
+
+      ImGui::Separator();
+      ImGui::BeginGroup();
+
+      ImGui::Text("View");
+
+      ImGui::Columns(5, NULL, false);
+      TextVector("Position", "%+.3f", 3, glm::value_ptr(position));
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      TextVector("Center", "%+.3f", 3, glm::value_ptr(center));
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      TextVector("Up", "%+.3f", 3, glm::value_ptr(up));
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(sViewMatrix));
+      ImGui::Columns(1);
+
+      ImGui::EndGroup();
 
       ImGui::Separator();
       ImGui::BeginGroup();
@@ -1873,10 +1930,6 @@ void iris::Renderer::EndFrame(
     ImGui::End(); // Status
 
     ImGui::EndFrame();
-
-    glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
-    glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
-    sViewMatrix = glm::lookAt(glm::vec3(0.f, 0.f, 0.f), center, up);
 
     // currentFrame is still the previous frame, use that imageAvailable
     // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
@@ -2089,6 +2142,9 @@ iris::Renderer::RenderableID
 iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   IRIS_LOG_ENTER();
 
+  GetLogger()->debug("renderable bsphere: {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+      renderable.boundingSphere.x, renderable.boundingSphere.y,
+      renderable.boundingSphere.z, renderable.boundingSphere.w);
   glm::vec3 const renderableBSCenter(renderable.boundingSphere.x,
                                      renderable.boundingSphere.y,
                                      renderable.boundingSphere.z);
@@ -2107,12 +2163,12 @@ iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
     sWorldBoundingSphere = renderable.boundingSphere;
   } else {
     float const r = (renderableBSRadius + worldBSRadius + rwBSLength) / 2.f;
-    glm::vec3 const c =
-      glm::mix(renderableBSCenter, worldBSCenter - renderableBSCenter,
-               r - renderableBSRadius);
     //glm::vec3 const c =
-      //renderableBSCenter + (worldBSCenter - renderableBSCenter) *
-                             //(r - renderableBSRadius) / wrBSLength;
+      //glm::mix(renderableBSCenter, worldBSCenter - renderableBSCenter,
+               //r - renderableBSRadius);
+    glm::vec3 const c =
+      renderableBSCenter + (worldBSCenter - renderableBSCenter) *
+                             (r - renderableBSRadius) / wrBSLength;
     sWorldBoundingSphere = glm::vec4(c, r);
   }
 
