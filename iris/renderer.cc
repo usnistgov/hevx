@@ -1693,6 +1693,49 @@ void iris::Renderer::BindDescriptorSets(
   );
 } // iris::Renderer::BindDescriptorSets
 
+template <int N, typename T, glm::qualifier Q>
+void Text(char const* name, char const* fmt, glm::vec<N, T, Q> const& vec) {
+  ImGui::Text(name);
+  ImGui::NextColumn();
+
+  for (int i = 0; i < N; ++i) {
+    ImGui::Text(fmt, vec[i]);
+    ImGui::NextColumn();
+  }
+} // Text
+
+template <typename T, glm::qualifier Q>
+void Text(char const* name, char const* fmt, glm::qua<T, Q> const& qua) {
+  ImGui::Text(name);
+  ImGui::NextColumn();
+
+  ImGui::Text(fmt, qua.w);
+  ImGui::NextColumn();
+  ImGui::Text(fmt, qua.x);
+  ImGui::NextColumn();
+  ImGui::Text(fmt, qua.y);
+  ImGui::NextColumn();
+  ImGui::Text(fmt, qua.z);
+} // Text
+
+template <int C, int R, typename T, glm::qualifier Q>
+void Text(char const* name, char const* fmt, glm::mat<C, R, T, Q> const& mat) {
+  for (int i = 0; i < R; ++i) {
+    if (i == 0) {
+      ImGui::Text(name);
+      ImGui::NextColumn();
+    } else {
+      ImGui::Text("  ");
+      ImGui::NextColumn();
+    }
+
+    for (int j = 0; j < C; ++j) {
+      ImGui::Text(fmt, mat[j][i]);
+      ImGui::NextColumn();
+    }
+  }
+} // Text
+
 void iris::Renderer::EndFrame(
   VkImageView view, gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
@@ -1723,35 +1766,6 @@ void iris::Renderer::EndFrame(
   renderPassBI.clearValueCount =
     gsl::narrow_cast<std::uint32_t>(clearValues.size());
 
-  auto TextVector = [](char const* name, char const* componentFormat,
-      int numComponents, float const* components) {
-    ImGui::Text(name);
-    ImGui::NextColumn();
-
-    for (int i = 0; i < numComponents; ++i) {
-      ImGui::Text(componentFormat, components[i]);
-      ImGui::NextColumn();
-    }
-  };
-
-  auto TextMatrix = [](char const* name, char const* componentFormat,
-      int numRows, int numCols, float const* components) {
-    for (int i = 0; i < numRows; ++i) {
-      if (i == 0) {
-        ImGui::Text(name);
-        ImGui::NextColumn();
-      } else {
-        ImGui::Text("  ");
-        ImGui::NextColumn();
-      }
-
-      for (int j = 0; j < numCols; ++j) {
-        ImGui::Text(componentFormat, components[i * numCols + j]);
-        ImGui::NextColumn();
-      }
-    }
-  };
-
   for (auto&& [i, iter] : enumerate(windows)) {
     auto&& [title, window] = iter;
     ImGui::SetCurrentContext(window.uiContext.get());
@@ -1776,19 +1790,19 @@ void iris::Renderer::EndFrame(
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Position", "%+.3f", 3, glm::value_ptr(position));
+      Text("Position", "%+.3f", position);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Center", "%+.3f", 3, glm::value_ptr(center));
+      Text("Center", "%+.3f", center);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Up", "%+.3f", 3, glm::value_ptr(up));
+      Text("Up", "%+.3f", up);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(sViewMatrix));
+      Text("Matrix", "%+.3f", sViewMatrix);
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -1799,28 +1813,26 @@ void iris::Renderer::EndFrame(
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
-      float const navResponse = Nav::Response();
-      float const navScale = Nav::Scale();
-      glm::vec3 const navPosition = Nav::Position();
-      glm::quat const navOrientation = Nav::Orientation();
-      glm::mat4 const navMatrix = Nav::Matrix();
-
       ImGui::Columns(5, NULL, false);
-      TextVector("Response", "%+.3f", 1, &navResponse);
+      ImGui::Text("Response");
       ImGui::NextColumn();
-      TextVector("Scale", "%+.3f", 1, &navScale);
+      ImGui::Text("%+.3f", Nav::Response());
+      ImGui::NextColumn();
+      ImGui::Text("Scale");
+      ImGui::NextColumn();
+      ImGui::Text("%+.3f", Nav::Scale());
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Position", "%+.3f", 3, glm::value_ptr(navPosition));
+      Text("Position", "%+.3f", Nav::Position());
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Orientation", "%+.3f", 4, glm::value_ptr(navOrientation));
+      Text("Orientation", "%+.3f", Nav::Orientation());
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(navMatrix));
+      Text("Matrix", "%+.3f", Nav::Matrix());
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -1830,11 +1842,11 @@ void iris::Renderer::EndFrame(
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
 
       ImGui::Columns(5, NULL, false);
-      TextVector("BSphere", "%+.3f", 4, glm::value_ptr(sWorldBoundingSphere));
+      Text("BSphere", "%+.3f", sWorldBoundingSphere);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(sWorldMatrix));
+      Text("Matrix", "%+.3f", sWorldMatrix);
       ImGui::Columns(1);
 
       ImGui::EndGroup();
