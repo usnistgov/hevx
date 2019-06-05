@@ -23,7 +23,6 @@
 #include "io/gltf.h"
 #include "io/json.h"
 #include "io/shadertoy.h"
-#include "matrix_transform.h"
 #include "pipeline.h"
 #include "protos.h"
 #include "renderer_private.h"
@@ -173,8 +172,9 @@ static glm::mat4 sViewMatrix{1.f};
 namespace Nav {
 
 static float sResponse{1.f};
-static MatrixTransform sMatrixTransform{};
-static glm::vec3 sPivotPoint{};
+static float sScale{1.f};
+static glm::vec3 sPosition{0.f, 0.f, 0.f};
+static glm::quat sOrientation{1.f, glm::vec3{0.f, 0.f, 0.f}};
 
 /////
 //
@@ -191,100 +191,51 @@ void SetResponse(float response) noexcept {
 } // SetResponse
 
 float Scale() noexcept {
-  return sMatrixTransform.getScale()[0];
+  return sScale;
 } // Scale
 
 void Rescale(float scale) noexcept {
-  sMatrixTransform.setScale(glm::vec3(scale, scale, scale));
+  sScale = scale;
 } // Rescale
 
 glm::vec3 Position() noexcept {
-  return sMatrixTransform.getPosition();
+  return sPosition;
 } // Position
 
 void Reposition(glm::vec3 position) noexcept {
-  sMatrixTransform.setPosition(std::move(position));
+  sPosition = std::move(position);
 } // Reposition
 
-glm::quat Attitude() noexcept {
-  return sMatrixTransform.getAttitude();
-} // Attitude
+glm::quat Orientation() noexcept {
+  return sOrientation;
+} // Orientation
 
-void SetAttitude(glm::quat attitude) noexcept {
-  sMatrixTransform.setAttitude(std::move(attitude));
-} // SetAttitude
-
-glm::vec3 PivotPoint() noexcept {
-  return sPivotPoint;
-} // PivotPoint
-
-void SetPivotPoint(glm::vec3 pivotPoint) noexcept {
-  sPivotPoint = std::move(pivotPoint);
-} // SetPivotPoint
-
-static glm::mat4 getNormalizedPivotTransformation() noexcept {
-  glm::mat4 npm = sWorldMatrix;
-  npm = glm::translate(glm::mat4(1.f), sPivotPoint) * npm;
-
-  glm::vec3 scale, position, skew;
-  glm::quat attitude;
-  glm::vec4 perspective;
-  glm::decompose(npm, scale, attitude, position, skew, perspective);
-
-  return glm::translate(glm::mat4_cast(attitude), position);
-} // getNormalizedPivotTransformation
-
-static glm::vec3 getNormalizedPivotPoint() noexcept {
-  glm::mat4 const npm = getNormalizedPivotTransformation();
-  return glm::vec3(npm[3]);
-} // getNormalizedPivotPoint
+void Reorient(glm::quat orientation) noexcept {
+  sOrientation = std::move(orientation);
+} // Reorient
 
 void Pivot(glm::quat const& pivot) noexcept {
-  glm::mat4 mat = sMatrixTransform.getMatrix();
-  GetLogger()->debug(
-    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
-    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
-    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
-    mat[3][2], mat[3][3]);
-
-  glm::vec3 npp = getNormalizedPivotPoint();
-  GetLogger()->debug("Nav::Pivot npp: {:+.3f} {:+.3f} {:+.3f}", npp.x, npp.y,
-                     npp.z);
-
-  mat = glm::translate(mat, -npp);
-  GetLogger()->debug(
-    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
-    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
-    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
-    mat[3][2], mat[3][3]);
-
-  mat *= glm::mat4_cast(pivot);
-  GetLogger()->debug(
-    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
-    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
-    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
-    mat[3][2], mat[3][3]);
-
-  mat = glm::translate(mat, npp);
-  GetLogger()->debug(
-    "Nav::Pivot mat: {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} "
-    "{:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-    mat[0][0], mat[0][1], mat[0][2], mat[0][3], mat[1][0], mat[1][1], mat[1][2],
-    mat[1][3], mat[2][0], mat[2][1], mat[2][2], mat[2][3], mat[3][0], mat[3][1],
-    mat[3][2], mat[3][3]);
-
-  sMatrixTransform.setMatrix(mat);
+  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
 } // Pivot
 
 glm::mat4 Matrix() noexcept {
-  return sMatrixTransform.getMatrix();
+  // Uniform scaling commutes with rotation in this case.
+  return glm::translate(
+    glm::scale(glm::mat4_cast(sOrientation), glm::vec3(sScale, sScale, sScale)),
+    sPosition);
+#if 0
+  glm::mat4 matrix(1.f);
+  matrix = glm::scale(matrix, glm::vec3(sScale, sScale, sScale));
+  matrix *= glm::mat4_cast(sOrientation);
+  matrix = glm::translate(matrix, sPosition);
+  return matrix;
+#endif
 } // Matrix
 
 void Reset() noexcept {
-  sMatrixTransform.setMatrix(glm::mat4(1.f));
+  sScale = 1.f;
+  sPosition = glm::vec3(0.f, 0.f, 0.f);
+  sOrientation = glm::quat(1.f, glm::vec3(0.f, 0.f, 0.f));
 } // Reset
 
 } // namespace Nav
@@ -356,32 +307,6 @@ void main() {
 static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
-
-static void ExamineNode(iris::Control::Examine const& examineMessage) noexcept {
-  IRIS_LOG_ENTER();
-
-  std::string const nodeName =
-    examineMessage.node().empty() ? "world" : examineMessage.node();
-  if (nodeName != "world") {
-    GetLogger()->warn("EXAMINE only currently supports 'world' node");
-    return;
-  }
-
-  if (sWorldBoundingSphere.w <= 0.f) sWorldBoundingSphere.w = 1.f;
-  glm::vec3 const boundingSphereCenter(sWorldBoundingSphere);
-
-  float const examineScale = 1.f / sWorldBoundingSphere.w;
-  glm::vec3 const examineCenter(0.f, 2.f, 0.f);
-  glm::vec3 const examineOffset =
-    examineCenter - boundingSphereCenter * examineScale;
-
-  sWorldMatrix = glm::scale(
-    glm::mat4(1.f), glm::vec3(examineScale, examineScale, examineScale));
-  sWorldMatrix = glm::translate(sWorldMatrix, examineOffset);
-  Nav::SetPivotPoint(boundingSphereCenter);
-
-  IRIS_LOG_LEAVE();
-} // ExamineNode
 
 static void
 CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
@@ -1875,10 +1800,7 @@ void iris::Renderer::EndFrame(
       float const navResponse = Nav::Response();
       float const navScale = Nav::Scale();
       glm::vec3 const navPosition = Nav::Position();
-      glm::quat const navAttitude = Nav::Attitude();
-      glm::vec3 const navPivotPoint = Nav::PivotPoint();
-      glm::mat4 const npp = Nav::getNormalizedPivotTransformation();
-      glm::vec3 const np = Nav::getNormalizedPivotPoint();
+      glm::quat const navOrientation = Nav::Orientation();
       glm::mat4 const navMatrix = Nav::Matrix();
 
       ImGui::Columns(5, NULL, false);
@@ -1892,23 +1814,11 @@ void iris::Renderer::EndFrame(
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      TextVector("Attitude", "%+.3f", 4, glm::value_ptr(navAttitude));
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      TextVector("PivotPoint", "%+.3f", 3, glm::value_ptr(navPivotPoint));
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      TextVector("nPivotPoint", "%+.3f", 3, glm::value_ptr(np));
+      TextVector("Orientation", "%+.3f", 4, glm::value_ptr(navOrientation));
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
       TextMatrix("Matrix", "%+.3f", 4, 4, glm::value_ptr(navMatrix));
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      TextMatrix("npp", "%+.3f", 4, 4, glm::value_ptr(npp));
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -2446,9 +2356,6 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     for (int i = 0; i < controlMessage.displays().windows_size(); ++i) {
       CreateEmplaceWindow(controlMessage.displays().windows(i));
     }
-    break;
-  case iris::Control::Control::TypeCase::kExamine:
-    ExamineNode(controlMessage.examine());
     break;
   case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());

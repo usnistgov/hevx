@@ -30,7 +30,6 @@
 #include <vector>
 
 ABSL_FLAG(std::string, shadertoy_url, "", "ShaderToy URL to load");
-ABSL_FLAG(std::string, examine, "", "Node to examine");
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -69,7 +68,6 @@ int main(int argc, char** argv) {
 
   auto const positional = absl::ParseCommandLine(argc, argv);
   auto const shadertoy_url = absl::GetFlag(FLAGS_shadertoy_url);
-  auto const examine_node = absl::GetFlag(FLAGS_examine);
 
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
     "iris-viewer.log", true);
@@ -109,15 +107,6 @@ int main(int argc, char** argv) {
     message.mutable_shadertoy()->set_url(shadertoy_url);
     if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
       logger.error("Error loading {}: {}", shadertoy_url,
-                   result.error().what());
-    }
-  }
-
-  if (!examine_node.empty()) {
-    iris::Control::Control message;
-    message.mutable_examine()->set_node(examine_node);
-    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
-      logger.error("Error examining {}: {}", examine_node,
                    result.error().what());
     }
   }

@@ -22,7 +22,7 @@ public:
   void Update(ImGuiIO const& io) noexcept;
 
 private:
-  glm::vec3 attitude_{0.f, 0.f, 0.f};
+  EulerAngles attitude_{};
   glm::vec3 position_{0.f, 0.f, 0.f};
   glm::vec2 prevMouse_;
 }; // class Trackball
@@ -42,14 +42,14 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
       ImGui::IsMouseClicked(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseClicked(wsi::Buttons::kButtonRight)) {
     position_ = {0.f, 0.f, 0.f};
-    attitude_ = {0.f, 0.f, 0.f};
+    attitude_ = {};
     return;
   } else if (ImGui::IsMouseReleased(wsi::Buttons::kButtonLeft) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonMiddle) ||
       ImGui::IsMouseReleased(wsi::Buttons::kButtonRight)) {
     if (glm::length2(deltaMouse) < .00001f) {
       position_ = {0.f, 0.f, 0.f};
-      attitude_ = {0.f, 0.f, 0.f};
+      attitude_ = {};
     }
     return;
   }
@@ -61,33 +61,26 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
     float const dh = deltaMouse.x * kTwist / io.DeltaTime;
     float const dp = -deltaMouse.y * kTwist / io.DeltaTime;
-    attitude_ = glm::vec3(dh, dp, 0.f);
+    attitude_.heading = EulerAngles::Heading(glm::radians(dh));
+    attitude_.pitch = EulerAngles::Pitch(glm::radians(dp));
   } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
-    float const dy = deltaMouse.y * kSpeed / io.DeltaTime;
+    float const dy = -deltaMouse.y * kSpeed / io.DeltaTime;
     position_ = glm::vec3(0.f, dy, 0.f);
   }
 
-  //if (io.MouseWheel > 0) {
-    //Renderer::Nav::RescaleAtPivot(Renderer::Nav::Scale() / 1.05f);
-  //} else if (io.MouseWheel < 0) {
-    //Renderer::Nav::RescaleAtPivot(Renderer::Nav::Scale() * 1.05f);
-  //}
+  if (io.MouseWheel > 0) {
+    Renderer::Nav::Rescale(Renderer::Nav::Scale() / 1.05f);
+  } else if (io.MouseWheel < 0) {
+    Renderer::Nav::Rescale(Renderer::Nav::Scale() * 1.05f);
+  }
 
-  glm::vec3 const m = position_ * io.DeltaTime * Renderer::Nav::Response();
+  glm::vec3 const m(position_ * io.DeltaTime * Renderer::Nav::Response());
   if (m != glm::vec3(0.f, 0.f, 0.f)) {
     Renderer::Nav::Reposition(Renderer::Nav::Position() + m);
   }
 
-  auto const a = attitude_ * io.DeltaTime * Renderer::Nav::Response();
-
-  auto const qh = glm::angleAxis(glm::radians(a.x), glm::vec3(0.f, 0.f, 1.f));
-  auto const qp = glm::angleAxis(glm::radians(a.y), glm::vec3(1.f, 0.f, 0.f));
-  auto const qr = glm::angleAxis(glm::radians(a.z), glm::vec3(0.f, 1.f, 0.f));
-
-  auto const o = qr * qp * qh;
-  if (glm::angle(o) != 0.0f) {
-    Renderer::Nav::Pivot(o);
-  }
+  glm::quat const o(attitude_ * io.DeltaTime * Renderer::Nav::Response());
+  if (glm::angle(o) != 0.0f) Renderer::Nav::Pivot(o);
 
   prevMouse_ = currMouse;
 } // Trackball::update

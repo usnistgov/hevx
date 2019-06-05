@@ -253,11 +253,8 @@ void Rescale(float scale) noexcept;
 glm::vec3 Position() noexcept;
 void Reposition(glm::vec3 position) noexcept;
 
-glm::quat Attitude() noexcept;
-void SetAttitude(glm::quat attitude) noexcept;
-
-glm::vec3 PivotPoint() noexcept;
-void SetPivotPoint(glm::vec3 pivotPoint) noexcept;
+glm::quat Orientation() noexcept;
+void Reorient(glm::quat orientation) noexcept;
 
 void Pivot(glm::quat const& pivot) noexcept;
 

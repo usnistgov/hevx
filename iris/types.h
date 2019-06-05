@@ -38,6 +38,30 @@ struct EulerAngles {
   }
 }; // struct EulerAngles
 
+inline EulerAngles operator*(EulerAngles a, float s) noexcept {
+  a.heading *= EulerAngles::Heading(s);
+  a.pitch *= EulerAngles::Pitch(s);
+  a.roll *= EulerAngles::Roll(s);
+  return a;
+};
+
+inline EulerAngles operator/(EulerAngles a, float s) noexcept {
+  a.heading /= EulerAngles::Heading(s);
+  a.pitch /= EulerAngles::Pitch(s);
+  a.roll /= EulerAngles::Roll(s);
+  return a;
+};
+
+inline EulerAngles& operator*=(EulerAngles& a, float s) noexcept {
+  a = a * s;
+  return a;
+};
+
+inline EulerAngles& operator/=(EulerAngles& a, float s) noexcept {
+  a = a / s;
+  return a;
+};
+
 } // namespace iris
 
 #endif // HEV_IRIS_TYPES_H_
