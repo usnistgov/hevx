@@ -202,6 +202,10 @@ glm::vec3 Position() noexcept {
   return sPosition;
 } // Position
 
+void Move(glm::vec3 const& delta) noexcept {
+  sPosition += delta;
+} // Move
+
 void Reposition(glm::vec3 position) noexcept {
   sPosition = std::move(position);
 } // Reposition
@@ -210,17 +214,16 @@ glm::quat Orientation() noexcept {
   return sOrientation;
 } // Orientation
 
+void Rotate(glm::quat const& delta) noexcept {
+  sOrientation = glm::normalize(glm::normalize(delta) * sOrientation);
+} // Rotate
+
 void Reorient(glm::quat orientation) noexcept {
   sOrientation = std::move(orientation);
 } // Reorient
 
-void Pivot(glm::quat const& pivot) noexcept {
-  sOrientation = glm::normalize(sOrientation * glm::normalize(pivot));
-} // Pivot
-
 glm::mat4 Matrix() noexcept {
-  // Uniform scaling commutes with rotation in this case.
-
+  // Uniform scaling commutes with rotation.
   glm::mat4 matrix = glm::mat4_cast(sOrientation);
 
   matrix[0][0] *= sScale;

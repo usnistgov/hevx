@@ -34,6 +34,12 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   if (!io.WantCaptureMouse) {
     glm::vec2 const deltaMouse = currMouse - prevMouse_;
 
+    // If movement is too fast, assume we missed some events or screen changed.
+    if (glm::length2(deltaMouse) > .25) {
+      prevMouse_ = currMouse;
+      return;
+    }
+
     if (ImGui::IsMouseClicked(wsi::Buttons::kButtonLeft) ||
         ImGui::IsMouseClicked(wsi::Buttons::kButtonMiddle) ||
         ImGui::IsMouseClicked(wsi::Buttons::kButtonRight)) {
@@ -43,6 +49,7 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
     } else if (ImGui::IsMouseReleased(wsi::Buttons::kButtonLeft) ||
                ImGui::IsMouseReleased(wsi::Buttons::kButtonMiddle) ||
                ImGui::IsMouseReleased(wsi::Buttons::kButtonRight)) {
+      // If movement is extremely slow when button released, stop all motion.
       if (glm::length2(deltaMouse) < .00001f) {
         position_ = {0.f, 0.f, 0.f};
         attitude_ = {};
@@ -50,18 +57,44 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
       return;
     }
 
-    if (ImGui::IsMouseDragging(wsi::Buttons::kButtonLeft)) {
-      float const dx = deltaMouse.x * kSpeed / io.DeltaTime;
-      float const dz = deltaMouse.y * kSpeed / io.DeltaTime;
-      position_ = glm::vec3(dx, 0.f, dz);
-    } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
-      float const dh = deltaMouse.x * kTwist / io.DeltaTime;
-      float const dp = -deltaMouse.y * kTwist / io.DeltaTime;
+    // Use a lambda here since rotateHeadingPitch is called twice down below.
+    auto rotateHeadingPitch = [&]() {
+      float const dh = ImGui::IsKeyDown(wsi::Keys::kX)
+                         ? 0.f
+                         : deltaMouse.x * kTwist / io.DeltaTime;
+      float const dp = ImGui::IsKeyDown(wsi::Keys::kZ)
+                         ? 0.f
+                         : -deltaMouse.y * kTwist / io.DeltaTime;
       attitude_.heading = EulerAngles::Heading(glm::radians(dh));
       attitude_.pitch = EulerAngles::Pitch(glm::radians(dp));
+    }; // rotateHeadingPitch
+
+    if (ImGui::IsMouseDragging(wsi::Buttons::kButtonLeft)) {
+      if (ImGui::IsKeyDown(wsi::Keys::kLeftControl)) {
+        rotateHeadingPitch();
+      } else {
+        float const dx = ImGui::IsKeyDown(wsi::Keys::kZ)
+                           ? 0.f
+                           : deltaMouse.x * kSpeed / io.DeltaTime;
+        float const dz = ImGui::IsKeyDown(wsi::Keys::kX)
+                           ? 0.f
+                           : deltaMouse.y * kSpeed / io.DeltaTime;
+        position_ = glm::vec3(dx, 0.f, dz);
+      }
+    } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {
+      rotateHeadingPitch();
     } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonRight)) {
-      float const dy = -deltaMouse.y * kSpeed / io.DeltaTime;
-      position_ = glm::vec3(0.f, dy, 0.f);
+      if (ImGui::IsKeyDown(wsi::Keys::kLeftControl)) {
+        glm::vec2 const p0 = glm::normalize(prevMouse_);
+        glm::vec2 const p1 = glm::normalize(currMouse);
+        float const p0t = std::atan2(p0.y, p0.x);
+        float const p1t = std::atan2(p1.y, p1.x);
+        float const dr = -(p1t - p0t) * kTwist / io.DeltaTime;
+        attitude_.roll = EulerAngles::Roll(glm::radians(dr));
+      } else {
+        float const dy = -deltaMouse.y * kSpeed / io.DeltaTime;
+        position_ = glm::vec3(0.f, dy, 0.f);
+      }
     }
 
     if (io.MouseWheel > 0) {
@@ -72,12 +105,10 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
   }
 
   glm::vec3 const m(position_ * io.DeltaTime * Renderer::Nav::Response());
-  if (m != glm::vec3(0.f, 0.f, 0.f)) {
-    Renderer::Nav::Reposition(Renderer::Nav::Position() + m);
-  }
+  if (m != glm::vec3(0.f, 0.f, 0.f)) Renderer::Nav::Move(m);
 
   glm::quat const o(attitude_ * io.DeltaTime * Renderer::Nav::Response());
-  if (glm::angle(o) != 0.0f) Renderer::Nav::Pivot(o);
+  if (glm::angle(o) != 0.0f) Renderer::Nav::Rotate(o);
 
   prevMouse_ = currMouse;
 } // Trackball::Update

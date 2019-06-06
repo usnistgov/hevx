@@ -251,12 +251,12 @@ float Scale() noexcept;
 void Rescale(float scale) noexcept;
 
 glm::vec3 Position() noexcept;
+void Move(glm::vec3 const& delta) noexcept;
 void Reposition(glm::vec3 position) noexcept;
 
 glm::quat Orientation() noexcept;
+void Rotate(glm::quat const& delta) noexcept;
 void Reorient(glm::quat orientation) noexcept;
-
-void Pivot(glm::quat const& pivot) noexcept;
 
 glm::mat4 Matrix() noexcept;
 
