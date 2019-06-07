@@ -109,31 +109,34 @@ vec4 SRGBtoLINEAR(vec4 srgbIn) {
 
   vec3 linOut = pow(srgbIn.xyz,vec3(2.2));
 
-#else //SRGB_FAST_APPROXIMATION
+#else // SRGB_FAST_APPROXIMATION
 
   vec3 bLess = step(vec3(0.04045),srgbIn.xyz);
   vec3 linOut = mix(srgbIn.xyz/vec3(12.92), 
                     pow((srgbIn.xyz+vec3(0.055))/vec3(1.055),vec3(2.4)),
                     bLess);
 
-#endif //SRGB_FAST_APPROXIMATION
+#endif // SRGB_FAST_APPROXIMATION
 
   return vec4(linOut,srgbIn.w);;
 
-#else //MANUAL_SRGB
+#else // MANUAL_SRGB
 
   return srgbIn;
 
-#endif //MANUAL_SRGB
+#endif // MANUAL_SRGB
 }
 
 // Find the normal for this fragment, pulling either from a predefined normal
 // map or from the interpolated mesh normal and tangent attributes.
 vec3 GetNormal() {
 #ifdef HAS_TEXCOORDS
+
   // Retrieve the tangent space matrix
   mat3 tbn = TBN;
-#else
+
+#else // HAS_TEXCOORDS
+
   vec3 ng = normalize(Ne);
 
   vec3 posDx = dFdx(Pe.xyz/ Pe.w);
@@ -147,16 +150,21 @@ vec3 GetNormal() {
   vec3 b = normalize(cross(ng, t));
 
   mat3 tbn = mat3(t, b, ng);
-#endif
+
+#endif // HAS_TEXCOORDS
 
 #ifdef HAS_NORMAL_MAP
-    vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV0.st).rgb;
-    vec3 s = vec3(MetallicRoughnessNormalOcclusion.zz, 1.0);
-    n = normalize(tbn * ((2.0 * n - 1.0) * s));
-#else
+
+  vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV0.st).rgb;
+  vec3 s = vec3(MetallicRoughnessNormalOcclusion.zz, 1.0);
+  n = normalize(tbn * ((2.0 * n - 1.0) * s));
+
+#else // HAS_NORMAL_MAP
+
   // The tbn matrix is linearly interpolated, so we need to re-normalize
   vec3 n = normalize(tbn[2].xyz);
-#endif
+
+#endif // HAS_NORMAL_MAP
 
   return n;
 }
@@ -203,6 +211,7 @@ void main() {
   vec3 specularEnvironmentR90R0Delta = specularEnvironmentR90 - specularEnvironmentR0;
 
   vec3 n = GetNormal();
+
   vec3 v = normalize(Ve);
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
   vec3 reflection = -normalize(reflect(v, n));

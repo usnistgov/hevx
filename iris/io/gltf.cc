@@ -1984,3 +1984,4 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_LEAVE();
   return []() { return std::system_error(Error::kNone); };
 } // iris::io::LoadGLTF
+

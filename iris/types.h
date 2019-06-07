@@ -38,6 +38,11 @@ struct EulerAngles {
   }
 }; // struct EulerAngles
 
+/*!
+\brief Component-wise multiplication of an EulerAngles by a single scalar value.
+\param[in] a
+\param[in] s the scalar value to multiply heading, pitch, and roll by.
+*/
 inline EulerAngles operator*(EulerAngles a, float s) noexcept {
   a.heading *= EulerAngles::Heading(s);
   a.pitch *= EulerAngles::Pitch(s);
@@ -45,6 +50,11 @@ inline EulerAngles operator*(EulerAngles a, float s) noexcept {
   return a;
 };
 
+/*!
+\brief Component-wise division of an EulerAngles by a single scalar value.
+\param[in] a
+\param[in] s the scalar value to divide heading, pitch, and roll by.
+*/
 inline EulerAngles operator/(EulerAngles a, float s) noexcept {
   a.heading /= EulerAngles::Heading(s);
   a.pitch /= EulerAngles::Pitch(s);
@@ -52,11 +62,21 @@ inline EulerAngles operator/(EulerAngles a, float s) noexcept {
   return a;
 };
 
+/*!
+\brief Component-wise multiplication of an EulerAngles by a single scalar value.
+\param[in,out] a
+\param[in] s the scalar value to multiply heading, pitch, and roll by.
+*/
 inline EulerAngles& operator*=(EulerAngles& a, float s) noexcept {
   a = a * s;
   return a;
 };
 
+/*!
+\brief Component-wise division of an EulerAngles by a single scalar value.
+\param[in,out] a
+\param[in] s the scalar value to divide heading, pitch, and roll by.
+*/
 inline EulerAngles& operator/=(EulerAngles& a, float s) noexcept {
   a = a / s;
   return a;
