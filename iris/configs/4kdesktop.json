@@ -1,0 +1,22 @@
+{
+  "displays": {
+    "windows": [
+      {
+        "name": "desktopWindow",
+        "is_stereo": false,
+        "x": 320,
+        "y": 320,
+        "width": 1600,
+        "height": 1600,
+        "show_system_decoration": true,
+        "background_color": {
+          "r": 0.0,
+          "g": 0.0,
+          "b": 0.0,
+          "a": 0.0
+        },
+        "show_ui": true
+      }
+    ]
+  }
+}
