@@ -904,9 +904,9 @@ struct TangentGenerator {
 
     glm::vec3 pos;
     if (pData->indices) {
-      pos = pData->positions[iFace * 3 + iVert];
-    } else {
       pos = pData->positions[pData->indices[iFace * 3 + iVert]];
+    } else {
+      pos = pData->positions[iFace * 3 + iVert];
     }
 
     fvPosOut[0] = pos.x;
@@ -920,9 +920,9 @@ struct TangentGenerator {
 
     glm::vec3 norm;
     if (pData->indices) {
-      norm = pData->normals[iFace * 3 + iVert];
-    } else {
       norm = pData->normals[pData->indices[iFace * 3 + iVert]];
+    } else {
+      norm = pData->normals[iFace * 3 + iVert];
     }
 
     fvNormOut[0] = norm.x;
@@ -936,9 +936,9 @@ struct TangentGenerator {
 
     glm::vec2 texc;
     if (pData->indices) {
-      texc = pData->texcoords[iFace * 3 + iVert];
-    } else {
       texc = pData->texcoords[pData->indices[iFace * 3 + iVert]];
+    } else {
+      texc = pData->texcoords[iFace * 3 + iVert];
     }
 
     fvTexcOut[0] = texc.x;
@@ -953,13 +953,16 @@ struct TangentGenerator {
     glm::vec4 tangent{fvTangent[0], fvTangent[1], fvTangent[2], fSign};
 
     if (pData->indices) {
-      pData->tangents[iFace * 3 + iVert] = tangent;
-    } else {
       pData->tangents[pData->indices[iFace * 3 + iVert]] = tangent;
+    } else {
+      pData->tangents[iFace * 3 + iVert] = tangent;
     }
   }
 
   bool operator()() noexcept {
+    IRIS_LOG_ENTER();
+    tangents.resize(count);
+
     std::unique_ptr<SMikkTSpaceInterface> ifc(new SMikkTSpaceInterface);
     ifc->m_getNumFaces = &GetNumFaces;
     ifc->m_getNumVerticesOfFace = &GetNumVerticesOfFace;
@@ -973,7 +976,9 @@ struct TangentGenerator {
     ctx->m_pInterface = ifc.get();
     ctx->m_pUserData = this;
 
-    return genTangSpaceDefault(ctx.get());
+    bool ret = genTangSpaceDefault(ctx.get());
+    IRIS_LOG_LEAVE();
+    return ret;
   }
 }; // struct TangentGenerator
 
