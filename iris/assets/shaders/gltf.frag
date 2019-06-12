@@ -170,6 +170,10 @@ vec3 GetNormal() {
 }
 
 void main() {
+  vec3 n = GetNormal();
+  //Color = vec4(n / vec3(2.f, 2.f, 2.f) + vec3(.5f, .5f, .5f), 1.f);
+  //return;
+
   float metallic = MetallicRoughnessNormalOcclusion.x;
   float perceptualRoughness = MetallicRoughnessNormalOcclusion.y;
 
@@ -209,8 +213,6 @@ void main() {
   vec3 specularEnvironmentR0 = specularColor.rgb;
   vec3 specularEnvironmentR90 = vec3(1.0, 1.0, 1.0) * reflectance90;
   vec3 specularEnvironmentR90R0Delta = specularEnvironmentR90 - specularEnvironmentR0;
-
-  vec3 n = GetNormal();
 
   vec3 v = normalize(Ve);
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);

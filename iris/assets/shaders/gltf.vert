@@ -78,7 +78,7 @@ void main() {
   Pe = ModelViewMatrix * Po;
 
   No = normalize(Normal);
-  Ne = vec3(ModelMatrix) * No;
+  Ne = vec3(transpose(ModelViewMatrixInverse)) * No;
 
   Ee = -ProjectionMatrixInverse[2];
   Eo = ModelViewMatrixInverse * Ee;

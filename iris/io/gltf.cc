@@ -594,6 +594,17 @@ inline int AccessorTypeCount(std::string const& type) {
   return 0;
 }
 
+inline int AccessorTypeByteSize(std::string const& type) {
+  if (type == "SCALAR") return 4;
+  if (type == "VEC2") return 8;
+  if (type == "VEC3") return 12;
+  if (type == "VEC4") return 16;
+  if (type == "MAT2") return 16;
+  if (type == "MAT3") return 36;
+  if (type == "MAT4") return 64;
+  return 0;
+}
+
 inline std::size_t AccessorComponentTypeSize(int type) {
   switch (type) {
   case 5120: return sizeof(unsigned char);
@@ -731,7 +742,8 @@ GetAccessorData(int index, std::string const& accessorType,
       std::system_error(Error::kFileParseFailed, "too few buffers"));
   }
 
-  int const componentCount = AccessorTypeCount(accessorType);
+  int const bufferByteStride =
+    bufferView.byteStride.value_or(AccessorTypeByteSize(accessorType)) / 4;
   std::size_t const componentTypeSize =
     AccessorComponentTypeSize(accessor.componentType);
   int const byteOffset =
@@ -749,42 +761,42 @@ GetAccessorData(int index, std::string const& accessorType,
   switch (accessor.componentType) {
   case 5120: {
     auto p = reinterpret_cast<char*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
 
   case 5121: {
     auto p = reinterpret_cast<unsigned char*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
 
   case 5122: {
     auto p = reinterpret_cast<short*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
 
   case 5123: {
     auto p = reinterpret_cast<unsigned short*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
 
   case 5125: {
     auto p = reinterpret_cast<unsigned int*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
 
   case 5126: {
     auto p = reinterpret_cast<float*>(bytes);
-    for (int i = 0; i < accessor.count; ++i, p += componentCount) {
+    for (int i = 0; i < accessor.count; ++i, p += bufferByteStride) {
       data[i] = GetAccessorDataComponent<T>(gsl::not_null(p));
     }
   } break;
@@ -833,6 +845,7 @@ GenerateNormals(std::vector<glm::vec3> const& positions,
   std::vector<glm::vec3> normals(positions.size());
 
   if (indices.empty()) {
+    GetLogger()->debug("Generating normals without indices");
     std::size_t const num = positions.size();
     for (std::size_t i = 0; i < num; i += 3) {
       auto&& a = positions[i];
@@ -1114,6 +1127,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     std::vector<glm::vec3> positions;
     for (auto&& [semantic, index] : primitive.attributes) {
       if (semantic == "POSITION") {
+        GetLogger()->trace("reading POSITION");
         if (auto p = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1133,6 +1147,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     // original format of the indices in the draw call.
     std::vector<unsigned int> indices;
     if (primitive.indices) {
+      GetLogger()->trace("reading indices");
       std::array<int, 2> componentTypes{5123, 5125};
       if (auto i = gltf::GetAccessorData<unsigned int>(
             *primitive.indices, "SCALAR", componentTypes, false, accessors,
@@ -1153,6 +1168,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     for (auto&& [semantic, index] : primitive.attributes) {
       if (semantic == "TEXCOORD_0") {
+        GetLogger()->trace("reading TEXCOORD_0");
         if (auto t = gltf::GetAccessorData<glm::vec2>(index, "VEC2", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1162,6 +1178,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(t.error());
         }
       } else if (semantic == "NORMAL") {
+        GetLogger()->trace("reading NORMAL");
         if (auto n = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1171,6 +1188,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(n.error());
         }
       } else if (semantic == "TANGENT") {
+        GetLogger()->trace("reading TANGENT");
         if (auto t = gltf::GetAccessorData<glm::vec4>(index, "VEC4", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1332,7 +1350,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencilStateCI.depthTestEnable = VK_TRUE;
     depthStencilStateCI.depthWriteEnable = VK_TRUE;
-    depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
 
     absl::FixedArray<VkPipelineColorBlendAttachmentState>
       colorBlendAttachmentStates(1);
