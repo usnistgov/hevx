@@ -531,7 +531,9 @@ struct GLTF {
   tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, filesystem::path const& path,
-            std::vector<std::vector<std::byte>> const& buffersBytes);
+            std::vector<std::vector<std::byte>> const& buffersBytes,
+            std::vector<VkExtent2D> imagesExtents,
+            std::vector<std::vector<std::byte>> imagesBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -985,7 +987,9 @@ struct TangentGenerator {
 tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 glm::mat4x4 parentMat, filesystem::path const& path,
-                std::vector<std::vector<std::byte>> const& buffersBytes) {
+                std::vector<std::vector<std::byte>> const& buffersBytes,
+                std::vector<VkExtent2D> imagesExtents,
+                std::vector<std::vector<std::byte>> imagesBytes) {
   IRIS_LOG_ENTER();
   std::vector<Renderer::Component::Renderable> renderables;
 
@@ -1040,7 +1044,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
   for (auto&& child : children) {
-    if (auto r = ParseNode(commandQueue, child, nodeMat, path, buffersBytes)) {
+    if (auto r = ParseNode(commandQueue, child, nodeMat, path, buffersBytes,
+                           imagesExtents, imagesBytes)) {
       renderables.insert(renderables.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
@@ -1423,6 +1428,132 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           (*ptr)->BaseColorFactor =
             material.pbrMetallicRoughness->baseColorFactor.value_or(
               glm::vec4(1.f));
+
+          // FIXME: use textures/samplers passed in here
+#if 0
+  std::size_t const numTextures =
+    g.textures.value_or<std::vector<gltf::Texture>>({}).size();
+
+  for (std::size_t i = 0; i < numTextures; ++i) {
+    auto&& texture = (*g.textures)[i];
+    auto&& bytes = imagesBytes[*texture.source];
+
+    std::string const textureName =
+      path.string() + (texture.name ? ":" + *texture.name : "");
+
+    if (auto t = iris::CreateImage(
+          commandQueue.commandPool, commandQueue.queue,
+          commandQueue.submitFence, VK_FORMAT_R8G8B8A8_UNORM, imagesExtents[i],
+          VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+          gsl::not_null(bytes.data()), 4)) {
+      deviceTextures.push_back(std::move(*t));
+      iris::Renderer::NameObject(
+        VK_OBJECT_TYPE_IMAGE, deviceTextures.back().image, textureName.c_str());
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(t.error());
+    }
+
+    VkSamplerCreateInfo samplerCI = {};
+    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerCI.magFilter = VK_FILTER_LINEAR; // auto ??
+    samplerCI.minFilter = VK_FILTER_LINEAR; // auto ??
+    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerCI.mipLodBias = 0.f;
+    samplerCI.anisotropyEnable = VK_FALSE;
+    samplerCI.maxAnisotropy = 1;
+    samplerCI.compareEnable = VK_FALSE;
+    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerCI.minLod = -1000.f;
+    samplerCI.maxLod = 1000.f;
+    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerCI.unnormalizedCoordinates = VK_FALSE;
+
+    if (texture.sampler) {
+      auto&& sampler = (*g.samplers)[*texture.sampler];
+
+      switch (sampler.magFilter.value_or(9720)) {
+      case 9728: samplerCI.magFilter = VK_FILTER_NEAREST; break;
+      case 9729: samplerCI.magFilter = VK_FILTER_LINEAR; break;
+      }
+
+      switch (sampler.minFilter.value_or(9720)) {
+      case 9728:
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minLod = 0.0;
+        samplerCI.maxLod = 0.25;
+        break;
+      case 9729:
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        samplerCI.minLod = 0.0;
+        samplerCI.maxLod = 0.25;
+        break;
+      case 9984:
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        break;
+      case 9985:
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        break;
+      case 9986:
+        samplerCI.minFilter = VK_FILTER_NEAREST;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        break;
+      case 9987:
+        samplerCI.minFilter = VK_FILTER_LINEAR;
+        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        break;
+      }
+
+      switch (sampler.wrapS.value_or(10497)) {
+      case 10497:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        break;
+      case 33071:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
+      case 33648:
+        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        break;
+      }
+
+      switch (sampler.wrapT.value_or(10497)) {
+      case 10497:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        break;
+      case 33071:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        break;
+      case 33648:
+        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        break;
+      }
+    }
+
+    VkSampler sampler;
+    if (auto result =
+          vkCreateSampler(Renderer::sDevice, &samplerCI, nullptr, &sampler);
+        result == VK_SUCCESS) {
+      deviceSamplers.push_back(sampler);
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(make_error_code(result),
+                                              "Cannot create texture sampler"));
+    }
+  }
+#endif
+
+          if (material.pbrMetallicRoughness->baseColorTexture) {
+          }
+
+          if (material.pbrMetallicRoughness->metallicRoughnessTexture) {
+          }
         }
 
         if (material.normalTexture) {
@@ -1803,7 +1934,18 @@ ReadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-#if 0
+  //
+  // Acquire a command queue
+  //
+  Renderer::CommandQueue commandQueue;
+  if (auto q = Renderer::AcquireCommandQueue()) {
+    commandQueue = std::move(*q);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(Error::kFileLoadFailed,
+                                            "could not acquire command queue"));
+  }
+
   //
   // Read all the images into memory
   //
@@ -1815,7 +1957,10 @@ ReadGLTF(filesystem::path const& path) noexcept {
   for (auto&& image : images) {
     if (image.uri) {
       filesystem::path uriPath(*image.uri);
-      if (uriPath.is_relative()) uriPath = baseDir / uriPath;
+      if (uriPath.is_relative()) {
+        uriPath = kIRISContentDirectory / baseDir / uriPath;
+      }
+      GetLogger()->debug("Reading {}", uriPath.string());
 
       int x, y, n;
       if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4);
@@ -1839,140 +1984,9 @@ ReadGLTF(filesystem::path const& path) noexcept {
     }
   }
 
-  std::vector<std::tuple<VkImage, VmaAllocation>> deviceImages;
-  std::vector<VkSampler> samplers;
-
-  std::size_t const numTextures =
-    g.textures.value_or<std::vector<gltf::Texture>>({}).size();
-
-  for (std::size_t i = 0; i < numTextures; ++i) {
-    auto&& texture = (*g.textures)[i];
-    auto&& bytes = imagesBytes[*texture.source];
-
-    std::string const textureName =
-      path.string() + (texture.name ? ":" + *texture.name : "");
-
-    if (auto ia = Renderer::CreateImage(
-          Renderer::sDevice, Renderer::sAllocator, VK_FORMAT_R8G8B8A8_UNORM,
-          imagesExtents[i], VK_IMAGE_USAGE_SAMPLED_BIT,
-          VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(bytes.data()), 4)) {
-      deviceImages.push_back(std::move(*ia));
-
-      iris::Renderer::NameObject(VK_OBJECT_TYPE_IMAGE,
-                                 std::get<0>(deviceImages.back()),
-                                 textureName.c_str());
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(ia.error());
-    }
-
-    VkSamplerCreateInfo samplerCI = {};
-    samplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerCI.magFilter = VK_FILTER_LINEAR; // auto ??
-    samplerCI.minFilter = VK_FILTER_LINEAR; // auto ??
-    samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerCI.mipLodBias = 0.f;
-    samplerCI.anisotropyEnable = VK_FALSE;
-    samplerCI.maxAnisotropy = 1;
-    samplerCI.compareEnable = VK_FALSE;
-    samplerCI.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerCI.minLod = -1000.f;
-    samplerCI.maxLod = 1000.f;
-    samplerCI.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerCI.unnormalizedCoordinates = VK_FALSE;
-
-    if (texture.sampler) {
-      auto&& sampler = (*g.samplers)[*texture.sampler];
-
-      switch (sampler.magFilter.value_or(9720)) {
-      case 9728: samplerCI.magFilter = VK_FILTER_NEAREST; break;
-      case 9729: samplerCI.magFilter = VK_FILTER_LINEAR; break;
-      }
-
-      switch (sampler.minFilter.value_or(9720)) {
-      case 9728:
-        samplerCI.minFilter = VK_FILTER_NEAREST;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerCI.minLod = 0.0;
-        samplerCI.maxLod = 0.25;
-        break;
-      case 9729:
-        samplerCI.minFilter = VK_FILTER_LINEAR;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerCI.minLod = 0.0;
-        samplerCI.maxLod = 0.25;
-        break;
-      case 9984:
-        samplerCI.minFilter = VK_FILTER_NEAREST;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        break;
-      case 9985:
-        samplerCI.minFilter = VK_FILTER_LINEAR;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        break;
-      case 9986:
-        samplerCI.minFilter = VK_FILTER_NEAREST;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        break;
-      case 9987:
-        samplerCI.minFilter = VK_FILTER_LINEAR;
-        samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        break;
-      }
-
-      switch (sampler.wrapS.value_or(10497)) {
-      case 10497:
-        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        break;
-      case 33071:
-        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        break;
-      case 33648:
-        samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        break;
-      }
-
-      switch (sampler.wrapT.value_or(10497)) {
-      case 10497:
-        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        break;
-      case 33071:
-        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        break;
-      case 33648:
-        samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        break;
-      }
-    }
-
-    VkSampler sampler;
-    if (auto result =
-          vkCreateSampler(Renderer::sDevice, &samplerCI, nullptr, &sampler);
-        result != VK_SUCCESS) {
-      samplers.push_back(sampler);
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot create texture sampler"));
-    }
-  }
-#endif
-
   if (!g.scene) {
     GetLogger()->warn("no default scene specified; using first node");
     g.scene = 0;
-  }
-
-  Renderer::CommandQueue commandQueue;
-  if (auto q = Renderer::AcquireCommandQueue()) {
-    commandQueue = std::move(*q);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kFileLoadFailed,
-                                            "could not acquire command queue"));
   }
 
   //
@@ -1981,8 +1995,9 @@ ReadGLTF(filesystem::path const& path) noexcept {
   // TODO: implement Animatable(?) component to support animations
   //
 
-  if (auto renderables = g.ParseNode(commandQueue, *g.scene, glm::mat4x4(1.f),
-                                     path, buffersBytes)) {
+  if (auto renderables =
+        g.ParseNode(commandQueue, *g.scene, glm::mat4x4(1.f), path,
+                    buffersBytes, imagesExtents, imagesBytes)) {
     IRIS_LOG_LEAVE();
     return *renderables;
   } else {
