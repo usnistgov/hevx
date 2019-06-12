@@ -1947,6 +1947,7 @@ void iris::Renderer::EndFrame(
     pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
     pushConstants.iResolution.z =
       pushConstants.iResolution.x / pushConstants.iResolution.y;
+    pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
 
     clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
 
@@ -1972,8 +1973,8 @@ void iris::Renderer::EndFrame(
         pushConstants.ModelMatrix =
           Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
-        pushConstants.ModelViewMatrixInverse =
-          glm::inverse(pushConstants.ModelViewMatrix);
+        pushConstants.NormalMatrix = glm::mat3(
+          glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
         VkCommandBuffer commandBuffer =
           RenderRenderable(renderable, &window.viewport, &window.scissor,

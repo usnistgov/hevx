@@ -35,9 +35,10 @@ layout(push_constant) uniform PushConstants {
   float iFrame;
   vec3 iResolution;
   float padding0;
+  vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
-  mat4 ModelViewMatrixInverse;
+  mat3 NormalMatrix;
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {
@@ -78,10 +79,10 @@ void main() {
   Pe = ModelViewMatrix * Po;
 
   No = normalize(Normal);
-  Ne = vec3(transpose(ModelViewMatrixInverse)) * No;
+  Ne = NormalMatrix * No;
 
-  Ee = -ProjectionMatrixInverse[2];
-  Eo = ModelViewMatrixInverse * Ee;
+  Eo = EyePosition;
+  Ee = ModelViewMatrix * Eo;
 
   Vo = normalize(Eo.xyz*Po.w - Po.xyz*Eo.w);
   Ve = normalize(Ee.xyz*Pe.w - Pe.xyz*Ee.w);
