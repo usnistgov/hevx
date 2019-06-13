@@ -258,6 +258,8 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
     preamble += "\n";
   }
 
+  GetLogger()->debug("shader preamble: {}", preamble);
+
   glslang::TShader shader(lang);
   shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
   shader.setPreamble(preamble.c_str());

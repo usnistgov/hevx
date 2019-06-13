@@ -1308,7 +1308,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             return tl::unexpected(dt.error());
           }
         }
-
+#if 0
         if (material.pbrMetallicRoughness->metallicRoughnessTexture) {
           if (auto dt = CreateTexture(
                 commandQueue,
@@ -1344,6 +1344,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             return tl::unexpected(dt.error());
           }
         }
+#endif
       }
 
       if (material.normalTexture) {
