@@ -1308,7 +1308,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             return tl::unexpected(dt.error());
           }
         }
-#if 0
+
         if (material.pbrMetallicRoughness->metallicRoughnessTexture) {
           if (auto dt = CreateTexture(
                 commandQueue,
@@ -1344,11 +1344,11 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             return tl::unexpected(dt.error());
           }
         }
-#endif
+
       }
 
       if (material.normalTexture) {
-        // FIXME: ignoring the scale in NormalTextureInfo
+        // The NormalTextureInfo scale is handled down below
         TextureInfo ti;
         ti.index = material.normalTexture->index;
         ti.texCoord = material.normalTexture->texCoord;
@@ -1405,10 +1405,15 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(dt.error());
         }
       }
-#if 0
+
       if (material.occlusionTexture) {
-        if (auto dt = CreateTexture(commandQueue, *material.occlusionTexture,
-                                    magesExtents, imagesBytes)) {
+        // The OcclusionInfo strength is handled below
+        TextureInfo ti;
+        ti.index = material.occlusionTexture->index;
+        ti.texCoord = material.occlusionTexture->texCoord;
+
+        if (auto dt =
+              CreateTexture(commandQueue, ti, imagesExtents, imagesBytes)) {
           shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
           occlusionIndex = renderable.textures.size();
 
@@ -1417,18 +1422,17 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           renderable.textureSamplers.push_back(dt->sampler);
 
           descriptorSetLayoutBindings.push_back({
-            6,                           // binding
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,   // descriptorType
-            1,                            // descriptorCount
-            VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
-            nullptr                       // pImmutableSamplers
+            kOcclusionBinding,                         // binding
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+            1,                                         // descriptorCount
+            VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+            nullptr                                    // pImmutableSamplers
           });
         } else {
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
         }
       }
-#endif
     }
 
     GetLogger()->debug("Creating descriptor set layout with {} bindings",
