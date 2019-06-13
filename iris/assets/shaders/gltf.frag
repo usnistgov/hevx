@@ -59,23 +59,23 @@ layout(set = 1, binding = 0) uniform MaterialBuffer {
 };
 
 #ifdef HAS_BASECOLOR_MAP
-layout(set = 1, binding = 2) uniform sampler2D BaseColorSampler;
+layout(set = 1, binding = 1) uniform sampler2D BaseColorSampler;
 #endif
 
 #ifdef HAS_NORMAL_MAP
-layout(set = 1, binding = 3) uniform sampler2D NormalSampler;
+layout(set = 1, binding = 2) uniform sampler2D NormalSampler;
+#endif
+
+#ifdef HAS_METALLICROUGHNESS_MAP
+layout(set = 1, binding = 3) uniform sampler2D MetallicRoughnessSampler;
 #endif
 
 #ifdef HAS_EMISSIVE_MAP
 layout(set = 1, binding = 4) uniform sampler2D EmissiveSampler;
 #endif
 
-#ifdef HAS_METALLICROUGHNESS_MAP
-layout(set = 1, binding = 5) uniform sampler2D MetallicRoughnessSampler;
-#endif
-
 #ifdef HAS_OCCLUSION_MAP
-layout(set = 1, binding = 6) uniform sampler2D OcclusionSampler;
+layout(set = 1, binding = 5) uniform sampler2D OcclusionSampler;
 #endif
 
 layout(location = 0) in vec4 Po; // surface position in object-space

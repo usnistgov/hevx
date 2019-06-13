@@ -1,5 +1,6 @@
 .vs/
 build/
+iris-raytracer.log
 iris-viewer.log
 imgui.ini
 *.sublime-workspace

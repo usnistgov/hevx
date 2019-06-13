@@ -516,6 +516,13 @@ void from_json(json const& j, Texture& tex) {
 }
 
 struct GLTF {
+  // FIXME: These need to match gltf.frag
+  static constexpr std::size_t const kBaseColorBinding = 1;
+  static constexpr std::size_t const kNormalBinding = 2;
+  static constexpr std::size_t const kMetallicRoughnessBinding = 3;
+  static constexpr std::size_t const kEmissiveBinding = 4;
+  static constexpr std::size_t const kOcclusionBinding = 5;
+
   std::optional<std::vector<Accessor>> accessors;
   Asset asset;
   std::optional<std::vector<Buffer>> buffers;
@@ -1024,11 +1031,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   std::string const nodeName =
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
 
-  if (node.name && *node.name == "Camera") {
-    if (node.rotation) Renderer::Nav::Reorient(*node.rotation);
-    if (node.translation) Renderer::Nav::Reposition(*node.translation);
-    if (node.scale) Renderer::Nav::Rescale((*node.scale)[0]);
-  }
+  // FIXME: Translate the GLTF camera matrix space into Nav matrix space
+  //if (node.name && *node.name == "Camera") {
+    //if (node.rotation) Renderer::Nav::Reorient(*node.rotation);
+    //if (node.translation) Renderer::Nav::Reposition(*node.translation);
+    //if (node.scale) Renderer::Nav::Rescale((*node.scale)[0]);
+  //}
 
   glm::mat4x4 nodeMat = parentMat;
 
@@ -1231,6 +1239,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     Renderer::Component::Renderable renderable;
 
+    int baseColorIndex = -1;
+    int metallicRoughnessIndex = -1;
+    int normalIndex = -1;
+    int emissiveIndex = -1;
+    int occlusionIndex = -1;
+
     absl::InlinedVector<std::string, 8> shaderMacros;
     if (!texcoords.empty()) shaderMacros.push_back("#define HAS_TEXCOORDS");
 
@@ -1266,17 +1280,29 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 commandQueue, *material.pbrMetallicRoughness->baseColorTexture,
                 imagesExtents, imagesBytes)) {
             shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
+            baseColorIndex = renderable.textures.size();
+
             renderable.textures.push_back(std::move(dt->texture));
             renderable.textureViews.push_back(dt->view);
             renderable.textureSamplers.push_back(dt->sampler);
 
             descriptorSetLayoutBindings.push_back({
-              2,                                         // binding
+              kBaseColorBinding,                         // binding
               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
               1,                                         // descriptorCount
               VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
               nullptr                                    // pImmutableSamplers
             });
+
+            GetLogger()->debug(
+              "Loaded baseColor (index: {}) with binding {}: {:x} {:x} {:x}",
+              baseColorIndex, GLTF::kBaseColorBinding,
+              reinterpret_cast<std::uintptr_t>(
+                renderable.textures.back().image),
+              reinterpret_cast<std::uintptr_t>(
+                renderable.textureSamplers.back()),
+              reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
+                renderable.textureViews.back())));
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(dt.error());
@@ -1289,17 +1315,30 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 *material.pbrMetallicRoughness->metallicRoughnessTexture,
                 imagesExtents, imagesBytes)) {
             shaderMacros.push_back("#define HAS_METALLICROUGHNESS_MAP");
+            metallicRoughnessIndex = renderable.textures.size();
+
             renderable.textures.push_back(std::move(dt->texture));
             renderable.textureViews.push_back(dt->view);
             renderable.textureSamplers.push_back(dt->sampler);
 
             descriptorSetLayoutBindings.push_back({
-              5,                                         // binding
+              kMetallicRoughnessBinding,                 // binding
               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
               1,                                         // descriptorCount
               VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
               nullptr                                    // pImmutableSamplers
             });
+
+            GetLogger()->debug(
+              "Loaded metallicRoughness (index: {}) with binding {}: {:x} {:x} "
+              "{:x}",
+              metallicRoughnessIndex, GLTF::kMetallicRoughnessBinding,
+              reinterpret_cast<std::uintptr_t>(
+                renderable.textures.back().image),
+              reinterpret_cast<std::uintptr_t>(
+                renderable.textureSamplers.back()),
+              reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
+                renderable.textureViews.back())));
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(dt.error());
@@ -1307,39 +1346,54 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         }
       }
 
-#if 0
       if (material.normalTexture) {
-        if (auto dt = CreateTexture(commandQueue, *material.normalTexture,
-                                    imagesExtents, imagesBytes)) {
+        // FIXME: ignoring the scale in NormalTextureInfo
+        TextureInfo ti;
+        ti.index = material.normalTexture->index;
+        ti.texCoord = material.normalTexture->texCoord;
+
+        if (auto dt =
+              CreateTexture(commandQueue, ti, imagesExtents, imagesBytes)) {
           shaderMacros.push_back("#define HAS_NORMAL_MAP");
+          normalIndex = renderable.textures.size();
+
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
           renderable.textureSamplers.push_back(dt->sampler);
 
           descriptorSetLayoutBindings.push_back({
-            3,                            // binding
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,   // descriptorType
-            1,                            // descriptorCount
-            VK_SHADER_STAGE_FRAGMENT_BIT, // stageFlags
-            nullptr                       // pImmutableSamplers
+            kNormalBinding,                            // binding
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+            1,                                         // descriptorCount
+            VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+            nullptr                                    // pImmutableSamplers
           });
+
+          GetLogger()->debug(
+            "Loaded normal (index: {}) with binding {}: {:x} {:x} {:x}",
+            normalIndex, GLTF::kNormalBinding,
+            reinterpret_cast<std::uintptr_t>(renderable.textures.back().image),
+            reinterpret_cast<std::uintptr_t>(renderable.textureSamplers.back()),
+            reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
+              renderable.textureViews.back())));
         } else {
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
         }
       }
-#endif
 
       if (material.emissiveTexture) {
         if (auto dt = CreateTexture(commandQueue, *material.emissiveTexture,
                                     imagesExtents, imagesBytes)) {
           shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
+          emissiveIndex = renderable.textures.size();
+
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
           renderable.textureSamplers.push_back(dt->sampler);
 
           descriptorSetLayoutBindings.push_back({
-            4,                                         // binding
+            kEmissiveBinding,                          // binding
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
             1,                                         // descriptorCount
             VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
@@ -1355,6 +1409,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         if (auto dt = CreateTexture(commandQueue, *material.occlusionTexture,
                                     magesExtents, imagesBytes)) {
           shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
+          occlusionIndex = renderable.textures.size();
+
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
           renderable.textureSamplers.push_back(dt->sampler);
@@ -1374,6 +1430,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 #endif
     }
 
+    GetLogger()->debug("Creating descriptor set layout with {} bindings",
+                       descriptorSetLayoutBindings.size());
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
     descriptorSetLayoutCI.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1657,9 +1715,53 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     std::size_t const nBindings = descriptorSetLayoutBindings.size();
     for (std::size_t i = 1; i < nBindings; ++i) {
       VkDescriptorImageInfo imageInfo = {};
-      imageInfo.sampler = renderable.textureSamplers[i - 1];
-      imageInfo.imageView = renderable.textureViews[i - 1];
       imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+      if (descriptorSetLayoutBindings[i].binding == kBaseColorBinding) {
+        imageInfo.sampler = renderable.textureSamplers[baseColorIndex];
+        imageInfo.imageView = renderable.textureViews[baseColorIndex];
+        GetLogger()->debug(
+          "Writing DS at binding {} with index {} ({:x} {:x})",
+          descriptorSetLayoutBindings[i].binding, baseColorIndex,
+          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
+          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+      } else if (descriptorSetLayoutBindings[i].binding == kNormalBinding) {
+        imageInfo.sampler = renderable.textureSamplers[normalIndex];
+        imageInfo.imageView = renderable.textureViews[normalIndex];
+        GetLogger()->debug(
+          "Writing DS at binding {} with index {} ({:x} {:x})",
+          descriptorSetLayoutBindings[i].binding, normalIndex,
+          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
+          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+      } else if (descriptorSetLayoutBindings[i].binding == kEmissiveBinding) {
+        imageInfo.sampler = renderable.textureSamplers[emissiveIndex];
+        imageInfo.imageView = renderable.textureViews[emissiveIndex];
+        GetLogger()->debug(
+          "Writing DS at binding {} with index {} ({:x} {:x})",
+          descriptorSetLayoutBindings[i].binding, emissiveIndex,
+          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
+          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+      } else if (descriptorSetLayoutBindings[i].binding ==
+                 kMetallicRoughnessBinding) {
+        imageInfo.sampler = renderable.textureSamplers[metallicRoughnessIndex];
+        imageInfo.imageView = renderable.textureViews[metallicRoughnessIndex];
+        GetLogger()->debug(
+          "Writing DS at binding {} with index {} ({:x} {:x})",
+          descriptorSetLayoutBindings[i].binding, metallicRoughnessIndex,
+          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
+          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+      } else if (descriptorSetLayoutBindings[i].binding == kOcclusionBinding) {
+        imageInfo.sampler = renderable.textureSamplers[occlusionIndex];
+        imageInfo.imageView = renderable.textureViews[occlusionIndex];
+        GetLogger()->debug(
+          "Writing DS at binding {} with index {} ({:x} {:x})",
+          descriptorSetLayoutBindings[i].binding, occlusionIndex,
+          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
+          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+      } else {
+        GetLogger()->error("Unknown binding: {}",
+                           descriptorSetLayoutBindings[i].binding);
+      }
 
       writeDescriptorSets.push_back({
         VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
@@ -1674,6 +1776,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       });
     }
 
+    GetLogger()->debug("Updating {} descriptor sets",
+                       writeDescriptorSets.size());
     vkUpdateDescriptorSets(
       Renderer::sDevice,
       gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
@@ -2160,26 +2264,61 @@ ReadGLTF(filesystem::path const& path) noexcept {
                                             "could not acquire command queue"));
   }
 
-  if (!g.scene) {
-    GetLogger()->warn("no default scene specified; using first node");
-    g.scene = 0;
-  }
-
   //
   // Parse the scene graph
   // TODO: this removes the hierarchy: need to maintain those relationships
   // TODO: implement Animatable(?) component to support animations
   //
 
-  if (auto renderables =
-        g.ParseNode(commandQueue, *g.scene, glm::mat4x4(1.f), path,
-                    buffersBytes, imagesExtents, imagesBytes)) {
-    IRIS_LOG_LEAVE();
-    return *renderables;
+  std::vector<Renderer::Component::Renderable> renderables;
+
+  if (!g.scenes) {
+    GetLogger()->debug("no scenes specified; using first node");
+    if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
+                             buffersBytes, imagesExtents, imagesBytes)) {
+      renderables.insert(renderables.end(), r->begin(), r->end());
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(r.error());
+    }
   } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(renderables.error());
+    if (!g.scene) {
+      GetLogger()->warn("no default scene specified; using first scene");
+      g.scene = 0;
+    }
+
+    if (static_cast<std::size_t>(*g.scene) >= g.scenes->size()) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(std::system_error(
+        Error::kFileLoadFailed, "default scene references non-existent scene"));
+    }
+
+    auto&& scene = (*g.scenes)[*g.scene];
+
+    if (!scene.nodes) {
+      GetLogger()->debug("no nodes in scene; using first node");
+      if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
+                               buffersBytes, imagesExtents, imagesBytes)) {
+        renderables.insert(renderables.end(), r->begin(), r->end());
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(r.error());
+      }
+    } else {
+      for (auto&& node : *scene.nodes) {
+        if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
+                                 buffersBytes, imagesExtents, imagesBytes)) {
+          renderables.insert(renderables.end(), r->begin(), r->end());
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(r.error());
+        }
+      }
+    }
   }
+
+  IRIS_LOG_LEAVE();
+  return renderables;
 } // ReadGLTF
 
 } // namespace iris::io
