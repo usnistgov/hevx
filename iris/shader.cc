@@ -252,8 +252,15 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
   int lengths[] = {static_cast<int>(source.size())};
   char const* names[] = {path.string().c_str()};
 
+  std::string preamble;
+  for (auto&& define : macroDefinitions) {
+    preamble += define;
+    preamble += "\n";
+  }
+
   glslang::TShader shader(lang);
   shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
+  shader.setPreamble(preamble.c_str());
   shader.setEntryPoint(entryPoint.c_str());
   shader.setEnvInput(glslang::EShSource::EShSourceGlsl, lang,
                      glslang::EShClient::EShClientVulkan, 101);
@@ -300,9 +307,9 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
 
 } // namespace iris
 
-tl::expected<iris::Shader, std::system_error>
-iris::CompileShaderFromSource(std::string_view source,
-                              VkShaderStageFlagBits stage) noexcept {
+tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
+  std::string_view source, VkShaderStageFlagBits stage,
+  gsl::span<std::string> macroDefinitions) noexcept {
   IRIS_LOG_ENTER();
   Expects(Renderer::sDevice != VK_NULL_HANDLE);
   Expects(source.size() > 0);
@@ -310,7 +317,8 @@ iris::CompileShaderFromSource(std::string_view source,
   Shader shader;
   shader.stage = stage;
 
-  auto code = CompileShader(source, shader.stage, "<inline>", {}, "main");
+  auto code =
+    CompileShader(source, shader.stage, "<inline>", macroDefinitions, "main");
   if (!code) {
     IRIS_LOG_LEAVE();
     return tl::unexpected(
@@ -339,9 +347,11 @@ iris::CompileShaderFromSource(std::string_view source,
 
 tl::expected<iris::Shader, std::system_error>
 iris::LoadShaderFromFile(filesystem::path const& path,
-                         VkShaderStageFlagBits stage) noexcept {
+                         VkShaderStageFlagBits stage,
+                         gsl::span<std::string> macroDefinitions) noexcept {
   IRIS_LOG_ENTER();
   Expects(!path.empty());
+  Expects(Renderer::sDevice != VK_NULL_HANDLE);
 
   auto bytes = iris::io::ReadFile(path);
 
@@ -350,14 +360,35 @@ iris::LoadShaderFromFile(filesystem::path const& path,
     return tl::unexpected(bytes.error());
   }
 
-  auto shader = iris::CompileShaderFromSource(
-    {reinterpret_cast<char const*>(bytes->data()), bytes->size()}, stage);
-  if (!shader) {
+  Shader shader;
+  shader.stage = stage;
+
+  auto code =
+    CompileShader({reinterpret_cast<char const*>(bytes->data()), bytes->size()},
+                  shader.stage, path, macroDefinitions, "main");
+  if (!code) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(shader.error());
+    return tl::unexpected(
+      std::system_error(Error::kShaderCompileFailed, code.error()));
   }
 
+  VkShaderModuleCreateInfo shaderModuleCI = {};
+  shaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  // codeSize is count of bytes, not count of words (which is what size() is)
+  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size()) * 4u;
+  shaderModuleCI.pCode = code->data();
+
+  if (auto result = vkCreateShaderModule(Renderer::sDevice, &shaderModuleCI,
+                                         nullptr, &shader.module);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot create shader module"));
+  }
+
+  Ensures(shader.module != VK_NULL_HANDLE);
+
   IRIS_LOG_LEAVE();
-  return *shader;
+  return shader;
 } // iris::LoadShaderFromFile
 

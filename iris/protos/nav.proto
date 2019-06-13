@@ -1,0 +1,52 @@
+syntax = "proto3";
+package iris.Control;
+
+message Nav {
+  message Position {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+  };
+
+  message Orientation {
+    float head = 1;
+    float pitch = 2;
+    float roll = 3;
+  };
+
+  message Attitude {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+    float w = 4;
+  };
+
+  message Matrix {
+    float a00 = 1;
+    float a01 = 2;
+    float a02 = 3;
+    float a03 = 4;
+    float a10 = 5;
+    float a11 = 6;
+    float a12 = 7;
+    float a13 = 8;
+    float a20 = 9;
+    float a21 = 10;
+    float a22 = 11;
+    float a23 = 12;
+    float a30 = 13;
+    float a31 = 14;
+    float a32 = 15;
+    float a33 = 16;
+  };
+
+  oneof nav {
+    Position position = 1;
+    Orientation orientation = 2;
+    Attitude attitude = 3;
+    float scale = 4;
+    Matrix matrix = 5;
+    float response = 6;
+    bool reset = 7;
+  }
+}

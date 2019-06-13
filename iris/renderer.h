@@ -233,7 +233,7 @@ LoadFile(std::filesystem::path const& path) noexcept;
 /*!
 \brief Execute a control message.
 
-This is a synchronous execution step.
+This is a synchronous execution step and not thread safe.
 \param[in] control the \ref iris::Control::Control message.
 \return std::system_error> indicating if the message failed.
 */

@@ -59,28 +59,23 @@ layout(set = 1, binding = 0) uniform MaterialBuffer {
 };
 
 #ifdef HAS_BASECOLOR_MAP
-layout(set = 1, binding = 2) uniform sampler BaseColorSampler;
-layout(set = 1, binding = 3) uniform texture2D BaseColorTexture;
+layout(set = 1, binding = 2) uniform sampler2D BaseColorSampler;
 #endif
 
 #ifdef HAS_NORMAL_MAP
-layout(set = 1, binding = 4) uniform sampler NormalSampler;
-layout(set = 1, binding = 5) uniform texture2D NormalTexture;
+layout(set = 1, binding = 3) uniform sampler2D NormalSampler;
 #endif
 
 #ifdef HAS_EMISSIVE_MAP
-layout(set = 1, binding = 6) uniform sampler EmissiveSampler;
-layout(set = 1, binding = 7) uniform texture2D EmissiveTexture;
+layout(set = 1, binding = 4) uniform sampler2D EmissiveSampler;
 #endif
 
 #ifdef HAS_METALLICROUGHNESS_MAP
-layout(set = 1, binding = 8) uniform sampler MetallicRoughnessSampler;
-layout(set = 1, binding = 9) uniform texture2D MetallicRoughnessTexture;
+layout(set = 1, binding = 5) uniform sampler2D MetallicRoughnessSampler;
 #endif
 
 #ifdef HAS_OCCLUSION_MAP
-layout(set = 1, binding = 10) uniform sampler OcclusionSampler;
-layout(set = 1, binding = 11) uniform texture2D OcclusionTexture;
+layout(set = 1, binding = 6) uniform sampler2D OcclusionSampler;
 #endif
 
 layout(location = 0) in vec4 Po; // surface position in object-space
@@ -155,7 +150,7 @@ vec3 GetNormal() {
 
 #ifdef HAS_NORMAL_MAP
 
-  vec3 n = texture(sampler2D(NormalTexture, NormalSampler), UV0.st).rgb;
+  vec3 n = texture(NormalSampler, UV.st).rgb;
   vec3 s = vec3(MetallicRoughnessNormalOcclusion.zz, 1.0);
   n = normalize(tbn * ((2.0 * n - 1.0) * s));
 
@@ -180,7 +175,7 @@ void main() {
 #ifdef HAS_METALLICROUGHNESS_MAP
   // Roughness is stored in the 'g' channel, metallic is stored in the 'b' channel.
   // This layout intentionally reserves the 'r' channel for (optional) occlusion map data
-  vec4 mrSample = texture(sampler2D(MetallicRoughnessTexture, MetallicRoughnessSampler), UV0.st);
+  vec4 mrSample = texture(MetallicRoughnessSampler, UV.st);
   perceptualRoughness = mrSample.g * perceptualRoughness;
   metallic = mrSample.b * metallic;
 #endif
@@ -192,7 +187,7 @@ void main() {
   float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
 #ifdef HAS_BASECOLOR_MAP
-  vec4 baseColor = SRGBtoLINEAR(texture(sampler2D(BaseColorTexture, BaseColorSampler), UV0.st)) * BaseColorFactor;
+  vec4 baseColor = SRGBtoLINEAR(texture(BaseColorSampler, UV.st)) * BaseColorFactor;
 #else
   vec4 baseColor = BaseColorFactor;
 #endif
@@ -256,12 +251,12 @@ void main() {
 
   // Apply optional PBR terms for additional (optional) shading
 #ifdef HAS_OCCLUSION_MAP
-  float ao = texture(sampler2D(OcclusionTexture, OcclusionSampler), UV0.st).r;
+  float ao = texture(OcclusionTexture, UV.st).r;
   color = mix(color, color * ao,MetallicRoughnessNormalOcclusion.w);
 #endif
 
 #ifdef HAS_EMISSIVE_MAP
-  vec3 emissive = SRGBtoLINEAR(texture(sampler2D(EmissiveTexture, EmissiveSampler), UV0.st)).rgb * EmissiveFactor;
+  vec3 emissive = SRGBtoLINEAR(texture(EmissiveSampler, UV.st)).rgb * EmissiveFactor;
   color += emissive;
 #endif
 

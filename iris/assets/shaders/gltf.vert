@@ -95,7 +95,7 @@ void main() {
 #endif
 
 #ifdef HAS_TEXCOORDS
-  UV = Texcoord0;
+  UV = Texcoord;
 #else
   UV = vec2(0.0, 0.0);
 #endif

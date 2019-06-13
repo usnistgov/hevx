@@ -3,6 +3,7 @@ package iris.Control;
 
 import "displays.proto";
 import "examine.proto";
+import "nav.proto";
 import "window.proto";
 import "shadertoy.proto";
 
@@ -11,6 +12,7 @@ message Control {
     Displays displays = 2;
     Examine examine = 3;
     Window window = 4;
+    Nav nav = 5;
 	  ShaderToy shaderToy = 20;
   }
 }

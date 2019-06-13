@@ -22,6 +22,7 @@
 #include "iris/protos/control.pb.h"
 #include "iris/protos/displays.pb.h"
 #include "iris/protos/examine.pb.h"
+#include "iris/protos/nav.pb.h"
 #include "iris/protos/shadertoy.pb.h"
 #include "iris/protos/window.pb.h"
 

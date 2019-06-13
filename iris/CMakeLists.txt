@@ -12,6 +12,7 @@ set(protos_PROTOS
   protos/control.proto
   protos/displays.proto
   protos/examine.proto
+  protos/nav.proto
   protos/shadertoy.proto
   protos/window.proto
 )

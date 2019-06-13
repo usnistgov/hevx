@@ -249,6 +249,45 @@ void Reset() noexcept {
   sOrientation = glm::quat(1.f, glm::vec3(0.f, 0.f, 0.f));
 } // Reset
 
+static void
+ProcessControlMessage(iris::Control::Nav const& navMessage) noexcept {
+  IRIS_LOG_ENTER();
+
+  switch (navMessage.nav_case()) {
+  case iris::Control::Nav::NavCase::kPosition: {
+    auto const& p = navMessage.position();
+    Reposition(glm::vec3(p.x(), p.y(), p.z()));
+  } break;
+  case iris::Control::Nav::NavCase::kOrientation: {
+    auto const& o = navMessage.orientation();
+
+    EulerAngles a;
+    a.heading = EulerAngles::Heading(o.head());
+    a.pitch = EulerAngles::Pitch(o.pitch());
+    a.roll = EulerAngles::Roll(o.roll());
+
+    Reorient(glm::quat(a));
+  } break;
+  case iris::Control::Nav::NavCase::kAttitude: {
+    auto const& a = navMessage.attitude();
+    Reorient(glm::quat(a.x(), a.y(), a.z(), a.w()));
+  } break;
+  case iris::Control::Nav::NavCase::kScale: Rescale(navMessage.scale()); break;
+  case iris::Control::Nav::NavCase::kMatrix:
+    GetLogger()->error("not implemented");
+    break;
+  case iris::Control::Nav::NavCase::kResponse:
+    SetResponse(navMessage.response());
+    break;
+  case iris::Control::Nav::NavCase::kReset: Reset(); break;
+  case iris::Control::Nav::NavCase::NAV_NOT_SET:
+    GetLogger()->error("Nav control message invalid");
+    break;
+  }
+
+  IRIS_LOG_LEAVE();
+} // ProcessControlMessage
+
 } // namespace Nav
 
 static Buffer sMatricesBuffer;
@@ -2377,6 +2416,9 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     break;
   case iris::Control::Control::TypeCase::kWindow:
     CreateEmplaceWindow(controlMessage.window());
+    break;
+  case iris::Control::Control::TypeCase::kNav:
+    Nav::ProcessControlMessage(controlMessage.nav());
     break;
   case iris::Control::Control::TypeCase::kShaderToy:
     sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy()));

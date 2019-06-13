@@ -51,12 +51,13 @@ struct ShaderGroup {
 }; // struct ShaderGroup
 
 [[nodiscard]] tl::expected<Shader, std::system_error>
-CompileShaderFromSource(std::string_view source,
-                        VkShaderStageFlagBits stage) noexcept;
+CompileShaderFromSource(std::string_view source, VkShaderStageFlagBits stage,
+                        gsl::span<std::string> macroDefinitions = {}) noexcept;
 
 [[nodiscard]] tl::expected<Shader, std::system_error>
 LoadShaderFromFile(std::filesystem::path const& path,
-                   VkShaderStageFlagBits stage) noexcept;
+                   VkShaderStageFlagBits stage,
+                   gsl::span<std::string> macroDefinitions = {}) noexcept;
 
 } // namespace iris
 
