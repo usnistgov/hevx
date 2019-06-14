@@ -160,17 +160,17 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
   Expects(queue != VK_NULL_HANDLE);
   Expects(fence != VK_NULL_HANDLE);
 
-  VkDeviceSize imageSize [[maybe_unused]];
+  VkDeviceSize imageSize = 0;
 
   switch (format) {
   case VK_FORMAT_R8G8B8A8_UNORM:
     Expects(bytesPerPixel == sizeof(char) * 4);
-    imageSize = extent.width * extent.height * sizeof(char) * 4;
+    imageSize = extent.width * extent.height * bytesPerPixel;
     break;
 
   case VK_FORMAT_R32_SFLOAT:
     Expects(bytesPerPixel == sizeof(float));
-    imageSize = extent.width * extent.height * sizeof(float);
+    imageSize = extent.width * extent.height * bytesPerPixel;
     break;
 
   default:
@@ -266,6 +266,158 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
            ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
            : VK_IMAGE_LAYOUT_GENERAL),
         1, 1);
+      !result) {
+    return tl::unexpected(result.error());
+  }
+
+  DestroyBuffer(*staging);
+
+  Ensures(image.image != VK_NULL_HANDLE);
+  Ensures(image.allocation != VK_NULL_HANDLE);
+
+  IRIS_LOG_LEAVE();
+  return image;
+} // iris::CreateImage
+
+tl::expected<iris::Image, std::system_error>
+iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
+                  VkFormat format, gsl::span<VkExtent2D> extents,
+                  VkImageUsageFlags imageUsage, VmaMemoryUsage memoryUsage,
+                  gsl::not_null<std::byte*> levelsPixels,
+                  std::uint32_t bytesPerPixel) noexcept {
+  IRIS_LOG_ENTER();
+  Expects(Renderer::sDevice != VK_NULL_HANDLE);
+  Expects(Renderer::sAllocator != VK_NULL_HANDLE);
+  Expects(commandPool != VK_NULL_HANDLE);
+  Expects(queue != VK_NULL_HANDLE);
+  Expects(fence != VK_NULL_HANDLE);
+
+  VkDeviceSize imageSize = 0;
+
+  switch (format) {
+  case VK_FORMAT_R8G8B8A8_UNORM:
+    Expects(bytesPerPixel == sizeof(char) * 4);
+    for (auto&& extent : extents) {
+      imageSize += extent.width * extent.height * bytesPerPixel;
+    }
+    break;
+
+  case VK_FORMAT_R32_SFLOAT:
+    Expects(bytesPerPixel == sizeof(float));
+    for (auto&& extent : extents) {
+      imageSize += extent.width * extent.height * bytesPerPixel;
+    }
+    break;
+
+  default:
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(std::make_error_code(std::errc::invalid_argument),
+                        "Unsupported texture format"));
+  }
+
+  auto staging = AllocateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!staging) {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(staging.error().code(),
+                                            "Cannot create staging buffer: "s +
+                                              staging.error().what()));
+  }
+
+  if (auto ptr = staging->Map<std::byte*>()) {
+    std::memcpy(*ptr, levelsPixels, imageSize);
+    staging->Unmap();
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
+  }
+
+  VkImageCreateInfo imageCI = {};
+  imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  imageCI.imageType = VK_IMAGE_TYPE_2D;
+  imageCI.format = format;
+  imageCI.extent = {extents[0].width, extents[0].height, 1};
+  imageCI.mipLevels = gsl::narrow_cast<std::uint32_t>(extents.size());
+  imageCI.arrayLayers = 1;
+  imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+  imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+  imageCI.usage = imageUsage | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VmaAllocationCreateInfo allocationCI = {};
+  allocationCI.usage = memoryUsage;
+
+  Image image;
+
+  if (auto result =
+        vmaCreateImage(Renderer::sAllocator, &imageCI, &allocationCI,
+                       &image.image, &image.allocation, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    tl::unexpected(
+      std::system_error(make_error_code(result), "Cannot create image"));
+  }
+
+  if (auto result = TransitionImage(
+        commandPool, queue, fence, image, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageCI.mipLevels, 1);
+      !result) {
+    return tl::unexpected(result.error());
+  }
+
+  VkCommandBuffer commandBuffer;
+  if (auto cb = Renderer::BeginOneTimeSubmit(commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
+  }
+
+  VkBufferImageCopy region = {};
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;
+  region.bufferImageHeight = 0;
+  region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  region.imageOffset = {0, 0, 0};
+  region.imageExtent = {extents[0].width, extents[0].height, 1};
+
+  GetLogger()->debug("Copying offset {} to level {} ({}x{})",
+                     region.bufferOffset, region.imageSubresource.mipLevel,
+                     region.imageExtent.width, region.imageExtent.height);
+  vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image.image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  for (std::size_t i = 1; i < static_cast<std::size_t>(extents.size()); ++i) {
+    region.bufferOffset +=
+      region.imageExtent.width * region.imageExtent.height * bytesPerPixel;
+    region.imageSubresource.mipLevel = i;
+    region.imageExtent = {extents[i].width, extents[i].height, 1};
+
+    GetLogger()->debug("Copying offset {} to level {} ({}x{})",
+                       region.bufferOffset, region.imageSubresource.mipLevel,
+                       region.imageExtent.width, region.imageExtent.height);
+    vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+  }
+
+  if (auto result =
+        Renderer::EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
+      !result) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  if (auto result = TransitionImage(
+        commandPool, queue, fence, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        (memoryUsage == VMA_MEMORY_USAGE_GPU_ONLY
+           ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+           : VK_IMAGE_LAYOUT_GENERAL),
+        imageCI.mipLevels, 1);
       !result) {
     return tl::unexpected(result.error());
   }

@@ -62,6 +62,13 @@ CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
             VmaMemoryUsage memoryUsage, gsl::not_null<std::byte*> pixels,
             std::uint32_t bytesPerPixel) noexcept;
 
+[[nodiscard]] tl::expected<Image, std::system_error>
+CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
+            VkFormat format, gsl::span<VkExtent2D> extents,
+            VkImageUsageFlags imageUsage, VmaMemoryUsage memoryUsage,
+            gsl::not_null<std::byte*> levelsPixels,
+            std::uint32_t bytesPerPixel) noexcept;
+
 void DestroyImage(Image image) noexcept;
 
 } // namespace iris

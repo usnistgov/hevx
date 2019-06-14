@@ -7,8 +7,14 @@ FetchContent_Populate(stb
   QUIET
 )
 
-file(WRITE ${stb_BINARY_DIR}/stb.cc "#define STB_IMAGE_IMPLEMENTATION\n\
+file(WRITE ${stb_BINARY_DIR}/stb_image.cc
+  "#define STB_IMAGE_IMPLEMENTATION\n\
 #include \"stb_image.h\"")
 
-add_library(stb ${stb_BINARY_DIR}/stb.cc)
+file(WRITE ${stb_BINARY_DIR}/stb_image_resize.cc
+  "#define STB_IMAGE_RESIZE_IMPLEMENTATION\n\
+#include \"stb_image_resize.h\"")
+
+add_library(stb
+  ${stb_BINARY_DIR}/stb_image.cc ${stb_BINARY_DIR}/stb_image_resize.cc)
 target_include_directories(stb PUBLIC ${stb_SOURCE_DIR})

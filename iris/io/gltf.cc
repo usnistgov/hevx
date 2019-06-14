@@ -28,6 +28,7 @@
 #include "renderer.h"
 #include "renderer_private.h"
 #include "stb_image.h"
+#include "stb_image_resize.h"
 #include <map>
 #include <optional>
 #include <string>
@@ -552,7 +553,7 @@ struct GLTF {
   tl::expected<DeviceTexture, std::system_error>
   CreateTexture(Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
                 std::vector<VkExtent2D> const& imagesExtents,
-                std::vector<std::vector<std::byte>> imagesBytes);
+                std::vector<std::vector<std::byte>> imagesBytes, bool srgb);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -1278,7 +1279,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         if (material.pbrMetallicRoughness->baseColorTexture) {
           if (auto dt = CreateTexture(
                 commandQueue, *material.pbrMetallicRoughness->baseColorTexture,
-                imagesExtents, imagesBytes)) {
+                imagesExtents, imagesBytes, true)) {
             shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
             baseColorIndex = renderable.textures.size();
 
@@ -1293,16 +1294,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
               VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
               nullptr                                    // pImmutableSamplers
             });
-
-            GetLogger()->debug(
-              "Loaded baseColor (index: {}) with binding {}: {:x} {:x} {:x}",
-              baseColorIndex, GLTF::kBaseColorBinding,
-              reinterpret_cast<std::uintptr_t>(
-                renderable.textures.back().image),
-              reinterpret_cast<std::uintptr_t>(
-                renderable.textureSamplers.back()),
-              reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
-                renderable.textureViews.back())));
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(dt.error());
@@ -1313,7 +1304,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           if (auto dt = CreateTexture(
                 commandQueue,
                 *material.pbrMetallicRoughness->metallicRoughnessTexture,
-                imagesExtents, imagesBytes)) {
+                imagesExtents, imagesBytes, false)) {
             shaderMacros.push_back("#define HAS_METALLICROUGHNESS_MAP");
             metallicRoughnessIndex = renderable.textures.size();
 
@@ -1328,17 +1319,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
               VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
               nullptr                                    // pImmutableSamplers
             });
-
-            GetLogger()->debug(
-              "Loaded metallicRoughness (index: {}) with binding {}: {:x} {:x} "
-              "{:x}",
-              metallicRoughnessIndex, GLTF::kMetallicRoughnessBinding,
-              reinterpret_cast<std::uintptr_t>(
-                renderable.textures.back().image),
-              reinterpret_cast<std::uintptr_t>(
-                renderable.textureSamplers.back()),
-              reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
-                renderable.textureViews.back())));
           } else {
             IRIS_LOG_LEAVE();
             return tl::unexpected(dt.error());
@@ -1353,8 +1333,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         ti.index = material.normalTexture->index;
         ti.texCoord = material.normalTexture->texCoord;
 
-        if (auto dt =
-              CreateTexture(commandQueue, ti, imagesExtents, imagesBytes)) {
+        if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
+                                    imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_NORMAL_MAP");
           normalIndex = renderable.textures.size();
 
@@ -1369,14 +1349,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
             nullptr                                    // pImmutableSamplers
           });
-
-          GetLogger()->debug(
-            "Loaded normal (index: {}) with binding {}: {:x} {:x} {:x}",
-            normalIndex, GLTF::kNormalBinding,
-            reinterpret_cast<std::uintptr_t>(renderable.textures.back().image),
-            reinterpret_cast<std::uintptr_t>(renderable.textureSamplers.back()),
-            reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
-              renderable.textureViews.back())));
         } else {
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
@@ -1385,7 +1357,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
       if (material.emissiveTexture) {
         if (auto dt = CreateTexture(commandQueue, *material.emissiveTexture,
-                                    imagesExtents, imagesBytes)) {
+                                    imagesExtents, imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
           emissiveIndex = renderable.textures.size();
 
@@ -1412,8 +1384,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         ti.index = material.occlusionTexture->index;
         ti.texCoord = material.occlusionTexture->texCoord;
 
-        if (auto dt =
-              CreateTexture(commandQueue, ti, imagesExtents, imagesBytes)) {
+        if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
+                                    imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
           occlusionIndex = renderable.textures.size();
 
@@ -1428,14 +1400,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
             nullptr                                    // pImmutableSamplers
           });
-
-          GetLogger()->debug(
-            "Loaded occlusion (index: {}) with binding {}: {:x} {:x} {:x}",
-            occlusionIndex, GLTF::kOcclusionBinding,
-            reinterpret_cast<std::uintptr_t>(renderable.textures.back().image),
-            reinterpret_cast<std::uintptr_t>(renderable.textureSamplers.back()),
-            reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
-              renderable.textureViews.back())));
         } else {
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
@@ -1443,8 +1407,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       }
     }
 
-    GetLogger()->debug("Creating descriptor set layout with {} bindings",
-                       descriptorSetLayoutBindings.size());
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
     descriptorSetLayoutCI.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1735,46 +1697,21 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       if (descriptorSetLayoutBindings[i].binding == kBaseColorBinding) {
         imageInfos[i - 1].sampler = renderable.textureSamplers[baseColorIndex];
         imageInfos[i - 1].imageView = renderable.textureViews[baseColorIndex];
-        GetLogger()->debug(
-          "Writing DS at binding {} with index {} ({:x} {:x})",
-          descriptorSetLayoutBindings[i].binding, baseColorIndex,
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kNormalBinding) {
         imageInfos[i - 1].sampler = renderable.textureSamplers[normalIndex];
         imageInfos[i - 1].imageView = renderable.textureViews[normalIndex];
-        GetLogger()->debug(
-          "Writing DS at binding {} with index {} ({:x} {:x})",
-          descriptorSetLayoutBindings[i].binding, normalIndex,
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kEmissiveBinding) {
         imageInfos[i - 1].sampler = renderable.textureSamplers[emissiveIndex];
         imageInfos[i - 1].imageView = renderable.textureViews[emissiveIndex];
-        GetLogger()->debug(
-          "Writing DS at binding {} with index {} ({:x} {:x})",
-          descriptorSetLayoutBindings[i].binding, emissiveIndex,
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding ==
                  kMetallicRoughnessBinding) {
         imageInfos[i - 1].sampler =
           renderable.textureSamplers[metallicRoughnessIndex];
         imageInfos[i - 1].imageView =
           renderable.textureViews[metallicRoughnessIndex];
-        GetLogger()->debug(
-          "Writing DS at binding {} with index {} ({:x} {:x})",
-          descriptorSetLayoutBindings[i].binding, metallicRoughnessIndex,
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kOcclusionBinding) {
         imageInfos[i - 1].sampler = renderable.textureSamplers[occlusionIndex];
         imageInfos[i - 1].imageView = renderable.textureViews[occlusionIndex];
-        GetLogger()->debug(
-          "Writing DS at binding {} with index {} ({:x} {:x})",
-          descriptorSetLayoutBindings[i].binding, occlusionIndex,
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
-          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else {
         GetLogger()->error("Unknown binding: {}",
                            descriptorSetLayoutBindings[i].binding);
@@ -1793,8 +1730,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       });
     }
 
-    GetLogger()->debug("Updating {} descriptor sets",
-                       writeDescriptorSets.size());
     vkUpdateDescriptorSets(
       Renderer::sDevice,
       gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
@@ -2018,11 +1953,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   return renderables;
 } // GLTF::ParseNode
 
-tl::expected<GLTF::DeviceTexture, std::system_error>
-GLTF::CreateTexture(Renderer::CommandQueue commandQueue,
-                    TextureInfo textureInfo,
-                    std::vector<VkExtent2D> const& imagesExtents,
-                    std::vector<std::vector<std::byte>> imagesBytes) {
+tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
+  Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
+  std::vector<VkExtent2D> const& imagesExtents,
+  std::vector<std::vector<std::byte>> imagesBytes, bool srgb) {
   IRIS_LOG_ENTER();
   DeviceTexture deviceTexture;
 
@@ -2034,6 +1968,55 @@ GLTF::CreateTexture(Renderer::CommandQueue commandQueue,
   }
 
   auto&& texture = (*textures)[textureInfo.index];
+  auto&& extent = imagesExtents[*texture.source];
+  auto&& bytes = imagesBytes[*texture.source];
+  std::uint32_t const nLevels =
+    1 + std::floor(std::log2(std::max(extent.width, extent.height)));
+
+  absl::InlinedVector<std::size_t, 16> mipLevelSizes(nLevels);
+  mipLevelSizes[0] = extent.width * extent.height * sizeof(std::byte) * 4;
+
+  absl::InlinedVector<VkExtent2D, 16> mipLevelExtents(nLevels);
+  mipLevelExtents[0] = extent;
+
+  std::size_t totalBytesSize = mipLevelSizes[0];
+
+  for (uint32_t i = 1; i < nLevels; ++i) {
+    mipLevelExtents[i].width = mipLevelExtents[i - 1].width / 2;
+    mipLevelExtents[i].height = mipLevelExtents[i - 1].height / 2;
+    mipLevelSizes[i] = mipLevelExtents[i].width * mipLevelExtents[i].height *
+                       sizeof(std::byte) * 4;
+    totalBytesSize += mipLevelSizes[i];
+  }
+
+  GetLogger()->debug("extent: ({}x{}) nLevels: {} totalBytesSize: {}",
+                     extent.width, extent.height, nLevels, totalBytesSize);
+
+  std::vector<std::byte> mipLevelBytes(totalBytesSize);
+  std::copy_n(bytes.data(), mipLevelSizes[0], mipLevelBytes.data());
+
+  std::size_t offset = mipLevelSizes[0];
+  for (uint32_t i = 1; i < nLevels; ++i) {
+    GetLogger()->debug("creating mip level {} ({}x{}) {} {}", i,
+                       mipLevelExtents[i].width, mipLevelExtents[i].height,
+                       mipLevelSizes[i], offset);
+
+    auto src = reinterpret_cast<unsigned char*>(mipLevelBytes.data() + offset -
+                                                mipLevelSizes[i - 1]);
+    auto dst = reinterpret_cast<unsigned char*>(mipLevelBytes.data() + offset);
+
+    if (srgb) {
+      stbir_resize_uint8_srgb(
+        src, mipLevelExtents[i - 1].width, mipLevelExtents[i - 1].height, 0,
+        dst, mipLevelExtents[i].width, mipLevelExtents[i].height, 0, 4, 3, 0);
+    } else {
+      stbir_resize_uint8(
+        src, mipLevelExtents[i - 1].width, mipLevelExtents[i - 1].height, 0,
+        dst, mipLevelExtents[i].width, mipLevelExtents[i].height, 0, 4);
+    }
+
+    offset += mipLevelSizes[i];
+  }
 
   if (!texture.source ||
       static_cast<std::size_t>(*texture.source) >= imagesBytes.size()) {
@@ -2044,18 +2027,17 @@ GLTF::CreateTexture(Renderer::CommandQueue commandQueue,
 
   if (auto tex = CreateImage(
         commandQueue.commandPool, commandQueue.queue, commandQueue.submitFence,
-        VK_FORMAT_R8G8B8A8_UNORM, imagesExtents[*texture.source],
-        VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-        gsl::not_null(imagesBytes[*texture.source].data()), 4)) {
+        VK_FORMAT_R8G8B8A8_UNORM, mipLevelExtents, VK_IMAGE_USAGE_SAMPLED_BIT,
+        VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(mipLevelBytes.data()), 4)) {
     deviceTexture.texture = std::move(*tex);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(tex.error());
   }
 
-  if (auto view = CreateImageView(deviceTexture.texture, VK_IMAGE_VIEW_TYPE_2D,
-                                  VK_FORMAT_R8G8B8A8_UNORM,
-                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+  if (auto view = CreateImageView(
+        deviceTexture.texture, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, nLevels, 0, 1})) {
     deviceTexture.view = std::move(*view);
   } else {
     IRIS_LOG_LEAVE();
