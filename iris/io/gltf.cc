@@ -1514,9 +1514,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
     if (glm::determinant(nodeMat) < 0.f) {
-      rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    } else {
       rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    } else {
+      rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     }
     rasterizationStateCI.lineWidth = 1.f;
 
