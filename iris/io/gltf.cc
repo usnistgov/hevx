@@ -1428,6 +1428,14 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
             nullptr                                    // pImmutableSamplers
           });
+
+          GetLogger()->debug(
+            "Loaded occlusion (index: {}) with binding {}: {:x} {:x} {:x}",
+            occlusionIndex, GLTF::kOcclusionBinding,
+            reinterpret_cast<std::uintptr_t>(renderable.textures.back().image),
+            reinterpret_cast<std::uintptr_t>(renderable.textureSamplers.back()),
+            reinterpret_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(
+              renderable.textureViews.back())));
         } else {
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
@@ -1717,52 +1725,56 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     Expects(renderable.textureViews.size() ==
             renderable.textureSamplers.size());
 
+    absl::FixedArray<VkDescriptorImageInfo> imageInfos(
+      descriptorSetLayoutBindings.size() - 1);
+
     std::size_t const nBindings = descriptorSetLayoutBindings.size();
     for (std::size_t i = 1; i < nBindings; ++i) {
-      VkDescriptorImageInfo imageInfo = {};
-      imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      imageInfos[i - 1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
       if (descriptorSetLayoutBindings[i].binding == kBaseColorBinding) {
-        imageInfo.sampler = renderable.textureSamplers[baseColorIndex];
-        imageInfo.imageView = renderable.textureViews[baseColorIndex];
+        imageInfos[i - 1].sampler = renderable.textureSamplers[baseColorIndex];
+        imageInfos[i - 1].imageView = renderable.textureViews[baseColorIndex];
         GetLogger()->debug(
           "Writing DS at binding {} with index {} ({:x} {:x})",
           descriptorSetLayoutBindings[i].binding, baseColorIndex,
-          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
-          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kNormalBinding) {
-        imageInfo.sampler = renderable.textureSamplers[normalIndex];
-        imageInfo.imageView = renderable.textureViews[normalIndex];
+        imageInfos[i - 1].sampler = renderable.textureSamplers[normalIndex];
+        imageInfos[i - 1].imageView = renderable.textureViews[normalIndex];
         GetLogger()->debug(
           "Writing DS at binding {} with index {} ({:x} {:x})",
           descriptorSetLayoutBindings[i].binding, normalIndex,
-          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
-          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kEmissiveBinding) {
-        imageInfo.sampler = renderable.textureSamplers[emissiveIndex];
-        imageInfo.imageView = renderable.textureViews[emissiveIndex];
+        imageInfos[i - 1].sampler = renderable.textureSamplers[emissiveIndex];
+        imageInfos[i - 1].imageView = renderable.textureViews[emissiveIndex];
         GetLogger()->debug(
           "Writing DS at binding {} with index {} ({:x} {:x})",
           descriptorSetLayoutBindings[i].binding, emissiveIndex,
-          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
-          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding ==
                  kMetallicRoughnessBinding) {
-        imageInfo.sampler = renderable.textureSamplers[metallicRoughnessIndex];
-        imageInfo.imageView = renderable.textureViews[metallicRoughnessIndex];
+        imageInfos[i - 1].sampler =
+          renderable.textureSamplers[metallicRoughnessIndex];
+        imageInfos[i - 1].imageView =
+          renderable.textureViews[metallicRoughnessIndex];
         GetLogger()->debug(
           "Writing DS at binding {} with index {} ({:x} {:x})",
           descriptorSetLayoutBindings[i].binding, metallicRoughnessIndex,
-          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
-          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else if (descriptorSetLayoutBindings[i].binding == kOcclusionBinding) {
-        imageInfo.sampler = renderable.textureSamplers[occlusionIndex];
-        imageInfo.imageView = renderable.textureViews[occlusionIndex];
+        imageInfos[i - 1].sampler = renderable.textureSamplers[occlusionIndex];
+        imageInfos[i - 1].imageView = renderable.textureViews[occlusionIndex];
         GetLogger()->debug(
           "Writing DS at binding {} with index {} ({:x} {:x})",
           descriptorSetLayoutBindings[i].binding, occlusionIndex,
-          reinterpret_cast<std::intptr_t>(imageInfo.sampler),
-          reinterpret_cast<std::intptr_t>(imageInfo.imageView));
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].sampler),
+          reinterpret_cast<std::intptr_t>(imageInfos[i - 1].imageView));
       } else {
         GetLogger()->error("Unknown binding: {}",
                            descriptorSetLayoutBindings[i].binding);
@@ -1775,9 +1787,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         0,                                      // dstArrayElement
         1,                                      // descriptorCount
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        &imageInfo, // pImageInfo
-        nullptr,    // pBufferInfo
-        nullptr     // pTexelBufferView
+        &imageInfos[i - 1], // pImageInfo
+        nullptr,            // pBufferInfo
+        nullptr             // pTexelBufferView
       });
     }
 

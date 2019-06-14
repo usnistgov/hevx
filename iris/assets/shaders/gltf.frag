@@ -251,7 +251,7 @@ void main() {
 
   // Apply optional PBR terms for additional (optional) shading
 #ifdef HAS_OCCLUSION_MAP
-  float ao = texture(OcclusionTexture, UV.st).r;
+  float ao = texture(OcclusionSampler, UV.st).r;
   color = mix(color, color * ao,MetallicRoughnessNormalOcclusion.w);
 #endif
 
