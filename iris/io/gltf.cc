@@ -1281,7 +1281,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 commandQueue, *material.pbrMetallicRoughness->baseColorTexture,
                 imagesExtents, imagesBytes, true)) {
             shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
-            baseColorIndex = renderable.textures.size();
+            baseColorIndex = gsl::narrow_cast<int>(renderable.textures.size());
 
             renderable.textures.push_back(std::move(dt->texture));
             renderable.textureViews.push_back(dt->view);
@@ -1306,7 +1306,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 *material.pbrMetallicRoughness->metallicRoughnessTexture,
                 imagesExtents, imagesBytes, false)) {
             shaderMacros.push_back("#define HAS_METALLICROUGHNESS_MAP");
-            metallicRoughnessIndex = renderable.textures.size();
+            metallicRoughnessIndex =
+              gsl::narrow_cast<int>(renderable.textures.size());
 
             renderable.textures.push_back(std::move(dt->texture));
             renderable.textureViews.push_back(dt->view);
@@ -1336,7 +1337,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
                                     imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_NORMAL_MAP");
-          normalIndex = renderable.textures.size();
+          normalIndex = gsl::narrow_cast<int>(renderable.textures.size());
 
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
@@ -1359,7 +1360,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         if (auto dt = CreateTexture(commandQueue, *material.emissiveTexture,
                                     imagesExtents, imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
-          emissiveIndex = renderable.textures.size();
+          emissiveIndex = gsl::narrow_cast<int>(renderable.textures.size());
 
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
@@ -1387,7 +1388,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
                                     imagesBytes, false)) {
           shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
-          occlusionIndex = renderable.textures.size();
+          occlusionIndex = gsl::narrow_cast<int>(renderable.textures.size());
 
           renderable.textures.push_back(std::move(dt->texture));
           renderable.textureViews.push_back(dt->view);
@@ -1971,7 +1972,8 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   auto&& extent = imagesExtents[*texture.source];
   auto&& bytes = imagesBytes[*texture.source];
   std::uint32_t const nLevels =
-    1 + std::floor(std::log2(std::max(extent.width, extent.height)));
+    1 + gsl::narrow_cast<std::uint32_t>(
+          std::floor(std::log2(std::max(extent.width, extent.height))));
 
   absl::InlinedVector<std::size_t, 16> mipLevelSizes(nLevels);
   mipLevelSizes[0] = extent.width * extent.height * sizeof(std::byte) * 4;

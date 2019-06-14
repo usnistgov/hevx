@@ -395,7 +395,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   for (std::size_t i = 1; i < static_cast<std::size_t>(extents.size()); ++i) {
     region.bufferOffset +=
       region.imageExtent.width * region.imageExtent.height * bytesPerPixel;
-    region.imageSubresource.mipLevel = i;
+    region.imageSubresource.mipLevel = gsl::narrow_cast<std::uint32_t>(i);
     region.imageExtent = {extents[i].width, extents[i].height, 1};
 
     GetLogger()->debug("Copying offset {} to level {} ({}x{})",
