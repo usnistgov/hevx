@@ -84,12 +84,14 @@ The following packages are fetched and managed with CMake:
 - [KhronosGroup/glslang](https://github.com/KhronosGroup/glslang)
 - [Microsoft/GSL](https://github.com/Microsoft/GSL)
 - [Microsoft/cpprestsdk](https://github.com/Microsoft/cpprestsdk)
+- [nlohmann/json](https://github.com/nlohmann/json)
 - [nothings/stb](https://github.com/nothings/stb)
 - [mosra/flextgl](https://github.com/mosra/flextgl)
 - [ocornut/imgui](https://github.com/ocornut/imgui)
 - [protocolbuffers/protobuf](https://github.com/protocolbuffers/protobuf)
-- [nlohmann/json](https://github.com/nlohmann/json)
 - [TartanLlama/expected](https://github.com/TartanLlama/expected)
+- [vrpn/vrpn](https://github.com/vrpn/vrpn)
+- [zaphoyd/websocketpp](https://github.com/zaphoyd/websocketpp)
 
 Developers
 ----------

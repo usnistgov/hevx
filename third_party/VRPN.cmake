@@ -1,0 +1,20 @@
+set(_vrpn_git_tag version_07.34)
+
+set(VRPN_BUILD_CLIENT_LIBRARY ON CACHE BOOL "" FORCE)
+set(VRPN_BUILD_SERVER_LIBRARY ON CACHE BOOL "" FORCE)
+set(VRPN_BUILD_CLIENTS ON CACHE BOOL "" FORCE)
+set(VRPN_BUILD_SERVERS ON CACHE BOOL "" FORCE)
+set(VRPN_INSTALL TRUE CACHE BOOL "" FORCE)
+
+message(STATUS "Populating VRPN")
+FetchContent_Populate(vrpn
+  GIT_REPOSITORY https://github.com/vrpn/vrpn
+  GIT_SHALLOW TRUE GIT_TAG ${_vrpn_git_tag}
+  PATCH_COMMAND
+    ${CMAKE_COMMAND} -E remove "${CMAKE_CURRENT_BINARY_DIR}/vrpn/cmake/cmake-4.0.0-modules/autoinclude.cmake"
+  SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/vrpn
+  UPDATE_DISCONNECTED ${THIRD_PARTY_UPDATE_DISCONNECTED}
+  QUIET
+)
+
+add_subdirectory(${vrpn_SOURCE_DIR} ${vrpn_BINARY_DIR})

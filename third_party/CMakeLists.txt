@@ -20,6 +20,7 @@ include(Protobuf.cmake)
 include(Spdlog.cmake)
 include(STB.cmake)
 include(TBB.cmake)
+include(VRPN.cmake)
 include(VulkanMemoryAllocator.cmake)
 include(Websocketpp.cmake)
 
