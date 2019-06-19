@@ -20,7 +20,7 @@ Build Requirements
 - GCC >= 8
 - X11 XCB development libraries
 - Boost development libraries
-- Vulkan SDK
+- **Vulkan SDK**
 
 ### Vulkan SDK ###
 Ensure the VULKAN_SDK environment variable is set before building HEVx.
