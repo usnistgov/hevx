@@ -308,21 +308,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f68d67a5-b358-4586-b0ea-b720e387ddaf" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/vrpn/cmake/cmake-4.0.0-modules/autoinclude.cmake" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/iris-raytracer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/iris-raytracer.cc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/pipeline.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/pipeline.cc" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/iris/renderer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer.cc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/renderer_private.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer_private.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/vulkan_util.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/vulkan_util.cc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iris/vulkan_util.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/vulkan_util.h" afterDir="false" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
     <ignored path="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/CMakeFiles/" />
@@ -335,11 +325,11 @@
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug-Vulkan-Python3" />
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="479">
-              <caret line="169" selection-start-line="169" selection-end-line="169" />
+            <state relative-caret-position="401">
+              <caret line="1896" column="19" selection-start-line="1896" selection-start-column="19" selection-end-line="1896" selection-end-column="19" />
               <folding>
                 <element signature="e#29407#29485#0" expanded="true" />
                 <element signature="e#31931#31967#0" expanded="true" />
@@ -351,8 +341,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="479">
-              <caret line="111" selection-start-line="111" selection-end-line="111" />
+            <state relative-caret-position="499">
+              <caret line="653" column="32" selection-start-line="653" selection-start-column="32" selection-end-line="653" selection-end-column="32" />
               <folding>
                 <element signature="e#0#24#0" expanded="true" />
                 <element signature="e#22450#23436#0" expanded="true" />
@@ -361,11 +351,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="531">
-              <caret line="148" column="31" selection-start-line="148" selection-start-column="31" selection-end-line="148" selection-end-column="31" />
+            <state relative-caret-position="551">
+              <caret line="149" selection-start-line="149" selection-end-line="149" />
               <folding>
                 <element signature="e#0#21#0" expanded="true" />
               </folding>
@@ -450,14 +440,14 @@
         <option value="$PROJECT_DIR$/docs/pages.rst" />
         <option value="$PROJECT_DIR$/iris/vulkan_util.h" />
         <option value="$PROJECT_DIR$/iris/vulkan_util.cc" />
-        <option value="$PROJECT_DIR$/iris/renderer.cc" />
         <option value="$PROJECT_DIR$/iris/renderer_private.h" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" />
-        <option value="$PROJECT_DIR$/iris/iris-raytracer.cc" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" />
         <option value="$PROJECT_DIR$/iris/pipeline.cc" />
+        <option value="$PROJECT_DIR$/iris/iris-raytracer.cc" />
+        <option value="$PROJECT_DIR$/iris/renderer.cc" />
       </list>
     </option>
   </component>
@@ -2475,17 +2465,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="479">
-          <caret line="169" selection-start-line="169" selection-end-line="169" />
-          <folding>
-            <element signature="e#29407#29485#0" expanded="true" />
-            <element signature="e#31931#31967#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="539">
@@ -2532,10 +2511,20 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="551">
+          <caret line="149" selection-start-line="149" selection-end-line="149" />
+          <folding>
+            <element signature="e#0#21#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="479">
-          <caret line="111" selection-start-line="111" selection-end-line="111" />
+        <state relative-caret-position="499">
+          <caret line="653" column="32" selection-start-line="653" selection-start-column="32" selection-end-line="653" selection-end-column="32" />
           <folding>
             <element signature="e#0#24#0" expanded="true" />
             <element signature="e#22450#23436#0" expanded="true" />
@@ -2543,12 +2532,13 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
+    <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="531">
-          <caret line="148" column="31" selection-start-line="148" selection-start-column="31" selection-end-line="148" selection-end-column="31" />
+        <state relative-caret-position="401">
+          <caret line="1896" column="19" selection-start-line="1896" selection-start-column="19" selection-end-line="1896" selection-end-column="19" />
           <folding>
-            <element signature="e#0#21#0" expanded="true" />
+            <element signature="e#29407#29485#0" expanded="true" />
+            <element signature="e#31931#31967#0" expanded="true" />
           </folding>
         </state>
       </provider>

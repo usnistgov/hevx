@@ -1886,15 +1886,15 @@ void iris::Renderer::EndFrame(
       ImGui::SameLine();
       if (ImGui::Button("Reset")) Nav::Reset();
 
-      ImGui::Columns(5, NULL, false);
-      ImGui::Text("Response");
-      ImGui::NextColumn();
-      ImGui::Text("%+.3f", Nav::Response());
-      ImGui::NextColumn();
-      ImGui::Text("Scale");
-      ImGui::NextColumn();
-      ImGui::Text("%+.3f", Nav::Scale());
-      ImGui::Columns(1);
+      static float response = Nav::Response();
+      if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
+        Nav::SetResponse(response);
+      }
+
+      static float scale = Nav::Scale();
+      if (ImGui::SliderFloat("Scale", &scale, 0.001f, 100.f)) {
+        Nav::Rescale(scale);
+      }
 
       ImGui::Columns(5, NULL, false);
       Text("Position", "%+.3f", Nav::Position());
