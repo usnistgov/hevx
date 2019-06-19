@@ -73,6 +73,8 @@ BuildAccelerationStructure(AccelerationStructure const& structure,
                            VkFence fence,
                            VkBuffer instanceData = VK_NULL_HANDLE) noexcept;
 
+void DestroyAccelerationStructure(AccelerationStructure structure) noexcept;
+
 } // namespace iris
 
 #endif // HEV_IRIS_ACCELERATION_STRUCTURE_H_

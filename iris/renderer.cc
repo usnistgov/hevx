@@ -5,6 +5,9 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
+#include "acceleration_structure.h"
+#include "components/renderable.h"
+#include "components/traceable.h"
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
@@ -119,7 +122,7 @@ absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
 
-static std::uint32_t sCommandQueueHead{1};
+static std::uint32_t sCommandQueueHead{2}; // Reserve 0 and 1 for Renderer
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
 static std::timed_mutex sCommandQueueMutex;
 
@@ -136,31 +139,33 @@ static constexpr std::uint32_t const sNumFramesBuffered{2};
 static std::uint32_t sFrameNum{0};
 static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 
-struct Renderables {
-  RenderableID Insert(Component::Renderable renderable) {
+template <class T, class ID>
+struct ComponentSystem {
+  ID Insert(T component) {
     std::lock_guard<decltype(mutex)> lck(mutex);
     auto const newID = nextID++;
-    renderables.emplace(newID, std::move(renderable));
-    return RenderableID(newID);
+    components.emplace(newID, std::move(component));
+    return ID(newID);
   }
 
-  std::optional<Component::Renderable> Remove(RenderableID const& id) {
+  std::optional<T> Remove(ID const& id) {
     std::lock_guard<decltype(mutex)> lck(mutex);
-    if (auto pos = renderables.find(id); pos == renderables.end()) {
+    if (auto pos = components.find(id); pos == components.end()) {
       return {};
     } else {
       auto old = pos->second;
-      renderables.erase(pos);
+      components.erase(pos);
       return old;
     }
   }
 
   std::mutex mutex{};
-  RenderableID::id_type nextID{0};
-  absl::flat_hash_map<RenderableID, Component::Renderable> renderables;
-}; // struct Renderables
+  typename ID::id_type nextID{0};
+  absl::flat_hash_map<ID, T> components;
+}; // struct ComponentSystem
 
-static Renderables sRenderables{};
+static ComponentSystem<Component::Renderable, RenderableID> sRenderables{};
+static ComponentSystem<Component::Traceable, TraceableID> sTraceables{};
 
 // TODO: move this
 static Trackball sTrackball;
@@ -487,6 +492,107 @@ static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
 } // BlitImage
+
+static VkCommandBuffer
+RenderTraceable(Component::Traceable const& traceable,
+                gsl::span<std::byte> pushConstants) noexcept {
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sCommandPools[0];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+      vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+    result != VK_SUCCESS) {
+    GetLogger()->error("Cannot allocate command buffer: {}",
+                       iris::to_string(result));
+    return VK_NULL_HANDLE;
+  }
+
+  vkWaitForFences(sDevice, 1, &traceable.traceCompleteFences[sFrameNum % 2],
+                  VK_TRUE, UINT64_MAX);
+  vkResetFences(sDevice, 1, &traceable.traceCompleteFences[sFrameNum % 2]);
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+
+  SetImageLayout(
+    commandBuffer, traceable.outputImage, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+    VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, VK_IMAGE_LAYOUT_UNDEFINED,
+    VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
+                    traceable.pipeline.pipeline);
+
+  vkCmdBindDescriptorSets(
+    commandBuffer,                         // commandBuffer
+    VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
+    traceable.pipeline.layout,             // layout
+    0,                                     // firstSet
+    1,                                     // descriptorSetCount
+    &sGlobalDescriptorSet,                 // pDescriptorSets
+    0,                                     // dynamicOffsetCount
+    nullptr                                // pDynamicOffsets
+  );
+
+  vkCmdPushConstants(
+    commandBuffer, traceable.pipeline.layout,
+    VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
+      VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV |
+      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
+    0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
+    pushConstants.data());
+
+  if (traceable.descriptorSet != VK_NULL_HANDLE) {
+    vkCmdBindDescriptorSets(
+      commandBuffer,                         // commandBuffer
+      VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
+      traceable.pipeline.layout,             // layout
+      1,                                     // firstSet
+      1,                                     // descriptorSetCount
+      &traceable.descriptorSet,              // pDescriptorSets
+      0,                                     // dynamicOffsetCount
+      nullptr                                // pDynamicOffsets
+    );
+  }
+
+  vkCmdTraceRaysNV(
+    commandBuffer,                       // commandBuffer
+    traceable.shaderBindingTable.buffer, // raygenShaderBindingTableBuffer
+    traceable.raygenBindingOffset,       // raygenShaderBindingOffset
+    traceable.shaderBindingTable.buffer, // missShaderBindingTableBuffer
+    traceable.missBindingOffset,         // missShaderBindingOffset
+    traceable.missBindingStride,         // missShaderBindingStride
+    traceable.shaderBindingTable.buffer, // hitShaderBindingTableBuffer
+    traceable.hitBindingOffset,          // hitShaderBindingOffset
+    traceable.hitBindingStride,          // hitShaderBindingStride
+    VK_NULL_HANDLE,                      // callableShaderBindingTableBuffer
+    0,                                   // callableShaderBindingOffset
+    0,                                   // callableShaderBindingStride
+    traceable.outputImageExtent.width,   // width
+    traceable.outputImageExtent.height,  // height
+    1                                    // depth
+  );
+
+  SetImageLayout(commandBuffer,                               // commandBuffer
+                 traceable.outputImage,                       // image
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
+                 VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
+                 VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
+                 1,                                           // mipLevels
+                 1                                            // arrayLayers
+  );
+
+  vkEndCommandBuffer(commandBuffer);
+  return commandBuffer;
+} // RenderTraceable
 
 static VkCommandBuffer
 RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
@@ -2037,9 +2143,51 @@ void iris::Renderer::EndFrame(
       sOldCommandBuffers.push_back(commandBuffer);
     }
 
+    // FIXME: this needs to work differently: the trace commandBuffer should
+    // be submitted below along with the main buffer?
+    { // this block locks sTraceables so that we can iterate over them safely
+      std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
+      for (auto&& [id, traceable] : sTraceables.components) {
+        pushConstants.ModelMatrix =
+          Nav::Matrix() * sWorldMatrix * traceable.modelMatrix;
+        pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
+        pushConstants.NormalMatrix = glm::mat3(
+          glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+
+        VkCommandBuffer traceCommandBuffer = RenderTraceable(
+          traceable, gsl::make_span<std::byte>(
+                       reinterpret_cast<std::byte*>(&pushConstants),
+                       sizeof(PushConstants)));
+
+        VkSubmitInfo submitI = {};
+        submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitI.commandBufferCount = 1;
+        submitI.pCommandBuffers = &traceCommandBuffer;
+
+        if (result = vkQueueSubmit(sCommandQueues[1], 1, &submitI,
+                                   traceable.traceCompleteFences[sFrameNum % 2]);
+            result != VK_SUCCESS) {
+          GetLogger()->error("Error submitting traceable command buffer: {}",
+                             iris::to_string(result));
+        }
+
+        //sOldCommandBuffers.push_back(traceCommandBuffer);
+
+        // FIXME: this overwrites the framebuffer every time with whatever the
+        // last traceable output.
+        VkCommandBuffer blitCommandBuffer = BlitImage(
+          traceable.outputImageView, &window.viewport, &window.scissor,
+          gsl::make_span<std::byte>(
+            reinterpret_cast<std::byte*>(&pushConstants),
+            sizeof(PushConstants)));
+        vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
+        sOldCommandBuffers.push_back(blitCommandBuffer);
+      }
+    }
+
     { // this block locks sRenderables so that we can iterate over them safely
       std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
-      for (auto&& [id, renderable] : sRenderables.renderables) {
+      for (auto&& [id, renderable] : sRenderables.components) {
         pushConstants.ModelMatrix =
           Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
         pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
@@ -2246,6 +2394,87 @@ iris::Renderer::RemoveRenderable(RenderableID const& id) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::RemoveRenderable
+
+iris::Renderer::TraceableID
+iris::Renderer::AddTraceable(Component::Traceable traceable) noexcept {
+  IRIS_LOG_ENTER();
+
+  auto&& id = sTraceables.Insert(std::move(traceable));
+
+  IRIS_LOG_LEAVE();
+  return id;
+} // AddTraceable
+
+tl::expected<void, std::system_error>
+iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
+  IRIS_LOG_ENTER();
+
+  class ReleaseTask : public tbb::task {
+  public:
+    ReleaseTask(Component::Traceable t) noexcept
+      : traceable_(std::move(t)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      for (auto&& fence : traceable_.traceCompleteFences) {
+        vkDestroyFence(sDevice, fence, nullptr);
+      }
+
+      if (traceable_.shaderBindingTable) {
+        DestroyBuffer(traceable_.shaderBindingTable);
+      }
+
+      if (traceable_.outputImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(sDevice, traceable_.outputImageView, nullptr);
+      }
+
+      if (traceable_.outputImage) DestroyImage(traceable_.outputImage);
+
+      if (traceable_.topLevelAccelerationStructure) {
+        DestroyAccelerationStructure(traceable_.topLevelAccelerationStructure);
+      }
+
+      if (traceable_.bottomLevelAccelerationStructure) {
+        DestroyAccelerationStructure(
+          traceable_.bottomLevelAccelerationStructure);
+      }
+
+      if (traceable_.descriptorSet != VK_NULL_HANDLE) {
+        vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
+                             &traceable_.descriptorSet);
+      }
+
+      if (traceable_.descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(sDevice, traceable_.descriptorSetLayout,
+                                     nullptr);
+      }
+
+      if (traceable_.pipeline) DestroyPipeline(traceable_.pipeline);
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
+  private:
+    Component::Traceable traceable_;
+  }; // struct IOTask
+
+  if (auto old = sTraceables.Remove(id)) {
+    try {
+      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
+      tbb::task::enqueue(*task);
+    } catch (std::exception const& e) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(
+        std::system_error(make_error_code(Error::kEnqueueError),
+                          fmt::format("Enqueing release task: {}", e.what())));
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::RemoveTraceable
 
 tl::expected<iris::Renderer::CommandQueue, std::system_error>
 iris::Renderer::AcquireCommandQueue(

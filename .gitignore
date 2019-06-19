@@ -7,3 +7,4 @@ imgui.ini
 *.sublime-project
 *.nsight-gfxproj
 cmake-build-debug-vulkan-python3/
+.idea/workspace.xml

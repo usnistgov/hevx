@@ -117,7 +117,7 @@ set(SOURCES
   vulkan_util.cc
   window.cc
   wsi/platform_window.cc
-)
+  components/traceable.h)
 
 if(WIN32)
   list(APPEND SOURCES wsi/platform_window_win32.cc)

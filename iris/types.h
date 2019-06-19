@@ -7,6 +7,32 @@
 
 namespace iris {
 
+template <class Tag>
+struct ComponentID {
+public:
+    using id_type = std::uint32_t;
+
+    constexpr ComponentID() noexcept = default;
+    constexpr ComponentID(id_type id) noexcept
+      : id_(std::move(id)) {}
+
+    id_type& operator()() noexcept { return id_; }
+    id_type const& operator()() const noexcept { return id_; }
+
+    friend bool operator==(ComponentID const& lhs,
+                           ComponentID const& rhs) noexcept {
+      return lhs.id_ == rhs.id_;
+    }
+
+    friend bool operator<(ComponentID const& lhs,
+                          ComponentID const& rhs) noexcept {
+      return lhs.id_ < rhs.id_;
+    }
+
+private:
+    id_type id_{UINT32_MAX};
+}; // struct ComponentID
+
 /*!
 \brief EulerAngles is a struct that holds intrinsic Tait-Bryan angles. These
 are angles that represent a sequence of model axis rotations.

@@ -51,6 +51,7 @@ class Control;
 
 namespace Renderer::Component {
 struct Renderable;
+struct Traceable;
 } // namespace Renderer::Component
 
 /*!
@@ -150,30 +151,7 @@ executed into the primary command buffer for each \ref Window.
 void EndFrame(VkImageView view = VK_NULL_HANDLE,
               gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
 
-struct RenderableID {
-public:
-  using id_type = std::uint32_t;
-
-  constexpr RenderableID() noexcept = default;
-  constexpr RenderableID(id_type id) noexcept
-    : id_(std::move(id)) {}
-
-  id_type& operator()() noexcept { return id_; }
-  id_type const& operator()() const noexcept { return id_; }
-
-  friend bool operator==(RenderableID const& lhs,
-                         RenderableID const& rhs) noexcept {
-    return lhs.id_ == rhs.id_;
-  }
-
-  friend bool operator<(RenderableID const& lhs,
-                        RenderableID const& rhs) noexcept {
-    return lhs.id_ < rhs.id_;
-  }
-
-private:
-  id_type id_{UINT32_MAX};
-}; // struct RenderableID
+using RenderableID = ComponentID<struct RenderableIDTag>;
 
 /*!
 \brief Add a \ref Component::Renderable for rendering each frame.
@@ -191,6 +169,13 @@ AddRenderable(Component::Renderable renderable) noexcept;
 */
 tl::expected<void, std::system_error>
 RemoveRenderable(RenderableID const& id) noexcept;
+
+using TraceableID = ComponentID<struct TracableIDTag>;
+
+TraceableID AddTraceable(Component::Traceable traceable) noexcept;
+
+tl::expected<void, std::system_error>
+RemoveTraceable(TraceableID const& id) noexcept;
 
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};
@@ -333,12 +318,21 @@ inline Features operator&=(Features& lhs, Features const& rhs) noexcept {
 } // namespace iris
 
 namespace std {
+
 template <>
 struct hash<iris::Renderer::RenderableID> {
   std::size_t operator()(iris::Renderer::RenderableID const& v) const noexcept {
     return std::hash<iris::Renderer::RenderableID::id_type>{}(v());
   }
 };
+
+template <>
+struct hash<iris::Renderer::TraceableID> {
+  std::size_t operator()(iris::Renderer::TraceableID const& v) const noexcept {
+    return std::hash<iris::Renderer::TraceableID::id_type>{}(v());
+  }
+};
+
 } // namespace std
 
 #endif // HEV_IRIS_RENDERER_H_

@@ -2,297 +2,297 @@
 <project version="4">
   <component name="CMakeRunConfigurationManager" shouldGenerate="true" shouldDeleteObsolete="true">
     <generated>
-      <config projectName="hevx" targetName="spirv-opt" />
-      <config projectName="hevx" targetName="HLSL" />
-      <config projectName="hevx" targetName="test-ext_scalar_relational" />
-      <config projectName="hevx" targetName="ContinuousBuild" />
-      <config projectName="hevx" targetName="absl_flags_marshalling" />
-      <config projectName="hevx" targetName="glslang" />
-      <config projectName="hevx" targetName="absl_time_zone" />
-      <config projectName="hevx" targetName="NightlyTest" />
-      <config projectName="hevx" targetName="test-gtx_norm" />
-      <config projectName="hevx" targetName="test-ext_scalar_constants" />
-      <config projectName="hevx" targetName="absl_raw_hash_set" />
-      <config projectName="hevx" targetName="test-gtx_matrix_major_storage" />
-      <config projectName="hevx" targetName="test-gtc_matrix_access" />
-      <config projectName="hevx" targetName="test-gtx_matrix_operation" />
-      <config projectName="hevx" targetName="test-ext_quaternion_geometric" />
-      <config projectName="hevx" targetName="safe_numeric" />
-      <config projectName="hevx" targetName="absl_strings_internal" />
-      <config projectName="hevx" targetName="test-gtx_normal" />
-      <config projectName="hevx" targetName="test-core_func_noise" />
-      <config projectName="hevx" targetName="ExperimentalMemCheck" />
-      <config projectName="hevx" targetName="absl_hash" />
-      <config projectName="hevx" targetName="test-gtx_matrix_interpolation" />
-      <config projectName="hevx" targetName="absl_flags_handle" />
-      <config projectName="hevx" targetName="test-core_setup_message" />
-      <config projectName="hevx" targetName="test-core_func_swizzle" />
-      <config projectName="hevx" targetName="absl_flags" />
-      <config projectName="hevx" targetName="ContinuousSubmit" />
-      <config projectName="hevx" targetName="Nightly" />
-      <config projectName="hevx" targetName="test-ext_vector_relational" />
-      <config projectName="hevx" targetName="test-gtx_extended_min_max" />
-      <config projectName="hevx" targetName="test-ext_scalar_ulp" />
-      <config projectName="hevx" targetName="test-ext_scalar_int_sized" />
-      <config projectName="hevx" targetName="test-gtc_random" />
-      <config projectName="hevx" targetName="test-gtc_type_precision" />
-      <config projectName="hevx" targetName="vrpn_streamPrint" />
-      <config projectName="hevx" targetName="test-gtx_rotate_vector" />
-      <config projectName="hevx" targetName="SPIRV-Tools-opt" />
-      <config projectName="hevx" targetName="NightlyConfigure" />
-      <config projectName="hevx" targetName="test-core_type_mat2x2" />
-      <config projectName="hevx" targetName="spirv-link" />
-      <config projectName="hevx" targetName="vrpn_server" />
-      <config projectName="hevx" targetName="test-gtx_wrap" />
-      <config projectName="hevx" targetName="iris-viewer" />
-      <config projectName="hevx" targetName="test-gtc_matrix_integer" />
-      <config projectName="hevx" targetName="test-gtx_exterior_product" />
-      <config projectName="hevx" targetName="absl_int128" />
-      <config projectName="hevx" targetName="test-core_func_integer_find_lsb" />
-      <config projectName="hevx" targetName="test-gtc_matrix_transform" />
-      <config projectName="hevx" targetName="OSDependent" />
-      <config projectName="hevx" targetName="SPIRV-Tools-link" />
-      <config projectName="hevx" targetName="test-gtx_intersect" />
-      <config projectName="hevx" targetName="absl_scoped_set_env" />
-      <config projectName="hevx" targetName="test-gtx_polar_coordinates" />
-      <config projectName="hevx" targetName="NightlySubmit" />
-      <config projectName="hevx" targetName="test-core_type_mat3x4" />
-      <config projectName="hevx" targetName="test-core_type_mat3x3" />
-      <config projectName="hevx" targetName="absl_spinlock_wait" />
-      <config projectName="hevx" targetName="spv-tools-spv-amd-sevp" />
-      <config projectName="hevx" targetName="SPIRV-Tools-shared" />
-      <config projectName="hevx" targetName="NightlyMemoryCheck" />
-      <config projectName="hevx" targetName="test-gtx_orthonormalize" />
-      <config projectName="hevx" targetName="Experimental" />
-      <config projectName="hevx" targetName="test-gtx_fast_exponential" />
-      <config projectName="hevx" targetName="glslangValidator" />
-      <config projectName="hevx" targetName="ContinuousMemCheck" />
-      <config projectName="hevx" targetName="test-gtx_normalize_dot" />
-      <config projectName="hevx" targetName="test-gtc_noise" />
-      <config projectName="hevx" targetName="test-ext_quaternion_common" />
-      <config projectName="hevx" targetName="ContinuousUpdate" />
-      <config projectName="hevx" targetName="vrpn_average_analogs" />
-      <config projectName="hevx" targetName="test-perf_matrix_mul_vector" />
-      <config projectName="hevx" targetName="ContinuousStart" />
-      <config projectName="hevx" targetName="uninstall" />
-      <config projectName="hevx" targetName="test-gtc_reciprocal" />
-      <config projectName="hevx" targetName="test-gtc_packing" />
-      <config projectName="hevx" targetName="test-core_type_length" />
-      <config projectName="hevx" targetName="absl_flags_registry" />
-      <config projectName="hevx" targetName="test-core_force_ctor_init" />
-      <config projectName="hevx" targetName="test-ext_vec1" />
-      <config projectName="hevx" targetName="gtest" />
-      <config projectName="hevx" targetName="imgui" />
-      <config projectName="hevx" targetName="absl_debugging_internal" />
-      <config projectName="hevx" targetName="test-gtc_constants" />
-      <config projectName="hevx" targetName="test-perf_matrix_div" />
-      <config projectName="hevx" targetName="ExperimentalTest" />
-      <config projectName="hevx" targetName="ContinuousCoverage" />
-      <config projectName="hevx" targetName="test-core_setup_force_size_t_length" />
-      <config projectName="hevx" targetName="test-ext_vector_common" />
-      <config projectName="hevx" targetName="mikktspace" />
-      <config projectName="hevx" targetName="spirv-tools-pkg-config" />
-      <config projectName="hevx" targetName="test-core_type_vec2" />
-      <config projectName="hevx" targetName="test-gtx_color_space" />
-      <config projectName="hevx" targetName="spirv-dis" />
-      <config projectName="hevx" targetName="NightlyUpdate" />
-      <config projectName="hevx" targetName="test-gtx_matrix_factorisation" />
-      <config projectName="hevx" targetName="test-core_func_common" />
-      <config projectName="hevx" targetName="test-gtx_common" />
-      <config projectName="hevx" targetName="run_auxiliary_logger" />
-      <config projectName="hevx" targetName="test-gtc_round" />
-      <config projectName="hevx" targetName="c_interface_example" />
-      <config projectName="hevx" targetName="gtest_main" />
-      <config projectName="hevx" targetName="test-gtx_load" />
-      <config projectName="hevx" targetName="test-perf_matrix_transpose" />
-      <config projectName="hevx" targetName="absl_stacktrace" />
-      <config projectName="hevx" targetName="test-core_type_mat2x3" />
-      <config projectName="hevx" targetName="NightlyCoverage" />
-      <config projectName="hevx" targetName="test-core_type_mat3x2" />
-      <config projectName="hevx" targetName="NightlyBuild" />
-      <config projectName="hevx" targetName="test-gtx_vector_query" />
-      <config projectName="hevx" targetName="test-core_func_geometric" />
-      <config projectName="hevx" targetName="absl_dynamic_annotations" />
-      <config projectName="hevx" targetName="ExperimentalSubmit" />
-      <config projectName="hevx" targetName="test-perf_matrix_inverse" />
-      <config projectName="hevx" targetName="absl_throw_delegate" />
-      <config projectName="hevx" targetName="test-gtx_color_space_YCoCg" />
-      <config projectName="hevx" targetName="test-core_setup_force_cxx98" />
-      <config projectName="hevx" targetName="core_tables" />
-      <config projectName="hevx" targetName="vrpn_atmel" />
-      <config projectName="hevx" targetName="test-gtc_bitfield" />
-      <config projectName="hevx" targetName="test-gtx_component_wise" />
-      <config projectName="hevx" targetName="test-ext_quaternion_relational" />
-      <config projectName="hevx" targetName="SPVRemapper" />
-      <config projectName="hevx" targetName="absl_bad_any_cast_impl" />
-      <config projectName="hevx" targetName="spirv-remap" />
-      <config projectName="hevx" targetName="absl_symbolize" />
-      <config projectName="hevx" targetName="test-gtx_texture" />
-      <config projectName="hevx" targetName="test-gtx_number_precision" />
-      <config projectName="hevx" targetName="spv-tools-debuginfo" />
-      <config projectName="hevx" targetName="vrpn" />
-      <config projectName="hevx" targetName="absl_hashtablez_sampler" />
-      <config projectName="hevx" targetName="test-gtx_log_base" />
-      <config projectName="hevx" targetName="absl_str_format_internal" />
-      <config projectName="hevx" targetName="libprotobuf-lite" />
-      <config projectName="hevx" targetName="spirv-tools-cpp-example" />
-      <config projectName="hevx" targetName="test-core_force_pure" />
-      <config projectName="hevx" targetName="test-gtx_compatibility" />
-      <config projectName="hevx" targetName="test-gtx_matrix_cross_product" />
-      <config projectName="hevx" targetName="test-ext_vector_integer" />
-      <config projectName="hevx" targetName="test-core_func_integer_bit_count" />
-      <config projectName="hevx" targetName="test-gtx_fast_square_root" />
-      <config projectName="hevx" targetName="spirv-tools-build-version" />
-      <config projectName="hevx" targetName="test-gtx" />
-      <config projectName="hevx" targetName="test-gtx_spline" />
-      <config projectName="hevx" targetName="vrpn_print_devices" />
-      <config projectName="hevx" targetName="spv-tools-spv-amd-gs" />
-      <config projectName="hevx" targetName="test-core_force_unrestricted_gentype" />
-      <config projectName="hevx" targetName="test-core_force_xyzw_only" />
-      <config projectName="hevx" targetName="SPIRV-Tools-reduce" />
-      <config projectName="hevx" targetName="test-ext_vector_iec559" />
-      <config projectName="hevx" targetName="ExperimentalUpdate" />
-      <config projectName="hevx" targetName="gmock_main" />
       <config projectName="hevx" targetName="absl_bad_variant_access" />
-      <config projectName="hevx" targetName="test-gtx_functions" />
-      <config projectName="hevx" targetName="test-gtx_extend" />
-      <config projectName="hevx" targetName="test-gtx_gradient_paint" />
-      <config projectName="hevx" targetName="test-ext_quaternion_trigonometric" />
-      <config projectName="hevx" targetName="test-gtc_vec1" />
-      <config projectName="hevx" targetName="absl_malloc_internal" />
-      <config projectName="hevx" targetName="test-ext_vector_ulp" />
-      <config projectName="hevx" targetName="test-gtx_optimum_pow" />
-      <config projectName="hevx" targetName="test-core_force_aligned_gentypes" />
-      <config projectName="hevx" targetName="absl_civil_time" />
+      <config projectName="hevx" targetName="vma" />
+      <config projectName="hevx" targetName="test-gtc_random" />
+      <config projectName="hevx" targetName="iris-viewer" />
+      <config projectName="hevx" targetName="fmt" />
+      <config projectName="hevx" targetName="absl_failure_signal_handler" />
+      <config projectName="hevx" targetName="test-gtx_norm" />
+      <config projectName="hevx" targetName="test-core_func_noise" />
+      <config projectName="hevx" targetName="SPIRV-Tools-link" />
+      <config projectName="hevx" targetName="spv-tools-spv-amd-gs" />
+      <config projectName="hevx" targetName="vrpn_atmel" />
+      <config projectName="hevx" targetName="test-gtc_type_ptr" />
+      <config projectName="hevx" targetName="test-ext_scalar_ulp" />
+      <config projectName="hevx" targetName="test-core_force_inline" />
       <config projectName="hevx" targetName="vrpn_timecode_generator" />
-      <config projectName="hevx" targetName="test-gtx_quaternion" />
-      <config projectName="hevx" targetName="test-core_type_ctor" />
-      <config projectName="hevx" targetName="tests" />
-      <config projectName="hevx" targetName="test-gtc_type_aligned" />
-      <config projectName="hevx" targetName="NightlyStart" />
-      <config projectName="hevx" targetName="test-core_type_vec4" />
-      <config projectName="hevx" targetName="test-core_type_vec3" />
-      <config projectName="hevx" targetName="libprotobuf" />
-      <config projectName="hevx" targetName="test-core_type_vec1" />
-      <config projectName="hevx" targetName="glslang-default-resource-limits" />
-      <config projectName="hevx" targetName="test-core_type_mat2x4" />
-      <config projectName="hevx" targetName="spv-tools-spv-amd-stm" />
-      <config projectName="hevx" targetName="test-ext_vector_bool1" />
-      <config projectName="hevx" targetName="test-gtx_vector_angle" />
-      <config projectName="hevx" targetName="test-ext_matrix_transform" />
-      <config projectName="hevx" targetName="test-perf_vector_mul_matrix" />
-      <config projectName="hevx" targetName="gpsnmea" />
-      <config projectName="hevx" targetName="ExperimentalConfigure" />
-      <config projectName="hevx" targetName="test-core_func_exponential" />
-      <config projectName="hevx" targetName="spv-tools-spv-amd-sb" />
-      <config projectName="hevx" targetName="libprotoc" />
-      <config projectName="hevx" targetName="test-core_func_matrix" />
-      <config projectName="hevx" targetName="spirv-reduce" />
-      <config projectName="hevx" targetName="test-core_cpp_defaulted_ctor" />
-      <config projectName="hevx" targetName="test-ext_scalar_common" />
-      <config projectName="hevx" targetName="test-gtx_matrix_query" />
-      <config projectName="hevx" targetName="test-core_func_integer" />
-      <config projectName="hevx" targetName="test-gtx_string_cast" />
-      <config projectName="hevx" targetName="test-gtx_type_trait" />
-      <config projectName="hevx" targetName="absl_base" />
-      <config projectName="hevx" targetName="test-gtx_rotate_normalized_axis" />
-      <config projectName="hevx" targetName="test-core_setup_platform_unknown" />
-      <config projectName="hevx" targetName="test-gtx_projection" />
-      <config projectName="hevx" targetName="absl_flags_internal" />
-      <config projectName="hevx" targetName="glm_static" />
-      <config projectName="hevx" targetName="test-ext_scalar_uint_sized" />
-      <config projectName="hevx" targetName="NightlyMemCheck" />
-      <config projectName="hevx" targetName="absl_leak_check_disable" />
-      <config projectName="hevx" targetName="absl_demangle_internal" />
-      <config projectName="hevx" targetName="test-ext_quaternion_transform" />
-      <config projectName="hevx" targetName="cpprest" />
-      <config projectName="hevx" targetName="test-gtc_matrix_inverse" />
-      <config projectName="hevx" targetName="test-core_force_explicit_ctor" />
-      <config projectName="hevx" targetName="ExperimentalCoverage" />
-      <config projectName="hevx" targetName="spirv-val" />
-      <config projectName="hevx" targetName="ExperimentalBuild" />
-      <config projectName="hevx" targetName="test-gtx_fast_trigonometry" />
-      <config projectName="hevx" targetName="spirv-cfg" />
-      <config projectName="hevx" targetName="SPIRV-Tools" />
-      <config projectName="hevx" targetName="test-core_func_integer_find_msb" />
-      <config projectName="hevx" targetName="test-gtc_ulp" />
-      <config projectName="hevx" targetName="test-gtx_scalar_relational" />
-      <config projectName="hevx" targetName="test-gtx_easing" />
-      <config projectName="hevx" targetName="ContinuousTest" />
-      <config projectName="hevx" targetName="test-core_func_trigonometric" />
-      <config projectName="hevx" targetName="absl_flags_usage" />
+      <config projectName="hevx" targetName="test-core_type_aligned" />
+      <config projectName="hevx" targetName="absl_civil_time" />
       <config projectName="hevx" targetName="test-gtx_perpendicular" />
+      <config projectName="hevx" targetName="absl_flags_config" />
+      <config projectName="hevx" targetName="gmock" />
+      <config projectName="hevx" targetName="absl_flags_usage" />
+      <config projectName="hevx" targetName="test-gtc_quaternion" />
+      <config projectName="hevx" targetName="ContinuousStart" />
+      <config projectName="hevx" targetName="test-ext_matrix_relational" />
+      <config projectName="hevx" targetName="test-ext_scalar_constants" />
+      <config projectName="hevx" targetName="vrpn_streamPrint" />
       <config projectName="hevx" targetName="absl_time" />
+      <config projectName="hevx" targetName="test-perf_matrix_inverse" />
+      <config projectName="hevx" targetName="test-gtc_matrix_transform" />
+      <config projectName="hevx" targetName="test-gtx_color_space_YCoCg" />
+      <config projectName="hevx" targetName="test-gtx_extend" />
+      <config projectName="hevx" targetName="test-ext_vector_integer" />
+      <config projectName="hevx" targetName="test-ext_vector_iec559" />
+      <config projectName="hevx" targetName="absl_flags_registry" />
+      <config projectName="hevx" targetName="absl_debugging_internal" />
+      <config projectName="hevx" targetName="absl_flags_marshalling" />
+      <config projectName="hevx" targetName="test-core_type_length" />
+      <config projectName="hevx" targetName="absl_base" />
+      <config projectName="hevx" targetName="NightlyMemCheck" />
+      <config projectName="hevx" targetName="NightlyConfigure" />
+      <config projectName="hevx" targetName="SPIRV-Tools" />
+      <config projectName="hevx" targetName="extinst_tables" />
+      <config projectName="hevx" targetName="test-gtx_scalar_relational" />
+      <config projectName="hevx" targetName="test-gtx_type_trait" />
       <config projectName="hevx" targetName="test-core_type_mat4x4" />
       <config projectName="hevx" targetName="test-core_type_mat4x3" />
+      <config projectName="hevx" targetName="test-gtx_log_base" />
+      <config projectName="hevx" targetName="test-gtx_rotate_vector" />
+      <config projectName="hevx" targetName="SPIRV-Tools-shared" />
+      <config projectName="hevx" targetName="test-gtx_associated_min_max" />
+      <config projectName="hevx" targetName="test-ext_scalar_int_sized" />
       <config projectName="hevx" targetName="test-core_type_mat4x2" />
-      <config projectName="hevx" targetName="spirv-tools-header-DebugInfo" />
-      <config projectName="hevx" targetName="test-gtc_integer" />
-      <config projectName="hevx" targetName="fmt" />
-      <config projectName="hevx" targetName="test-gtx_handed_coordinate_space" />
-      <config projectName="hevx" targetName="docs" />
-      <config projectName="hevx" targetName="absl_synchronization" />
-      <config projectName="hevx" targetName="test-core_type_cast" />
-      <config projectName="hevx" targetName="test-gtx_euler_angle" />
-      <config projectName="hevx" targetName="protos" />
-      <config projectName="hevx" targetName="vrpn_print_performance" />
-      <config projectName="hevx" targetName="test-core_cpp_constexpr" />
+      <config projectName="hevx" targetName="test-gtc_vec1" />
+      <config projectName="hevx" targetName="ExperimentalBuild" />
+      <config projectName="hevx" targetName="ExperimentalUpdate" />
+      <config projectName="hevx" targetName="absl_leak_check" />
       <config projectName="hevx" targetName="vrpn_print_messages" />
-      <config projectName="hevx" targetName="test-ext_quaternion_type" />
-      <config projectName="hevx" targetName="protoc" />
-      <config projectName="hevx" targetName="gmock" />
-      <config projectName="hevx" targetName="test-ext_matrix_relational" />
-      <config projectName="hevx" targetName="test-gtx_vec_swizzle" />
-      <config projectName="hevx" targetName="Continuous" />
-      <config projectName="hevx" targetName="spirv-tools-vimsyntax" />
-      <config projectName="hevx" targetName="OGLCompiler" />
-      <config projectName="hevx" targetName="SPIRV" />
-      <config projectName="hevx" targetName="test-gtx_dual_quaternion" />
-      <config projectName="hevx" targetName="quat" />
-      <config projectName="hevx" targetName="test-gtc_type_ptr" />
-      <config projectName="hevx" targetName="test-gtx_io" />
-      <config projectName="hevx" targetName="test-gtc_color_space" />
-      <config projectName="hevx" targetName="test-core_force_inline" />
-      <config projectName="hevx" targetName="ContinuousConfigure" />
+      <config projectName="hevx" targetName="test-gtc_ulp" />
+      <config projectName="hevx" targetName="vrpn_print_devices" />
+      <config projectName="hevx" targetName="gmock_main" />
+      <config projectName="hevx" targetName="stb" />
+      <config projectName="hevx" targetName="absl_stacktrace" />
+      <config projectName="hevx" targetName="absl_leak_check_disable" />
       <config projectName="hevx" targetName="test-gtx_range" />
-      <config projectName="hevx" targetName="test-core_type_int" />
-      <config projectName="hevx" targetName="test-gtx_color_encoding" />
-      <config projectName="hevx" targetName="test-bug_ms_vec_static" />
+      <config projectName="hevx" targetName="ExperimentalConfigure" />
+      <config projectName="hevx" targetName="test-ext_quaternion_geometric" />
+      <config projectName="hevx" targetName="test-ext_quaternion_transform" />
+      <config projectName="hevx" targetName="test-gtc_constants" />
+      <config projectName="hevx" targetName="absl_hash" />
+      <config projectName="hevx" targetName="mikktspace" />
+      <config projectName="hevx" targetName="test-ext_scalar_common" />
+      <config projectName="hevx" targetName="absl_bad_any_cast_impl" />
+      <config projectName="hevx" targetName="libprotoc" />
+      <config projectName="hevx" targetName="test-gtx_scalar_multiplication" />
+      <config projectName="hevx" targetName="absl_demangle_internal" />
+      <config projectName="hevx" targetName="test-gtx_vec_swizzle" />
+      <config projectName="hevx" targetName="absl_flags" />
+      <config projectName="hevx" targetName="enum_string_mapping" />
+      <config projectName="hevx" targetName="absl_flags_internal" />
+      <config projectName="hevx" targetName="test-core_cpp_constexpr" />
+      <config projectName="hevx" targetName="test-core_func_integer" />
+      <config projectName="hevx" targetName="SPIRV" />
+      <config projectName="hevx" targetName="spirv-val" />
       <config projectName="hevx" targetName="test-gtx_matrix_transform_2d" />
+      <config projectName="hevx" targetName="NightlyCoverage" />
+      <config projectName="hevx" targetName="test-gtx_fast_square_root" />
       <config projectName="hevx" targetName="absl_city" />
-      <config projectName="hevx" targetName="test-core_func_vector_relational" />
+      <config projectName="hevx" targetName="test-gtx_extended_min_max" />
+      <config projectName="hevx" targetName="test-perf_matrix_div" />
+      <config projectName="hevx" targetName="test-gtx_integer" />
+      <config projectName="hevx" targetName="NightlyStart" />
+      <config projectName="hevx" targetName="absl_graphcycles_internal" />
+      <config projectName="hevx" targetName="spv-tools-spv-amd-sevp" />
+      <config projectName="hevx" targetName="test-core_setup_platform_unknown" />
+      <config projectName="hevx" targetName="quat" />
+      <config projectName="hevx" targetName="libprotobuf-lite" />
+      <config projectName="hevx" targetName="test-core_func_exponential" />
+      <config projectName="hevx" targetName="test-gtx_functions" />
+      <config projectName="hevx" targetName="absl_time_zone" />
+      <config projectName="hevx" targetName="test-perf_matrix_mul_vector" />
+      <config projectName="hevx" targetName="spv-tools-spv-amd-stm" />
+      <config projectName="hevx" targetName="test-gtx_matrix_factorisation" />
+      <config projectName="hevx" targetName="ExperimentalTest" />
+      <config projectName="hevx" targetName="glm_static" />
+      <config projectName="hevx" targetName="test-ext_quaternion_common" />
+      <config projectName="hevx" targetName="SPIRV-Tools-opt" />
+      <config projectName="hevx" targetName="test-core_setup_message" />
+      <config projectName="hevx" targetName="test-gtx_matrix_query" />
+      <config projectName="hevx" targetName="test-ext_quaternion_trigonometric" />
+      <config projectName="hevx" targetName="test-core_func_integer_find_msb" />
+      <config projectName="hevx" targetName="test-gtc_matrix_access" />
+      <config projectName="hevx" targetName="test-gtx_matrix_cross_product" />
+      <config projectName="hevx" targetName="vrpn_print_performance" />
+      <config projectName="hevx" targetName="test-gtx_polar_coordinates" />
+      <config projectName="hevx" targetName="spirv-tools-pkg-config" />
+      <config projectName="hevx" targetName="SPVRemapper" />
+      <config projectName="hevx" targetName="test-gtx_matrix_operation" />
+      <config projectName="hevx" targetName="test-gtx_common" />
+      <config projectName="hevx" targetName="ContinuousMemCheck" />
+      <config projectName="hevx" targetName="ExperimentalMemCheck" />
+      <config projectName="hevx" targetName="ContinuousConfigure" />
+      <config projectName="hevx" targetName="absl_strings" />
+      <config projectName="hevx" targetName="spirv-link" />
+      <config projectName="hevx" targetName="uninstall" />
+      <config projectName="hevx" targetName="test-gtx_color_encoding" />
+      <config projectName="hevx" targetName="test-core_setup_force_size_t_length" />
+      <config projectName="hevx" targetName="absl_synchronization" />
+      <config projectName="hevx" targetName="OGLCompiler" />
+      <config projectName="hevx" targetName="ContinuousTest" />
+      <config projectName="hevx" targetName="test-gtx_vector_query" />
+      <config projectName="hevx" targetName="vrpn_server" />
+      <config projectName="hevx" targetName="test-core_type_int" />
+      <config projectName="hevx" targetName="spirv-tools-header-DebugInfo" />
+      <config projectName="hevx" targetName="test-gtx_euler_angle" />
+      <config projectName="hevx" targetName="test-core_func_integer_bit_count" />
+      <config projectName="hevx" targetName="test-core_type_ctor" />
+      <config projectName="hevx" targetName="spv-tools-spv-amd-sb" />
+      <config projectName="hevx" targetName="test-gtx_fast_exponential" />
+      <config projectName="hevx" targetName="test-core_cpp_defaulted_ctor" />
+      <config projectName="hevx" targetName="test-gtx_easing" />
+      <config projectName="hevx" targetName="test-ext_vector_relational" />
+      <config projectName="hevx" targetName="test-gtx_intersect" />
+      <config projectName="hevx" targetName="test-gtx_fast_trigonometry" />
+      <config projectName="hevx" targetName="c_interface_example" />
+      <config projectName="hevx" targetName="spirv-remap" />
+      <config projectName="hevx" targetName="test-core_setup_precision" />
+      <config projectName="hevx" targetName="test-core_force_aligned_gentypes" />
+      <config projectName="hevx" targetName="test-ext_vector_common" />
+      <config projectName="hevx" targetName="test-gtc_noise" />
+      <config projectName="hevx" targetName="test-gtx_component_wise" />
+      <config projectName="hevx" targetName="ContinuousBuild" />
+      <config projectName="hevx" targetName="spirv-opt" />
+      <config projectName="hevx" targetName="test-gtx_normal" />
+      <config projectName="hevx" targetName="test-gtc_matrix_integer" />
+      <config projectName="hevx" targetName="absl_bad_optional_access" />
+      <config projectName="hevx" targetName="test-core_force_ctor_init" />
+      <config projectName="hevx" targetName="spirv-tools-shared-pkg-config" />
+      <config projectName="hevx" targetName="core_tables" />
+      <config projectName="hevx" targetName="gtest" />
+      <config projectName="hevx" targetName="test-gtx_string_cast" />
+      <config projectName="hevx" targetName="imgui" />
+      <config projectName="hevx" targetName="test-gtx_orthonormalize" />
+      <config projectName="hevx" targetName="test-gtc_bitfield" />
+      <config projectName="hevx" targetName="absl_hashtablez_sampler" />
+      <config projectName="hevx" targetName="glslang" />
+      <config projectName="hevx" targetName="NightlyMemoryCheck" />
+      <config projectName="hevx" targetName="iris-raytracer" />
+      <config projectName="hevx" targetName="test-gtx_type_aligned" />
+      <config projectName="hevx" targetName="test-gtx_quaternion" />
+      <config projectName="hevx" targetName="spirv-dis" />
+      <config projectName="hevx" targetName="test-gtx_optimum_pow" />
+      <config projectName="hevx" targetName="test-ext_vec1" />
+      <config projectName="hevx" targetName="test-gtx_projection" />
+      <config projectName="hevx" targetName="cpprest" />
+      <config projectName="hevx" targetName="absl_raw_hash_set" />
+      <config projectName="hevx" targetName="test-perf_matrix_transpose" />
+      <config projectName="hevx" targetName="ContinuousCoverage" />
+      <config projectName="hevx" targetName="spv-tools-debuginfo" />
+      <config projectName="hevx" targetName="SPIRV-Tools-reduce" />
+      <config projectName="hevx" targetName="NightlyTest" />
+      <config projectName="hevx" targetName="absl_flags_handle" />
+      <config projectName="hevx" targetName="test-ext_matrix_common" />
+      <config projectName="hevx" targetName="absl_throw_delegate" />
+      <config projectName="hevx" targetName="test-core_func_common" />
+      <config projectName="hevx" targetName="absl_symbolize" />
+      <config projectName="hevx" targetName="gtest_main" />
+      <config projectName="hevx" targetName="vrpn" />
+      <config projectName="hevx" targetName="test-gtx_rotate_normalized_axis" />
+      <config projectName="hevx" targetName="test-core_func_trigonometric" />
+      <config projectName="hevx" targetName="absl_spinlock_wait" />
+      <config projectName="hevx" targetName="test-gtx_vector_angle" />
+      <config projectName="hevx" targetName="test-core_type_cast" />
+      <config projectName="hevx" targetName="test-gtx_load" />
+      <config projectName="hevx" targetName="test-gtc_type_precision" />
+      <config projectName="hevx" targetName="ExperimentalSubmit" />
+      <config projectName="hevx" targetName="test-bug_ms_vec_static" />
+      <config projectName="hevx" targetName="test-core_func_swizzle" />
+      <config projectName="hevx" targetName="test-gtx_closest_point" />
+      <config projectName="hevx" targetName="safe_numeric" />
+      <config projectName="hevx" targetName="test-ext_scalar_uint_sized" />
+      <config projectName="hevx" targetName="test-gtx_dual_quaternion" />
+      <config projectName="hevx" targetName="ContinuousSubmit" />
       <config projectName="hevx" targetName="test-perf_matrix_mul" />
+      <config projectName="hevx" targetName="test-gtx_handed_coordinate_space" />
+      <config projectName="hevx" targetName="absl_flags_parse" />
+      <config projectName="hevx" targetName="test-gtc_color_space" />
+      <config projectName="hevx" targetName="test-ext_vector_bool1" />
+      <config projectName="hevx" targetName="protoc" />
+      <config projectName="hevx" targetName="test-gtx_normalize_dot" />
+      <config projectName="hevx" targetName="test-core_force_unrestricted_gentype" />
+      <config projectName="hevx" targetName="test-gtx_exterior_product" />
+      <config projectName="hevx" targetName="test-core_force_pure" />
+      <config projectName="hevx" targetName="test-gtx_spline" />
+      <config projectName="hevx" targetName="protos" />
       <config projectName="hevx" targetName="iris" />
       <config projectName="hevx" targetName="vrpnserver" />
-      <config projectName="hevx" targetName="absl_strings" />
-      <config projectName="hevx" targetName="test-gtx_type_aligned" />
-      <config projectName="hevx" targetName="spirv-tools-shared-pkg-config" />
-      <config projectName="hevx" targetName="absl_flags_config" />
-      <config projectName="hevx" targetName="test-core_setup_precision" />
-      <config projectName="hevx" targetName="stb" />
-      <config projectName="hevx" targetName="absl_failure_signal_handler" />
-      <config projectName="hevx" targetName="spirv-as" />
-      <config projectName="hevx" targetName="absl_flags_parse" />
-      <config projectName="hevx" targetName="test-gtc_quaternion" />
-      <config projectName="hevx" targetName="test-core_func_packing" />
-      <config projectName="hevx" targetName="test-gtx_matrix_decompose" />
+      <config projectName="hevx" targetName="test-gtc_integer" />
+      <config projectName="hevx" targetName="absl_scoped_set_env" />
+      <config projectName="hevx" targetName="test-core_func_integer_find_lsb" />
       <config projectName="hevx" targetName="ExperimentalStart" />
-      <config projectName="hevx" targetName="vma" />
-      <config projectName="hevx" targetName="absl_leak_check" />
-      <config projectName="hevx" targetName="iris-raytracer" />
-      <config projectName="hevx" targetName="absl_bad_optional_access" />
-      <config projectName="hevx" targetName="test-gtx_closest_point" />
-      <config projectName="hevx" targetName="test-ext_quaternion_exponential" />
+      <config projectName="hevx" targetName="OSDependent" />
+      <config projectName="hevx" targetName="test-gtx_matrix_interpolation" />
+      <config projectName="hevx" targetName="test-gtc_reciprocal" />
       <config projectName="hevx" targetName="test-gtc_epsilon" />
-      <config projectName="hevx" targetName="test-gtx_integer" />
-      <config projectName="hevx" targetName="test-core_type_aligned" />
-      <config projectName="hevx" targetName="test-gtx_scalar_multiplication" />
-      <config projectName="hevx" targetName="test-ext_matrix_common" />
-      <config projectName="hevx" targetName="absl_graphcycles_internal" />
+      <config projectName="hevx" targetName="vrpn_average_analogs" />
+      <config projectName="hevx" targetName="test-core_force_explicit_ctor" />
+      <config projectName="hevx" targetName="absl_strings_internal" />
+      <config projectName="hevx" targetName="test-ext_quaternion_type" />
+      <config projectName="hevx" targetName="docs" />
+      <config projectName="hevx" targetName="glslangValidator" />
       <config projectName="hevx" targetName="absl_examine_stack" />
-      <config projectName="hevx" targetName="test-gtx_associated_min_max" />
-      <config projectName="hevx" targetName="extinst_tables" />
-      <config projectName="hevx" targetName="enum_string_mapping" />
+      <config projectName="hevx" targetName="test-core_type_mat3x4" />
+      <config projectName="hevx" targetName="test-gtx_color_space" />
+      <config projectName="hevx" targetName="test-core_force_xyzw_only" />
+      <config projectName="hevx" targetName="test-gtx_compatibility" />
+      <config projectName="hevx" targetName="test-core_func_matrix" />
+      <config projectName="hevx" targetName="test-ext_quaternion_relational" />
+      <config projectName="hevx" targetName="absl_dynamic_annotations" />
+      <config projectName="hevx" targetName="test-core_type_mat3x3" />
+      <config projectName="hevx" targetName="test-gtx_texture" />
+      <config projectName="hevx" targetName="gpsnmea" />
+      <config projectName="hevx" targetName="test-core_type_mat3x2" />
+      <config projectName="hevx" targetName="test-gtx_io" />
+      <config projectName="hevx" targetName="test-gtx_wrap" />
+      <config projectName="hevx" targetName="test-core_type_vec1" />
+      <config projectName="hevx" targetName="test-core_type_vec2" />
+      <config projectName="hevx" targetName="test-ext_vector_ulp" />
+      <config projectName="hevx" targetName="test-gtc_packing" />
+      <config projectName="hevx" targetName="spirv-reduce" />
+      <config projectName="hevx" targetName="absl_str_format_internal" />
+      <config projectName="hevx" targetName="absl_int128" />
+      <config projectName="hevx" targetName="test-ext_quaternion_exponential" />
+      <config projectName="hevx" targetName="test-core_type_vec3" />
+      <config projectName="hevx" targetName="test-core_type_vec4" />
+      <config projectName="hevx" targetName="test-ext_matrix_transform" />
+      <config projectName="hevx" targetName="test-gtc_round" />
+      <config projectName="hevx" targetName="test-gtx" />
+      <config projectName="hevx" targetName="ExperimentalCoverage" />
+      <config projectName="hevx" targetName="libprotobuf" />
+      <config projectName="hevx" targetName="spirv-tools-vimsyntax" />
+      <config projectName="hevx" targetName="HLSL" />
+      <config projectName="hevx" targetName="test-core_setup_force_cxx98" />
+      <config projectName="hevx" targetName="spirv-tools-build-version" />
+      <config projectName="hevx" targetName="test-ext_scalar_relational" />
+      <config projectName="hevx" targetName="test-core_func_packing" />
+      <config projectName="hevx" targetName="Continuous" />
+      <config projectName="hevx" targetName="test-gtx_number_precision" />
+      <config projectName="hevx" targetName="test-perf_vector_mul_matrix" />
+      <config projectName="hevx" targetName="ContinuousUpdate" />
+      <config projectName="hevx" targetName="NightlyUpdate" />
+      <config projectName="hevx" targetName="test-core_func_geometric" />
+      <config projectName="hevx" targetName="glslang-default-resource-limits" />
+      <config projectName="hevx" targetName="test-gtx_matrix_decompose" />
+      <config projectName="hevx" targetName="test-core_type_mat2x4" />
+      <config projectName="hevx" targetName="test-gtc_matrix_inverse" />
+      <config projectName="hevx" targetName="test-gtx_matrix_major_storage" />
+      <config projectName="hevx" targetName="test-core_type_mat2x3" />
+      <config projectName="hevx" targetName="test-core_type_mat2x2" />
+      <config projectName="hevx" targetName="spirv-cfg" />
+      <config projectName="hevx" targetName="test-gtx_gradient_paint" />
+      <config projectName="hevx" targetName="spirv-as" />
+      <config projectName="hevx" targetName="NightlyBuild" />
+      <config projectName="hevx" targetName="run_auxiliary_logger" />
+      <config projectName="hevx" targetName="tests" />
+      <config projectName="hevx" targetName="test-core_func_vector_relational" />
+      <config projectName="hevx" targetName="absl_malloc_internal" />
+      <config projectName="hevx" targetName="Nightly" />
+      <config projectName="hevx" targetName="NightlySubmit" />
+      <config projectName="hevx" targetName="Experimental" />
+      <config projectName="hevx" targetName="spirv-tools-cpp-example" />
+      <config projectName="hevx" targetName="test-gtc_type_aligned" />
     </generated>
   </component>
   <component name="CMakeSettings">
@@ -308,11 +308,19 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f68d67a5-b358-4586-b0ea-b720e387ddaf" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/vrpn/cmake/cmake-4.0.0-modules/autoinclude.cmake" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/iris/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/acceleration_structure.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/acceleration_structure.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/acceleration_structure.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/acceleration_structure.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/iris-raytracer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/iris-raytracer.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/pipeline.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/pipeline.cc" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/iris/renderer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/renderer.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/types.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/types.h" afterDir="false" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
     <ignored path="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/CMakeFiles/" />
@@ -328,9 +336,12 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="401">
-              <caret line="1896" column="19" selection-start-line="1896" selection-start-column="19" selection-end-line="1896" selection-end-column="19" />
+            <state relative-caret-position="459">
+              <caret line="2167" column="12" selection-start-line="2167" selection-start-column="12" selection-end-line="2167" selection-end-column="12" />
               <folding>
+                <element signature="e#56#75#0" expanded="true" />
+                <element signature="e#540#558#0" expanded="true" />
+                <element signature="e#4719#4738#0" expanded="true" />
                 <element signature="e#29407#29485#0" expanded="true" />
                 <element signature="e#31931#31967#0" expanded="true" />
               </folding>
@@ -339,84 +350,25 @@
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/components/traceable.h">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="720">
+              <caret line="36" column="32" selection-start-line="36" selection-start-column="32" selection-end-line="36" selection-end-column="32" />
+              <folding>
+                <element signature="e#85#127#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="499">
-              <caret line="653" column="32" selection-start-line="653" selection-start-column="32" selection-end-line="653" selection-end-column="32" />
+            <state relative-caret-position="619">
+              <caret line="516" column="51" selection-start-line="516" selection-start-column="51" selection-end-line="516" selection-end-column="51" />
               <folding>
                 <element signature="e#0#24#0" expanded="true" />
-                <element signature="e#22450#23436#0" expanded="true" />
               </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="551">
-              <caret line="149" selection-start-line="149" selection-end-line="149" />
-              <folding>
-                <element signature="e#0#21#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="539">
-              <caret line="55" column="18" selection-start-line="55" selection-start-column="18" selection-end-line="55" selection-end-column="18" />
-              <folding>
-                <element signature="e#1642#1651#0" expanded="true" />
-                <element signature="e#1920#2167#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/raygen.rgen">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="60">
-              <caret line="3" selection-start-line="3" selection-end-line="3" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/gltf.vert">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="80">
-              <caret line="30" selection-start-line="30" selection-end-line="30" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rchit">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="340">
-              <caret line="17" selection-start-line="4" selection-end-line="17" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rint">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="60">
-              <caret line="3" selection-start-line="3" selection-end-line="3" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/miss.rmiss">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="380">
-              <caret line="19" column="12" selection-start-line="19" selection-start-column="12" selection-end-line="19" selection-end-column="12" />
             </state>
           </provider>
         </entry>
@@ -445,13 +397,21 @@
         <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" />
         <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" />
+        <option value="$PROJECT_DIR$/iris/types.h" />
+        <option value="$PROJECT_DIR$/iris/renderer.h" />
+        <option value="$PROJECT_DIR$/iris/acceleration_structure.h" />
+        <option value="$PROJECT_DIR$/iris/acceleration_structure.cc" />
         <option value="$PROJECT_DIR$/iris/pipeline.cc" />
-        <option value="$PROJECT_DIR$/iris/iris-raytracer.cc" />
+        <option value="$PROJECT_DIR$/iris/components/traceable.h" />
         <option value="$PROJECT_DIR$/iris/renderer.cc" />
+        <option value="$PROJECT_DIR$/iris/iris-raytracer.cc" />
       </list>
     </option>
   </component>
   <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
+  <component name="OCResolveContextSettings">
+    <option name="configuration" value="0-iris" />
+  </component>
   <component name="ProjectFrameBounds">
     <option name="x" value="286" />
     <option name="y" value="80" />
@@ -486,8 +446,7 @@
               <item name="hevx" type="b2602c69:ProjectViewProjectNode" />
               <item name="hevx" type="462c0819:PsiDirectoryNode" />
               <item name="iris" type="462c0819:PsiDirectoryNode" />
-              <item name="assets" type="462c0819:PsiDirectoryNode" />
-              <item name="shaders" type="462c0819:PsiDirectoryNode" />
+              <item name="components" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
               <item name="hevx" type="b2602c69:ProjectViewProjectNode" />
@@ -509,7 +468,7 @@
     <property name="cf.advertisement.text.overridden" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="nodejs_package_manager_path" value="npm" />
-    <property name="settings.editor.selected.configurable" value="preferences.fileTypes" />
+    <property name="settings.editor.selected.configurable" value="preferences.sourceCode.C/C++" />
   </component>
   <component name="RunAnythingCache">
     <option name="myCommands">
@@ -2316,13 +2275,6 @@
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
   </component>
-  <component name="XDebuggerManager">
-    <watches-manager>
-      <configuration name="CMakeRunConfiguration">
-        <watch expression="(char*)prop.extensionName" language="ObjectiveC" />
-      </configuration>
-    </watches-manager>
-  </component>
   <component name="debuggerHistoryManager">
     <expressions id="watch">
       <expression>
@@ -2337,26 +2289,6 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="160">
           <caret line="8" column="32" selection-start-line="8" selection-start-column="32" selection-end-line="8" selection-end-column="32" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/image.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-137">
-          <caret line="18" lean-forward="true" selection-start-line="18" selection-end-line="18" />
-          <folding>
-            <element signature="e#53#77#0" expanded="true" />
-            <element signature="e#137#298#0" expanded="true" />
-            <element signature="e#307#330#0" expanded="true" />
-            <element signature="e#383#403#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/image.cc">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="560">
-          <caret line="123" column="43" selection-start-line="123" selection-start-column="43" selection-end-line="123" selection-end-column="43" />
         </state>
       </provider>
     </entry>
@@ -2437,20 +2369,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/cmake-build-debug-vulkan-python3/iris/flextVk.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="334">
-          <caret line="158" column="8" selection-start-line="158" selection-start-column="8" selection-end-line="158" selection-end-column="8" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/renderer.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="380">
-          <caret line="311" selection-start-line="311" selection-end-line="311" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/iris/vulkan_util.h">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="371">
@@ -2465,28 +2383,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="539">
-          <caret line="55" column="18" selection-start-line="55" selection-start-column="18" selection-end-line="55" selection-end-column="18" />
-          <folding>
-            <element signature="e#1642#1651#0" expanded="true" />
-            <element signature="e#1920#2167#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/iris/assets/shaders/gltf.vert">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="80">
           <caret line="30" selection-start-line="30" selection-end-line="30" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/raygen.rgen">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="60">
-          <caret line="3" selection-start-line="3" selection-end-line="3" />
         </state>
       </provider>
     </entry>
@@ -2511,32 +2411,147 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/raygen.rgen">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="60">
+          <caret line="3" selection-start-line="3" selection-end-line="3" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="844">
+          <caret line="105" selection-start-line="105" selection-end-line="105" />
+          <folding>
+            <element signature="e#69#93#0" expanded="true" />
+            <element signature="e#148#309#0" expanded="true" />
+            <element signature="e#318#360#0" expanded="true" />
+            <element signature="e#508#528#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/types.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="620">
+          <caret line="33" column="23" selection-start-line="33" selection-start-column="23" selection-end-line="33" selection-end-column="23" />
+          <folding>
+            <element signature="e#170#181#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/renderer.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="481">
+          <caret line="153" column="6" selection-start-line="153" selection-start-column="6" selection-end-line="153" selection-end-column="6" />
+          <folding>
+            <element signature="e#8793#8795#0" expanded="true" />
+            <element signature="e#8645#8647#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/image.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="860">
+          <caret line="71" selection-start-line="71" selection-end-line="71" />
+          <folding>
+            <element signature="e#53#77#0" expanded="true" />
+            <element signature="e#137#298#0" expanded="true" />
+            <element signature="e#307#330#0" expanded="true" />
+            <element signature="e#383#403#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/image.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="843">
+          <caret line="436" selection-start-line="436" selection-end-line="436" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/acceleration_structure.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="300">
+          <caret line="28" selection-start-line="28" selection-end-line="28" />
+          <folding>
+            <element signature="e#216#377#0" expanded="true" />
+            <element signature="e#500#520#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/acceleration_structure.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="843">
+          <caret line="206" column="18" selection-start-line="206" selection-start-column="18" selection-end-line="206" selection-end-column="18" />
+          <folding>
+            <element signature="e#0#35#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/fmtlib/include/fmt/format.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="380">
+          <caret line="2129" selection-start-line="2129" selection-end-line="2129" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/cmake-build-debug-vulkan-python3/iris/flextVk.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="334">
+          <caret line="999" column="4" selection-start-line="999" selection-start-column="4" selection-end-line="999" selection-end-column="4" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="551">
-          <caret line="149" selection-start-line="149" selection-end-line="149" />
+        <state relative-caret-position="591">
+          <caret line="151" column="70" selection-start-line="151" selection-start-column="70" selection-end-line="151" selection-end-column="70" />
           <folding>
             <element signature="e#0#21#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/iris/components/renderable.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="487">
+          <caret line="41" selection-start-line="41" selection-end-line="41" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/components/traceable.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="720">
+          <caret line="36" column="32" selection-start-line="36" selection-start-column="32" selection-end-line="36" selection-end-column="32" />
+          <folding>
+            <element signature="e#85#127#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="499">
-          <caret line="653" column="32" selection-start-line="653" selection-start-column="32" selection-end-line="653" selection-end-column="32" />
+        <state relative-caret-position="619">
+          <caret line="516" column="51" selection-start-line="516" selection-start-column="51" selection-end-line="516" selection-end-column="51" />
           <folding>
             <element signature="e#0#24#0" expanded="true" />
-            <element signature="e#22450#23436#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="401">
-          <caret line="1896" column="19" selection-start-line="1896" selection-start-column="19" selection-end-line="1896" selection-end-column="19" />
+        <state relative-caret-position="459">
+          <caret line="2167" column="12" selection-start-line="2167" selection-start-column="12" selection-end-line="2167" selection-end-column="12" />
           <folding>
+            <element signature="e#56#75#0" expanded="true" />
+            <element signature="e#540#558#0" expanded="true" />
+            <element signature="e#4719#4738#0" expanded="true" />
             <element signature="e#29407#29485#0" expanded="true" />
             <element signature="e#31931#31967#0" expanded="true" />
           </folding>

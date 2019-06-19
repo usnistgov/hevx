@@ -196,3 +196,13 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
   return {};
 } // iris::BuildAccelerationStructure
 
+void iris::DestroyAccelerationStructure(
+  iris::AccelerationStructure structure) noexcept {
+  IRIS_LOG_ENTER();
+
+  vmaFreeMemory(Renderer::sAllocator, structure.allocation);
+  vkDestroyAccelerationStructureNV(Renderer::sDevice, structure.structure,
+                                   nullptr);
+
+  IRIS_LOG_LEAVE();
+} // iris::DestroyAccelerationStructure
