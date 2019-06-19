@@ -308,15 +308,21 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f68d67a5-b358-4586-b0ea-b720e387ddaf" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/cmake/FindSphinx.cmake" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/expected/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/imgui/imconfig.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/spdlog/include/spdlog/tweakme.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/vrpn/cmake/cmake-4.0.0-modules/autoinclude.cmake" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/pages.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/pages.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" beforeDir="false" afterPath="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/iris-raytracer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/iris-raytracer.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/pipeline.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/pipeline.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/renderer.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/renderer_private.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/renderer_private.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/vulkan_util.cc" beforeDir="false" afterPath="$PROJECT_DIR$/iris/vulkan_util.cc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/iris/vulkan_util.h" beforeDir="false" afterPath="$PROJECT_DIR$/iris/vulkan_util.h" afterDir="false" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
     <ignored path="$PROJECT_DIR$/cmake-build-debug-vulkan-python3/CMakeFiles/" />
@@ -332,19 +338,11 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1120">
-              <caret line="56" column="4" selection-start-line="56" selection-start-column="4" selection-end-line="56" selection-end-column="4" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/window.cc">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="6040">
-              <caret line="302" column="49" selection-start-line="302" selection-start-column="49" selection-end-line="302" selection-end-column="49" />
+            <state relative-caret-position="479">
+              <caret line="169" selection-start-line="169" selection-end-line="169" />
               <folding>
-                <element signature="e#324#362#0" expanded="true" />
+                <element signature="e#29407#29485#0" expanded="true" />
+                <element signature="e#31931#31967#0" expanded="true" />
               </folding>
             </state>
           </provider>
@@ -353,36 +351,82 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state>
+            <state relative-caret-position="479">
+              <caret line="111" selection-start-line="111" selection-end-line="111" />
               <folding>
                 <element signature="e#0#24#0" expanded="true" />
+                <element signature="e#22450#23436#0" expanded="true" />
               </folding>
             </state>
           </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/assets/shadertoy_sphere.json">
-          <provider selected="true" editor-type-id="text-editor" />
         </entry>
       </file>
       <file pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/iris/protos/shadertoy.proto">
+        <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="260">
-              <caret line="13" selection-start-line="13" selection-end-line="13" />
+            <state relative-caret-position="531">
+              <caret line="148" column="31" selection-start-line="148" selection-start-column="31" selection-end-line="148" selection-end-column="31" />
+              <folding>
+                <element signature="e#0#21#0" expanded="true" />
+              </folding>
             </state>
           </provider>
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/iris/io/shadertoy.cc">
+        <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="840">
-              <caret line="42" column="4" selection-start-line="42" selection-start-column="4" selection-end-line="42" selection-end-column="4" />
+            <state relative-caret-position="539">
+              <caret line="55" column="18" selection-start-line="55" selection-start-column="18" selection-end-line="55" selection-end-column="18" />
               <folding>
-                <element signature="e#0#24#0" expanded="true" />
+                <element signature="e#1642#1651#0" expanded="true" />
+                <element signature="e#1920#2167#0" expanded="true" />
               </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/raygen.rgen">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="60">
+              <caret line="3" selection-start-line="3" selection-end-line="3" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/gltf.vert">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="80">
+              <caret line="30" selection-start-line="30" selection-end-line="30" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rchit">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="340">
+              <caret line="17" selection-start-line="4" selection-end-line="17" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rint">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="60">
+              <caret line="3" selection-start-line="3" selection-end-line="3" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/iris/assets/shaders/miss.rmiss">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="380">
+              <caret line="19" column="12" selection-start-line="19" selection-start-column="12" selection-end-line="19" selection-end-column="12" />
             </state>
           </provider>
         </entry>
@@ -404,9 +448,20 @@
         <option value="$PROJECT_DIR$/docs/CMakeLists.txt" />
         <option value="$PROJECT_DIR$/README.md" />
         <option value="$PROJECT_DIR$/docs/pages.rst" />
+        <option value="$PROJECT_DIR$/iris/vulkan_util.h" />
+        <option value="$PROJECT_DIR$/iris/vulkan_util.cc" />
+        <option value="$PROJECT_DIR$/iris/renderer.cc" />
+        <option value="$PROJECT_DIR$/iris/renderer_private.h" />
+        <option value="$PROJECT_DIR$/iris/assets/shaders/raygen.rgen" />
+        <option value="$PROJECT_DIR$/iris/iris-raytracer.cc" />
+        <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rint" />
+        <option value="$PROJECT_DIR$/iris/assets/shaders/miss.rmiss" />
+        <option value="$PROJECT_DIR$/iris/assets/shaders/sphere.rchit" />
+        <option value="$PROJECT_DIR$/iris/pipeline.cc" />
       </list>
     </option>
   </component>
+  <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
   <component name="ProjectFrameBounds">
     <option name="x" value="286" />
     <option name="y" value="80" />
@@ -441,6 +496,13 @@
               <item name="hevx" type="b2602c69:ProjectViewProjectNode" />
               <item name="hevx" type="462c0819:PsiDirectoryNode" />
               <item name="iris" type="462c0819:PsiDirectoryNode" />
+              <item name="assets" type="462c0819:PsiDirectoryNode" />
+              <item name="shaders" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="hevx" type="b2602c69:ProjectViewProjectNode" />
+              <item name="hevx" type="462c0819:PsiDirectoryNode" />
+              <item name="iris" type="462c0819:PsiDirectoryNode" />
               <item name="protos" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
@@ -457,7 +519,7 @@
     <property name="cf.advertisement.text.overridden" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="nodejs_package_manager_path" value="npm" />
-    <property name="settings.editor.selected.configurable" value="preferences.sourceCode.JSON" />
+    <property name="settings.editor.selected.configurable" value="preferences.fileTypes" />
   </component>
   <component name="RunAnythingCache">
     <option name="myCommands">
@@ -476,7 +538,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="CMake Application.iris-viewer">
+  <component name="RunManager" selected="CMake Application.iris-raytracer">
     <configuration name="Continuous" type="CMakeRunConfiguration" factoryName="Application" PASS_PARENT_ENVS_2="true" PROJECT_NAME="hevx" TARGET_NAME="Continuous" CONFIG_NAME="Debug-Vulkan-Python3">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
@@ -942,7 +1004,7 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="iris-raytracer" type="CMakeRunConfiguration" factoryName="Application" PASS_PARENT_ENVS_2="true" PROJECT_NAME="hevx" TARGET_NAME="iris-raytracer" CONFIG_NAME="Debug-Vulkan-Python3" RUN_TARGET_PROJECT_NAME="hevx" RUN_TARGET_NAME="iris-raytracer">
+    <configuration name="iris-raytracer" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="configs/4kdesktop.json" PASS_PARENT_ENVS_2="true" PROJECT_NAME="hevx" TARGET_NAME="iris-raytracer" CONFIG_NAME="Debug-Vulkan-Python3" RUN_TARGET_PROJECT_NAME="hevx" RUN_TARGET_NAME="iris-raytracer">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -1933,6 +1995,7 @@
       </method>
     </configuration>
     <list>
+      <item itemvalue="CMake Application.Continuous" />
       <item itemvalue="CMake Application.ContinuousBuild" />
       <item itemvalue="CMake Application.ContinuousConfigure" />
       <item itemvalue="CMake Application.ContinuousCoverage" />
@@ -1941,7 +2004,7 @@
       <item itemvalue="CMake Application.ContinuousSubmit" />
       <item itemvalue="CMake Application.ContinuousTest" />
       <item itemvalue="CMake Application.ContinuousUpdate" />
-      <item itemvalue="CMake Application.Continuous" />
+      <item itemvalue="CMake Application.Experimental" />
       <item itemvalue="CMake Application.ExperimentalBuild" />
       <item itemvalue="CMake Application.ExperimentalConfigure" />
       <item itemvalue="CMake Application.ExperimentalCoverage" />
@@ -1950,8 +2013,7 @@
       <item itemvalue="CMake Application.ExperimentalSubmit" />
       <item itemvalue="CMake Application.ExperimentalTest" />
       <item itemvalue="CMake Application.ExperimentalUpdate" />
-      <item itemvalue="CMake Application.Experimental" />
-      <item itemvalue="CMake Application.HLSL" />
+      <item itemvalue="CMake Application.Nightly" />
       <item itemvalue="CMake Application.NightlyBuild" />
       <item itemvalue="CMake Application.NightlyConfigure" />
       <item itemvalue="CMake Application.NightlyCoverage" />
@@ -1961,27 +2023,22 @@
       <item itemvalue="CMake Application.NightlySubmit" />
       <item itemvalue="CMake Application.NightlyTest" />
       <item itemvalue="CMake Application.NightlyUpdate" />
-      <item itemvalue="CMake Application.Nightly" />
-      <item itemvalue="CMake Application.OGLCompiler" />
-      <item itemvalue="CMake Application.OSDependent" />
-      <item itemvalue="CMake Application.SPIRV-Tools-link" />
-      <item itemvalue="CMake Application.SPIRV-Tools-opt" />
-      <item itemvalue="CMake Application.SPIRV-Tools-reduce" />
-      <item itemvalue="CMake Application.SPIRV-Tools-shared" />
-      <item itemvalue="CMake Application.SPIRV-Tools" />
-      <item itemvalue="CMake Application.SPIRV" />
-      <item itemvalue="CMake Application.SPVRemapper" />
-      <item itemvalue="CMake Application.absl_bad_any_cast_impl" />
-      <item itemvalue="CMake Application.absl_bad_optional_access" />
-      <item itemvalue="CMake Application.absl_bad_variant_access" />
       <item itemvalue="CMake Application.absl_base" />
-      <item itemvalue="CMake Application.absl_city" />
-      <item itemvalue="CMake Application.absl_civil_time" />
+      <item itemvalue="CMake Application.absl_dynamic_annotations" />
+      <item itemvalue="CMake Application.absl_malloc_internal" />
+      <item itemvalue="CMake Application.absl_scoped_set_env" />
+      <item itemvalue="CMake Application.absl_spinlock_wait" />
+      <item itemvalue="CMake Application.absl_throw_delegate" />
+      <item itemvalue="CMake Application.absl_hashtablez_sampler" />
+      <item itemvalue="CMake Application.absl_raw_hash_set" />
       <item itemvalue="CMake Application.absl_debugging_internal" />
       <item itemvalue="CMake Application.absl_demangle_internal" />
-      <item itemvalue="CMake Application.absl_dynamic_annotations" />
       <item itemvalue="CMake Application.absl_examine_stack" />
       <item itemvalue="CMake Application.absl_failure_signal_handler" />
+      <item itemvalue="CMake Application.absl_leak_check" />
+      <item itemvalue="CMake Application.absl_leak_check_disable" />
+      <item itemvalue="CMake Application.absl_stacktrace" />
+      <item itemvalue="CMake Application.absl_symbolize" />
       <item itemvalue="CMake Application.absl_flags" />
       <item itemvalue="CMake Application.absl_flags_config" />
       <item itemvalue="CMake Application.absl_flags_handle" />
@@ -1990,74 +2047,25 @@
       <item itemvalue="CMake Application.absl_flags_parse" />
       <item itemvalue="CMake Application.absl_flags_registry" />
       <item itemvalue="CMake Application.absl_flags_usage" />
-      <item itemvalue="CMake Application.absl_graphcycles_internal" />
+      <item itemvalue="CMake Application.absl_city" />
       <item itemvalue="CMake Application.absl_hash" />
-      <item itemvalue="CMake Application.absl_hashtablez_sampler" />
       <item itemvalue="CMake Application.absl_int128" />
-      <item itemvalue="CMake Application.absl_leak_check" />
-      <item itemvalue="CMake Application.absl_leak_check_disable" />
-      <item itemvalue="CMake Application.absl_malloc_internal" />
-      <item itemvalue="CMake Application.absl_raw_hash_set" />
-      <item itemvalue="CMake Application.absl_scoped_set_env" />
-      <item itemvalue="CMake Application.absl_spinlock_wait" />
-      <item itemvalue="CMake Application.absl_stacktrace" />
       <item itemvalue="CMake Application.absl_str_format_internal" />
       <item itemvalue="CMake Application.absl_strings" />
       <item itemvalue="CMake Application.absl_strings_internal" />
-      <item itemvalue="CMake Application.absl_symbolize" />
+      <item itemvalue="CMake Application.absl_graphcycles_internal" />
       <item itemvalue="CMake Application.absl_synchronization" />
-      <item itemvalue="CMake Application.absl_throw_delegate" />
+      <item itemvalue="CMake Application.absl_civil_time" />
       <item itemvalue="CMake Application.absl_time" />
       <item itemvalue="CMake Application.absl_time_zone" />
-      <item itemvalue="CMake Application.c_interface_example" />
-      <item itemvalue="CMake Application.core_tables" />
+      <item itemvalue="CMake Application.absl_bad_any_cast_impl" />
+      <item itemvalue="CMake Application.absl_bad_optional_access" />
+      <item itemvalue="CMake Application.absl_bad_variant_access" />
       <item itemvalue="CMake Application.cpprest" />
-      <item itemvalue="CMake Application.docs" />
-      <item itemvalue="CMake Application.enum_string_mapping" />
-      <item itemvalue="CMake Application.extinst_tables" />
+      <item itemvalue="CMake Application.tests" />
       <item itemvalue="CMake Application.fmt" />
+      <item itemvalue="CMake Application.uninstall" />
       <item itemvalue="CMake Application.glm_static" />
-      <item itemvalue="CMake Application.glslang-default-resource-limits" />
-      <item itemvalue="CMake Application.glslangValidator" />
-      <item itemvalue="CMake Application.glslang" />
-      <item itemvalue="CMake Application.gmock" />
-      <item itemvalue="CMake Application.gmock_main" />
-      <item itemvalue="CMake Application.gpsnmea" />
-      <item itemvalue="CMake Application.gtest" />
-      <item itemvalue="CMake Application.gtest_main" />
-      <item itemvalue="CMake Application.imgui" />
-      <item itemvalue="CMake Application.iris-raytracer" />
-      <item itemvalue="CMake Application.iris-viewer" />
-      <item itemvalue="CMake Application.iris" />
-      <item itemvalue="CMake Application.libprotobuf-lite" />
-      <item itemvalue="CMake Application.libprotobuf" />
-      <item itemvalue="CMake Application.libprotoc" />
-      <item itemvalue="CMake Application.mikktspace" />
-      <item itemvalue="CMake Application.protoc" />
-      <item itemvalue="CMake Application.protos" />
-      <item itemvalue="CMake Application.quat" />
-      <item itemvalue="CMake Application.run_auxiliary_logger" />
-      <item itemvalue="CMake Application.safe_numeric" />
-      <item itemvalue="CMake Application.spirv-as" />
-      <item itemvalue="CMake Application.spirv-cfg" />
-      <item itemvalue="CMake Application.spirv-dis" />
-      <item itemvalue="CMake Application.spirv-link" />
-      <item itemvalue="CMake Application.spirv-opt" />
-      <item itemvalue="CMake Application.spirv-reduce" />
-      <item itemvalue="CMake Application.spirv-remap" />
-      <item itemvalue="CMake Application.spirv-tools-build-version" />
-      <item itemvalue="CMake Application.spirv-tools-cpp-example" />
-      <item itemvalue="CMake Application.spirv-tools-header-DebugInfo" />
-      <item itemvalue="CMake Application.spirv-tools-pkg-config" />
-      <item itemvalue="CMake Application.spirv-tools-shared-pkg-config" />
-      <item itemvalue="CMake Application.spirv-tools-vimsyntax" />
-      <item itemvalue="CMake Application.spirv-val" />
-      <item itemvalue="CMake Application.spv-tools-debuginfo" />
-      <item itemvalue="CMake Application.spv-tools-spv-amd-gs" />
-      <item itemvalue="CMake Application.spv-tools-spv-amd-sb" />
-      <item itemvalue="CMake Application.spv-tools-spv-amd-sevp" />
-      <item itemvalue="CMake Application.spv-tools-spv-amd-stm" />
-      <item itemvalue="CMake Application.stb" />
       <item itemvalue="CMake Application.test-bug_ms_vec_static" />
       <item itemvalue="CMake Application.test-core_cpp_constexpr" />
       <item itemvalue="CMake Application.test-core_cpp_defaulted_ctor" />
@@ -2211,19 +2219,73 @@
       <item itemvalue="CMake Application.test-perf_matrix_mul_vector" />
       <item itemvalue="CMake Application.test-perf_matrix_transpose" />
       <item itemvalue="CMake Application.test-perf_vector_mul_matrix" />
-      <item itemvalue="CMake Application.tests" />
-      <item itemvalue="CMake Application.uninstall" />
-      <item itemvalue="CMake Application.vma" />
+      <item itemvalue="CMake Application.spirv-tools-pkg-config" />
+      <item itemvalue="CMake Application.spirv-tools-shared-pkg-config" />
+      <item itemvalue="CMake Application.spirv-tools-cpp-example" />
+      <item itemvalue="CMake Application.core_tables" />
+      <item itemvalue="CMake Application.enum_string_mapping" />
+      <item itemvalue="CMake Application.extinst_tables" />
+      <item itemvalue="CMake Application.SPIRV-Tools" />
+      <item itemvalue="CMake Application.spirv-tools-build-version" />
+      <item itemvalue="CMake Application.spirv-tools-header-DebugInfo" />
+      <item itemvalue="CMake Application.SPIRV-Tools-shared" />
+      <item itemvalue="CMake Application.spirv-tools-vimsyntax" />
+      <item itemvalue="CMake Application.spv-tools-debuginfo" />
+      <item itemvalue="CMake Application.spv-tools-spv-amd-gs" />
+      <item itemvalue="CMake Application.spv-tools-spv-amd-sb" />
+      <item itemvalue="CMake Application.spv-tools-spv-amd-sevp" />
+      <item itemvalue="CMake Application.spv-tools-spv-amd-stm" />
+      <item itemvalue="CMake Application.SPIRV-Tools-link" />
+      <item itemvalue="CMake Application.SPIRV-Tools-opt" />
+      <item itemvalue="CMake Application.SPIRV-Tools-reduce" />
+      <item itemvalue="CMake Application.spirv-as" />
+      <item itemvalue="CMake Application.spirv-cfg" />
+      <item itemvalue="CMake Application.spirv-dis" />
+      <item itemvalue="CMake Application.spirv-link" />
+      <item itemvalue="CMake Application.spirv-opt" />
+      <item itemvalue="CMake Application.spirv-reduce" />
+      <item itemvalue="CMake Application.spirv-val" />
+      <item itemvalue="CMake Application.glslang" />
+      <item itemvalue="CMake Application.OSDependent" />
+      <item itemvalue="CMake Application.HLSL" />
+      <item itemvalue="CMake Application.OGLCompiler" />
+      <item itemvalue="CMake Application.SPIRV" />
+      <item itemvalue="CMake Application.SPVRemapper" />
+      <item itemvalue="CMake Application.glslang-default-resource-limits" />
+      <item itemvalue="CMake Application.glslangValidator" />
+      <item itemvalue="CMake Application.spirv-remap" />
+      <item itemvalue="CMake Application.gmock" />
+      <item itemvalue="CMake Application.gmock_main" />
+      <item itemvalue="CMake Application.gtest" />
+      <item itemvalue="CMake Application.gtest_main" />
+      <item itemvalue="CMake Application.libprotobuf" />
+      <item itemvalue="CMake Application.libprotobuf-lite" />
+      <item itemvalue="CMake Application.libprotoc" />
+      <item itemvalue="CMake Application.protoc" />
       <item itemvalue="CMake Application.vrpn" />
+      <item itemvalue="CMake Application.vrpnserver" />
       <item itemvalue="CMake Application.vrpn_atmel" />
+      <item itemvalue="CMake Application.c_interface_example" />
+      <item itemvalue="CMake Application.run_auxiliary_logger" />
       <item itemvalue="CMake Application.vrpn_average_analogs" />
       <item itemvalue="CMake Application.vrpn_print_devices" />
       <item itemvalue="CMake Application.vrpn_print_messages" />
       <item itemvalue="CMake Application.vrpn_print_performance" />
+      <item itemvalue="CMake Application.gpsnmea" />
+      <item itemvalue="CMake Application.quat" />
       <item itemvalue="CMake Application.vrpn_server" />
-      <item itemvalue="CMake Application.vrpn_streamPrint" />
       <item itemvalue="CMake Application.vrpn_timecode_generator" />
-      <item itemvalue="CMake Application.vrpnserver" />
+      <item itemvalue="CMake Application.vrpn_streamPrint" />
+      <item itemvalue="CMake Application.docs" />
+      <item itemvalue="CMake Application.iris" />
+      <item itemvalue="CMake Application.iris-raytracer" />
+      <item itemvalue="CMake Application.iris-viewer" />
+      <item itemvalue="CMake Application.protos" />
+      <item itemvalue="CMake Application.safe_numeric" />
+      <item itemvalue="CMake Application.imgui" />
+      <item itemvalue="CMake Application.stb" />
+      <item itemvalue="CMake Application.vma" />
+      <item itemvalue="CMake Application.mikktspace" />
     </list>
   </component>
   <component name="TodoView">
@@ -2237,20 +2299,21 @@
   </component>
   <component name="ToolWindowManager">
     <frame x="286" y="80" width="1884" height="1697" extended-state="0" />
+    <editor active="true" />
     <layout>
       <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.1467689" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" />
-      <window_info anchor="bottom" id="Run" order="2" weight="0.33225387" />
-      <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
+      <window_info active="true" anchor="bottom" id="Run" order="2" visible="true" weight="0.33162284" />
+      <window_info anchor="bottom" id="Debug" order="3" weight="0.39961514" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" weight="0.32951653" />
       <window_info anchor="bottom" id="Database Changes" order="7" />
       <window_info anchor="bottom" id="Messages" order="8" weight="0.3290571" />
-      <window_info active="true" anchor="bottom" id="Terminal" order="9" visible="true" weight="0.32969853" />
+      <window_info anchor="bottom" id="Terminal" order="9" weight="0.32969853" />
       <window_info anchor="bottom" id="Event Log" order="10" sideWeight="0.50060904" side_tool="true" weight="0.3288804" />
       <window_info anchor="bottom" id="Version Control" order="11" weight="0.32951653" />
       <window_info anchor="bottom" id="CMake" order="12" sideWeight="0.499391" weight="0.32841566" />
@@ -2262,6 +2325,22 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
+  </component>
+  <component name="XDebuggerManager">
+    <watches-manager>
+      <configuration name="CMakeRunConfiguration">
+        <watch expression="(char*)prop.extensionName" language="ObjectiveC" />
+      </configuration>
+    </watches-manager>
+  </component>
+  <component name="debuggerHistoryManager">
+    <expressions id="watch">
+      <expression>
+        <expression-string>(char*)prop.extensionName</expression-string>
+        <language-id>ObjectiveC</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+    </expressions>
   </component>
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/.gitignore">
@@ -2331,35 +2410,12 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/gltf.vert">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="940">
-          <caret line="47" column="30" selection-start-line="47" selection-start-column="30" selection-end-line="47" selection-end-column="30" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1120">
-          <caret line="56" column="4" selection-start-line="56" selection-start-column="4" selection-end-line="56" selection-end-column="4" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/iris/window.cc">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="6040">
           <caret line="302" column="49" selection-start-line="302" selection-start-column="49" selection-end-line="302" selection-end-column="49" />
           <folding>
             <element signature="e#324#362#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
-      <provider selected="true" editor-type-id="text-editor">
-        <state>
-          <folding>
-            <element signature="e#0#24#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -2381,6 +2437,119 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="260">
           <caret line="13" selection-start-line="13" selection-end-line="13" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/cmake-build-debug-vulkan-python3/third_party/gsl/include/gsl/span">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="299">
+          <caret line="337" selection-start-line="337" selection-end-line="337" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/cmake-build-debug-vulkan-python3/iris/flextVk.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="334">
+          <caret line="158" column="8" selection-start-line="158" selection-start-column="8" selection-end-line="158" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/renderer.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="380">
+          <caret line="311" selection-start-line="311" selection-end-line="311" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/vulkan_util.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="371">
+          <caret line="90" selection-start-line="90" selection-end-line="90" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/vulkan_util.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="340">
+          <caret line="288" selection-start-line="288" selection-end-line="288" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/renderer.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="479">
+          <caret line="169" selection-start-line="169" selection-end-line="169" />
+          <folding>
+            <element signature="e#29407#29485#0" expanded="true" />
+            <element signature="e#31931#31967#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/renderer_private.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="539">
+          <caret line="55" column="18" selection-start-line="55" selection-start-column="18" selection-end-line="55" selection-end-column="18" />
+          <folding>
+            <element signature="e#1642#1651#0" expanded="true" />
+            <element signature="e#1920#2167#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/gltf.vert">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="80">
+          <caret line="30" selection-start-line="30" selection-end-line="30" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/raygen.rgen">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="60">
+          <caret line="3" selection-start-line="3" selection-end-line="3" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rint">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="60">
+          <caret line="3" selection-start-line="3" selection-end-line="3" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/miss.rmiss">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="380">
+          <caret line="19" column="12" selection-start-line="19" selection-start-column="12" selection-end-line="19" selection-end-column="12" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/assets/shaders/sphere.rchit">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="340">
+          <caret line="17" selection-start-line="4" selection-end-line="17" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/iris-raytracer.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="479">
+          <caret line="111" selection-start-line="111" selection-end-line="111" />
+          <folding>
+            <element signature="e#0#24#0" expanded="true" />
+            <element signature="e#22450#23436#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/iris/pipeline.cc">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="531">
+          <caret line="148" column="31" selection-start-line="148" selection-start-column="31" selection-end-line="148" selection-end-column="31" />
+          <folding>
+            <element signature="e#0#21#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>

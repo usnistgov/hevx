@@ -52,6 +52,9 @@ extern std::uint32_t const sColorResolveAttachmentIndex;
 extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
 
+// FIXME: hack for iris-raytracer
+extern glm::mat4 sViewMatrix;
+
 template <class T>
 void NameObject(VkObjectType objectType [[maybe_unused]],
                 T objectHandle [[maybe_unused]],

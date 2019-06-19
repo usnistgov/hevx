@@ -85,7 +85,8 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#de
 */
 [[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
 ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
-                     gsl::span<gsl::czstring<>> extensionNames,
+                     gsl::span<gsl::czstring<>> requiredExtensionNames,
+                     gsl::span<gsl::czstring<>> optionalExtensionNames,
                      VkQueueFlags queueFlags) noexcept;
 
 /*! \brief Create the Vulkan logical device.

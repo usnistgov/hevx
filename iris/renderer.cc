@@ -167,7 +167,7 @@ static Trackball sTrackball;
 
 static glm::vec4 sWorldBoundingSphere{0.f, 0.f, 0.f, 0.f};
 static glm::mat4 sWorldMatrix{1.f};
-static glm::mat4 sViewMatrix{1.f};
+glm::mat4 sViewMatrix{1.f};
 
 namespace Nav {
 
@@ -884,50 +884,6 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     instanceExtensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
-  // These are the features that we require from the physical device.
-  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
-  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-  physicalDeviceFeatures.features.fullDrawIndexUint32 = VK_TRUE;
-  physicalDeviceFeatures.features.geometryShader = VK_TRUE;
-  physicalDeviceFeatures.features.tessellationShader = VK_TRUE;
-  physicalDeviceFeatures.features.depthClamp = VK_TRUE;
-  physicalDeviceFeatures.features.fillModeNonSolid = VK_TRUE;
-  physicalDeviceFeatures.features.wideLines = VK_TRUE;
-  physicalDeviceFeatures.features.largePoints = VK_TRUE;
-  physicalDeviceFeatures.features.multiViewport = VK_TRUE;
-  physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
-  physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize =
-    VK_TRUE;
-  physicalDeviceFeatures.features.shaderUniformBufferArrayDynamicIndexing =
-    VK_TRUE;
-  physicalDeviceFeatures.features.shaderSampledImageArrayDynamicIndexing =
-    VK_TRUE;
-  physicalDeviceFeatures.features.shaderStorageBufferArrayDynamicIndexing =
-    VK_TRUE;
-  physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing =
-    VK_TRUE;
-  physicalDeviceFeatures.features.shaderClipDistance = VK_TRUE;
-  physicalDeviceFeatures.features.shaderCullDistance = VK_TRUE;
-  physicalDeviceFeatures.features.shaderFloat64 = VK_TRUE;
-  physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
-
-  // These are the extensions that we require from the physical device.
-  absl::InlinedVector<char const*, 32> physicalDeviceExtensionNames{{
-    VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, // core in 1.1, but
-                                                     // necessary for
-                                                     // DEDICATED_ALLOCATION
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  }};
-
-  for (auto&& prop : extensionProperties) {
-    if (std::strcmp(prop.extensionName, VK_NV_RAY_TRACING_EXTENSION_NAME) ==
-        0) {
-      physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
-      sFeatures |= Features::kRayTracing;
-    }
-  }
-
   if (auto instance = vk::CreateInstance(
         appName,
         (appVersion == 0
@@ -958,13 +914,88 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     }
   }
 
+  // These are the features that we require from the physical device.
+  VkPhysicalDeviceFeatures2 physicalDeviceFeatures = {};
+  physicalDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  physicalDeviceFeatures.features.fullDrawIndexUint32 = VK_TRUE;
+  physicalDeviceFeatures.features.geometryShader = VK_TRUE;
+  physicalDeviceFeatures.features.tessellationShader = VK_TRUE;
+  physicalDeviceFeatures.features.depthClamp = VK_TRUE;
+  physicalDeviceFeatures.features.fillModeNonSolid = VK_TRUE;
+  physicalDeviceFeatures.features.wideLines = VK_TRUE;
+  physicalDeviceFeatures.features.largePoints = VK_TRUE;
+  physicalDeviceFeatures.features.multiViewport = VK_TRUE;
+  physicalDeviceFeatures.features.pipelineStatisticsQuery = VK_TRUE;
+  physicalDeviceFeatures.features.shaderTessellationAndGeometryPointSize =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderUniformBufferArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderSampledImageArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageBufferArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing =
+    VK_TRUE;
+  physicalDeviceFeatures.features.shaderClipDistance = VK_TRUE;
+  physicalDeviceFeatures.features.shaderCullDistance = VK_TRUE;
+  physicalDeviceFeatures.features.shaderFloat64 = VK_TRUE;
+  physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
+
+  // These are the extensions that we require from the physical device.
+  absl::InlinedVector<char const*, 32> requiredPhysicalDeviceExtensionNames{{
+    VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+    // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
+    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  }};
+
+  // These are additional extensions that we would like for the physical device.
+  absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{{
+    VK_NV_RAY_TRACING_EXTENSION_NAME,
+  }};
+
   if (auto physicalDevice = vk::ChoosePhysicalDevice(
-        sInstance, physicalDeviceFeatures, physicalDeviceExtensionNames,
+        sInstance, physicalDeviceFeatures, requiredPhysicalDeviceExtensionNames,
+        optionalPhysicalDeviceExtensionNames,
         VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
     sPhysicalDevice = std::move(*physicalDevice);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(physicalDevice.error());
+  }
+
+  // Get the number of physical device extension properties.
+  std::uint32_t numDeviceExtensionProperties;
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        sPhysicalDevice, nullptr, &numDeviceExtensionProperties, nullptr);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  // Get the physical device extension properties.
+  absl::FixedArray<VkExtensionProperties> deviceExtensionProperties(
+    numDeviceExtensionProperties);
+  if (auto result = vkEnumerateDeviceExtensionProperties(
+        sPhysicalDevice, nullptr, &numDeviceExtensionProperties,
+        deviceExtensionProperties.data());
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result),
+      "Cannot enumerate physical device extension properties"));
+  }
+
+  absl::InlinedVector<char const*, 32> physicalDeviceExtensionNames(
+    requiredPhysicalDeviceExtensionNames);
+  for (auto&& prop : deviceExtensionProperties) {
+    if (std::strcmp(prop.extensionName, VK_NV_RAY_TRACING_EXTENSION_NAME) ==
+        0) {
+      physicalDeviceExtensionNames.push_back(VK_NV_RAY_TRACING_EXTENSION_NAME);
+      sFeatures |= Features::kRayTracing;
+    }
   }
 
   if (auto qfi = vk::GetQueueFamilyIndex(

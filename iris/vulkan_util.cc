@@ -432,10 +432,11 @@ iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
 } // iris::vk::DumpPhysicalDevices
 
 tl::expected<VkPhysicalDevice, std::system_error>
-iris::vk::ChoosePhysicalDevice(VkInstance instance,
-                               VkPhysicalDeviceFeatures2 features,
-                               gsl::span<gsl::czstring<>> extensionNames,
-                               VkQueueFlags queueFlags) noexcept {
+iris::vk::ChoosePhysicalDevice(
+  VkInstance instance, VkPhysicalDeviceFeatures2 features,
+  gsl::span<gsl::czstring<>> requiredExtensionNames,
+  gsl::span<gsl::czstring<>> optionalExtensionNames,
+  VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
   Expects(instance != VK_NULL_HANDLE);
 
@@ -459,19 +460,42 @@ iris::vk::ChoosePhysicalDevice(VkInstance instance,
       make_error_code(result), "Cannot enumerate physical devices"));
   }
 
+  /////
+  //
   // Iterate through each physical device to find one that we can use.
+  //
+  /////
+
+  // First, find all physical devices that support the required extensions.
+  absl::InlinedVector<VkPhysicalDevice, 32> candidatePhysicalDevices;
   for (auto&& physicalDevice : physicalDevices) {
     if (auto good = IsPhysicalDeviceGood(physicalDevice, features,
-                                         extensionNames, queueFlags)) {
+                                         requiredExtensionNames, queueFlags)) {
+      Ensures(physicalDevice != VK_NULL_HANDLE);
+      candidatePhysicalDevices.push_back(physicalDevice);
+    }
+  }
+
+  // Next, search the candidate devices for one that supports the optional exts.
+  for (auto&& physicalDevice : candidatePhysicalDevices) {
+    if (auto good = IsPhysicalDeviceGood(physicalDevice, features,
+                                         optionalExtensionNames, queueFlags)) {
       Ensures(physicalDevice != VK_NULL_HANDLE);
       IRIS_LOG_LEAVE();
       return physicalDevice;
     }
   }
 
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(std::system_error(Error::kNoPhysicalDevice,
-                                          "No suitable physical device found"));
+  // At this point, no device was found that supports the optional extensions.
+  // Return the first device found that supports the required extensions.
+  if (!candidatePhysicalDevices.empty()) {
+    IRIS_LOG_LEAVE();
+    return candidatePhysicalDevices[0];
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kNoPhysicalDevice, "No suitable physical device found"));
+  }
 } // iris::vk::ChoosePhysicalDevice
 
 tl::expected<std::pair<VkDevice, std::uint32_t>, std::system_error>

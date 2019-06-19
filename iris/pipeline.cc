@@ -147,7 +147,8 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
 
   VkPushConstantRange pushConstantRange = {};
   pushConstantRange.stageFlags =
-    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
+    VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
   pushConstantRange.offset = 0;
   pushConstantRange.size = sizeof(Renderer::PushConstants);
 

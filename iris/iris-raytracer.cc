@@ -46,8 +46,8 @@ struct Sphere {
 }; // struct Sphere
 
 static absl::FixedArray<Sphere> sSpheres = {
-  Sphere(glm::vec3(0.f, 0.f, 0.f), .5f),
-  Sphere(glm::vec3(0.f, -100.5f, 0.f), 100.f),
+  Sphere(glm::vec3(0.f, 2.f, 0.f), .5f),
+  Sphere(glm::vec3(0.f, 2.f, 100.5f), 100.f),
 };
 
 static iris::Buffer sSpheresBuffer;
@@ -163,6 +163,9 @@ static tl::expected<void, std::system_error> CreateDescriptor() noexcept {
 
 static tl::expected<void, std::system_error> CreatePipeline() noexcept {
   IRIS_LOG_ENTER();
+  Expects((iris::Renderer::AvailableFeatures() &
+           iris::Renderer::Features::kRayTracing) ==
+          iris::Renderer::Features::kRayTracing);
 
   using namespace std::string_literals;
   absl::FixedArray<iris::Shader> shaders(4);
@@ -622,6 +625,45 @@ int main(int argc, char** argv) {
       sPipeline.layout,                      // layout
       gsl::make_span(&sDescriptorSet, 1)     // descriptorSets
     );
+
+    iris::Renderer::PushConstants pushConstants;
+#if 0
+    pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
+                            0.f};
+
+    if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
+      window.lastMousePos.x = ImGui::GetIO().MousePos.x;
+      window.lastMousePos.y = ImGui::GetIO().MousePos.y;
+    }
+    if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+      pushConstants.iMouse.z = ImGui::GetIO().MousePos.x;
+      pushConstants.iMouse.w = ImGui::GetIO().MousePos.y;
+    }
+
+    pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
+    pushConstants.iTime = gsl::narrow_cast<float>(ImGui::GetTime());
+    pushConstants.iFrame = gsl::narrow_cast<float>(ImGui::GetFrameCount());
+    pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
+    pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
+    pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
+    pushConstants.iResolution.z =
+      pushConstants.iResolution.x / pushConstants.iResolution.y;
+#endif
+    pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
+
+    pushConstants.ModelMatrix = iris::Renderer::Nav::Matrix();
+    pushConstants.ModelViewMatrix =
+      iris::Renderer::sViewMatrix * pushConstants.ModelMatrix;
+    pushConstants.NormalMatrix =
+      glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+
+    vkCmdPushConstants(
+      cb, sPipeline.layout,
+      VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV,
+      0, gsl::narrow_cast<std::uint32_t>(sizeof(pushConstants)),
+      &pushConstants);
 
     vkCmdTraceRaysNV(
       cb,                         // commandBuffer

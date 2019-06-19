@@ -1,6 +1,20 @@
 #version 460 core
 #extension GL_NV_ray_tracing : require
 
+layout(push_constant) uniform PushConstants {
+  vec4 iMouse;
+  float iTime;
+  float iTimeDelta;
+  float iFrameRate;
+  float iFrame;
+  vec3 iResolution;
+  float padding0;
+  vec4 EyePosition;
+  mat4 ModelMatrix;
+  mat4 ModelViewMatrix;
+  mat3 NormalMatrix;
+};
+
 struct Sphere {
   float aabbMinX;
   float aabbMinY;
@@ -24,10 +38,10 @@ void main() {
   const vec3 aabbMin = vec3(sphere.aabbMinX, sphere.aabbMinY, sphere.aabbMinZ);
   const vec3 aabbMax = vec3(sphere.aabbMaxX, sphere.aabbMaxY, sphere.aabbMaxZ);
 
-  const vec3 center = (aabbMax + aabbMin) / vec3(2.f);
+  const vec4 center = ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f);
   const float radius = (aabbMax.x - aabbMin.x) / 2.f;
 
-  vec3 oc = origin - center;
+  vec3 oc = origin - center.xyz;
   float a = dot(direction, direction);
   float b = dot(oc, direction);
   float c = dot(oc, oc) - (radius * radius);
@@ -39,11 +53,11 @@ void main() {
 
     if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
       vec3 hitValue = origin + direction * t1;
-      normalVector = normalize((hitValue - center) / radius);
+      normalVector = normalize((hitValue - center.xyz) / radius);
       reportIntersectionNV(t1, 0);
     } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
       vec3 hitValue = origin + direction * t2;
-      normalVector = normalize((hitValue - center) / radius);
+      normalVector = normalize((hitValue - center.xyz) / radius);
       reportIntersectionNV(t2, 0);
     }
   }

@@ -10,10 +10,10 @@ layout(push_constant) uniform PushConstants {
   float iFrame;
   vec3 iResolution;
   float padding0;
+  vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
-  mat4 ModelViewMatrixInverse;
-  //mat3 NormalMatrix;
+  mat3 NormalMatrix;
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {

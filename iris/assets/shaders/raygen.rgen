@@ -9,10 +9,10 @@ layout(push_constant) uniform PushConstants {
   float iFrame;
   vec3 iResolution;
   float padding0;
+  vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
-  mat4 ModelViewMatrixInverse;
-  //mat3 NormalMatrix;
+  mat3 NormalMatrix;
 };
 
 layout(set = 0, binding = 0) uniform MatricesBuffer {
@@ -32,7 +32,7 @@ void main() {
   const vec2 uv = pixelCenter / vec2(gl_LaunchSizeNV.xy);
   const vec2 ndc = uv * 2.f - 1.f;
 
-  const vec4 origin = ViewMatrixInverse * vec4(0.f, 0.f, 0.f, 1.f);
+  const vec4 origin = ViewMatrixInverse * EyePosition;
   const vec4 target = ProjectionMatrixInverse * vec4(ndc.x, ndc.y, 1.f, 1.f);
   const vec4 direction = ViewMatrixInverse * vec4(normalize(target.xyz), 0.f);
 
