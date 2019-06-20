@@ -7,13 +7,20 @@ else()
 endif()
 
 if(Doxygen_FOUND)
-  find_package(Sphinx REQUIRED)
+  find_package(Sphinx)
   configure_file(Doxyfile.in Doxyfile @ONLY)
   configure_file(conf.py.in conf.py @ONLY)
 
-  add_custom_target(docs
-    Doxygen::doxygen Doxyfile
-    COMMAND ${SPHINX_EXECUTABLE} -c "." "${CMAKE_CURRENT_SOURCE_DIR}" "rtd"
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
+  if(Sphinx_FOUND)
+    add_custom_target(docs
+      Doxygen::doxygen Doxyfile
+      COMMAND ${SPHINX_EXECUTABLE} -c "." "${CMAKE_CURRENT_SOURCE_DIR}" "rtd"
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+  else()
+    add_custom_target(docs
+      Doxygen::doxygen Doxyfile
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      )
+  endif()
 endif()
