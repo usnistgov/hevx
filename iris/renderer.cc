@@ -11,8 +11,8 @@
 #include "enumerate.h"
 #include "error.h"
 #include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtx/matrix_decompose.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/matrix_decompose.hpp"
 #include "renderer.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -504,8 +504,8 @@ RenderTraceable(Component::Traceable const& traceable,
 
   VkCommandBuffer commandBuffer;
   if (auto result =
-      vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
-    result != VK_SUCCESS) {
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
     GetLogger()->error("Cannot allocate command buffer: {}",
                        iris::to_string(result));
     return VK_NULL_HANDLE;
@@ -684,8 +684,8 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
   return commandBuffer;
 } // RenderRenderable
 
-static absl::InlinedVector<VkCommandBuffer, 32> RenderUI(
-  VkCommandBuffer commandBuffer, Window& window) {
+static absl::InlinedVector<VkCommandBuffer, 32>
+RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   ImGui::Render();
   ImDrawData* drawData = ImGui::GetDrawData();
   if (!drawData || drawData->TotalVtxCount == 0) return {};
@@ -849,7 +849,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   // TODO: this is probably not good to rely on
   // Try not to print out object tracker messages
   if (std::strcmp(pCallbackData->pMessageIdName,
-        "UNASSIGNED-ObjectTracker-Info") == 0) {
+                  "UNASSIGNED-ObjectTracker-Info") == 0) {
     return VK_FALSE;
   }
 
@@ -1873,21 +1873,22 @@ void iris::Renderer::BindDescriptorSets(
 } // iris::Renderer::BindDescriptorSets
 
 template <int N, typename T, glm::qualifier Q>
-void Text(char const* name, char const* fmt, glm::vec<N, T, Q> const& vec) {
-  ImGui::Text(name);
-  ImGui::NextColumn();
-
+void Text(int width, char const* name, char const* fmt,
+          glm::vec<N, T, Q> const& vec) {
   for (int i = 0; i < N; ++i) {
     ImGui::Text(fmt, vec[i]);
     ImGui::NextColumn();
   }
+  for (int i = N; i < width - 1; ++i) {
+    ImGui::Text("  ");
+    ImGui::NextColumn();
+  }
+  ImGui::Text(name);
 } // Text
 
 template <typename T, glm::qualifier Q>
-void Text(char const* name, char const* fmt, glm::qua<T, Q> const& qua) {
-  ImGui::Text(name);
-  ImGui::NextColumn();
-
+void Text(int width, char const* name, char const* fmt,
+          glm::qua<T, Q> const& qua) {
   ImGui::Text(fmt, qua.w);
   ImGui::NextColumn();
   ImGui::Text(fmt, qua.x);
@@ -1895,21 +1896,31 @@ void Text(char const* name, char const* fmt, glm::qua<T, Q> const& qua) {
   ImGui::Text(fmt, qua.y);
   ImGui::NextColumn();
   ImGui::Text(fmt, qua.z);
+  ImGui::NextColumn();
+  for (int i = 4; i < width - 1; ++i) {
+    ImGui::Text("  ");
+    ImGui::NextColumn();
+  }
+  ImGui::Text(name);
 } // Text
 
 template <int C, int R, typename T, glm::qualifier Q>
-void Text(char const* name, char const* fmt, glm::mat<C, R, T, Q> const& mat) {
+void Text(int width, char const* name, char const* fmt,
+          glm::mat<C, R, T, Q> const& mat) {
   for (int i = 0; i < R; ++i) {
+    for (int j = 0; j < C; ++j) {
+      ImGui::Text(fmt, mat[j][i]);
+      ImGui::NextColumn();
+    }
+    for (int k = 4; k < width - 1; ++k) {
+      ImGui::Text("  ");
+      ImGui::NextColumn();
+    }
     if (i == 0) {
       ImGui::Text(name);
       ImGui::NextColumn();
     } else {
       ImGui::Text("  ");
-      ImGui::NextColumn();
-    }
-
-    for (int j = 0; j < C; ++j) {
-      ImGui::Text(fmt, mat[j][i]);
       ImGui::NextColumn();
     }
   }
@@ -1969,19 +1980,19 @@ void iris::Renderer::EndFrame(
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
 
       ImGui::Columns(5, NULL, false);
-      Text("Position", "%+.3f", position);
+      Text(5, "Position", "%+.3f", position);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Center", "%+.3f", center);
+      Text(5, "Center", "%+.3f", center);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Up", "%+.3f", up);
+      Text(5, "Up", "%+.3f", up);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Matrix", "%+.3f", sViewMatrix);
+      Text(5, "Matrix", "%+.3f", sViewMatrix);
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -2003,15 +2014,15 @@ void iris::Renderer::EndFrame(
       }
 
       ImGui::Columns(5, NULL, false);
-      Text("Position", "%+.3f", Nav::Position());
+      Text(5, "Position", "%+.3f", Nav::Position());
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Orientation", "%+.3f", Nav::Orientation());
+      Text(5, "Orientation", "%+.3f", Nav::Orientation());
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Matrix", "%+.3f", Nav::Matrix());
+      Text(5, "Matrix", "%+.3f", Nav::Matrix());
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -2021,11 +2032,11 @@ void iris::Renderer::EndFrame(
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
 
       ImGui::Columns(5, NULL, false);
-      Text("BSphere", "%+.3f", sWorldBoundingSphere);
+      Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
       ImGui::Columns(1);
 
       ImGui::Columns(5, NULL, false);
-      Text("Matrix", "%+.3f", sWorldMatrix);
+      Text(5, "Matrix", "%+.3f", sWorldMatrix);
       ImGui::Columns(1);
 
       ImGui::EndGroup();
@@ -2074,13 +2085,13 @@ void iris::Renderer::EndFrame(
     }
 
     if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
-      (*ptr)->Lights[0].direction = glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
+      (*ptr)->Lights[0].direction =
+        glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
       (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
       (*ptr)->NumLights = 1;
       sLightsBuffer.Unmap();
     } else {
-      GetLogger()->error("Cannot update lights buffer: {}",
-                         ptr.error().what());
+      GetLogger()->error("Cannot update lights buffer: {}", ptr.error().what());
     }
 
     Window::Frame& frame = window.currentFrame();
@@ -2164,14 +2175,15 @@ void iris::Renderer::EndFrame(
         submitI.commandBufferCount = 1;
         submitI.pCommandBuffers = &traceCommandBuffer;
 
-        if (result = vkQueueSubmit(sCommandQueues[1], 1, &submitI,
-                                   traceable.traceCompleteFences[sFrameNum % 2]);
+        if (result =
+              vkQueueSubmit(sCommandQueues[1], 1, &submitI,
+                            traceable.traceCompleteFences[sFrameNum % 2]);
             result != VK_SUCCESS) {
           GetLogger()->error("Error submitting traceable command buffer: {}",
                              iris::to_string(result));
         }
 
-        //sOldCommandBuffers.push_back(traceCommandBuffer);
+        // sOldCommandBuffers.push_back(traceCommandBuffer);
 
         // FIXME: this overwrites the framebuffer every time with whatever the
         // last traceable output.
@@ -2275,9 +2287,10 @@ void iris::Renderer::EndFrame(
     }
   }
 
-  vkFreeCommandBuffers(sDevice, sCommandPools[0],
-      gsl::narrow_cast<std::uint32_t>(previousFrameOldCBs.size()),
-      previousFrameOldCBs.data());
+  vkFreeCommandBuffers(
+    sDevice, sCommandPools[0],
+    gsl::narrow_cast<std::uint32_t>(previousFrameOldCBs.size()),
+    previousFrameOldCBs.data());
 
   sFrameNum += 1;
   sFrameIndex = sFrameNum % sNumFramesBuffered;
@@ -2289,8 +2302,8 @@ iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   IRIS_LOG_ENTER();
 
   GetLogger()->debug("renderable bsphere: {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-      renderable.boundingSphere.x, renderable.boundingSphere.y,
-      renderable.boundingSphere.z, renderable.boundingSphere.w);
+                     renderable.boundingSphere.x, renderable.boundingSphere.y,
+                     renderable.boundingSphere.z, renderable.boundingSphere.w);
   glm::vec3 const renderableBSCenter(renderable.boundingSphere.x,
                                      renderable.boundingSphere.y,
                                      renderable.boundingSphere.z);
@@ -2309,9 +2322,9 @@ iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
     sWorldBoundingSphere = renderable.boundingSphere;
   } else {
     float const r = (renderableBSRadius + worldBSRadius + rwBSLength) / 2.f;
-    //glm::vec3 const c =
-      //glm::mix(renderableBSCenter, worldBSCenter - renderableBSCenter,
-               //r - renderableBSRadius);
+    // glm::vec3 const c =
+    // glm::mix(renderableBSCenter, worldBSCenter - renderableBSCenter,
+    // r - renderableBSRadius);
     glm::vec3 const c =
       renderableBSCenter + (worldBSCenter - renderableBSCenter) *
                              (r - renderableBSRadius) / wrBSLength;
@@ -2697,4 +2710,3 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ProcessControlMessage
-
