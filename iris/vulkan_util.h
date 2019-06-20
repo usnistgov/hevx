@@ -118,6 +118,31 @@ void SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                     std::uint32_t mipLevels,
                     std::uint32_t arrayLayers) noexcept;
 
+inline void BeginDebugLabel(VkCommandBuffer commandBuffer,
+                            char const* name) noexcept {
+  VkDebugUtilsLabelEXT label = {VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+                                nullptr,
+                                name,
+                                {0.f, 0.f, 0.f, 0.f}};
+  vkCmdBeginDebugUtilsLabelEXT(commandBuffer, &label);
+} // BeginDebugLabel
+
+inline void EndDebugLabel(VkCommandBuffer commandBuffer) noexcept {
+  vkCmdEndDebugUtilsLabelEXT(commandBuffer);
+} // EndDebugLabel
+
+inline void BeginDebugLabel(VkQueue queue, char const* name) noexcept {
+  VkDebugUtilsLabelEXT label = {VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+                                nullptr,
+                                name,
+                                {0.f, 0.f, 0.f, 0.f}};
+  vkQueueBeginDebugUtilsLabelEXT(queue, &label);
+}
+
+inline void EndDebugLabel(VkQueue queue) noexcept {
+  vkQueueEndDebugUtilsLabelEXT(queue);
+}
+
 /*!
 \brief Convert a VkPhysicalDeviceType to a std::string.
 \return a std::string of a VkPhysicalDeviceType.

@@ -473,12 +473,15 @@ CreateShaderBindingTable() noexcept {
 
   sTraceable.missBindingOffset = shaderGroupHandleSize;
   sTraceable.missBindingStride = shaderGroupHandleSize;
-  sTraceable.hitBindingOffset = sTraceable.missBindingOffset + sTraceable.missBindingStride;
+  sTraceable.hitBindingOffset =
+    sTraceable.missBindingOffset + sTraceable.missBindingStride;
   sTraceable.hitBindingStride = shaderGroupHandleSize;
 
   sLogger->info("shaderGroupHandleSize: {}", shaderGroupHandleSize);
-  sLogger->info("sTraceable.missBindingOffset: {}", sTraceable.missBindingOffset);
-  sLogger->info("sTraceable.missBindingStride: {}", sTraceable.missBindingStride);
+  sLogger->info("sTraceable.missBindingOffset: {}",
+                sTraceable.missBindingOffset);
+  sLogger->info("sTraceable.missBindingStride: {}",
+                sTraceable.missBindingStride);
   sLogger->info("sTraceable.hitBindingOffset: {}", sTraceable.hitBindingOffset);
   sLogger->info("sTraceable.hitBindingStride: {}", sTraceable.hitBindingStride);
 
@@ -498,28 +501,23 @@ CreateShaderBindingTable() noexcept {
 } // CreateShaderBindingTable
 
 static tl::expected<void, std::system_error>
-CreateTraceFences() noexcept {
+CreateSemaphore() noexcept {
   IRIS_LOG_ENTER();
 
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+  VkSemaphoreCreateInfo semaphoreCI = {};
+  semaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-  for (int i = 0; i < 2; ++i) {
-    VkFence fence;
-    if (auto result =
-          vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr, &fence);
-        result != VK_SUCCESS) {
-      sLogger->error("Error creating fence: {}", iris::to_string(result));
-      std::exit(EXIT_FAILURE);
-    }
-
-    sTraceable.traceCompleteFences.push_back(fence);
+  if (auto result =
+        vkCreateSemaphore(iris::Renderer::sDevice, &semaphoreCI, nullptr,
+                          &sTraceable.traceCompleteSemaphore);
+      result != VK_SUCCESS) {
+    sLogger->error("Error creating semaphore: {}", iris::to_string(result));
+    std::exit(EXIT_FAILURE);
   }
 
   IRIS_LOG_LEAVE();
   return {};
-} // CreateTraceFences
+} // CreateSemaphore
 
 #if PLATFORM_WINDOWS
 extern "C" {
@@ -582,7 +580,7 @@ int main(int argc, char** argv) {
                       .and_then(CreateTopLevelAccelerationStructure)
                       .and_then(WriteDescriptorSets)
                       .and_then(CreateShaderBindingTable)
-                      .and_then(CreateTraceFences);
+                      .and_then(CreateSemaphore);
       !result) {
     sLogger->critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);

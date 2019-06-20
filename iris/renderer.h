@@ -65,8 +65,6 @@ The expected application flow is:
 - while Renderer::IsRunning:
   - Renderer::BeginFrame
   - Renderer::EndFrame
-
-\dotfile appflow.gv "Expected application flow"
 */
 namespace Renderer {
 

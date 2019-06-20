@@ -34,7 +34,7 @@ struct Traceable {
   VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
 
-  absl::InlinedVector<VkFence, 4> traceCompleteFences{};
+  VkSemaphore traceCompleteSemaphore{VK_NULL_HANDLE};
 
   glm::mat4 modelMatrix{1.f};
 }; // struct Traceable
