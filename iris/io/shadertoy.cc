@@ -169,16 +169,16 @@ std::string GetCode(web::http::uri const& uri) {
 
   http::client::http_client client(uri.to_string());
   client.request(http::methods::GET)
-    .then([&](http::http_response response) -> pplx::task<json::value> {
+    .then([&](http::http_response response) -> pplx::task<web::json::value> {
       GetLogger()->trace(
         "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
         response.status_code());
       return response.extract_json();
     })
-    .then([&](json::value json) {
+    .then([&](web::json::value json) {
       GetLogger()->trace("parsing code");
 
-      json::value shader;
+      web::json::value shader;
       try {
         shader = json.at(_XPLATSTR("Shader"));
       } catch (std::exception const& e) {
@@ -187,7 +187,7 @@ std::string GetCode(web::http::uri const& uri) {
         return;
       }
 
-      json::value renderpasses;
+      web::json::value renderpasses;
       try {
         renderpasses = shader.at(_XPLATSTR("renderpass"));
       } catch (std::exception const& e) {
@@ -202,7 +202,7 @@ std::string GetCode(web::http::uri const& uri) {
         return;
       }
 
-      json::value renderpass;
+      web::json::value renderpass;
       try {
         renderpass = renderpasses.at(0);
       } catch (std::exception const& e) {
@@ -364,70 +364,7 @@ private:
   std::string url_;
 }; // class LoadTask
 
-class CreateTask : public tbb::task {
-public:
-  CreateTask(Control::ShaderToy::Source const& source) {
-    for (int i = 0; i < source.source_size(); ++i) {
-      code_ += source.source(i);
-      code_ += "\n";
-    }
-  }
-
-  tbb::task* execute() override {
-    IRIS_LOG_ENTER();
-
-    if (auto r = CreateRenderable(code_)) {
-      Renderer::AddRenderable(std::move(*r));
-    } else {
-      GetLogger()->error("Error creating renderable: {}", r.error().what());
-    }
-
-    IRIS_LOG_LEAVE();
-    return nullptr;
-  } // execute
-
-private:
-  std::string code_;
-}; // class CreateTask
-
 } // namespace iris::io
-
-std::function<std::system_error(void)>
-iris::io::LoadShaderToy(Control::ShaderToy const& message) noexcept {
-  IRIS_LOG_ENTER();
-
-  // NOTE: Unlike LoadJSON or LoadGLTF in json.cc / gltf.cc, this function gets
-  // called by the main Renderer thread while processing a Control message.
-  // Thus, we need to create a new task here to offload the actual loading
-  // so as to not tie up the main Renderer thread.
-
-  switch (message.type_case()) {
-  case Control::ShaderToy::TypeCase::kUrl:
-    try {
-      LoadTask* task = new (tbb::task::allocate_root()) LoadTask(message.url());
-      tbb::task::enqueue(*task);
-    } catch (std::exception const& e) {
-      GetLogger()->warn("Loading shadertoy failed: {}", e.what());
-    }
-    break;
-  case Control::ShaderToy::TypeCase::kCode:
-    try {
-      CreateTask* task =
-        new (tbb::task::allocate_root()) CreateTask(message.code());
-      tbb::task::enqueue(*task);
-    } catch (std::exception const& e) {
-      GetLogger()->warn("Loading shadertoy failed: {}", e.what());
-    }
-    break;
-  default:
-    GetLogger()->error("Unsupported controlMessage message type {}",
-                       message.type_case());
-    break;
-  }
-
-  IRIS_LOG_LEAVE();
-  return []() { return std::system_error(Error::kNone); };
-} // iris::io::LoadShaderToy
 
 tl::expected<iris::Renderer::Component::Renderable, std::system_error>
 iris::io::LoadShaderToy(std::string const& url) {

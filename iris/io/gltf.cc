@@ -25,7 +25,6 @@
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic pop
 #endif
-#include "nlohmann/json.hpp"
 #include "renderer.h"
 #include "renderer_private.h"
 #include "stb_image.h"
@@ -99,9 +98,9 @@ struct adl_serializer<glm::mat4> {
 
 } // namespace nlohmann
 
-using json = nlohmann::json;
-
 namespace iris::gltf {
+
+using json = nlohmann::json;
 
 struct MaterialBuffer {
   glm::vec4 MetallicRoughnessNormalOcclusion;
@@ -2230,25 +2229,11 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
 namespace iris::io {
 
 tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
-ReadGLTF(filesystem::path const& path) noexcept {
+static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
   filesystem::path const baseDir = path.parent_path();
-
-  json j;
-  if (auto&& bytes = ReadFile(path)) {
-    try {
-      j = json::parse(*bytes);
-    } catch (std::exception const& e) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, fmt::format("Parsing failed: {}", e.what())));
-    }
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(bytes.error());
-  }
 
   gltf::GLTF g;
   try {
@@ -2406,7 +2391,7 @@ ReadGLTF(filesystem::path const& path) noexcept {
 
   IRIS_LOG_LEAVE();
   return renderables;
-} // ReadGLTF
+} // ParseGLTF
 
 } // namespace iris::io
 
@@ -2414,11 +2399,44 @@ std::function<std::system_error(void)>
 iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
-  if (auto renderables = ReadGLTF(path)) {
+  json j;
+  if (auto&& bytes = ReadFile(path)) {
+    try {
+      j = json::parse(*bytes);
+    } catch (std::exception const& e) {
+      IRIS_LOG_LEAVE();
+      GetLogger()->error("Error parsing {}: {}", path.string(), e.what());
+      return []() { return std::system_error(Error::kFileParseFailed); };
+    }
+  } else {
+    IRIS_LOG_LEAVE();
+    GetLogger()->error("Error reading {}: {}", path.string(),
+                       bytes.error().what());
+    return []() { return std::system_error(Error::kFileLoadFailed); };
+  }
+
+  if (auto renderables = ParseGLTF(j, path)) {
     for (auto&& r : *renderables) Renderer::AddRenderable(r);
   } else {
     GetLogger()->error("Error creating renderable: {}",
                        renderables.error().what());
+    return []() { return std::system_error(Error::kFileLoadFailed); };
+  }
+
+  IRIS_LOG_LEAVE();
+  return []() { return std::system_error(Error::kNone); };
+} // iris::io::LoadGLTF
+
+std::function<std::system_error(void)>
+iris::io::LoadGLTF(json const& gltf) noexcept {
+  IRIS_LOG_ENTER();
+
+  if (auto renderables = ParseGLTF(gltf)) {
+    for (auto&& r : *renderables) Renderer::AddRenderable(r);
+  } else {
+    GetLogger()->error("Error creating renderable: {}",
+                       renderables.error().what());
+    return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 
   IRIS_LOG_LEAVE();

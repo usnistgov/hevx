@@ -2677,6 +2677,43 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
   return {};
 } // iris::Renderer::LoadFile
 
+tl::expected<void, std::system_error>
+iris::Renderer::LoadGLTF(io::json const& gltf) noexcept {
+  IRIS_LOG_ENTER();
+
+  class IOTask : public tbb::task {
+  public:
+    IOTask(io::json g) noexcept
+      : gltf_(std::move(g)) {}
+
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
+
+      GetLogger()->debug("Loading GLTF");
+      sIOContinuations.push(io::LoadGLTF(gltf_));
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
+  private:
+    io::json gltf_;
+  }; // struct IOTask
+
+  try {
+    IOTask* task = new (tbb::task::allocate_root()) IOTask(gltf);
+    tbb::task::enqueue(*task);
+  } catch (std::exception const& e) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(Error::kEnqueueError),
+      fmt::format("Enqueing IO task for GLTF: {}", e.what())));
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+}
+
 tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   iris::Control::Control const& controlMessage) noexcept {
   IRIS_LOG_ENTER();
@@ -2692,9 +2729,6 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     break;
   case iris::Control::Control::TypeCase::kNav:
     Nav::ProcessControlMessage(controlMessage.nav());
-    break;
-  case iris::Control::Control::TypeCase::kShaderToy:
-    sIOContinuations.push(io::LoadShaderToy(controlMessage.shadertoy()));
     break;
   default:
     GetLogger()->error("Unsupported controlMessage message type {}",

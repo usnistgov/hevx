@@ -22,6 +22,7 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
+#include "io/gltf.h"
 #include "spdlog/sinks/sink.h"
 #include <chrono>
 #include <cstddef>
@@ -214,6 +215,9 @@ enqueued.
 */
 [[nodiscard]] tl::expected<void, std::system_error>
 LoadFile(std::filesystem::path const& path) noexcept;
+
+[[nodiscard]] tl::expected<void, std::system_error>
+LoadGLTF(io::json const& gltf) noexcept;
 
 /*!
 \brief Execute a control message.

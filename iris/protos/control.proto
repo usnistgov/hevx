@@ -5,7 +5,6 @@ import "displays.proto";
 import "examine.proto";
 import "nav.proto";
 import "window.proto";
-import "shadertoy.proto";
 
 message Control {
   oneof type {
@@ -13,6 +12,5 @@ message Control {
     Examine examine = 3;
     Window window = 4;
     Nav nav = 5;
-	  ShaderToy shaderToy = 20;
   }
 }

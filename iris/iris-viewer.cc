@@ -16,7 +16,6 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "fmt/format.h"
-#include "iris/protos.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
@@ -103,9 +102,21 @@ int main(int argc, char** argv) {
   }
 
   if (!shadertoy_url.empty()) {
-    iris::Control::Control message;
-    message.mutable_shadertoy()->set_url(shadertoy_url);
-    if (auto result = iris::Renderer::ProcessControlMessage(message); !result) {
+    iris::io::json node = {
+      {"extensions", {{"HEV_nodes_shadertoy", {{"url", shadertoy_url}}}}}};
+
+    iris::io::json scene = {{"nodes", {0}}};
+
+    iris::io::json gltf = {{"asset", {{"version", "2.0"}}},
+                           {"extensionsUsed", {"HEV_nodes_shadertoy"}},
+                           {"extensionsRequired", {"HEV_nodes_shadertoy"}},
+                           {"scene", 0},
+                           {"scenes", {scene}},
+                           {"nodes", {node}}};
+
+    logger.info(gltf.dump(2));
+
+    if (auto result = iris::Renderer::LoadGLTF(gltf); !result) {
       logger.error("Error loading {}: {}", shadertoy_url,
                    result.error().what());
     }

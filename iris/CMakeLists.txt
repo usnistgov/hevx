@@ -13,7 +13,6 @@ set(protos_PROTOS
   protos/displays.proto
   protos/examine.proto
   protos/nav.proto
-  protos/shadertoy.proto
   protos/window.proto
 )
 
