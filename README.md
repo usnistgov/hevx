@@ -20,7 +20,7 @@ Build Requirements
 - GCC >= 8
 - X11 XCB development libraries
 - Boost development libraries
-- **Vulkan SDK**
+- Vulkan SDK
 
 ### Vulkan SDK ###
 Ensure the VULKAN_SDK environment variable is set before building HEVx.
@@ -61,14 +61,14 @@ Build Instructions
 ### CentOS 7 ###
 ~~~
 $ mkdir build && cd build
-$ scl enable devtoolset-8 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ scl enable devtoolset-8 -- cmake3 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPYTHON_EXECUTABLE=/usr/bin/python3 ..
 $ cmake --build .
 ~~~
 
 ### Fedora 28 / 29 and Ubuntu 18.10 ###
 ~~~
 $ mkdir build && cd build
-$ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+$ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DPYTHON_EXECUTABLE=/usr/bin/python3 ..
 $ cmake --build .
 ~~~
 

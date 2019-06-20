@@ -181,7 +181,8 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   }
 
   RECT r;
-  ::SetRect(&r, offset.x, offset.y, extent.width, extent.height);
+  ::SetRect(&r, offset.x, offset.y, offset.x + extent.width,
+            offset.y + extent.height);
   ::AdjustWindowRect(&r, pWin->dwStyle_, FALSE);
 
   HWND hWnd = ::CreateWindowExA(0, sWindowClass.lpszClassName, title,
@@ -323,6 +324,8 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
     if (rect_.extent.width != LOWORD(lParam) ||
         rect_.extent.height != HIWORD(lParam)) {
       rect_.extent = Extent2D{LOWORD(lParam), HIWORD(lParam)};
+      GetLogger()->debug("WM_SIZE ({}x{})", rect_.extent.width,
+                         rect_.extent.height);
       resizeDelegate_(rect_.extent);
     }
     break;

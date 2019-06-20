@@ -4,8 +4,8 @@
 
 #include "absl/container/fixed_array.h"
 #include "absl/container/inlined_vector.h"
-#include "error.h"
 #include "components/renderable.h"
+#include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -199,8 +199,7 @@ struct BufferView {
 }; // struct BufferView
 
 void to_json(json& j, BufferView const& view) {
-  j = json{{"buffer", view.buffer},
-           {"byteLength", view.byteLength}};
+  j = json{{"buffer", view.buffer}, {"byteLength", view.byteLength}};
 
   if (view.byteOffset) j["byteOffset"] = *view.byteOffset;
   if (view.byteStride) j["byteStride"] = *view.byteStride;
@@ -280,7 +279,7 @@ void from_json(json const& j, PBRMetallicRoughness& pbr) {
     pbr.baseColorFactor = j["baseColorFactor"].get<glm::vec4>();
   }
   if (j.find("baseColorTexture") != j.end()) {
-    pbr.baseColorTexture = j["baseColorTexture"];//.get<TextureInfo>();
+    pbr.baseColorTexture = j["baseColorTexture"]; //.get<TextureInfo>();
   }
   if (j.find("metallicFactor") != j.end()) {
     pbr.metallicFactor = j["metallicFactor"];
@@ -326,7 +325,24 @@ void to_json(json& j, OcclusionTextureInfo const& info) {
 void from_json(json const& j, OcclusionTextureInfo& info) {
   info.index = j.at("index");
   if (j.find("texCoord") != j.end()) info.texCoord = j["texCoord"];
-  if (j.find("strength") != j.end()) info.strength= j["strength"];
+  if (j.find("strength") != j.end()) info.strength = j["strength"];
+}
+
+struct MaterialShaderToy {
+  static constexpr char const* const kExtensionName = "HEV_materials_shadertoy";
+  std::optional<std::string> url;
+  std::optional<std::string> code;
+}; // struct MaterialShaderToy
+
+void to_json(json& j, MaterialShaderToy const& m) {
+  j = json{};
+  if (m.url) j["url"] = *m.url;
+  if (m.code) j["code"] = *m.code;
+}
+
+void from_json(json const& j, MaterialShaderToy& m) {
+  if (j.find("url") != j.end()) m.url = j["url"];
+  if (j.find("code") != j.end()) m.code = j["code"];
 }
 
 struct Material {
@@ -339,6 +355,7 @@ struct Material {
   std::optional<std::string> alphaMode;
   std::optional<double> alphaCutoff;
   std::optional<bool> doubleSided;
+  std::optional<MaterialShaderToy> shaderToy;
 }; // struct Material
 
 void to_json(json& j, Material const& m) {
@@ -354,6 +371,10 @@ void to_json(json& j, Material const& m) {
   if (m.alphaMode) j["alphaMode"] = *m.alphaMode;
   if (m.alphaCutoff) j["alphaCutoff"] = *m.alphaCutoff;
   if (m.doubleSided) j["doubleSided"] = *m.doubleSided;
+  if (m.shaderToy) {
+    j["extensions"] = json{};
+    j["extensions"][MaterialShaderToy::kExtensionName] = *m.shaderToy;
+  }
 }
 
 void from_json(json const& j, Material& m) {
@@ -374,6 +395,12 @@ void from_json(json const& j, Material& m) {
   if (j.find("alphaMode") != j.end()) m.alphaMode = j["alphaMode"];
   if (j.find("alphaCutoff") != j.end()) m.alphaCutoff = j["alphaCutoff"];
   if (j.find("doubleSided") != j.end()) m.doubleSided = j["doubleSided"];
+  if (j.find("extensions") != j.end()) {
+    auto&& e = j["extensions"];
+    if (e.find(MaterialShaderToy::kExtensionName) != e.end()) {
+      m.shaderToy = j["extensions"][MaterialShaderToy::kExtensionName];
+    }
+  }
 }
 
 struct Primitive {
@@ -536,6 +563,8 @@ struct GLTF {
   std::optional<int> scene;
   std::optional<std::vector<Scene>> scenes;
   std::optional<std::vector<Texture>> textures;
+  std::optional<std::vector<std::string>> extensionsUsed;
+  std::optional<std::vector<std::string>> extensionsRequired;
 
   tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
@@ -568,6 +597,8 @@ void to_json(json& j, GLTF const& g) {
   if (g.scene) j["scene"] = *g.scene;
   if (g.scenes) j["scenes"] = *g.scenes;
   if (g.textures) j["textures"] = *g.textures;
+  if (g.extensionsUsed) j["extensionsUsed"] = *g.extensionsUsed;
+  if (g.extensionsRequired) j["extensionsRequired"] = *g.extensionsRequired;
 }
 
 void from_json(json const& j, GLTF& g) {
@@ -579,7 +610,8 @@ void from_json(json const& j, GLTF& g) {
     g.buffers = j["buffers"].get<decltype(GLTF::buffers)::value_type>();
   }
   if (j.find("bufferViews") != j.end()) {
-    g.bufferViews = j["bufferViews"].get<decltype(GLTF::bufferViews)::value_type>();
+    g.bufferViews =
+      j["bufferViews"].get<decltype(GLTF::bufferViews)::value_type>();
   }
   if (j.find("images") != j.end()) {
     g.images = j["images"].get<decltype(GLTF::images)::value_type>();
@@ -602,6 +634,15 @@ void from_json(json const& j, GLTF& g) {
   }
   if (j.find("textures") != j.end()) {
     g.textures = j["textures"].get<decltype(GLTF::textures)::value_type>();
+  }
+  if (j.find("extensionsUsed") != j.end()) {
+    g.extensionsUsed =
+      j["extensionsUsed"].get<decltype(GLTF::extensionsUsed)::value_type>();
+  }
+  if (j.find("extensionsRequired") != j.end()) {
+    g.extensionsRequired =
+      j["extensionsRequired"]
+        .get<decltype(GLTF::extensionsRequired)::value_type>();
   }
 }
 
@@ -847,13 +888,13 @@ inline tl::expected<VkPrimitiveTopology, std::system_error>
 ModeToVkPrimitiveTopology(std::optional<int> mode) {
   if (!mode) return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-  switch(*mode) {
-    case 0: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-    case 1: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-    case 3: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-    case 4: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    case 5: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    case 6: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+  switch (*mode) {
+  case 0: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+  case 1: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+  case 3: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+  case 4: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  case 5: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+  case 6: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
   }
 
   return tl::unexpected(
@@ -953,7 +994,7 @@ struct TangentGenerator {
   }
 
   static void GetTexCoord(SMikkTSpaceContext const* pContext, float fvTexcOut[],
-                        int const iFace, int const iVert) {
+                          int const iFace, int const iVert) {
     auto pData = reinterpret_cast<TangentGenerator*>(pContext->m_pUserData);
 
     glm::vec2 texc;
@@ -1033,10 +1074,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
 
   // FIXME: Translate the GLTF camera matrix space into Nav matrix space
-  //if (node.name && *node.name == "Camera") {
-    //if (node.rotation) Renderer::Nav::Reorient(*node.rotation);
-    //if (node.translation) Renderer::Nav::Reposition(*node.translation);
-    //if (node.scale) Renderer::Nav::Rescale((*node.scale)[0]);
+  // if (node.name && *node.name == "Camera") {
+  // if (node.rotation) Renderer::Nav::Reorient(*node.rotation);
+  // if (node.translation) Renderer::Nav::Reposition(*node.translation);
+  // if (node.scale) Renderer::Nav::Rescale((*node.scale)[0]);
   //}
 
   glm::mat4x4 nodeMat = parentMat;
@@ -1078,9 +1119,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
   if (meshes->size() < static_cast<std::size_t>(*node.mesh)) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kFileParseFailed,
-                        "node defines mesh, but not enough meshes"));
+    return tl::unexpected(std::system_error(
+      Error::kFileParseFailed, "node defines mesh, but not enough meshes"));
   }
 
   auto&& mesh = (*meshes)[*node.mesh];
@@ -1325,7 +1365,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             return tl::unexpected(dt.error());
           }
         }
-
       }
 
       if (material.normalTexture) {
@@ -1406,6 +1445,11 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(dt.error());
         }
       }
+
+      if (material.shaderToy) {
+        GetLogger()->error("{} extension not implemented",
+                           gltf::MaterialShaderToy::kExtensionName);
+      }
     }
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
@@ -1420,9 +1464,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                       nullptr, &renderable.descriptorSetLayout);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(
-        std::system_error(make_error_code(result),
-                          "Cannot create descriptor set layout"));
+      return tl::unexpected(std::system_error(
+        make_error_code(result), "Cannot create descriptor set layout"));
     }
 
     Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
@@ -1920,7 +1963,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     struct CoordAccessor {
       using Pit = decltype(positions)::const_iterator;
       using Cit = float const*;
-      inline Cit operator() (Pit it) const { return glm::value_ptr(*it); }
+      inline Cit operator()(Pit it) const { return glm::value_ptr(*it); }
     };
 
 #if PLATFORM_COMPILER_MSVC
@@ -2338,4 +2381,3 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   IRIS_LOG_LEAVE();
   return []() { return std::system_error(Error::kNone); };
 } // iris::io::LoadGLTF
-
