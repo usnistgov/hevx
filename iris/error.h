@@ -20,6 +20,7 @@ enum class Error {
   kFileLoadFailed,        //!< File load failed.
   kFileNotSupported,      //!< File is not supported.
   kFileParseFailed,       //!< Parsing a file failed.
+  kURIInvalid,            //!< Invalid URI.
   kControlMessageInvalid, //!< Control message invalid.
   kControlMessageFailed,  //!< Control message failed.
   kSurfaceNotSupported,   //!< Surface not supported by physical device.
@@ -50,6 +51,7 @@ public:
     case Error::kFileLoadFailed: return "file load failed"s;
     case Error::kFileNotSupported: return "file not supported"s;
     case Error::kFileParseFailed: return "file parse failed"s;
+    case Error::kURIInvalid: return "uri invalid"s;
     case Error::kControlMessageInvalid: return "control message invalid"s;
     case Error::kControlMessageFailed: return "control message failed"s;
     case Error::kSurfaceNotSupported: return "surface not supported"s;

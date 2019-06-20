@@ -245,7 +245,8 @@ std::string GetCode(web::http::uri const& uri) {
   return code;
 } // GetCode
 
-static void LoadFile(web::http::uri const& uri) {
+tl::expected<Renderer::Component::Renderable, std::system_error>
+LoadFile(web::http::uri const& uri) {
 #if PLATFORM_WINDOWS
   filesystem::path const path = wstring_to_string(uri.path());
 #else
@@ -256,26 +257,22 @@ static void LoadFile(web::http::uri const& uri) {
   if (auto bytes = ReadFile(path)) {
     code = std::string(reinterpret_cast<char*>(bytes->data()), bytes->size());
   } else {
-#if PLATFORM_WINDOWS
-    GetLogger()->error("Error reading file {}: {}",
-                       wstring_to_string(uri.path()), bytes.error().what());
-#else
-    GetLogger()->error("Error reading file {}: {}", uri.path(),
-                       bytes.error().what());
-#endif
     IRIS_LOG_LEAVE();
-    return;
+    return tl::unexpected(bytes.error());
   }
 
   GetLogger()->trace("creating renderable");
   if (auto r = CreateRenderable(code)) {
-    Renderer::AddRenderable(std::move(*r));
+    IRIS_LOG_LEAVE();
+    return std::move(*r);
   } else {
-    GetLogger()->error("Error creating renderable: {}", r.error().what());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(r.error());
   }
 } // LoadFile
 
-static void LoadWeb(web::http::uri const& uri) {
+tl::expected<Renderer::Component::Renderable, std::system_error>
+static LoadWeb(web::http::uri const& uri) {
   IRIS_LOG_ENTER();
 
   // grab the last component of the uri path: that's the shaderID
@@ -284,13 +281,15 @@ static void LoadWeb(web::http::uri const& uri) {
 
 #if PLATFORM_WINDOWS
   if (id == std::wstring::npos) {
-    GetLogger()->error("Bad URI: {}", wstring_to_string(uri.to_string()));
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kURIInvalid, wstring_to_string(uri.to_string())));
 #else
   if (id == std::string::npos) {
-    GetLogger()->error("Bad URI: {}", uri.to_string());
-#endif
     IRIS_LOG_LEAVE();
-    return;
+    return tl::unexpected(std::system_error(
+      Error::kURIInvalid, uri.to_string()));
+#endif
   }
 
   web::http::uri_builder apiURI;
@@ -309,12 +308,12 @@ static void LoadWeb(web::http::uri const& uri) {
 
   GetLogger()->trace("creating renderable");
   if (auto r = CreateRenderable(code)) {
-    Renderer::AddRenderable(std::move(*r));
+    IRIS_LOG_LEAVE();
+    return std::move(*r);
   } else {
-    GetLogger()->error("Error creating renderable: {}", r.error().what());
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(r.error());
   }
-
-  IRIS_LOG_LEAVE();
 } // LoadWeb
 
 class LoadTask : public tbb::task {
@@ -337,10 +336,18 @@ public:
 #endif
 
     if (uri.scheme() == _XPLATSTR("file")) {
-      LoadFile(uri);
+      if (auto r = LoadFile(uri)) {
+        Renderer::AddRenderable(std::move(*r));
+      } else {
+        GetLogger()->error("Error loading uri: {}", r.error().what());
+      }
     } else if (uri.scheme() == _XPLATSTR("http") ||
                uri.scheme() == _XPLATSTR("https")) {
-      LoadWeb(uri);
+      if (auto r = LoadWeb(uri)) {
+        Renderer::AddRenderable(std::move(*r));
+      } else {
+        GetLogger()->error("Error loading uri: {}", r.error().what());
+      }
     } else {
 #if PLATFORM_WINDOWS
       GetLogger()->error("Unknown scheme: {}", wstring_to_string(uri.scheme()));
@@ -420,4 +427,24 @@ iris::io::LoadShaderToy(Control::ShaderToy const& message) noexcept {
 
   IRIS_LOG_LEAVE();
   return []() { return std::system_error(Error::kNone); };
+} // iris::io::LoadShaderToy
+
+tl::expected<iris::Renderer::Component::Renderable, std::system_error>
+iris::io::LoadShaderToy(std::string const& url) {
+  IRIS_LOG_ENTER();
+#if PLATFORM_WINDOWS
+  web::http::uri const uri(string_to_wstring(url));
+#else
+  web::http::uri const uri(url);
+#endif
+
+  if (uri.scheme() == _XPLATSTR("file")) {
+    return LoadFile(uri);
+  } else if (uri.scheme() == _XPLATSTR("http") ||
+             uri.scheme() == _XPLATSTR("https")) {
+    return LoadWeb(uri);
+  } else {
+    return tl::unexpected(
+      std::system_error(Error::kURIInvalid, "unknown scheme"));
+  }
 } // iris::io::LoadShaderToy

@@ -14,6 +14,7 @@
 #include "glm/gtx/matrix_decompose.hpp"
 #include "gsl/gsl"
 #include "io/read_file.h"
+#include "io/shadertoy.h"
 #include "logging.h"
 #include "mikktspace.h"
 #if PLATFORM_COMPILER_GCC
@@ -444,6 +445,23 @@ void from_json(json const& j, Mesh& mesh) {
   if (j.find("name") != j.end()) mesh.name = j["name"];
 }
 
+struct NodeShaderToy {
+  static constexpr char const* const kExtensionName = "HEV_nodes_shadertoy";
+  std::optional<std::string> url;
+  std::optional<std::string> code;
+}; // struct NodeShaderToy
+
+void to_json(json& j, NodeShaderToy const& m) {
+  j = json{};
+  if (m.url) j["url"] = *m.url;
+  if (m.code) j["code"] = *m.code;
+}
+
+void from_json(json const& j, NodeShaderToy& m) {
+  if (j.find("url") != j.end()) m.url = j["url"];
+  if (j.find("code") != j.end()) m.code = j["code"];
+}
+
 struct Node {
   std::optional<std::vector<int>> children; // indices into gltf.nodes
   std::optional<glm::mat4x4> matrix;
@@ -452,6 +470,7 @@ struct Node {
   std::optional<glm::vec3> scale;
   std::optional<glm::vec3> translation;
   std::optional<std::string> name;
+  std::optional<NodeShaderToy> shaderToy;
 }; // struct Node
 
 void to_json(json& j, Node const& node) {
@@ -463,6 +482,10 @@ void to_json(json& j, Node const& node) {
   if (node.scale) j["scale"] = *node.scale;
   if (node.translation) j["translation"] = *node.translation;
   if (node.name) j["name"] = *node.name;
+  if (node.shaderToy) {
+    j["extensions"] = json{};
+    j["extensions"][NodeShaderToy::kExtensionName] = *node.shaderToy;
+  }
 }
 
 void from_json(json const& j, Node& node) {
@@ -479,6 +502,12 @@ void from_json(json const& j, Node& node) {
     node.translation = j["translation"].get<glm::vec3>();
   }
   if (j.find("name") != j.end()) node.name = j["name"];
+  if (j.find("extensions") != j.end()) {
+    auto&& e = j["extensions"];
+    if (e.find(NodeShaderToy::kExtensionName) != e.end()) {
+      node.shaderToy = j["extensions"][NodeShaderToy::kExtensionName];
+    }
+  }
 }
 
 struct Sampler {
@@ -1072,6 +1101,20 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
+
+  if (node.shaderToy) {
+    if (node.shaderToy->url) {
+      if (auto r = io::LoadShaderToy(*node.shaderToy->url)) {
+        renderables.push_back(std::move(*r));
+      } else {
+        return tl::unexpected(r.error());
+      }
+    } else {
+      return tl::unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "node has unsupported shaderToy type (not url)"));
+    }
+  }
 
   // FIXME: Translate the GLTF camera matrix space into Nav matrix space
   // if (node.name && *node.name == "Camera") {
