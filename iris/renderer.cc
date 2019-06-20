@@ -1223,9 +1223,8 @@ EndFrameWindow(std::string const& title, Window& window,
                        make_error_code(result).message());
   }
 
-  return frame.commandBuffer;
-
   vk::EndDebugLabel(sCommandQueues[0]);
+  return frame.commandBuffer;
 } // EndFrameWindow
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(

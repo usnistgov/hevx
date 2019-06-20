@@ -501,7 +501,7 @@ CreateShaderBindingTable() noexcept {
 } // CreateShaderBindingTable
 
 static tl::expected<void, std::system_error>
-CreateSemaphore() noexcept {
+CreateTraceSemaphore() noexcept {
   IRIS_LOG_ENTER();
 
   VkSemaphoreCreateInfo semaphoreCI = {};
@@ -517,7 +517,7 @@ CreateSemaphore() noexcept {
 
   IRIS_LOG_LEAVE();
   return {};
-} // CreateSemaphore
+} // CreateTraceSemaphore
 
 #if PLATFORM_WINDOWS
 extern "C" {
@@ -580,7 +580,7 @@ int main(int argc, char** argv) {
                       .and_then(CreateTopLevelAccelerationStructure)
                       .and_then(WriteDescriptorSets)
                       .and_then(CreateShaderBindingTable)
-                      .and_then(CreateSemaphore);
+                      .and_then(CreateTraceSemaphore);
       !result) {
     sLogger->critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);
