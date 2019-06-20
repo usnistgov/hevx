@@ -35,6 +35,7 @@
 #include "tbb/task.h"
 #include "tbb/task_scheduler_init.h"
 #include "trackball.h"
+#include "ui_util.h"
 #include "vulkan.h"
 #include "vulkan_util.h"
 #include "window.h"
@@ -136,7 +137,11 @@ static Features sFeatures{Features::kNone};
 static bool sRunning{false};
 static bool sInFrame{false};
 static constexpr std::uint32_t const sNumFramesBuffered{2};
+
 static std::uint32_t sFrameNum{0};
+static std::chrono::duration<float> sFrameDelta{0.f};
+static std::chrono::duration<float> sTime{0.f};
+static std::chrono::steady_clock::time_point sStartTime{};
 static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 
 template <class T, class ID>
@@ -391,9 +396,9 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
   IRIS_LOG_LEAVE();
 } // CreateEmplaceWindow
 
-static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
-                                 VkRect2D* pScissor,
-                                 gsl::span<std::byte> pushConstants) noexcept {
+static VkCommandBuffer BuildBlitImageCommandBuffer(
+  VkImageView src, VkViewport* pViewport, VkRect2D* pScissor,
+  gsl::span<std::byte> pushConstants, VkFence waitFence) noexcept {
   VkDescriptorImageInfo samplerInfo = {};
   samplerInfo.sampler = sImageBlitSampler;
 
@@ -454,6 +459,12 @@ static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
                           VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
   commandBufferBI.pInheritanceInfo = &commandBufferII;
 
+  GetLogger()->debug("Waiting on traceable fence (0x{:x})",
+                     reinterpret_cast<uintptr_t>(waitFence));
+  vkWaitForFences(sDevice, 1, &waitFence, VK_TRUE, UINT64_MAX);
+  vkResetFences(sDevice, 1, &waitFence);
+  GetLogger()->debug("Reset      traceable fence");
+
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
 
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -491,11 +502,11 @@ static VkCommandBuffer BlitImage(VkImageView src, VkViewport* pViewport,
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
-} // BlitImage
+} // BuildBlitImageCommandBuffer
 
 static VkCommandBuffer
-RenderTraceable(Component::Traceable const& traceable,
-                gsl::span<std::byte> pushConstants) noexcept {
+BuildTraceableCommandBuffer(Component::Traceable const& traceable,
+                            gsl::span<std::byte> pushConstants) noexcept {
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sCommandPools[0];
@@ -510,10 +521,6 @@ RenderTraceable(Component::Traceable const& traceable,
                        iris::to_string(result));
     return VK_NULL_HANDLE;
   }
-
-  vkWaitForFences(sDevice, 1, &traceable.traceCompleteFences[sFrameNum % 2],
-                  VK_TRUE, UINT64_MAX);
-  vkResetFences(sDevice, 1, &traceable.traceCompleteFences[sFrameNum % 2]);
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -592,12 +599,12 @@ RenderTraceable(Component::Traceable const& traceable,
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
-} // RenderTraceable
+} // BuildTraceableCommandBuffer
 
 static VkCommandBuffer
-RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
-                 VkRect2D* pScissor,
-                 gsl::span<std::byte> pushConstants) noexcept {
+BuildRenderableCommandBuffer(Component::Renderable const& renderable,
+                             VkViewport* pViewport, VkRect2D* pScissor,
+                             gsl::span<std::byte> pushConstants) noexcept {
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sCommandPools[0];
@@ -682,10 +689,10 @@ RenderRenderable(Component::Renderable const& renderable, VkViewport* pViewport,
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
-} // RenderRenderable
+} // BuildRenderableCommandBuffer
 
 static absl::InlinedVector<VkCommandBuffer, 32>
-RenderUI(VkCommandBuffer commandBuffer, Window& window) {
+BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   ImGui::Render();
   ImDrawData* drawData = ImGui::GetDrawData();
   if (!drawData || drawData->TotalVtxCount == 0) return {};
@@ -823,11 +830,11 @@ RenderUI(VkCommandBuffer commandBuffer, Window& window) {
       renderable.firstIndex = idOff;
       renderable.firstVertex = vtOff;
 
-      VkCommandBuffer cb =
-        RenderRenderable(renderable, &viewport, &scissor,
-                         gsl::make_span<std::byte>(
-                           reinterpret_cast<std::byte*>(uiPushConstants.data()),
-                           uiPushConstants.size() * sizeof(glm::vec2)));
+      VkCommandBuffer cb = BuildRenderableCommandBuffer(
+        renderable, &viewport, &scissor,
+        gsl::make_span<std::byte>(
+          reinterpret_cast<std::byte*>(uiPushConstants.data()),
+          uiPushConstants.size() * sizeof(glm::vec2)));
       vkCmdExecuteCommands(commandBuffer, 1, &cb);
       commandBuffers.push_back(cb);
 
@@ -838,13 +845,346 @@ RenderUI(VkCommandBuffer commandBuffer, Window& window) {
   }
 
   return commandBuffers;
-} // RenderUI
+} // BuildUICommandBuffer
+
+static void BeginFrameWindow(std::string const& title,
+                             Window& window) noexcept {
+  ImGui::SetCurrentContext(window.uiContext.get());
+
+  window.platformWindow.PollEvents();
+  if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
+
+  if (window.resized) {
+    auto const newExtent = window.platformWindow.Extent();
+    if (auto result =
+        ResizeWindow(window, {newExtent.width, newExtent.height});
+      !result) {
+      GetLogger()->error("Error resizing window {}: {}", title,
+                         result.error().what());
+    } else {
+      window.resized = false;
+    }
+  }
+
+  ImGuiIO& io = ImGui::GetIO();
+
+  io.DisplaySize = {static_cast<float>(window.extent.width),
+                    static_cast<float>(window.extent.height)};
+  io.DeltaTime = sFrameDelta.count();
+
+  io.KeyCtrl = ImGui::IsKeyDown(wsi::Keys::kLeftControl) |
+               ImGui::IsKeyDown(wsi::Keys::kRightControl);
+  io.KeyShift = ImGui::IsKeyDown(wsi::Keys::kLeftShift) |
+                ImGui::IsKeyDown(wsi::Keys::kRightShift);
+  io.KeyAlt = ImGui::IsKeyDown(wsi::Keys::kLeftAlt) |
+              ImGui::IsKeyDown(wsi::Keys::kRightAlt);
+  io.KeySuper = ImGui::IsKeyDown(wsi::Keys::kLeftSuper) |
+                ImGui::IsKeyDown(wsi::Keys::kRightSuper);
+
+  io.MousePos = window.platformWindow.CursorPos();
+
+  // TODO: update mouse cursor based on imgui request
+
+  ImGui::NewFrame();
+} // BeginFrameWindow
+
+static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
+  PushConstants pushConstants;
+  pushConstants.iMouse = glm::vec4(0.f, 0.f, 0.f, 0.f);
+  pushConstants.iTimeDelta = sFrameDelta.count();
+  pushConstants.iTime = sTime.count();
+  pushConstants.iFrame = gsl::narrow_cast<float>(sFrameNum);
+  pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
+  pushConstants.iResolution = glm::vec3(0.f, 0.f, 0.f);
+  pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
+
+  pushConstants.ModelMatrix =
+    Nav::Matrix() * sWorldMatrix * traceable.modelMatrix;
+  pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
+  pushConstants.NormalMatrix =
+    glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+
+  VkCommandBuffer traceCommandBuffer = BuildTraceableCommandBuffer(
+    traceable,
+    gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                              sizeof(PushConstants)));
+
+  VkSubmitInfo submitI = {};
+  submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitI.commandBufferCount = 1;
+  submitI.pCommandBuffers = &traceCommandBuffer;
+
+  GetLogger()->debug(
+    "Submitting traceable to queue with fence {} (0x{:x})", sFrameIndex,
+    reinterpret_cast<uintptr_t>(traceable.traceCompleteFences[sFrameIndex]));
+  if (auto result = vkQueueSubmit(sCommandQueues[1], 1, &submitI,
+                                  traceable.traceCompleteFences[sFrameIndex]);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error submitting traceable command buffer: {}",
+                       iris::to_string(result));
+  }
+
+  GetLogger()->debug("Submitted  traceable to queue");
+  sOldCommandBuffers.push_back(traceCommandBuffer);
+} // BeginFrameTraceable
+
+static void EndFrameWindowUI(Window& window) {
+  ImGui::SetCurrentContext(window.uiContext.get());
+  ImGuiIO& io = ImGui::GetIO();
+
+  // TODO: move this ??
+  sTrackball.Update(io);
+
+  glm::vec3 const position = glm::vec3(0.f, 0.f, 0.f);
+  glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
+  glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
+  sViewMatrix = glm::lookAt(position, center, up);
+
+  // TODO: how to handle this at application scope?
+  if (window.showUI && ImGui::Begin("Status")) {
+    ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.f);
+    ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
+                io.Framerate);
+    ImGui::Text("Total Time %.3f s", sTime.count());
+
+    ImGui::Separator();
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Position", "%+.3f", position);
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Center", "%+.3f", center);
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Up", "%+.3f", up);
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Matrix", "%+.3f", sViewMatrix);
+    ImGui::Columns(1);
+
+    ImGui::EndGroup();
+
+    ImGui::Separator();
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) Nav::Reset();
+
+    static float response = Nav::Response();
+    if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
+      Nav::SetResponse(response);
+    }
+
+    static float scale = Nav::Scale();
+    if (ImGui::SliderFloat("Scale", &scale, 0.001f, 100.f)) {
+      Nav::Rescale(scale);
+    }
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Position", "%+.3f", Nav::Position());
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Orientation", "%+.3f", Nav::Orientation());
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Matrix", "%+.3f", Nav::Matrix());
+    ImGui::Columns(1);
+
+    ImGui::EndGroup();
+
+    ImGui::Separator();
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
+    ImGui::Columns(1);
+
+    ImGui::Columns(5, NULL, false);
+    Text(5, "Matrix", "%+.3f", sWorldMatrix);
+    ImGui::Columns(1);
+
+    ImGui::EndGroup();
+  }
+  ImGui::End(); // Status
+
+  ImGui::EndFrame();
+} // EndFrameWindowUI
+
+static VkCommandBuffer
+EndFrameWindow(std::string const& title, Window& window,
+               gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
+  absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
+  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  VkRenderPassBeginInfo renderPassBI = {};
+  renderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassBI.renderPass = sRenderPass;
+  renderPassBI.clearValueCount =
+    gsl::narrow_cast<std::uint32_t>(clearValues.size());
+
+  VkResult result;
+
+  // currentFrame is still the previous frame, use that imageAvailable
+  // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
+  // currentFrame (via frameIndex).
+  window.imageAcquired = window.currentFrame().imageAvailable;
+
+  if (result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
+                                     window.imageAcquired, VK_NULL_HANDLE,
+                                     &window.frameIndex);
+      result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
+    GetLogger()->warn("Window {} swapchain out of date: resizing", title);
+    auto const newExtent = window.platformWindow.Extent();
+
+    if (auto r = ResizeWindow(window, {newExtent.width, newExtent.height});
+        !r) {
+      GetLogger()->error("Error resizing window {}: {}", title,
+                         r.error().what());
+    }
+
+    result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
+                                   window.imageAcquired, VK_NULL_HANDLE,
+                                   &window.frameIndex);
+  }
+
+  if (result != VK_SUCCESS) {
+    GetLogger()->error("Error acquiring next image for window {}: {}", title,
+                       make_error_code(result).message());
+  }
+
+  if (auto ptr = sMatricesBuffer.Map<MatricesBuffer*>()) {
+    (*ptr)->ViewMatrix = sViewMatrix;
+    (*ptr)->ViewMatrixInverse = glm::inverse(sViewMatrix);
+    (*ptr)->ProjectionMatrix = window.projectionMatrix;
+    (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
+    sMatricesBuffer.Unmap();
+  } else {
+    GetLogger()->error("Cannot update matrices buffer: {}", ptr.error().what());
+  }
+
+  Window::Frame& frame = window.currentFrame();
+
+  if (result = vkResetCommandPool(sDevice, frame.commandPool, 0);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error resetting window {} frame {} command pool: {}",
+                       title, window.frameIndex,
+                       make_error_code(result).message());
+  }
+
+  if (result = vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
+    GetLogger()->error("Error beginning window {} frame {} command buffer: {}",
+                       title, window.frameIndex,
+                       make_error_code(result).message());
+  }
+
+  vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
+  vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
+
+  PushConstants pushConstants;
+  pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
+                          0.f};
+
+  if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
+    window.lastMousePos.x = ImGui::GetIO().MousePos.x;
+    window.lastMousePos.y = ImGui::GetIO().MousePos.y;
+  }
+  if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+    pushConstants.iMouse.z = ImGui::GetIO().MousePos.x;
+    pushConstants.iMouse.w = ImGui::GetIO().MousePos.y;
+  }
+
+  pushConstants.iTimeDelta = sFrameDelta.count();
+  pushConstants.iTime = sTime.count();
+  pushConstants.iFrame = gsl::narrow_cast<float>(sFrameNum);
+  pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
+  pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
+  pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
+  pushConstants.iResolution.z =
+    pushConstants.iResolution.x / pushConstants.iResolution.y;
+  pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
+
+  clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
+
+  renderPassBI.framebuffer = frame.framebuffer;
+  renderPassBI.renderArea.extent = window.extent;
+  renderPassBI.pClearValues = clearValues.data();
+
+  vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
+                       VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+
+  { // this block locks sTraceables so that we can iterate over them safely
+    std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
+    for (auto&& [id, traceable] : sTraceables.components) {
+      // FIXME: this overwrites the framebuffer every time with whatever the
+      // last traceable output.
+      GetLogger()->debug("Blitting   traceable");
+      VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(
+        traceable.outputImageView, &window.viewport, &window.scissor,
+        gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                                  sizeof(PushConstants)),
+        traceable.traceCompleteFences[sFrameIndex]);
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
+      sOldCommandBuffers.push_back(blitCommandBuffer);
+    }
+  }
+
+  { // this block locks sRenderables so that we can iterate over them safely
+    std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
+    for (auto&& [id, renderable] : sRenderables.components) {
+      pushConstants.ModelMatrix =
+        Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
+      pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
+      pushConstants.NormalMatrix =
+        glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+
+      VkCommandBuffer commandBuffer = BuildRenderableCommandBuffer(
+        renderable, &window.viewport, &window.scissor,
+        gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                                  sizeof(PushConstants)));
+      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
+      sOldCommandBuffers.push_back(commandBuffer);
+    }
+  }
+
+  if (!secondaryCBs.empty()) {
+    vkCmdExecuteCommands(frame.commandBuffer,
+                         gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
+                         secondaryCBs.data());
+  }
+
+  if (window.showUI) {
+    auto uiCBs = BuildUICommandBuffer(frame.commandBuffer, window);
+    sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
+                              uiCBs.end());
+  }
+
+  vkCmdEndRenderPass(frame.commandBuffer);
+  if (result = vkEndCommandBuffer(frame.commandBuffer); result != VK_SUCCESS) {
+    GetLogger()->error("Error ending window {} frame {} command buffer: {}",
+                       title, window.frameIndex,
+                       make_error_code(result).message());
+  }
+
+  return frame.commandBuffer;
+} // EndFrameWindow
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT messageTypes,
   VkDebugUtilsMessengerCallbackDataEXT const* pCallbackData, void*) {
-  using namespace std::string_literals;
 
   // TODO: this is probably not good to rely on
   // Try not to print out object tracker messages
@@ -1748,6 +2088,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
              "sUIPipeline.pipeline");
 
   sRunning = true;
+  sStartTime = std::chrono::steady_clock::now();
+
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::Create
@@ -1772,7 +2114,8 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   Expects(!sInFrame);
 
   auto const currentTime = std::chrono::steady_clock::now();
-  std::chrono::duration<float> const delta = currentTime - sPreviousFrameTime;
+  sFrameDelta = currentTime - sPreviousFrameTime;
+  sTime = currentTime - sStartTime;
   sPreviousFrameTime = currentTime;
 
   decltype(sIOContinuations)::value_type ioContinuation;
@@ -1780,48 +2123,6 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
     if (auto error = ioContinuation(); error.code()) {
       GetLogger()->error(error.what());
     }
-  }
-
-  auto&& windows = Windows();
-
-  for (auto&& [title, window] : windows) {
-    ImGui::SetCurrentContext(window.uiContext.get());
-
-    window.platformWindow.PollEvents();
-    if (ImGui::IsKeyReleased(wsi::Keys::kEscape)) Terminate();
-
-    if (window.resized) {
-      auto const newExtent = window.platformWindow.Extent();
-      if (auto result =
-            ResizeWindow(window, {newExtent.width, newExtent.height});
-          !result) {
-        GetLogger()->error("Error resizing window {}: {}", title,
-                           result.error().what());
-      } else {
-        window.resized = false;
-      }
-    }
-
-    ImGuiIO& io = ImGui::GetIO();
-
-    io.DisplaySize = {static_cast<float>(window.extent.width),
-                      static_cast<float>(window.extent.height)};
-    io.DeltaTime = delta.count();
-
-    io.KeyCtrl = ImGui::IsKeyDown(wsi::Keys::kLeftControl) |
-                 ImGui::IsKeyDown(wsi::Keys::kRightControl);
-    io.KeyShift = ImGui::IsKeyDown(wsi::Keys::kLeftShift) |
-                  ImGui::IsKeyDown(wsi::Keys::kRightShift);
-    io.KeyAlt = ImGui::IsKeyDown(wsi::Keys::kLeftAlt) |
-                ImGui::IsKeyDown(wsi::Keys::kRightAlt);
-    io.KeySuper = ImGui::IsKeyDown(wsi::Keys::kLeftSuper) |
-                  ImGui::IsKeyDown(wsi::Keys::kRightSuper);
-
-    io.MousePos = window.platformWindow.CursorPos();
-
-    // TODO: update mouse cursor based on imgui request
-
-    ImGui::NewFrame();
   }
 
   if (sFrameNum != 0) {
@@ -1843,6 +2144,16 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   }
 
   sInFrame = true;
+
+  for (auto&& [title, window] : Windows()) BeginFrameWindow(title, window);
+
+  { // this block locks sTraceables so that we can iterate over them safely
+    std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
+    for (auto&& [id, traceable] : sTraceables.components) {
+      BeginFrameTraceable(traceable);
+    }
+  }
+
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
@@ -1872,382 +2183,45 @@ void iris::Renderer::BindDescriptorSets(
   );
 } // iris::Renderer::BindDescriptorSets
 
-template <int N, typename T, glm::qualifier Q>
-void Text(int width, char const* name, char const* fmt,
-          glm::vec<N, T, Q> const& vec) {
-  for (int i = 0; i < N; ++i) {
-    ImGui::Text(fmt, vec[i]);
-    ImGui::NextColumn();
-  }
-  for (int i = N; i < width - 1; ++i) {
-    ImGui::Text("  ");
-    ImGui::NextColumn();
-  }
-  ImGui::Text(name);
-} // Text
-
-template <typename T, glm::qualifier Q>
-void Text(int width, char const* name, char const* fmt,
-          glm::qua<T, Q> const& qua) {
-  ImGui::Text(fmt, qua.w);
-  ImGui::NextColumn();
-  ImGui::Text(fmt, qua.x);
-  ImGui::NextColumn();
-  ImGui::Text(fmt, qua.y);
-  ImGui::NextColumn();
-  ImGui::Text(fmt, qua.z);
-  ImGui::NextColumn();
-  for (int i = 4; i < width - 1; ++i) {
-    ImGui::Text("  ");
-    ImGui::NextColumn();
-  }
-  ImGui::Text(name);
-} // Text
-
-template <int C, int R, typename T, glm::qualifier Q>
-void Text(int width, char const* name, char const* fmt,
-          glm::mat<C, R, T, Q> const& mat) {
-  for (int i = 0; i < R; ++i) {
-    for (int j = 0; j < C; ++j) {
-      ImGui::Text(fmt, mat[j][i]);
-      ImGui::NextColumn();
-    }
-    for (int k = 4; k < width - 1; ++k) {
-      ImGui::Text("  ");
-      ImGui::NextColumn();
-    }
-    if (i == 0) {
-      ImGui::Text(name);
-      ImGui::NextColumn();
-    } else {
-      ImGui::Text("  ");
-      ImGui::NextColumn();
-    }
-  }
-} // Text
-
 void iris::Renderer::EndFrame(
-  VkImageView view, gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
+  gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
 
   auto previousFrameOldCBs = sOldCommandBuffers;
   sOldCommandBuffers.clear();
 
-  auto&& windows = Windows();
-  std::size_t const numWindows = windows.size();
+  // Update the lights buffer once
+  if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
+    (*ptr)->Lights[0].direction =
+      glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
+    (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
+    (*ptr)->NumLights = 1;
+    sLightsBuffer.Unmap();
+  } else {
+    GetLogger()->error("Cannot update lights buffer: {}", ptr.error().what());
+  }
 
-  VkResult result;
+  absl::InlinedVector<VkSemaphore, 8> waitSemaphores;
+  absl::InlinedVector<VkSwapchainKHR, 8> swapchains;
+  absl::InlinedVector<std::uint32_t, 8> imageIndices;
+  absl::InlinedVector<VkCommandBuffer, 8> commandBuffers;
 
-  absl::FixedArray<VkSemaphore> waitSemaphores(numWindows);
-  absl::FixedArray<VkSwapchainKHR> swapchains(numWindows);
-  absl::FixedArray<std::uint32_t> imageIndices(numWindows);
-  absl::FixedArray<VkCommandBuffer> commandBuffers(numWindows);
-
-  absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
-  clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
-
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-  VkRenderPassBeginInfo renderPassBI = {};
-  renderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassBI.renderPass = sRenderPass;
-  renderPassBI.clearValueCount =
-    gsl::narrow_cast<std::uint32_t>(clearValues.size());
-
-  for (auto&& [i, iter] : enumerate(windows)) {
-    auto&& [title, window] = iter;
-    ImGui::SetCurrentContext(window.uiContext.get());
-    ImGuiIO& io = ImGui::GetIO();
-
-    // TODO: move this ??
-    sTrackball.Update(io);
-
-    glm::vec3 const position = glm::vec3(0.f, 0.f, 0.f);
-    glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
-    glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
-    sViewMatrix = glm::lookAt(position, center, up);
-
-    // TODO: how to handle this at application scope?
-    if (window.showUI && ImGui::Begin("Status")) {
-      ImGui::Text("Last Frame %.3f ms", io.DeltaTime);
-      ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
-                  io.Framerate);
-
-      ImGui::Separator();
-      ImGui::BeginGroup();
-      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Position", "%+.3f", position);
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Center", "%+.3f", center);
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Up", "%+.3f", up);
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Matrix", "%+.3f", sViewMatrix);
-      ImGui::Columns(1);
-
-      ImGui::EndGroup();
-
-      ImGui::Separator();
-      ImGui::BeginGroup();
-      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
-      ImGui::SameLine();
-      if (ImGui::Button("Reset")) Nav::Reset();
-
-      static float response = Nav::Response();
-      if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
-        Nav::SetResponse(response);
-      }
-
-      static float scale = Nav::Scale();
-      if (ImGui::SliderFloat("Scale", &scale, 0.001f, 100.f)) {
-        Nav::Rescale(scale);
-      }
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Position", "%+.3f", Nav::Position());
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Orientation", "%+.3f", Nav::Orientation());
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Matrix", "%+.3f", Nav::Matrix());
-      ImGui::Columns(1);
-
-      ImGui::EndGroup();
-
-      ImGui::Separator();
-      ImGui::BeginGroup();
-      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
-      ImGui::Columns(1);
-
-      ImGui::Columns(5, NULL, false);
-      Text(5, "Matrix", "%+.3f", sWorldMatrix);
-      ImGui::Columns(1);
-
-      ImGui::EndGroup();
-    }
-    ImGui::End(); // Status
-
-    ImGui::EndFrame();
-
-    // currentFrame is still the previous frame, use that imageAvailable
-    // semaphore. vkAcquireNextImageKHR will update frameIndex thereby updating
-    // currentFrame (via frameIndex).
-    window.imageAcquired = window.currentFrame().imageAvailable;
-
-    if (result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
-                                       window.imageAcquired, VK_NULL_HANDLE,
-                                       &window.frameIndex);
-        result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
-      GetLogger()->warn("Window {} swapchain out of date: resizing", title);
-      auto const newExtent = window.platformWindow.Extent();
-
-      if (auto r = ResizeWindow(window, {newExtent.width, newExtent.height});
-          !r) {
-        GetLogger()->error("Error resizing window {}: {}", title,
-                           r.error().what());
-      }
-
-      result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
-                                     window.imageAcquired, VK_NULL_HANDLE,
-                                     &window.frameIndex);
-    }
-
-    if (result != VK_SUCCESS) {
-      GetLogger()->error("Error acquiring next image for window {}: {}", title,
-                         make_error_code(result).message());
-    }
-
-    if (auto ptr = sMatricesBuffer.Map<MatricesBuffer*>()) {
-      (*ptr)->ViewMatrix = sViewMatrix;
-      (*ptr)->ViewMatrixInverse = glm::inverse(sViewMatrix);
-      (*ptr)->ProjectionMatrix = window.projectionMatrix;
-      (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
-      sMatricesBuffer.Unmap();
-    } else {
-      GetLogger()->error("Cannot update matrices buffer: {}",
-                         ptr.error().what());
-    }
-
-    if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
-      (*ptr)->Lights[0].direction =
-        glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
-      (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
-      (*ptr)->NumLights = 1;
-      sLightsBuffer.Unmap();
-    } else {
-      GetLogger()->error("Cannot update lights buffer: {}", ptr.error().what());
-    }
-
-    Window::Frame& frame = window.currentFrame();
-
-    if (result = vkResetCommandPool(sDevice, frame.commandPool, 0);
-        result != VK_SUCCESS) {
-      GetLogger()->error("Error resetting window {} frame {} command pool: {}",
-                         title, window.frameIndex,
-                         make_error_code(result).message());
-    }
-
-    if (result = vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBI);
-        result != VK_SUCCESS) {
-      GetLogger()->error(
-        "Error beginning window {} frame {} command buffer: {}", title,
-        window.frameIndex, make_error_code(result).message());
-    }
-
-    vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
-    vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
-
-    PushConstants pushConstants;
-    pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
-                            0.f};
-
-    if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
-      window.lastMousePos.x = ImGui::GetIO().MousePos.x;
-      window.lastMousePos.y = ImGui::GetIO().MousePos.y;
-    }
-    if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
-      pushConstants.iMouse.z = ImGui::GetIO().MousePos.x;
-      pushConstants.iMouse.w = ImGui::GetIO().MousePos.y;
-    }
-
-    pushConstants.iTimeDelta = ImGui::GetIO().DeltaTime;
-    pushConstants.iTime = gsl::narrow_cast<float>(ImGui::GetTime());
-    pushConstants.iFrame = gsl::narrow_cast<float>(ImGui::GetFrameCount());
-    pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
-    pushConstants.iResolution.x = ImGui::GetIO().DisplaySize.x;
-    pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
-    pushConstants.iResolution.z =
-      pushConstants.iResolution.x / pushConstants.iResolution.y;
-    pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
-
-    clearValues[sColorTargetAttachmentIndex].color = window.clearColor;
-
-    renderPassBI.framebuffer = frame.framebuffer;
-    renderPassBI.renderArea.extent = window.extent;
-    renderPassBI.pClearValues = clearValues.data();
-
-    vkCmdBeginRenderPass(frame.commandBuffer, &renderPassBI,
-                         VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-
-    if (view != VK_NULL_HANDLE) {
-      VkCommandBuffer commandBuffer = BlitImage(
-        view, &window.viewport, &window.scissor,
-        gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
-                                  sizeof(PushConstants)));
-      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-      sOldCommandBuffers.push_back(commandBuffer);
-    }
-
-    // FIXME: this needs to work differently: the trace commandBuffer should
-    // be submitted below along with the main buffer?
-    { // this block locks sTraceables so that we can iterate over them safely
-      std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
-      for (auto&& [id, traceable] : sTraceables.components) {
-        pushConstants.ModelMatrix =
-          Nav::Matrix() * sWorldMatrix * traceable.modelMatrix;
-        pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
-        pushConstants.NormalMatrix = glm::mat3(
-          glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
-
-        VkCommandBuffer traceCommandBuffer = RenderTraceable(
-          traceable, gsl::make_span<std::byte>(
-                       reinterpret_cast<std::byte*>(&pushConstants),
-                       sizeof(PushConstants)));
-
-        VkSubmitInfo submitI = {};
-        submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitI.commandBufferCount = 1;
-        submitI.pCommandBuffers = &traceCommandBuffer;
-
-        if (result =
-              vkQueueSubmit(sCommandQueues[1], 1, &submitI,
-                            traceable.traceCompleteFences[sFrameNum % 2]);
-            result != VK_SUCCESS) {
-          GetLogger()->error("Error submitting traceable command buffer: {}",
-                             iris::to_string(result));
-        }
-
-        // sOldCommandBuffers.push_back(traceCommandBuffer);
-
-        // FIXME: this overwrites the framebuffer every time with whatever the
-        // last traceable output.
-        VkCommandBuffer blitCommandBuffer = BlitImage(
-          traceable.outputImageView, &window.viewport, &window.scissor,
-          gsl::make_span<std::byte>(
-            reinterpret_cast<std::byte*>(&pushConstants),
-            sizeof(PushConstants)));
-        vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
-        sOldCommandBuffers.push_back(blitCommandBuffer);
-      }
-    }
-
-    { // this block locks sRenderables so that we can iterate over them safely
-      std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
-      for (auto&& [id, renderable] : sRenderables.components) {
-        pushConstants.ModelMatrix =
-          Nav::Matrix() * sWorldMatrix * renderable.modelMatrix;
-        pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
-        pushConstants.NormalMatrix = glm::mat3(
-          glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
-
-        VkCommandBuffer commandBuffer =
-          RenderRenderable(renderable, &window.viewport, &window.scissor,
-                           gsl::make_span<std::byte>(
-                             reinterpret_cast<std::byte*>(&pushConstants),
-                             sizeof(PushConstants)));
-        vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-        sOldCommandBuffers.push_back(commandBuffer);
-      }
-    }
-
-    if (!secondaryCBs.empty()) {
-      vkCmdExecuteCommands(frame.commandBuffer,
-                           gsl::narrow_cast<std::uint32_t>(secondaryCBs.size()),
-                           secondaryCBs.data());
-    }
-
-    if (window.showUI) {
-      auto uiCBs = RenderUI(frame.commandBuffer, window);
-      sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
-                                uiCBs.end());
-    }
-
-    vkCmdEndRenderPass(frame.commandBuffer);
-    if (result = vkEndCommandBuffer(frame.commandBuffer);
-        result != VK_SUCCESS) {
-      GetLogger()->error("Error ending window {} frame {} command buffer: {}",
-                         title, window.frameIndex,
-                         make_error_code(result).message());
-    }
-
-    waitSemaphores[i] = window.imageAcquired;
-    swapchains[i] = window.swapchain;
-    imageIndices[i] = window.frameIndex;
-    commandBuffers[i] = frame.commandBuffer;
+  for (auto&& [title, window] : Windows()) {
+    EndFrameWindowUI(window);
+    VkCommandBuffer commandBuffer = EndFrameWindow(title, window, secondaryCBs);
+    waitSemaphores.push_back(window.imageAcquired);
+    swapchains.push_back(window.swapchain);
+    imageIndices.push_back(window.frameIndex);
+    commandBuffers.push_back(commandBuffer);
   }
 
   absl::FixedArray<VkPipelineStageFlags> waitDstStages(
-    numWindows, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    waitSemaphores.size(), VK_PIPELINE_STAGE_TRANSFER_BIT);
 
   VkSubmitInfo submitI = {};
   submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitI.waitSemaphoreCount = gsl::narrow_cast<std::uint32_t>(numWindows);
+  submitI.waitSemaphoreCount =
+    gsl::narrow_cast<std::uint32_t>(waitSemaphores.size());
   submitI.pWaitSemaphores = waitSemaphores.data();
   submitI.pWaitDstStageMask = waitDstStages.data();
   submitI.commandBufferCount =
@@ -2261,7 +2235,7 @@ void iris::Renderer::EndFrame(
 
   VkFence frameFinishedFence = sFrameFinishedFences[sFrameIndex];
 
-  if (result =
+  if (auto result =
         vkQueueSubmit(sCommandQueues[0], 1, &submitI, frameFinishedFence);
       result != VK_SUCCESS) {
     GetLogger()->error("Error submitting command buffer: {}",
@@ -2269,18 +2243,19 @@ void iris::Renderer::EndFrame(
   }
 
   if (!swapchains.empty()) {
-    absl::FixedArray<VkResult> presentResults(numWindows);
+    absl::FixedArray<VkResult> presentResults(swapchains.size());
 
     VkPresentInfoKHR presentI = {};
     presentI.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentI.waitSemaphoreCount = 1;
     presentI.pWaitSemaphores = &sImagesReadyForPresent;
-    presentI.swapchainCount = gsl::narrow_cast<std::uint32_t>(numWindows);
+    presentI.swapchainCount =
+      gsl::narrow_cast<std::uint32_t>(swapchains.size());
     presentI.pSwapchains = swapchains.data();
     presentI.pImageIndices = imageIndices.data();
     presentI.pResults = presentResults.data();
 
-    if (result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
+    if (auto result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
         result != VK_SUCCESS) {
       GetLogger()->error("Error presenting swapchains: {}",
                          iris::to_string(result));

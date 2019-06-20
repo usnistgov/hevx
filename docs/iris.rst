@@ -2,6 +2,7 @@ iris
 ====
 
 .. doxygennamespace:: iris
+   :outline:
 
 .. toctree::
    :hidden:

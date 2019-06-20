@@ -3,13 +3,13 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 
 layout(push_constant) uniform PushConstants {
-  vec4 iMouse;
+  vec4 padding0;
   float iTime;
   float iTimeDelta;
   float iFrameRate;
   float iFrame;
-  vec3 iResolution;
-  float padding0;
+  vec3 padding1;
+  float padding2;
   vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;

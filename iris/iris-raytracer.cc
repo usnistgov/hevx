@@ -498,7 +498,7 @@ CreateShaderBindingTable() noexcept {
 } // CreateShaderBindingTable
 
 static tl::expected<void, std::system_error>
-CreateTraceCompletedFence() noexcept {
+CreateTraceFences() noexcept {
   IRIS_LOG_ENTER();
 
   VkFenceCreateInfo fenceCI = {};
@@ -519,7 +519,7 @@ CreateTraceCompletedFence() noexcept {
 
   IRIS_LOG_LEAVE();
   return {};
-} // CreateTraceCompletedFence
+} // CreateTraceFences
 
 #if PLATFORM_WINDOWS
 extern "C" {
@@ -582,7 +582,7 @@ int main(int argc, char** argv) {
                       .and_then(CreateTopLevelAccelerationStructure)
                       .and_then(WriteDescriptorSets)
                       .and_then(CreateShaderBindingTable)
-                      .and_then(CreateTraceCompletedFence);
+                      .and_then(CreateTraceFences);
       !result) {
     sLogger->critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);

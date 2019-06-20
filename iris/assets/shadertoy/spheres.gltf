@@ -18,6 +18,7 @@
     ],
     "nodes": [
         {
+            "name": "spheres",
             "extensions": {
                 "HEV_nodes_shadertoy": {
                   "url": "https://www.shadertoy.com/view/MsSSWV"
