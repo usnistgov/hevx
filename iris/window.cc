@@ -16,6 +16,16 @@
 #include "wsi/platform_window_win32.h"
 #endif
 
+namespace iris::Renderer {
+
+// Declare these extern here for our direct use.
+extern std::uint32_t sQueueFamilyIndex;
+extern absl::InlinedVector<VkQueue, 16> sCommandQueues;
+extern absl::InlinedVector<VkCommandPool, 16> sCommandPools;
+extern absl::InlinedVector<VkFence, 16> sCommandFences;
+
+}
+
 iris::Window::Window(Window&& other) noexcept
   : title(std::move(other.title))
   , clearColor(other.clearColor)
@@ -346,8 +356,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   Expects(sPhysicalDevice != VK_NULL_HANDLE);
   Expects(sDevice != VK_NULL_HANDLE);
 
-  GetLogger()->debug("Resizing window to ({}x{})", newExtent.width,
-                     newExtent.height);
+  IRIS_LOG_DEBUG("Resizing window to ({}x{})", newExtent.width,
+                 newExtent.height);
 
   VkSurfaceCapabilities2KHR surfaceCapabilities = {};
   surfaceCapabilities.sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR;
@@ -650,7 +660,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
                         static_cast<float>(newExtent.height), .01f, 1000.f);
 
   if (window.swapchain != VK_NULL_HANDLE) {
-    GetLogger()->trace("ResizeWindow: releasing old resources");
+    IRIS_LOG_TRACE("ResizeWindow: releasing old resources");
     for (auto&& frame : window.frames) {
       vkDestroyFramebuffer(sDevice, frame.framebuffer, nullptr);
     }

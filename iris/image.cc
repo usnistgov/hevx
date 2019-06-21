@@ -386,9 +386,9 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   region.imageOffset = {0, 0, 0};
   region.imageExtent = {extents[0].width, extents[0].height, 1};
 
-  GetLogger()->debug("Copying offset {} to level {} ({}x{})",
-                     region.bufferOffset, region.imageSubresource.mipLevel,
-                     region.imageExtent.width, region.imageExtent.height);
+  IRIS_LOG_DEBUG("Copying offset {} to level {} ({}x{})", region.bufferOffset,
+                 region.imageSubresource.mipLevel, region.imageExtent.width,
+                 region.imageExtent.height);
   vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image.image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
@@ -398,9 +398,9 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
     region.imageSubresource.mipLevel = gsl::narrow_cast<std::uint32_t>(i);
     region.imageExtent = {extents[i].width, extents[i].height, 1};
 
-    GetLogger()->debug("Copying offset {} to level {} ({}x{})",
-                       region.bufferOffset, region.imageSubresource.mipLevel,
-                       region.imageExtent.width, region.imageExtent.height);
+    IRIS_LOG_DEBUG("Copying offset {} to level {} ({}x{})", region.bufferOffset,
+                   region.imageSubresource.mipLevel, region.imageExtent.width,
+                   region.imageExtent.height);
     vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image.image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
   }
@@ -434,4 +434,3 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
 void iris::DestroyImage(Image image) noexcept {
   vmaDestroyImage(Renderer::sAllocator, image.image, image.allocation);
 } // iris::DestroyImage
-

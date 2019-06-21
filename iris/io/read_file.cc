@@ -3,9 +3,9 @@
 #include "logging.h"
 #include <cstdio>
 #include <exception>
+#include <fcntl.h>
 #include <memory>
 #include <string>
-#include <fcntl.h>
 
 tl::expected<std::vector<std::byte>, std::system_error>
 iris::io::ReadFile(filesystem::path const& path) noexcept {
@@ -14,11 +14,11 @@ iris::io::ReadFile(filesystem::path const& path) noexcept {
   std::unique_ptr<std::FILE, decltype(&std::fclose)> fh{nullptr, std::fclose};
 
   if (filesystem::exists(path)) {
-    GetLogger()->debug("Reading {}", path.string());
+    IRIS_LOG_DEBUG("Reading {}", path.string());
     fh.reset(std::fopen(path.string().c_str(), "rb"));
   } else {
     if (filesystem::exists(kIRISContentDirectory / path)) {
-      GetLogger()->debug("Reading {}", (kIRISContentDirectory / path).string());
+      IRIS_LOG_DEBUG("Reading {}", (kIRISContentDirectory / path).string());
       fh.reset(
         std::fopen((kIRISContentDirectory / path).string().c_str(), "rb"));
     }
@@ -33,7 +33,7 @@ iris::io::ReadFile(filesystem::path const& path) noexcept {
   std::fseek(fh.get(), 0L, SEEK_END);
   std::vector<std::byte> bytes(std::ftell(fh.get()));
 
-  GetLogger()->debug("Reading {} bytes from {}", bytes.size(), path.string());
+  IRIS_LOG_DEBUG("Reading {} bytes from {}", bytes.size(), path.string());
   std::fseek(fh.get(), 0L, SEEK_SET);
 
   std::size_t nRead =
@@ -48,4 +48,3 @@ iris::io::ReadFile(filesystem::path const& path) noexcept {
   IRIS_LOG_LEAVE();
   return bytes;
 } // iris::io::ReadFile
-

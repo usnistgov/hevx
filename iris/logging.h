@@ -29,6 +29,25 @@ inline static spdlog::logger* GetLogger() noexcept {
 #pragma GCC diagnostic pop
 #endif
 
+#define IRIS_LOG_CRITICAL(fmt, ...)                                            \
+  ::iris::GetLogger()->critical(fmt " ({}:{})", ##__VA_ARGS__, __FILE__,       \
+                                __LINE__)
+
+#define IRIS_LOG_ERROR(fmt, ...)                                               \
+  ::iris::GetLogger()->error(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_WARN(fmt, ...)                                                \
+  ::iris::GetLogger()->warn(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_INFO(fmt, ...)                                                \
+  ::iris::GetLogger()->info(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_DEBUG(fmt, ...)                                               \
+  ::iris::GetLogger()->debug(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_TRACE(fmt, ...)                                               \
+  ::iris::GetLogger()->trace(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
   do {                                                                         \

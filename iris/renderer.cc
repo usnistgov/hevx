@@ -76,6 +76,25 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
 
 } // namespace iris
 
+#define IRIS_LOG_CRITICAL(fmt, ...)                                            \
+  ::iris::GetLogger()->critical(fmt " ({}:{})", ##__VA_ARGS__, __FILE__,       \
+                                __LINE__)
+
+#define IRIS_LOG_ERROR(fmt, ...)                                               \
+  ::iris::GetLogger()->error(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_WARN(fmt, ...)                                                \
+  ::iris::GetLogger()->warn(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_INFO(fmt, ...)                                                \
+  ::iris::GetLogger()->info(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_DEBUG(fmt, ...)                                               \
+  ::iris::GetLogger()->debug(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
+#define IRIS_LOG_TRACE(fmt, ...)                                               \
+  ::iris::GetLogger()->trace(fmt " ({}:{})", ##__VA_ARGS__, __FILE__, __LINE__)
+
 //! \brief Logs entry into a function.
 #define IRIS_LOG_ENTER()                                                       \
   do {                                                                         \
@@ -91,6 +110,11 @@ GetLogger(spdlog::sinks_init_list logSinks = {}) noexcept {
                                __LINE__);                                      \
     ::iris::GetLogger()->flush();                                              \
   } while (false)
+/////
+//
+// End of local logging definitions
+//
+/////
 
 namespace iris::Renderer {
 
@@ -119,11 +143,12 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
 } // Windows
 
 std::uint32_t sQueueFamilyIndex{UINT32_MAX};
+
+// FIXME: refactor this into a struct?
 absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
-
-static std::uint32_t sCommandQueueHead{2}; // Reserve 0 and 1 for Renderer
+static std::uint32_t sCommandQueueHead{1}; // Reserve 0 for Renderer
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
 static std::timed_mutex sCommandQueueMutex;
 
@@ -286,14 +311,14 @@ ProcessControlMessage(iris::Control::Nav const& navMessage) noexcept {
   } break;
   case iris::Control::Nav::NavCase::kScale: Rescale(navMessage.scale()); break;
   case iris::Control::Nav::NavCase::kMatrix:
-    GetLogger()->error("not implemented");
+    IRIS_LOG_ERROR("not implemented");
     break;
   case iris::Control::Nav::NavCase::kResponse:
     SetResponse(navMessage.response());
     break;
   case iris::Control::Nav::NavCase::kReset: Reset(); break;
   case iris::Control::Nav::NavCase::NAV_NOT_SET:
-    GetLogger()->error("Nav control message invalid");
+    IRIS_LOG_ERROR("Nav control message invalid");
     break;
   }
 
@@ -392,7 +417,7 @@ CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
         sNumFramesBuffered)) {
     Windows().emplace(windowMessage.name(), std::move(*win));
   } else {
-    GetLogger()->warn("Creating window failed: {}", win.error().what());
+    IRIS_LOG_WARN("Creating window failed: {}", win.error().what());
   }
 
   IRIS_LOG_LEAVE();
@@ -445,8 +470,8 @@ BuildBlitImageCommandBuffer(VkImageView src, VkViewport* pViewport,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}",
-                       iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
+                   iris::to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -506,7 +531,7 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
                             gsl::span<std::byte> pushConstants) noexcept {
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sCommandPools[1];
+  commandBufferAI.commandPool = sCommandPools[0];
   commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAI.commandBufferCount = 1;
 
@@ -514,8 +539,8 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}",
-                       iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
+                   iris::to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -569,18 +594,17 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
   vkCmdPushConstants(
     commandBuffer, traceable.pipeline.layout,
     VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
-    VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV |
-    VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
+      VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV |
+      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
     0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
     pushConstants.data());
   vk::EndDebugLabel(commandBuffer);
 
-  GetLogger()->debug("rgBO {} mBO {} mBS {} hBO {} hBS {} ex ({}x{})",
-                     traceable.raygenBindingOffset, traceable.missBindingOffset,
-                     traceable.missBindingStride, traceable.hitBindingOffset,
-                     traceable.hitBindingStride,
-                     traceable.outputImageExtent.width,
-                     traceable.outputImageExtent.height);
+  IRIS_LOG_DEBUG("rgBO {} mBO {} mBS {} hBO {} hBS {} ex ({}x{})",
+                 traceable.raygenBindingOffset, traceable.missBindingOffset,
+                 traceable.missBindingStride, traceable.hitBindingOffset,
+                 traceable.hitBindingStride, traceable.outputImageExtent.width,
+                 traceable.outputImageExtent.height);
 #if 0
   vkCmdTraceRaysNV(
     commandBuffer,                       // commandBuffer
@@ -632,8 +656,8 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    GetLogger()->error("Cannot allocate command buffer: {}",
-                       iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
+                   iris::to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -726,9 +750,8 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
     NameObject(VK_OBJECT_TYPE_BUFFER, window.uiVertexBuffer.buffer,
                (window.title + "::uiVertexBuffer").c_str());
   } else {
-    GetLogger()->warn(
-      "Unable to create/resize ui vertex buffer for window {}: {}",
-      window.title, vb.error().what());
+    IRIS_LOG_WARN("Unable to create/resize ui vertex buffer for window {}: {}",
+                  window.title, vb.error().what());
     return {};
   }
 
@@ -739,9 +762,8 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
     NameObject(VK_OBJECT_TYPE_BUFFER, window.uiIndexBuffer.buffer,
                (window.title + "::uiIndexBuffer").c_str());
   } else {
-    GetLogger()->warn(
-      "Unable to create/resize ui index buffer for window {}: {}", window.title,
-      ib.error().what());
+    IRIS_LOG_WARN("Unable to create/resize ui index buffer for window {}: {}",
+                  window.title, ib.error().what());
     return {};
   }
 
@@ -751,16 +773,16 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   if (auto ptr = window.uiVertexBuffer.Map<ImDrawVert*>()) {
     pVertices = std::move(*ptr);
   } else {
-    GetLogger()->warn("Unable to map ui vertex buffer for window {}: {}",
-                      window.title, ptr.error().what());
+    IRIS_LOG_WARN("Unable to map ui vertex buffer for window {}: {}",
+                  window.title, ptr.error().what());
     return {};
   }
 
   if (auto ptr = window.uiIndexBuffer.Map<ImDrawIdx*>()) {
     pIndices = std::move(*ptr);
   } else {
-    GetLogger()->warn("Unable to map ui index buffer for window {}: {}",
-                      window.title, ptr.error().what());
+    IRIS_LOG_WARN("Unable to map ui index buffer for window {}: {}",
+                  window.title, ptr.error().what());
     return {};
   }
 
@@ -880,11 +902,10 @@ static void BeginFrameWindow(std::string const& title,
 
   if (window.resized) {
     auto const newExtent = window.platformWindow.Extent();
-    if (auto result =
-        ResizeWindow(window, {newExtent.width, newExtent.height});
-      !result) {
-      GetLogger()->error("Error resizing window {}: {}", title,
-                         result.error().what());
+    if (auto result = ResizeWindow(window, {newExtent.width, newExtent.height});
+        !result) {
+      IRIS_LOG_ERROR("Error resizing window {}: {}", title,
+                     result.error().what());
     } else {
       window.resized = false;
     }
@@ -914,7 +935,7 @@ static void BeginFrameWindow(std::string const& title,
 } // BeginFrameWindow
 
 static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
-  vk::BeginDebugLabel(sCommandQueues[1], "BeginFrameTraceable");
+  vk::BeginDebugLabel(sCommandQueues[0], "BeginFrameTraceable");
 
   PushConstants pushConstants;
   pushConstants.iMouse = glm::vec4(0.f, 0.f, 0.f, 0.f);
@@ -943,16 +964,17 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
   submitI.commandBufferCount = 1;
   submitI.pCommandBuffers = &traceCommandBuffer;
 
-  if (auto result = vkQueueSubmit(sCommandQueues[1], 1, &submitI, VK_NULL_HANDLE);
+  if (auto result =
+        vkQueueSubmit(sCommandQueues[0], 1, &submitI, VK_NULL_HANDLE);
       result != VK_SUCCESS) {
-    GetLogger()->error("Error submitting traceable command buffer: {}",
-                       iris::to_string(result));
+    IRIS_LOG_ERROR("Error submitting traceable command buffer: {}",
+                   iris::to_string(result));
   }
 
   // FIXME: Figure out how to free this command buffer
-  //sOldCommandBuffers.push_back(traceCommandBuffer);
+  sOldCommandBuffers.push_back(traceCommandBuffer);
 
-  vk::EndDebugLabel(sCommandQueues[1]);
+  vk::EndDebugLabel(sCommandQueues[0]);
 } // BeginFrameTraceable
 
 static void EndFrameWindowUI(Window& window) {
@@ -1078,13 +1100,12 @@ EndFrameWindow(std::string const& title, Window& window,
                                      window.imageAcquired, VK_NULL_HANDLE,
                                      &window.frameIndex);
       result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR) {
-    GetLogger()->warn("Window {} swapchain out of date: resizing", title);
+    IRIS_LOG_WARN("Window {} swapchain out of date: resizing", title);
     auto const newExtent = window.platformWindow.Extent();
 
     if (auto r = ResizeWindow(window, {newExtent.width, newExtent.height});
         !r) {
-      GetLogger()->error("Error resizing window {}: {}", title,
-                         r.error().what());
+      IRIS_LOG_ERROR("Error resizing window {}: {}", title, r.error().what());
     }
 
     result = vkAcquireNextImageKHR(sDevice, window.swapchain, UINT64_MAX,
@@ -1093,8 +1114,8 @@ EndFrameWindow(std::string const& title, Window& window,
   }
 
   if (result != VK_SUCCESS) {
-    GetLogger()->error("Error acquiring next image for window {}: {}", title,
-                       make_error_code(result).message());
+    IRIS_LOG_ERROR("Error acquiring next image for window {}: {}", title,
+                   make_error_code(result).message());
   }
 
   if (auto ptr = sMatricesBuffer.Map<MatricesBuffer*>()) {
@@ -1104,23 +1125,21 @@ EndFrameWindow(std::string const& title, Window& window,
     (*ptr)->ProjectionMatrixInverse = window.projectionMatrixInverse;
     sMatricesBuffer.Unmap();
   } else {
-    GetLogger()->error("Cannot update matrices buffer: {}", ptr.error().what());
+    IRIS_LOG_ERROR("Cannot update matrices buffer: {}", ptr.error().what());
   }
 
   Window::Frame& frame = window.currentFrame();
 
   if (result = vkResetCommandPool(sDevice, frame.commandPool, 0);
       result != VK_SUCCESS) {
-    GetLogger()->error("Error resetting window {} frame {} command pool: {}",
-                       title, window.frameIndex,
-                       make_error_code(result).message());
+    IRIS_LOG_ERROR("Error resetting window {} frame {} command pool: {}", title,
+                   window.frameIndex, make_error_code(result).message());
   }
 
   if (result = vkBeginCommandBuffer(frame.commandBuffer, &commandBufferBI);
       result != VK_SUCCESS) {
-    GetLogger()->error("Error beginning window {} frame {} command buffer: {}",
-                       title, window.frameIndex,
-                       make_error_code(result).message());
+    IRIS_LOG_ERROR("Error beginning window {} frame {} command buffer: {}",
+                   title, window.frameIndex, make_error_code(result).message());
   }
 
   vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
@@ -1218,9 +1237,8 @@ EndFrameWindow(std::string const& title, Window& window,
   vk::EndDebugLabel(frame.commandBuffer);
 
   if (result = vkEndCommandBuffer(frame.commandBuffer); result != VK_SUCCESS) {
-    GetLogger()->error("Error ending window {} frame {} command buffer: {}",
-                       title, window.frameIndex,
-                       make_error_code(result).message());
+    IRIS_LOG_ERROR("Error ending window {} frame {} command buffer: {}", title,
+                   window.frameIndex, make_error_code(result).message());
   }
 
   vk::EndDebugLabel(sCommandQueues[0]);
@@ -1300,8 +1318,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   glslang::InitializeProcess();
 
   sTaskSchedulerInit.initialize();
-  GetLogger()->debug("Default number of task threads: {}",
-                     sTaskSchedulerInit.default_num_threads());
+  IRIS_LOG_DEBUG("Default number of task threads: {}",
+                 sTaskSchedulerInit.default_num_threads());
 
 #if PLATFORM_LINUX
   ::setenv(
@@ -1310,7 +1328,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 #elif PLATFORM_WINDOWS
   ::_putenv(("VK_LAYER_PATH="s + iris::kVulkanSDKDirectory + "\\Bin"s).c_str());
 #endif
-  GetLogger()->debug("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
+  IRIS_LOG_DEBUG("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
 
   flextVkInit();
 
@@ -1320,8 +1338,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   versionMinor = VK_VERSION_MINOR(instanceVersion);
   versionPatch = VK_VERSION_PATCH(instanceVersion);
 
-  GetLogger()->debug("Vulkan Instance Version: {}.{}.{}", versionMajor,
-                     versionMinor, versionPatch);
+  IRIS_LOG_DEBUG("Vulkan Instance Version: {}.{}.{}", versionMajor,
+                 versionMinor, versionPatch);
 
   if (versionMajor != 1 && versionMinor != 1) {
     IRIS_LOG_LEAVE();
@@ -1401,8 +1419,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
           sInstance, &DebugUtilsMessengerCallback)) {
       sDebugUtilsMessenger = std::move(*messenger);
     } else {
-      GetLogger()->warn("Cannot create DebugUtilsMessenger: {}",
-                        messenger.error().what());
+      IRIS_LOG_WARN("Cannot create DebugUtilsMessenger: {}",
+                    messenger.error().what());
     }
   }
 
@@ -2169,14 +2187,14 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   decltype(sIOContinuations)::value_type ioContinuation;
   while (sIOContinuations.try_pop(ioContinuation)) {
     if (auto error = ioContinuation(); error.code()) {
-      GetLogger()->error(error.what());
+      IRIS_LOG_ERROR("{}", error.what());
     }
   }
 
   if (sFrameNum != 0) {
     auto const prevFrameIndex = (sFrameIndex - 1) % sNumFramesBuffered;
 
-    GetLogger()->debug(
+    IRIS_LOG_DEBUG(
       "prevFrameIndex {} waiting on fence 0x{:x}", prevFrameIndex,
       reinterpret_cast<uintptr_t>(sFrameFinishedFences[prevFrameIndex]));
 
@@ -2184,15 +2202,15 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
           vkWaitForFences(sDevice, 1, &sFrameFinishedFences[prevFrameIndex],
                           VK_TRUE, UINT64_MAX);
         result != VK_SUCCESS) {
-      GetLogger()->error("Error waiting for fences: {}",
-                         make_error_code(result).message());
+      IRIS_LOG_ERROR("Error waiting for fences: {}",
+                     make_error_code(result).message());
     }
 
     if (auto result =
           vkResetFences(sDevice, 1, &sFrameFinishedFences[prevFrameIndex]);
         result != VK_SUCCESS) {
-      GetLogger()->error("Error resetting fences: {}",
-                         make_error_code(result).message());
+      IRIS_LOG_ERROR("Error resetting fences: {}",
+                     make_error_code(result).message());
     }
   }
 
@@ -2254,7 +2272,7 @@ void iris::Renderer::EndFrame(
     (*ptr)->NumLights = 1;
     sLightsBuffer.Unmap();
   } else {
-    GetLogger()->error("Cannot update lights buffer: {}", ptr.error().what());
+    IRIS_LOG_ERROR("Cannot update lights buffer: {}", ptr.error().what());
   }
 
   absl::InlinedVector<VkSemaphore, 16> waitSemaphores{};
@@ -2297,15 +2315,15 @@ void iris::Renderer::EndFrame(
     submitI.pSignalSemaphores = &sImagesReadyForPresent;
   }
 
-  GetLogger()->debug(
+  IRIS_LOG_DEBUG(
     "submit frameIndex {} fence 0x{:x}", sFrameIndex,
     reinterpret_cast<uintptr_t>(sFrameFinishedFences[sFrameIndex]));
   vk::BeginDebugLabel(sCommandQueues[0], "EndFrame Submit and Present");
   if (auto result = vkQueueSubmit(sCommandQueues[0], 1, &submitI,
                                   sFrameFinishedFences[sFrameIndex]);
       result != VK_SUCCESS) {
-    GetLogger()->error("Error submitting command buffer: {}",
-                       iris::to_string(result));
+    IRIS_LOG_ERROR("Error submitting command buffer: {}",
+                   iris::to_string(result));
   }
 
   if (!swapchains.empty()) {
@@ -2323,8 +2341,8 @@ void iris::Renderer::EndFrame(
 
     if (auto result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
         result != VK_SUCCESS) {
-      GetLogger()->error("Error presenting swapchains: {}",
-                         iris::to_string(result));
+      IRIS_LOG_ERROR("Error presenting swapchains: {}",
+                     iris::to_string(result));
     }
   }
   vk::EndDebugLabel(sCommandQueues[0]);
@@ -2345,9 +2363,9 @@ iris::Renderer::RenderableID
 iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {
   IRIS_LOG_ENTER();
 
-  GetLogger()->debug("renderable bsphere: {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
-                     renderable.boundingSphere.x, renderable.boundingSphere.y,
-                     renderable.boundingSphere.z, renderable.boundingSphere.w);
+  IRIS_LOG_DEBUG("renderable bsphere: {:+.3f} {:+.3f} {:+.3f} {:+.3f}",
+                 renderable.boundingSphere.x, renderable.boundingSphere.y,
+                 renderable.boundingSphere.z, renderable.boundingSphere.w);
   glm::vec3 const renderableBSCenter(renderable.boundingSphere.x,
                                      renderable.boundingSphere.y,
                                      renderable.boundingSphere.z);
@@ -2578,7 +2596,7 @@ tl::expected<void, std::system_error> iris::Renderer::ReleaseCommandQueue(
     queue.submitFence = VK_NULL_HANDLE;
     sCommandQueueHead--;
   } else {
-    GetLogger()->critical("not implemented");
+    IRIS_LOG_CRITICAL("not implemented");
     std::abort();
   }
 
@@ -2687,7 +2705,7 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
     tbb::task* execute() override {
       IRIS_LOG_ENTER();
 
-      GetLogger()->debug("Loading {}", path_.string());
+      IRIS_LOG_DEBUG("Loading {}", path_.string());
       auto const& ext = path_.extension();
 
       if (ext.compare(".json") == 0) {
@@ -2695,8 +2713,8 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
       } else if (ext.compare(".gltf") == 0) {
         sIOContinuations.push(io::LoadGLTF(path_));
       } else {
-        GetLogger()->error("Unhandled file extension '{}' for {}", ext.string(),
-                           path_.string());
+        IRIS_LOG_ERROR("Unhandled file extension '{}' for {}", ext.string(),
+                       path_.string());
       }
 
       IRIS_LOG_LEAVE();
@@ -2733,7 +2751,7 @@ iris::Renderer::LoadGLTF(io::json const& gltf) noexcept {
     tbb::task* execute() override {
       IRIS_LOG_ENTER();
 
-      GetLogger()->debug("Loading GLTF");
+      IRIS_LOG_DEBUG("Loading GLTF");
       sIOContinuations.push(io::LoadGLTF(gltf_));
 
       IRIS_LOG_LEAVE();
@@ -2775,8 +2793,8 @@ tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
     Nav::ProcessControlMessage(controlMessage.nav());
     break;
   default:
-    GetLogger()->error("Unsupported controlMessage message type {}",
-                       controlMessage.type_case());
+    IRIS_LOG_ERROR("Unsupported controlMessage message type {}",
+                   controlMessage.type_case());
     IRIS_LOG_LEAVE();
     return tl::unexpected(
       std::system_error(Error::kControlMessageInvalid,

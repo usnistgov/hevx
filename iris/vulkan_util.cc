@@ -387,9 +387,9 @@ iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
       "Cannot enumerate physical device extension properties"));
   }
 
-  GetLogger()->debug("{}{} Extensions:", indent, numExtensionProperties);
+  IRIS_LOG_DEBUG("{}{} Extensions:", indent, numExtensionProperties);
   for (auto&& extensionProperty : extensionProperties) {
-    GetLogger()->debug("{}  {}", indent, extensionProperty.extensionName);
+    IRIS_LOG_DEBUG("{}  {}", indent, extensionProperty.extensionName);
   }
 
   IRIS_LOG_LEAVE();
@@ -423,7 +423,7 @@ iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
 
   // Iterate through each physical device to find one that we can use.
   for (auto&& [i, physicalDevice] : enumerate(physicalDevices)) {
-    GetLogger()->debug("Physical device {}:", i);
+    IRIS_LOG_DEBUG("Physical device {}:", i);
     DumpPhysicalDevice(physicalDevice, "  ");
   }
 

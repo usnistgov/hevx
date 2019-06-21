@@ -32,12 +32,6 @@ extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
 extern VkRenderPass sRenderPass;
 
-// These are for use in window.cc
-extern std::uint32_t sQueueFamilyIndex;
-extern absl::InlinedVector<VkQueue, 16> sCommandQueues;
-extern absl::InlinedVector<VkCommandPool, 16> sCommandPools;
-extern absl::InlinedVector<VkFence, 16> sCommandFences;
-
 extern VkSurfaceFormatKHR const sSurfaceColorFormat;
 extern VkFormat const sSurfaceDepthStencilFormat;
 extern VkSampleCountFlagBits const sSurfaceSampleCount;

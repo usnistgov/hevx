@@ -1,9 +1,9 @@
 #include "iris/config.h"
 
 #include "absl/container/fixed_array.h"
+#include "components/renderable.h"
 #include "error.h"
 #include "io/shadertoy.h"
-#include "components/renderable.h"
 #include "logging.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic ignored "-Wshadow"
@@ -170,19 +170,19 @@ std::string GetCode(web::http::uri const& uri) {
   http::client::http_client client(uri.to_string());
   client.request(http::methods::GET)
     .then([&](http::http_response response) -> pplx::task<web::json::value> {
-      GetLogger()->trace(
+      IRIS_LOG_TRACE(
         "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
         response.status_code());
       return response.extract_json();
     })
     .then([&](web::json::value json) {
-      GetLogger()->trace("parsing code");
+      IRIS_LOG_TRACE("parsing code");
 
       web::json::value shader;
       try {
         shader = json.at(_XPLATSTR("Shader"));
       } catch (std::exception const& e) {
-        GetLogger()->error("Cannot find Shader in code: {}", e.what());
+        IRIS_LOG_ERROR("Cannot find Shader in code: {}", e.what());
         IRIS_LOG_LEAVE();
         return;
       }
@@ -191,13 +191,13 @@ std::string GetCode(web::http::uri const& uri) {
       try {
         renderpasses = shader.at(_XPLATSTR("renderpass"));
       } catch (std::exception const& e) {
-        GetLogger()->error("Cannot find renderpass in code: {}", e.what());
+        IRIS_LOG_ERROR("Cannot find renderpass in code: {}", e.what());
         IRIS_LOG_LEAVE();
         return;
       }
 
       if (!renderpasses.is_array()) {
-        GetLogger()->error("Renderpasses is not an array");
+        IRIS_LOG_ERROR("Renderpasses is not an array");
         IRIS_LOG_LEAVE();
         return;
       }
@@ -206,14 +206,14 @@ std::string GetCode(web::http::uri const& uri) {
       try {
         renderpass = renderpasses.at(0);
       } catch (std::exception const& e) {
-        GetLogger()->error("No renderpass in renderpasses array: {}", e.what());
+        IRIS_LOG_ERROR("No renderpass in renderpasses array: {}", e.what());
         IRIS_LOG_LEAVE();
         return;
       }
 
       if (renderpass.has_field(_XPLATSTR("inputs")) &&
           renderpass.at(_XPLATSTR("inputs")).size() > 0) {
-        GetLogger()->error("inputs are not yet implemented");
+        IRIS_LOG_ERROR("inputs are not yet implemented");
         IRIS_LOG_LEAVE();
         return;
       }
@@ -221,23 +221,23 @@ std::string GetCode(web::http::uri const& uri) {
       if (renderpass.has_field(_XPLATSTR("type")) &&
           renderpass.at(_XPLATSTR("type")).is_string() &&
           renderpass.at(_XPLATSTR("type")).as_string() != _XPLATSTR("image")) {
-        GetLogger()->error("non-image outputs are not yet implemented");
+        IRIS_LOG_ERROR("non-image outputs are not yet implemented");
         IRIS_LOG_LEAVE();
         return;
       }
 
       try {
-        GetLogger()->trace("converting code");
+        IRIS_LOG_TRACE("converting code");
 #if PLATFORM_WINDOWS
         code = wstring_to_string(renderpass.at(_XPLATSTR("code")).as_string());
 #else
         code = renderpass.at(_XPLATSTR("code")).as_string();
 #endif
       } catch (std::exception const& e) {
-        GetLogger()->error("Error converting code: {}", e.what());
+        IRIS_LOG_ERROR("Error converting code: {}", e.what());
       }
 
-      GetLogger()->trace("done parsing code");
+      IRIS_LOG_TRACE("done parsing code");
     })
     .wait();
 
@@ -261,7 +261,7 @@ LoadFile(web::http::uri const& uri) {
     return tl::unexpected(bytes.error());
   }
 
-  GetLogger()->trace("creating renderable");
+  IRIS_LOG_TRACE("creating renderable");
   if (auto r = CreateRenderable(code)) {
     IRIS_LOG_LEAVE();
     return std::move(*r);
@@ -271,8 +271,8 @@ LoadFile(web::http::uri const& uri) {
   }
 } // LoadFile
 
-tl::expected<Renderer::Component::Renderable, std::system_error>
-static LoadWeb(web::http::uri const& uri) {
+tl::expected<Renderer::Component::Renderable, std::system_error> static LoadWeb(
+  web::http::uri const& uri) {
   IRIS_LOG_ENTER();
 
   // grab the last component of the uri path: that's the shaderID
@@ -287,8 +287,8 @@ static LoadWeb(web::http::uri const& uri) {
 #else
   if (id == std::string::npos) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kURIInvalid, uri.to_string()));
+    return tl::unexpected(
+      std::system_error(Error::kURIInvalid, uri.to_string()));
 #endif
   }
 
@@ -299,14 +299,14 @@ static LoadWeb(web::http::uri const& uri) {
   apiURI.append_path(path.substr(id));
   apiURI.append_query(_XPLATSTR("key=BtHKWW"));
 #if PLATFORM_WINDOWS
-  GetLogger()->debug("api URI: {}", wstring_to_string(apiURI.to_string()));
+  IRIS_LOG_DEBUG("api URI: {}", wstring_to_string(apiURI.to_string()));
 #else
-  GetLogger()->debug("api URI: {}", apiURI.to_string());
+  IRIS_LOG_DEBUG("api URI: {}", apiURI.to_string());
 #endif
 
   std::string const code = GetCode(apiURI.to_uri());
 
-  GetLogger()->trace("creating renderable");
+  IRIS_LOG_TRACE("creating renderable");
   if (auto r = CreateRenderable(code)) {
     IRIS_LOG_LEAVE();
     return std::move(*r);
@@ -330,29 +330,29 @@ public:
 #endif
 
 #if PLATFORM_WINDOWS
-    GetLogger()->debug("Loading scheme: {}", wstring_to_string(uri.scheme()));
+    IRIS_LOG_DEBUG("Loading scheme: {}", wstring_to_string(uri.scheme()));
 #else
-    GetLogger()->debug("Loading scheme: {}", uri.scheme());
+    IRIS_LOG_DEBUG("Loading scheme: {}", uri.scheme());
 #endif
 
     if (uri.scheme() == _XPLATSTR("file")) {
       if (auto r = LoadFile(uri)) {
         Renderer::AddRenderable(std::move(*r));
       } else {
-        GetLogger()->error("Error loading uri: {}", r.error().what());
+        IRIS_LOG_ERROR("Error loading uri: {}", r.error().what());
       }
     } else if (uri.scheme() == _XPLATSTR("http") ||
                uri.scheme() == _XPLATSTR("https")) {
       if (auto r = LoadWeb(uri)) {
         Renderer::AddRenderable(std::move(*r));
       } else {
-        GetLogger()->error("Error loading uri: {}", r.error().what());
+        IRIS_LOG_ERROR("Error loading uri: {}", r.error().what());
       }
     } else {
 #if PLATFORM_WINDOWS
-      GetLogger()->error("Unknown scheme: {}", wstring_to_string(uri.scheme()));
+      IRIS_LOG_ERROR("Unknown scheme: {}", wstring_to_string(uri.scheme()));
 #else
-      GetLogger()->error("Unknown scheme: {}", uri.scheme());
+      IRIS_LOG_ERROR("Unknown scheme: {}", uri.scheme());
 #endif
     }
 

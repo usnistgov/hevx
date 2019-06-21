@@ -145,11 +145,11 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   try {
     pWin = std::make_unique<Impl>();
   } catch (std::bad_alloc const&) {
-    GetLogger()->critical("Cannot allocate memory");
+    IRIS_LOG_CRITICAL("Cannot allocate memory");
     IRIS_LOG_LEAVE();
     std::terminate();
   } catch (std::exception const& e) {
-    GetLogger()->critical("Unhandled exception from std::make_unique<Impl>");
+    IRIS_LOG_CRITICAL("Unhandled exception from std::make_unique<Impl>");
     IRIS_LOG_LEAVE();
     return tl::unexpected(e);
   }
@@ -324,8 +324,6 @@ iris::wsi::PlatformWindow::Impl::~Impl() noexcept {
     if (rect_.extent.width != LOWORD(lParam) ||
         rect_.extent.height != HIWORD(lParam)) {
       rect_.extent = Extent2D{LOWORD(lParam), HIWORD(lParam)};
-      GetLogger()->debug("WM_SIZE ({}x{})", rect_.extent.width,
-                         rect_.extent.height);
       resizeDelegate_(rect_.extent);
     }
     break;

@@ -198,17 +198,17 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   try {
     pWin = std::make_unique<Impl>();
   } catch (std::bad_alloc const&) {
-    GetLogger()->critical("Cannot allocate memory");
+    IRIS_LOG_CRITICAL("Cannot allocate memory");
     IRIS_LOG_LEAVE();
     std::terminate();
   } catch (std::exception const& e) {
-    GetLogger()->critical("Unhandled exception from std::make_unique<Impl>");
+    IRIS_LOG_CRITICAL("Unhandled exception from std::make_unique<Impl>");
     IRIS_LOG_LEAVE();
     return tl::unexpected(e);
   }
 
   std::string const displayName = fmt::format(":0.{}", display);
-  GetLogger()->debug("Opening display {}", displayName);
+  IRIS_LOG_DEBUG("Opening display {}", displayName);
 
   pWin->handle_.connection = ::xcb_connect(displayName.c_str(), nullptr);
   if (int error = ::xcb_connection_has_error(pWin->handle_.connection) > 0) {
@@ -333,7 +333,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
 
   if ((options & Options::kDecorated) != Options::kDecorated) {
     // remove decorations
-    GetLogger()->debug("Removing decorations on {}", title);
+    IRIS_LOG_DEBUG("Removing decorations on {}", title);
     struct {
       unsigned long flags;
       unsigned long functions;
@@ -362,7 +362,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
 
   if ((options & Options::kSizeable) != Options::kSizeable) {
     // remove resizeability
-    GetLogger()->debug("Removing resizeability on {}", title);
+    IRIS_LOG_DEBUG("Removing resizeability on {}", title);
 
     xcb_size_hints_t sizeHints = {};
     sizeHints.max_width = sizeHints.min_width = extent.width;

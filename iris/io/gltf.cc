@@ -710,7 +710,7 @@ inline std::size_t AccessorComponentTypeSize(int type) {
 
 template <class T, class U>
 T GetAccessorDataComponent(gsl::not_null<U*>) {
-  GetLogger()->critical("Not implemented");
+  IRIS_LOG_CRITICAL("Not implemented");
   std::terminate();
 }
 
@@ -783,7 +783,7 @@ GetAccessorData(int index, std::string const& accessorType,
   }
 
   auto&& accessor = (*accessors)[index];
-  GetLogger()->trace("accessor: {}", json(accessor).dump());
+  IRIS_LOG_TRACE("accessor: {}", json(accessor).dump());
 
   if (accessor.type != accessorType) {
     return tl::unexpected(std::system_error(
@@ -826,7 +826,7 @@ GetAccessorData(int index, std::string const& accessorType,
   }
 
   auto&& bufferView = (*bufferViews)[*accessor.bufferView];
-  GetLogger()->trace("bufferView: {}", json(bufferView).dump());
+  IRIS_LOG_TRACE("bufferView: {}", json(bufferView).dump());
 
   if (buffersBytes.size() < static_cast<std::size_t>(bufferView.buffer)) {
     return tl::unexpected(
@@ -936,7 +936,7 @@ GenerateNormals(std::vector<glm::vec3> const& positions,
   std::vector<glm::vec3> normals(positions.size());
 
   if (indices.empty()) {
-    GetLogger()->debug("Generating normals without indices");
+    IRIS_LOG_DEBUG("Generating normals without indices");
     std::size_t const num = positions.size();
     for (std::size_t i = 0; i < num; i += 3) {
       auto&& a = positions[i];
@@ -1097,7 +1097,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   // std::optional<glm::vec3> translation;
   // std::optional<std::string> name;
 
-  GetLogger()->trace("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
+  IRIS_LOG_TRACE("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
 
@@ -1127,7 +1127,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   if (node.matrix) {
     nodeMat *= *node.matrix;
     if (node.translation || node.rotation || node.scale) {
-      GetLogger()->warn("node has both matrix and TRS; using matrix");
+      IRIS_LOG_WARN("node has both matrix and TRS; using matrix");
     }
   } else {
     if (node.translation) nodeMat *= glm::translate({}, *node.translation);
@@ -1169,7 +1169,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   // Mesh:
   // std::vector<Primitive> primitives;
 
-  GetLogger()->trace("mesh: {}", json(mesh).dump());
+  IRIS_LOG_TRACE("mesh: {}", json(mesh).dump());
 
   for (std::size_t primIdx = 0; primIdx < mesh.primitives.size(); ++primIdx) {
     auto&& primitive = mesh.primitives[primIdx];
@@ -1231,7 +1231,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     std::vector<glm::vec3> positions;
     for (auto&& [semantic, index] : primitive.attributes) {
       if (semantic == "POSITION") {
-        GetLogger()->trace("reading POSITION");
+        IRIS_LOG_TRACE("reading POSITION");
         if (auto p = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1251,7 +1251,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     // original format of the indices in the draw call.
     std::vector<unsigned int> indices;
     if (primitive.indices) {
-      GetLogger()->trace("reading indices");
+      IRIS_LOG_TRACE("reading indices");
       std::array<int, 2> componentTypes{5123, 5125};
       if (auto i = gltf::GetAccessorData<unsigned int>(
             *primitive.indices, "SCALAR", componentTypes, false, accessors,
@@ -1272,7 +1272,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     for (auto&& [semantic, index] : primitive.attributes) {
       if (semantic == "TEXCOORD_0") {
-        GetLogger()->trace("reading TEXCOORD_0");
+        IRIS_LOG_TRACE("reading TEXCOORD_0");
         if (auto t = gltf::GetAccessorData<glm::vec2>(index, "VEC2", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1282,7 +1282,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(t.error());
         }
       } else if (semantic == "NORMAL") {
-        GetLogger()->trace("reading NORMAL");
+        IRIS_LOG_TRACE("reading NORMAL");
         if (auto n = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1292,7 +1292,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           return tl::unexpected(n.error());
         }
       } else if (semantic == "TANGENT") {
-        GetLogger()->trace("reading TANGENT");
+        IRIS_LOG_TRACE("reading TANGENT");
         if (auto t = gltf::GetAccessorData<glm::vec4>(index, "VEC4", 5126, true,
                                                       accessors, bufferViews,
                                                       buffersBytes)) {
@@ -1489,8 +1489,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       }
 
       if (material.shaderToy) {
-        GetLogger()->error("{} extension not implemented",
-                           gltf::MaterialShaderToy::kExtensionName);
+        IRIS_LOG_ERROR("{} extension not implemented",
+                       gltf::MaterialShaderToy::kExtensionName);
       }
     }
 
@@ -1799,8 +1799,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         imageInfos[i - 1].sampler = renderable.textureSamplers[occlusionIndex];
         imageInfos[i - 1].imageView = renderable.textureViews[occlusionIndex];
       } else {
-        GetLogger()->error("Unknown binding: {}",
-                           descriptorSetLayoutBindings[i].binding);
+        IRIS_LOG_ERROR("Unknown binding: {}",
+                       descriptorSetLayoutBindings[i].binding);
       }
 
       writeDescriptorSets.push_back({
@@ -2021,10 +2021,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     renderable.boundingSphere =
       glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
                 std::sqrt(mb.squared_radius()));
-    GetLogger()->debug("boundingSphere: ({} {} {}), {}",
-                       renderable.boundingSphere.x, renderable.boundingSphere.y,
-                       renderable.boundingSphere.z,
-                       renderable.boundingSphere.w);
+    IRIS_LOG_DEBUG("boundingSphere: ({} {} {}), {}",
+                   renderable.boundingSphere.x, renderable.boundingSphere.y,
+                   renderable.boundingSphere.z, renderable.boundingSphere.w);
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -2076,17 +2075,17 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
     totalBytesSize += mipLevelSizes[i];
   }
 
-  GetLogger()->debug("extent: ({}x{}) nLevels: {} totalBytesSize: {}",
-                     extent.width, extent.height, nLevels, totalBytesSize);
+  IRIS_LOG_DEBUG("extent: ({}x{}) nLevels: {} totalBytesSize: {}", extent.width,
+                 extent.height, nLevels, totalBytesSize);
 
   std::vector<std::byte> mipLevelBytes(totalBytesSize);
   std::copy_n(bytes.data(), mipLevelSizes[0], mipLevelBytes.data());
 
   std::size_t offset = mipLevelSizes[0];
   for (uint32_t i = 1; i < nLevels; ++i) {
-    GetLogger()->debug("creating mip level {} ({}x{}) {} {}", i,
-                       mipLevelExtents[i].width, mipLevelExtents[i].height,
-                       mipLevelSizes[i], offset);
+    IRIS_LOG_DEBUG("creating mip level {} ({}x{}) {} {}", i,
+                   mipLevelExtents[i].width, mipLevelExtents[i].height,
+                   mipLevelSizes[i], offset);
 
     auto src = reinterpret_cast<unsigned char*>(mipLevelBytes.data() + offset -
                                                 mipLevelSizes[i - 1]);
@@ -2228,8 +2227,10 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
 
 namespace iris::io {
 
-tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
-static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
+tl::expected<std::vector<Renderer::Component::Renderable>,
+             std::system_error> static ParseGLTF(json const& j,
+                                                 filesystem::path const& path =
+                                                   "") noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
@@ -2300,7 +2301,7 @@ static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
       if (uriPath.is_relative()) {
         uriPath = kIRISContentDirectory / baseDir / uriPath;
       }
-      GetLogger()->debug("Reading {}", uriPath.string());
+      IRIS_LOG_DEBUG("Reading {}", uriPath.string());
 
       int x, y, n;
       if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4);
@@ -2345,7 +2346,7 @@ static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
   std::vector<Renderer::Component::Renderable> renderables;
 
   if (!g.scenes) {
-    GetLogger()->debug("no scenes specified; using first node");
+    IRIS_LOG_DEBUG("no scenes specified; using first node");
     if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
                              buffersBytes, imagesExtents, imagesBytes)) {
       renderables.insert(renderables.end(), r->begin(), r->end());
@@ -2355,7 +2356,7 @@ static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
     }
   } else {
     if (!g.scene) {
-      GetLogger()->warn("no default scene specified; using first scene");
+      IRIS_LOG_WARN("no default scene specified; using first scene");
       g.scene = 0;
     }
 
@@ -2368,7 +2369,7 @@ static ParseGLTF(json const& j, filesystem::path const& path = "") noexcept {
     auto&& scene = (*g.scenes)[*g.scene];
 
     if (!scene.nodes) {
-      GetLogger()->debug("no nodes in scene; using first node");
+      IRIS_LOG_DEBUG("no nodes in scene; using first node");
       if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
                                buffersBytes, imagesExtents, imagesBytes)) {
         renderables.insert(renderables.end(), r->begin(), r->end());
@@ -2405,21 +2406,19 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
       j = json::parse(*bytes);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
-      GetLogger()->error("Error parsing {}: {}", path.string(), e.what());
+      IRIS_LOG_ERROR("Error parsing {}: {}", path.string(), e.what());
       return []() { return std::system_error(Error::kFileParseFailed); };
     }
   } else {
     IRIS_LOG_LEAVE();
-    GetLogger()->error("Error reading {}: {}", path.string(),
-                       bytes.error().what());
+    IRIS_LOG_ERROR("Error reading {}: {}", path.string(), bytes.error().what());
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 
   if (auto renderables = ParseGLTF(j, path)) {
     for (auto&& r : *renderables) Renderer::AddRenderable(r);
   } else {
-    GetLogger()->error("Error creating renderable: {}",
-                       renderables.error().what());
+    IRIS_LOG_ERROR("Error creating renderable: {}", renderables.error().what());
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 
@@ -2434,8 +2433,7 @@ iris::io::LoadGLTF(json const& gltf) noexcept {
   if (auto renderables = ParseGLTF(gltf)) {
     for (auto&& r : *renderables) Renderer::AddRenderable(r);
   } else {
-    GetLogger()->error("Error creating renderable: {}",
-                       renderables.error().what());
+    IRIS_LOG_ERROR("Error creating renderable: {}", renderables.error().what());
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 

@@ -190,7 +190,7 @@ private:
   }
 
   virtual IncludeResult* readSystemPath(char const*) const {
-    GetLogger()->error("including system headers not implemented");
+    IRIS_LOG_ERROR("including system headers not implemented");
     return nullptr;
   }
 
@@ -243,7 +243,7 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
     } else if ((shaderStage & VK_SHADER_STAGE_GEOMETRY_BIT)) {
       return EShLanguage::EShLangGeometry;
     } else {
-      GetLogger()->critical("Unhandled shaderStage: {}", shaderStage);
+      IRIS_LOG_CRITICAL("Unhandled shaderStage: {}", shaderStage);
       std::terminate();
     }
   }();
@@ -257,8 +257,6 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
     preamble += define;
     preamble += "\n";
   }
-
-  GetLogger()->debug("shader preamble: {}", preamble);
 
   glslang::TShader shader(lang);
   shader.setStringsWithLengthsAndNames(strings, lengths, names, 1);
