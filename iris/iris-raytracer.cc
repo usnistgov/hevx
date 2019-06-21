@@ -422,12 +422,12 @@ CreateShaderBindingTable() noexcept {
                                                  sShaderGroups.size());
 
   if (auto result = vkGetRayTracingShaderGroupHandlesNV(
-        iris::Renderer::sDevice,      // device
-        sTraceable.pipeline.pipeline, // pipeline
-        0,                            // firstGroup
-        sShaderGroups.size(),         // groupCount
-        shaderGroupHandles.size(),    // dataSize
-        shaderGroupHandles.data()     // pData
+        iris::Renderer::sDevice,                               // device
+        sTraceable.pipeline.pipeline,                          // pipeline
+        0,                                                     // firstGroup
+        gsl::narrow_cast<std::uint32_t>(sShaderGroups.size()), // groupCount
+        gsl::narrow_cast<std::uint32_t>(shaderGroupHandles.size()), // dataSize
+        shaderGroupHandles.data()                                   // pData
       );
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
