@@ -47,8 +47,8 @@ struct Sphere {
 }; // struct Sphere
 
 static absl::FixedArray<Sphere> sSpheres = {
-  Sphere(glm::vec3(0.f, 2.f, 0.f), .5f),
-  Sphere(glm::vec3(0.f, 2.f, 100.5f), 100.f),
+  Sphere(glm::vec3(0.f, 0.f, 0.f), .5f),
+  Sphere(glm::vec3(0.f, 0.f, 100.5f), 100.f),
 };
 
 static iris::Buffer sSpheresBuffer;
@@ -207,7 +207,7 @@ static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   sTraceable.outputImageExtent = VkExtent2D{1000, 1000};
 
   if (auto img = iris::AllocateImage(
-        VK_FORMAT_B8G8R8A8_UNORM, sTraceable.outputImageExtent, 1, 1,
+        VK_FORMAT_R8G8B8A8_UNORM, sTraceable.outputImageExtent, 1, 1,
         VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -222,7 +222,7 @@ static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
   }
 
   if (auto view = iris::CreateImageView(
-        sTraceable.outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_B8G8R8A8_UNORM,
+        sTraceable.outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
     sTraceable.outputImageView = *view;
   } else {
@@ -455,25 +455,6 @@ CreateShaderBindingTable() noexcept {
     sTraceable.missBindingOffset + sTraceable.missBindingStride;
   sTraceable.hitBindingStride = shaderGroupHandleSize;
 
-  sLogger->info("shaderGroupHandleSize: {}", shaderGroupHandleSize);
-  sLogger->info("sTraceable.missBindingOffset: {}",
-                sTraceable.missBindingOffset);
-  sLogger->info("sTraceable.missBindingStride: {}",
-                sTraceable.missBindingStride);
-  sLogger->info("sTraceable.hitBindingOffset: {}", sTraceable.hitBindingOffset);
-  sLogger->info("sTraceable.hitBindingStride: {}", sTraceable.hitBindingStride);
-
-  for (int i = 0; i < 3; ++i) {
-    std::string handle(shaderGroupHandleSize, '\0');
-    for (std::uint32_t j = 0; j < shaderGroupHandleSize; ++j) {
-      sprintf(handle.data() + j, "%0x",
-              static_cast<char>(*(shaderGroupHandles.data() +
-                                  (i * shaderGroupHandleSize) + j)));
-    }
-
-    sLogger->info("groupIndex: {} handle: 0x{}", i, handle);
-  }
-
   IRIS_LOG_LEAVE();
   return {};
 } // CreateShaderBindingTable
@@ -572,6 +553,7 @@ int main(int argc, char** argv) {
     }
   }
 
+  iris::Renderer::Nav::Reposition({0.f, 2.f, 0.f});
   iris::Renderer::AddTraceable(sTraceable);
   while (iris::Renderer::IsRunning()) {
     iris::Renderer::BeginFrame();

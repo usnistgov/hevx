@@ -38,26 +38,28 @@ void main() {
   const vec3 aabbMin = vec3(sphere.aabbMinX, sphere.aabbMinY, sphere.aabbMinZ);
   const vec3 aabbMax = vec3(sphere.aabbMaxX, sphere.aabbMaxY, sphere.aabbMaxZ);
 
-  const vec4 center = ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f);
+  const vec3 center =
+    (ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f)).xyz;
   const float radius = (aabbMax.x - aabbMin.x) / 2.f;
 
-  vec3 oc = origin - center.xyz;
-  float a = dot(direction, direction);
-  float b = dot(oc, direction);
-  float c = dot(oc, oc) - (radius * radius);
-  float d = b * b - a * c;
+  const vec3 oc = origin - center.xyz;
+  const float a = dot(direction, direction);
+  const float b = dot(oc, direction);
+  const float c = dot(oc, oc) - (radius * radius);
+  const float d = b * b - a * c;
 
-  if (d > 0.0) {
-    float t1 = (-b - sqrt(d)) / a;
-    float t2 = (-b + sqrt(d)) / a;
+  if (d > 0.f) {
+    const float sd = sqrt(d);
+    const float t1 = (-b - sd) / a;
+    const float t2 = (-b + sd) / a;
 
     if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
-      vec3 hitValue = origin + direction * t1;
-      normalVector = normalize((hitValue - center.xyz) / radius);
+      const vec3 hitValue = origin + t1 * direction;
+      normalVector = (hitValue - center.xyz) / radius;
       reportIntersectionNV(t1, 0);
     } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
-      vec3 hitValue = origin + direction * t2;
-      normalVector = normalize((hitValue - center.xyz) / radius);
+      const vec3 hitValue = origin + t2 * direction;
+      normalVector = (hitValue - center.xyz) / radius;
       reportIntersectionNV(t2, 0);
     }
   }
