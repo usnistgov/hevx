@@ -128,7 +128,7 @@ add_library(iris STATIC ${SOURCES} $<TARGET_OBJECTS:protos>)
 
 target_link_libraries(iris
   PUBLIC
-    imgui miniball vma
+    portaudio::portaudio_static imgui miniball vma
     GSL glm expected fmt spdlog nlohmann_json::nlohmann_json
     absl::base absl::hash absl::fixed_array absl::flat_hash_map
     mikktspace stb glslang SPIRV Vulkan::Vulkan
@@ -198,6 +198,10 @@ endif()
 
 add_executable(iris-raytracer WIN32 iris-raytracer.cc)
 target_link_libraries(iris-raytracer iris
+  absl::failure_signal_handler absl::flags absl::flags_parse)
+
+add_executable(iris-swsynth iris-swsynth.cc)
+target_link_libraries(iris-swsynth iris
   absl::failure_signal_handler absl::flags absl::flags_parse)
 
 if(BUILD_TESTING)
