@@ -2,7 +2,7 @@ Related Pages
 =============
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
    pages/ecs_design
    pages/scenegraph

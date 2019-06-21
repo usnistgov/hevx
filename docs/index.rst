@@ -2,9 +2,9 @@
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 4
    :caption: Table of Contents
 
    self
    pages
-   IRIS API <iris>
+   api

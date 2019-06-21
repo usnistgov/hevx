@@ -1,4 +1,5 @@
-# HEV/IRIS Scenegraph
+Scenegraph
+==========
 
 ```
                                  +-------+

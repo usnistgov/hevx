@@ -1,22 +1,22 @@
-HEVx ECS Design {#ECS}
-===============
+ECS Design
+==========
 
-## Entity Component System (ECS) Overview ##
+## Entity Component System (ECS) Overview
 TODO: list some references here
 
-### Entity ###
+### Entity
 - NO data
 - NO methods
 - JUST a name
 - Really just a globally unique number (GUID)
 
-### Components ###
+### Components
 - ONLY data
 
-### Systems ###
+### Systems
 - ONLY methods
 
-## Components ##
+## Components
 - Renderable
 - Inputable
 
@@ -30,7 +30,7 @@ TODO: list some references here
 - number of indices to draw
 - index buffer
 
-## Systems ##
+## Systems
 - Rendering
   - Renders all entities that have the Renderable component
 - Input

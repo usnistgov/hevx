@@ -69,3 +69,8 @@ breathe_default_project = "hevx"
 
 def setup(app):
   app.add_stylesheet('css/hevx_custom.css')
+
+html_theme_options = {
+  'collapse_navigation': False
+}
+
