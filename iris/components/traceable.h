@@ -19,7 +19,12 @@ struct Traceable {
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
+  VkGeometryNV geometry{};
+  bool bottomLevelDirty{true};
   AccelerationStructure bottomLevelAccelerationStructure{};
+
+  GeometryInstance instance{};
+  bool topLevelDirty{true};
   AccelerationStructure topLevelAccelerationStructure{};
 
   Image outputImage{};
@@ -34,7 +39,7 @@ struct Traceable {
   VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
 
-  VkSemaphore traceCompleteSemaphore{VK_NULL_HANDLE};
+  VkFence traceCompleteFence{VK_NULL_HANDLE};
 
   glm::mat4 modelMatrix{1.f};
 }; // struct Traceable

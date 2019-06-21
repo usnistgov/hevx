@@ -244,14 +244,15 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   int width, height, bytesPerPixel;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bytesPerPixel);
 
-  if (auto img =
-        CreateImage(sCommandPools[0], sCommandQueues[0], sCommandFences[0],
-                    VK_FORMAT_R8G8B8A8_UNORM,
-                    VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
-                               gsl::narrow_cast<std::uint32_t>(height)},
-                    VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
-                    gsl::not_null(reinterpret_cast<std::byte*>(pixels)),
-                    gsl::narrow_cast<std::uint32_t>(bytesPerPixel))) {
+  if (auto img = CreateImage(
+        sCommandPools[sCommandQueueGraphics],
+        sCommandQueues[sCommandQueueGraphics],
+        sCommandFences[sCommandQueueGraphics], VK_FORMAT_R8G8B8A8_UNORM,
+        VkExtent2D{gsl::narrow_cast<std::uint32_t>(width),
+                   gsl::narrow_cast<std::uint32_t>(height)},
+        VK_IMAGE_USAGE_SAMPLED_BIT, VMA_MEMORY_USAGE_GPU_ONLY,
+        gsl::not_null(reinterpret_cast<std::byte*>(pixels)),
+        gsl::narrow_cast<std::uint32_t>(bytesPerPixel))) {
     window.uiFontTexture = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
@@ -603,7 +604,9 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     1, 1);
 
   if (auto result = Renderer::EndOneTimeSubmit(
-        commandBuffer, sCommandPools[0], sCommandQueues[0], sCommandFences[0]);
+        commandBuffer, sCommandPools[sCommandQueueGraphics],
+        sCommandQueues[sCommandQueueGraphics],
+        sCommandFences[sCommandQueueGraphics]);
       !result) {
     DestroyImage(newDepthStencilTarget);
     vkDestroyImageView(sDevice, newDepthStencilTargetView, nullptr);

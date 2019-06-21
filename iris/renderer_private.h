@@ -40,14 +40,13 @@ extern VkPresentModeKHR const sSurfacePresentMode;
 extern VkDescriptorPool sDescriptorPool;
 extern VkDescriptorSetLayout sGlobalDescriptorSetLayout;
 
+extern std::uint32_t const sCommandQueueGraphics;
+
 extern std::uint32_t const sNumRenderPassAttachments;
 extern std::uint32_t const sColorTargetAttachmentIndex;
 extern std::uint32_t const sColorResolveAttachmentIndex;
 extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
 extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
-
-// FIXME: hack for iris-raytracer
-extern glm::mat4 sViewMatrix;
 
 template <class T>
 void NameObject(VkObjectType objectType [[maybe_unused]],

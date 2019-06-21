@@ -133,7 +133,7 @@ VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
 
 VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 VkDescriptorSetLayout sGlobalDescriptorSetLayout{VK_NULL_HANDLE};
-static VkDescriptorSet sGlobalDescriptorSet{VK_NULL_HANDLE};
+VkDescriptorSet sGlobalDescriptorSet{VK_NULL_HANDLE};
 
 VkQueryPool sTimestampsQueryPool{VK_NULL_HANDLE};
 
@@ -144,11 +144,13 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
 
 std::uint32_t sQueueFamilyIndex{UINT32_MAX};
 
+std::uint32_t const sCommandQueueGraphics = 0;
+
 // FIXME: refactor this into a struct?
 absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
-static std::uint32_t sCommandQueueHead{1}; // Reserve 0 for Renderer
+static std::uint32_t sCommandQueueHead{1}; // Reserve 0 (sCommandQueueGraphics) for Renderer
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
 static std::timed_mutex sCommandQueueMutex;
 
@@ -163,7 +165,7 @@ static bool sRunning{false};
 static bool sInFrame{false};
 static constexpr std::uint32_t const sNumFramesBuffered{2};
 
-static std::uint32_t sFrameNum{0};
+static std::uint64_t sFrameNum{0};
 static std::chrono::duration<float> sFrameDelta{0.f};
 static std::chrono::duration<float> sTime{0.f};
 static std::chrono::steady_clock::time_point sStartTime{};
@@ -204,7 +206,7 @@ static Trackball sTrackball;
 
 static glm::vec4 sWorldBoundingSphere{0.f, 0.f, 0.f, 0.f};
 static glm::mat4 sWorldMatrix{1.f};
-glm::mat4 sViewMatrix{1.f};
+static glm::mat4 sViewMatrix{1.f};
 
 namespace Nav {
 
@@ -335,6 +337,7 @@ static absl::FixedArray<VkFence> sFrameFinishedFences(sNumFramesBuffered);
 static VkSemaphore sImagesReadyForPresent{VK_NULL_HANDLE};
 static std::uint32_t sFrameIndex{0};
 static absl::InlinedVector<VkCommandBuffer, 128> sOldCommandBuffers;
+static absl::InlinedVector<VkCommandBuffer, 128> sTraceCommandBuffers;
 
 static tbb::task_scheduler_init sTaskSchedulerInit{
   tbb::task_scheduler_init::deferred};
@@ -531,7 +534,7 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
                             gsl::span<std::byte> pushConstants) noexcept {
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sCommandPools[0];
+  commandBufferAI.commandPool = sCommandPools[sCommandQueueGraphics];
   commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   commandBufferAI.commandBufferCount = 1;
 
@@ -600,12 +603,6 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
     pushConstants.data());
   vk::EndDebugLabel(commandBuffer);
 
-  IRIS_LOG_DEBUG("rgBO {} mBO {} mBS {} hBO {} hBS {} ex ({}x{})",
-                 traceable.raygenBindingOffset, traceable.missBindingOffset,
-                 traceable.missBindingStride, traceable.hitBindingOffset,
-                 traceable.hitBindingStride, traceable.outputImageExtent.width,
-                 traceable.outputImageExtent.height);
-#if 0
   vkCmdTraceRaysNV(
     commandBuffer,                       // commandBuffer
     traceable.shaderBindingTable.buffer, // raygenShaderBindingTableBuffer
@@ -623,7 +620,6 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
     traceable.outputImageExtent.height,  // height
     1                                    // depth
   );
-#endif
 
   vk::BeginDebugLabel(commandBuffer, "Traceable SetImageLayout final");
   SetImageLayout(commandBuffer,                               // commandBuffer
@@ -893,7 +889,7 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
 
 static void BeginFrameWindow(std::string const& title,
                              Window& window) noexcept {
-  vk::BeginDebugLabel(sCommandQueues[0], "BeginFrameWindow");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BeginFrameWindow");
 
   ImGui::SetCurrentContext(window.uiContext.get());
 
@@ -931,11 +927,56 @@ static void BeginFrameWindow(std::string const& title,
   // TODO: update mouse cursor based on imgui request
 
   ImGui::NewFrame();
-  vk::EndDebugLabel(sCommandQueues[0]);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // BeginFrameWindow
 
 static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
-  vk::BeginDebugLabel(sCommandQueues[0], "BeginFrameTraceable");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                      "BeginFrameTraceable");
+
+  if (traceable.bottomLevelDirty) {
+    IRIS_LOG_DEBUG("bottomLevelAS dirty: building");
+    if (auto result =
+          BuildAccelerationStructure(traceable.bottomLevelAccelerationStructure,
+                                     sCommandPools[sCommandQueueGraphics],
+                                     sCommandQueues[sCommandQueueGraphics],
+                                     sCommandFences[sCommandQueueGraphics],
+                                     gsl::make_span(&traceable.geometry, 1));
+        !result) {
+      IRIS_LOG_ERROR("Cannot build bottomLevelAccelerationStructure: {}",
+                     result.error().what());
+      IRIS_LOG_LEAVE();
+      return;
+    }
+
+    traceable.topLevelDirty = true;
+    traceable.bottomLevelDirty = false;
+  }
+
+  if (traceable.topLevelDirty) {
+    IRIS_LOG_DEBUG("topLevelAS dirty: building");
+    iris::GeometryInstance topLevelInstance(
+      traceable.bottomLevelAccelerationStructure.handle);
+
+    if (auto result = iris::BuildAccelerationStructure(
+          traceable.topLevelAccelerationStructure,
+          sCommandPools[sCommandQueueGraphics],
+          sCommandQueues[sCommandQueueGraphics],
+          sCommandFences[sCommandQueueGraphics],
+          gsl::make_span(&traceable.instance, 1));
+        !result) {
+      IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
+                     result.error().what());
+      IRIS_LOG_LEAVE();
+      return;
+    }
+
+    traceable.topLevelDirty = false;
+  }
+
+  vkWaitForFences(sDevice, 1, &traceable.traceCompleteFence, VK_TRUE,
+                  UINT64_MAX);
+  vkResetFences(sDevice, 1, &traceable.traceCompleteFence);
 
   PushConstants pushConstants;
   pushConstants.iMouse = glm::vec4(0.f, 0.f, 0.f, 0.f);
@@ -952,33 +993,29 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
   pushConstants.NormalMatrix =
     glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
-  VkCommandBuffer traceCommandBuffer = BuildTraceableCommandBuffer(
+  VkCommandBuffer commandBuffer = BuildTraceableCommandBuffer(
     traceable,
     gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                               sizeof(PushConstants)));
 
   VkSubmitInfo submitI = {};
   submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitI.signalSemaphoreCount = 1;
-  submitI.pSignalSemaphores = &traceable.traceCompleteSemaphore;
   submitI.commandBufferCount = 1;
-  submitI.pCommandBuffers = &traceCommandBuffer;
+  submitI.pCommandBuffers = &commandBuffer;
 
-  if (auto result =
-        vkQueueSubmit(sCommandQueues[0], 1, &submitI, VK_NULL_HANDLE);
+  if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1,
+                                  &submitI, traceable.traceCompleteFence);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting traceable command buffer: {}",
                    iris::to_string(result));
   }
 
-  // FIXME: Figure out how to free this command buffer
-  sOldCommandBuffers.push_back(traceCommandBuffer);
-
-  vk::EndDebugLabel(sCommandQueues[0]);
+  sTraceCommandBuffers.push_back(commandBuffer);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // BeginFrameTraceable
 
 static void EndFrameWindowUI(Window& window) {
-  vk::BeginDebugLabel(sCommandQueues[0], "EndFrameWindowUI");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrameWindowUI");
 
   ImGui::SetCurrentContext(window.uiContext.get());
   ImGuiIO& io = ImGui::GetIO();
@@ -1068,13 +1105,13 @@ static void EndFrameWindowUI(Window& window) {
 
   ImGui::EndFrame();
 
-  vk::EndDebugLabel(sCommandQueues[0]);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // EndFrameWindowUI
 
 static VkCommandBuffer
 EndFrameWindow(std::string const& title, Window& window,
                gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
-  vk::BeginDebugLabel(sCommandQueues[0], "EndFrameWindow");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrameWindow");
 
   absl::FixedArray<VkClearValue> clearValues(sNumRenderPassAttachments);
   clearValues[sDepthStencilTargetAttachmentIndex].depthStencil = {1.f, 0};
@@ -1182,7 +1219,7 @@ EndFrameWindow(std::string const& title, Window& window,
     std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
     for (auto&& [id, traceable] : sTraceables.components) {
       // FIXME: this overwrites the framebuffer with the last traceable.
-      vk::BeginDebugLabel(sCommandQueues[0], "BuildBlitImageCommandBuffer");
+      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildBlitImageCommandBuffer");
       VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(
         traceable.outputImageView, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
@@ -1190,10 +1227,10 @@ EndFrameWindow(std::string const& title, Window& window,
       vk::BeginDebugLabel(frame.commandBuffer, "Traceable BlitImage");
       vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
       vk::EndDebugLabel(frame.commandBuffer);
-      vk::EndDebugLabel(sCommandQueues[0]);
+      vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
       sOldCommandBuffers.push_back(blitCommandBuffer);
     }
-  }
+  } // end std::lock_guard block
 
   { // this block locks sRenderables so that we can iterate over them safely
     std::lock_guard<decltype(sRenderables.mutex)> lck(sRenderables.mutex);
@@ -1204,7 +1241,7 @@ EndFrameWindow(std::string const& title, Window& window,
       pushConstants.NormalMatrix =
         glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
-      vk::BeginDebugLabel(sCommandQueues[0], "BuildRenderableCommandBuffer");
+      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildRenderableCommandBuffer");
       VkCommandBuffer commandBuffer = BuildRenderableCommandBuffer(
         renderable, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
@@ -1212,10 +1249,10 @@ EndFrameWindow(std::string const& title, Window& window,
       vk::BeginDebugLabel(frame.commandBuffer, "Renderable");
       vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
       vk::EndDebugLabel(frame.commandBuffer);
-      vk::EndDebugLabel(sCommandQueues[0]);
+      vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
       sOldCommandBuffers.push_back(commandBuffer);
     }
-  }
+  } // end std::lock_guard block
 
   if (!secondaryCBs.empty()) {
     vk::BeginDebugLabel(frame.commandBuffer, "Secondary Command Buffers");
@@ -1226,9 +1263,9 @@ EndFrameWindow(std::string const& title, Window& window,
   }
 
   if (window.showUI) {
-    vk::BeginDebugLabel(sCommandQueues[0], "BuildUICommandBuffer");
+    vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildUICommandBuffer");
     auto uiCBs = BuildUICommandBuffer(frame.commandBuffer, window);
-    vk::EndDebugLabel(sCommandQueues[0]);
+    vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
     sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
                               uiCBs.end());
   }
@@ -1241,7 +1278,7 @@ EndFrameWindow(std::string const& title, Window& window,
                    window.frameIndex, make_error_code(result).message());
   }
 
-  vk::EndDebugLabel(sCommandQueues[0]);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
   return frame.commandBuffer;
 } // EndFrameWindow
 
@@ -2167,6 +2204,18 @@ bool iris::Renderer::IsRunning() noexcept {
   return sRunning;
 } // iris::Renderer::IsRunning
 
+std::uint64_t iris::Renderer::CurrentFrameNum() noexcept {
+  return sFrameNum;
+} // iris::Renderer::CurrentFrameNum
+
+float iris::Renderer::LastFrameDelta() noexcept {
+  return sFrameDelta.count();
+} // iris::Renderer::LastFrameDelta
+
+float iris::Renderer::TotalTime() noexcept {
+  return sTime.count();
+} // iris::Renderer::TotalTime
+
 void iris::Renderer::Terminate() noexcept {
   IRIS_LOG_ENTER();
   sRunning = false;
@@ -2177,7 +2226,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   Expects(sRunning);
   Expects(!sInFrame);
 
-  vk::BeginDebugLabel(sCommandQueues[0], "BeginFrame");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BeginFrame");
 
   auto const currentTime = std::chrono::steady_clock::now();
   sFrameDelta = currentTime - sPreviousFrameTime;
@@ -2193,10 +2242,6 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
 
   if (sFrameNum != 0) {
     auto const prevFrameIndex = (sFrameIndex - 1) % sNumFramesBuffered;
-
-    IRIS_LOG_DEBUG(
-      "prevFrameIndex {} waiting on fence 0x{:x}", prevFrameIndex,
-      reinterpret_cast<uintptr_t>(sFrameFinishedFences[prevFrameIndex]));
 
     if (auto result =
           vkWaitForFences(sDevice, 1, &sFrameFinishedFences[prevFrameIndex],
@@ -2217,52 +2262,30 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   sInFrame = true;
 
   for (auto&& [title, window] : Windows()) BeginFrameWindow(title, window);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 
   { // this block locks sTraceables so that we can iterate over them safely
     std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
     for (auto&& [id, traceable] : sTraceables.components) {
       BeginFrameTraceable(traceable);
     }
-  }
-
-  vk::EndDebugLabel(sCommandQueues[0]);
+  } // end std::lock_guard block
 
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
-void iris::Renderer::BindDescriptorSets(
-  VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
-  VkPipelineLayout layout, gsl::span<VkDescriptorSet> descriptorSets) noexcept {
-
-  vkCmdBindDescriptorSets(commandBuffer,         // commandBuffer
-                          pipelineBindPoint,     // pipelineBindPoint
-                          layout,                // layout
-                          0,                     // firstSet
-                          1,                     // descriptorSetCount
-                          &sGlobalDescriptorSet, // pDescriptorSets
-                          0,                     // dynamicOffsetCount
-                          nullptr                // pDynamicOffsets
-  );
-
-  vkCmdBindDescriptorSets(commandBuffer,     // commandBuffer
-                          pipelineBindPoint, // pipelineBindPoint
-                          layout,            // layout
-                          1,                 // firstSet
-                          gsl::narrow_cast<std::uint32_t>(
-                            descriptorSets.size()), // descriptorSetCount
-                          descriptorSets.data(),    // pDescriptorSets
-                          0,                        // dynamicOffsetCount
-                          nullptr                   // pDynamicOffsets
-  );
-} // iris::Renderer::BindDescriptorSets
-
 void iris::Renderer::EndFrame(
   gsl::span<const VkCommandBuffer> secondaryCBs) noexcept {
   Expects(sInFrame);
-  vk::BeginDebugLabel(sCommandQueues[0], "EndFrame");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrame");
 
   auto previousFrameOldCBs = sOldCommandBuffers;
   sOldCommandBuffers.clear();
+
+  sOldCommandBuffers.insert(sOldCommandBuffers.end(),
+                            sTraceCommandBuffers.begin(),
+                            sTraceCommandBuffers.end());
+  sTraceCommandBuffers.clear();
 
   // Update the lights buffer once
   if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
@@ -2275,7 +2298,7 @@ void iris::Renderer::EndFrame(
     IRIS_LOG_ERROR("Cannot update lights buffer: {}", ptr.error().what());
   }
 
-  absl::InlinedVector<VkSemaphore, 16> waitSemaphores{};
+  absl::InlinedVector<VkSemaphore, 8> waitSemaphores{};
   absl::InlinedVector<VkSwapchainKHR, 8> swapchains{};
   absl::InlinedVector<std::uint32_t, 8> imageIndices{};
   absl::InlinedVector<VkCommandBuffer, 8> commandBuffers{};
@@ -2288,13 +2311,6 @@ void iris::Renderer::EndFrame(
     swapchains.push_back(window.swapchain);
     imageIndices.push_back(window.frameIndex);
     commandBuffers.push_back(commandBuffer);
-  }
-
-  { // this block locks sTraceables so that we can iterate over them safely
-    std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
-    for (auto&& [id, traceable] : sTraceables.components) {
-      waitSemaphores.push_back(traceable.traceCompleteSemaphore);
-    }
   }
 
   absl::FixedArray<VkPipelineStageFlags> waitDstStages(
@@ -2315,11 +2331,8 @@ void iris::Renderer::EndFrame(
     submitI.pSignalSemaphores = &sImagesReadyForPresent;
   }
 
-  IRIS_LOG_DEBUG(
-    "submit frameIndex {} fence 0x{:x}", sFrameIndex,
-    reinterpret_cast<uintptr_t>(sFrameFinishedFences[sFrameIndex]));
-  vk::BeginDebugLabel(sCommandQueues[0], "EndFrame Submit and Present");
-  if (auto result = vkQueueSubmit(sCommandQueues[0], 1, &submitI,
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrame Submit and Present");
+  if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1, &submitI,
                                   sFrameFinishedFences[sFrameIndex]);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting command buffer: {}",
@@ -2339,13 +2352,13 @@ void iris::Renderer::EndFrame(
     presentI.pImageIndices = imageIndices.data();
     presentI.pResults = presentResults.data();
 
-    if (auto result = vkQueuePresentKHR(sCommandQueues[0], &presentI);
+    if (auto result = vkQueuePresentKHR(sCommandQueues[sCommandQueueGraphics], &presentI);
         result != VK_SUCCESS) {
       IRIS_LOG_ERROR("Error presenting swapchains: {}",
                      iris::to_string(result));
     }
   }
-  vk::EndDebugLabel(sCommandQueues[0]);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 
   vkFreeCommandBuffers(
     sDevice, sCommandPools[0],
@@ -2356,7 +2369,7 @@ void iris::Renderer::EndFrame(
   sFrameIndex = sFrameNum % sNumFramesBuffered;
   sInFrame = false;
 
-  vk::EndDebugLabel(sCommandQueues[0]);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // iris::Renderer::EndFrame
 
 iris::Renderer::RenderableID
@@ -2492,8 +2505,8 @@ iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
     tbb::task* execute() override {
       IRIS_LOG_ENTER();
 
-      if (traceable_.traceCompleteSemaphore) {
-        vkDestroySemaphore(sDevice, traceable_.traceCompleteSemaphore, nullptr);
+      if (traceable_.traceCompleteFence) {
+        vkDestroyFence(sDevice, traceable_.traceCompleteFence, nullptr);
       }
 
       if (traceable_.shaderBindingTable) {

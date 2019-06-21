@@ -115,6 +115,11 @@ any window is closed.
 */
 [[nodiscard]] bool IsRunning() noexcept;
 
+std::uint64_t CurrentFrameNum() noexcept;
+
+float LastFrameDelta() noexcept;
+float TotalTime() noexcept;
+
 /*!
 \brief Request the rendering system to shutdown.
 */
@@ -130,11 +135,6 @@ EndFrame.
 \ref EndFrame
 */
 VkRenderPass BeginFrame() noexcept;
-
-void BindDescriptorSets(VkCommandBuffer commandBuffer,
-                        VkPipelineBindPoint pipelineBindPoint,
-                        VkPipelineLayout layout,
-                        gsl::span<VkDescriptorSet> descriptorSets) noexcept;
 
 /*!
 \brief End the next rendering frame.

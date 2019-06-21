@@ -54,8 +54,13 @@ static absl::FixedArray<Sphere> sSpheres = {
 static iris::Buffer sSpheresBuffer;
 
 static iris::Renderer::CommandQueue sCommandQueue;
-static VkDescriptorPool sDescriptorPool;
+absl::InlinedVector<iris::ShaderGroup, 4> sShaderGroups;
 static iris::Renderer::Component::Traceable sTraceable;
+
+static glm::vec3 const position = glm::vec3(0.f, 0.f, 0.f);
+static glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
+static glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
+static glm::mat4 sViewMatrix = glm::lookAt(position, center, up);
 
 static tl::expected<void, std::system_error> AcquireCommandQueue() noexcept {
   IRIS_LOG_ENTER();
@@ -72,33 +77,6 @@ static tl::expected<void, std::system_error> AcquireCommandQueue() noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // AcquireCommandQueue
-
-static tl::expected<void, std::system_error> CreateDescriptorPool() noexcept {
-  IRIS_LOG_ENTER();
-
-  absl::FixedArray<VkDescriptorPoolSize, 4> poolSizes{{
-    {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 32},
-    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 32},
-    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 32},
-  }};
-
-  VkDescriptorPoolCreateInfo poolCI = {};
-  poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  poolCI.maxSets = 32;
-  poolCI.poolSizeCount = gsl::narrow_cast<std::uint32_t>(poolSizes.size());
-  poolCI.pPoolSizes = poolSizes.data();
-
-  if (auto result = vkCreateDescriptorPool(iris::Renderer::sDevice, &poolCI,
-                                           nullptr, &sDescriptorPool);
-    result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(iris::make_error_code(result),
-                                            "Cannot create descriptor pool"));
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateDescriptorPool
 
 static tl::expected<void, std::system_error> CreateDescriptor() noexcept {
   IRIS_LOG_ENTER();
@@ -145,7 +123,7 @@ static tl::expected<void, std::system_error> CreateDescriptor() noexcept {
 
   VkDescriptorSetAllocateInfo setAI = {};
   setAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  setAI.descriptorPool = sDescriptorPool;
+  setAI.descriptorPool = iris::Renderer::sDescriptorPool;
   setAI.descriptorSetCount = 1;
   setAI.pSetLayouts = &sTraceable.descriptorSetLayout;
 
@@ -188,31 +166,31 @@ static tl::expected<void, std::system_error> CreatePipeline() noexcept {
     return tl::unexpected(rmiss.error());
   }
 
-  if (auto rchit = iris::LoadShaderFromFile(
-        iris::kIRISContentDirectory + "/assets/shaders/sphere.rchit"s,
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
-    shaders[2] = std::move(*rchit);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(rchit.error());
-  }
-
   if (auto rint = iris::LoadShaderFromFile(
         iris::kIRISContentDirectory + "/assets/shaders/sphere.rint"s,
         VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
-    shaders[3] = std::move(*rint);
+    shaders[2] = std::move(*rint);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(rint.error());
   }
 
-  absl::FixedArray<iris::ShaderGroup> groups{
-    iris::ShaderGroup::General(0), iris::ShaderGroup::General(1),
-    iris::ShaderGroup::ProceduralHit(3, 2)};
+  if (auto rchit = iris::LoadShaderFromFile(
+        iris::kIRISContentDirectory + "/assets/shaders/sphere.rchit"s,
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+    shaders[3] = std::move(*rchit);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(rchit.error());
+  }
+
+  sShaderGroups.push_back(iris::ShaderGroup::General(0));
+  sShaderGroups.push_back(iris::ShaderGroup::General(1));
+  sShaderGroups.push_back(iris::ShaderGroup::ProceduralHit(2, 3));
 
   if (auto pipe = iris::CreateRayTracingPipeline(
-        shaders, groups, gsl::make_span(&sTraceable.descriptorSetLayout, 1),
-        4)) {
+        shaders, sShaderGroups,
+        gsl::make_span(&sTraceable.descriptorSetLayout, 1), 4)) {
     sTraceable.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
@@ -281,10 +259,8 @@ static tl::expected<void, std::system_error> CreateSpheres() noexcept {
 } // CreateSpheres
 
 static tl::expected<void, std::system_error>
-CreateBottomLevelAccelerationStructure() noexcept {
+CreateGeometry() noexcept {
   IRIS_LOG_ENTER();
-
-  using namespace std::string_literals;
 
   VkGeometryTrianglesNV triangles = {};
   triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
@@ -297,16 +273,25 @@ CreateBottomLevelAccelerationStructure() noexcept {
   spheres.stride = sizeof(Sphere);
   spheres.offset = offsetof(Sphere, aabbMin);
 
-  VkGeometryNV geometry = {};
-  geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-  geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
-  geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  geometry.geometry.triangles = triangles;
-  geometry.geometry.aabbs = spheres;
+  sTraceable.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+  sTraceable.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  sTraceable.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+  sTraceable.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  sTraceable.geometry.geometry.triangles = triangles;
+  sTraceable.geometry.geometry.aabbs = spheres;
 
-  if (auto structure =
-        iris::CreateAccelerationStructure(gsl::make_span(&geometry, 1), 0)) {
+  IRIS_LOG_LEAVE();
+  return {};
+} // CreateGeometry
+
+static tl::expected<void, std::system_error>
+CreateBottomLevelAccelerationStructure() noexcept {
+  IRIS_LOG_ENTER();
+
+  using namespace std::string_literals;
+
+  if (auto structure = iris::CreateAccelerationStructure(
+        gsl::make_span(&sTraceable.geometry, 1), 0)) {
     sTraceable.bottomLevelAccelerationStructure = std::move(*structure);
   } else {
     IRIS_LOG_LEAVE();
@@ -315,19 +300,20 @@ CreateBottomLevelAccelerationStructure() noexcept {
                                               structure.error().what()));
   }
 
-  if (auto result = iris::BuildAccelerationStructure(
-        sTraceable.bottomLevelAccelerationStructure, sCommandQueue.commandPool,
-        sCommandQueue.queue, sCommandQueue.submitFence);
-      !result) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(result.error().code(),
-                        "Cannot build topLevelAS: "s + result.error().what()));
-  }
-
   IRIS_LOG_LEAVE();
   return {};
 } // CreateBottomLevelAccelerationStructure
+
+static tl::expected<void, std::system_error>
+CreateInstance() noexcept {
+  IRIS_LOG_ENTER();
+
+  sTraceable.instance =
+    iris::GeometryInstance(sTraceable.bottomLevelAccelerationStructure.handle);
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // CreateInstance
 
 static tl::expected<void, std::system_error>
 CreateTopLevelAccelerationStructure() noexcept {
@@ -342,44 +328,6 @@ CreateTopLevelAccelerationStructure() noexcept {
                                             "Cannot create top level AS: "s +
                                               structure.error().what()));
   }
-
-  iris::GeometryInstance topLevelInstance(
-    sTraceable.bottomLevelAccelerationStructure.handle);
-
-  auto instanceBuffer = iris::AllocateBuffer(sizeof(iris::GeometryInstance),
-                                             VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
-                                             VMA_MEMORY_USAGE_CPU_TO_GPU);
-  if (!instanceBuffer) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(instanceBuffer.error().code(),
-                        "Cannot allocate instance buffer memory: "s +
-                          instanceBuffer.error().what()));
-  }
-
-  if (auto ptr = instanceBuffer->Map<iris::GeometryInstance*>()) {
-    std::memcpy(*ptr, &topLevelInstance, sizeof(iris::GeometryInstance));
-    instanceBuffer->Unmap();
-  } else {
-    DestroyBuffer(*instanceBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(ptr.error().code(), "Cannot map instance buffer: "s +
-                                              instanceBuffer.error().what()));
-  }
-
-  if (auto result = iris::BuildAccelerationStructure(
-        sTraceable.topLevelAccelerationStructure, sCommandQueue.commandPool,
-        sCommandQueue.queue, sCommandQueue.submitFence, instanceBuffer->buffer);
-      !result) {
-    DestroyBuffer(*instanceBuffer);
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(result.error().code(),
-                        "Cannot build topLevelAS: "s + result.error().what()));
-  }
-
-  DestroyBuffer(*instanceBuffer);
 
   IRIS_LOG_LEAVE();
   return {};
@@ -405,13 +353,42 @@ static tl::expected<void, std::system_error> WriteDescriptorSets() noexcept {
   bufferInfo.range = sizeof(Sphere) * sSpheres.size();
 
   absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, &writeDescriptorSetAS,
-     sTraceable.descriptorSet, 0, 0, 1,
-     VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, nullptr, nullptr, nullptr},
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sTraceable.descriptorSet,
-     1, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &imageInfo, nullptr, nullptr},
-    {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sTraceable.descriptorSet,
-     2, 0, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &bufferInfo, nullptr},
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
+      &writeDescriptorSetAS,                        // pNext
+      sTraceable.descriptorSet,                     // dstSet
+      0,                                            // dstBinding
+      0,                                            // dstArrayElement
+      1,                                            // descriptorCount
+      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+      nullptr,                                      // pImageInfo
+      nullptr,                                      // pBufferInfo
+      nullptr                                       // pTexelBufferView
+    },
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+      nullptr,                                // pNext
+      sTraceable.descriptorSet,               // dstSet
+      1,                                      // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,       // descriptorType
+      &imageInfo,                             // pImageInfo
+      nullptr,                                // pBufferInfo
+      nullptr                                 // pTexelBufferView
+    },
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+      nullptr,                                // pNext
+      sTraceable.descriptorSet,               // dstSet
+      2,                                      // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
+      nullptr,                                // pImageInfo
+      &bufferInfo,                            // pBufferInfo
+      nullptr                                 // pTexelBufferView
+    },
   };
 
   vkUpdateDescriptorSets(
@@ -441,13 +418,14 @@ CreateShaderBindingTable() noexcept {
   VkDeviceSize const shaderGroupHandleSize =
     rayTracingProperties.shaderGroupHandleSize;
 
-  absl::FixedArray<std::byte> shaderGroupHandles(shaderGroupHandleSize * 3);
+  absl::FixedArray<std::byte> shaderGroupHandles(shaderGroupHandleSize *
+                                                 sShaderGroups.size());
 
   if (auto result = vkGetRayTracingShaderGroupHandlesNV(
         iris::Renderer::sDevice,      // device
         sTraceable.pipeline.pipeline, // pipeline
         0,                            // firstGroup
-        3,                            // groupCount
+        sShaderGroups.size(),         // groupCount
         shaderGroupHandles.size(),    // dataSize
         shaderGroupHandles.data()     // pData
       );
@@ -500,24 +478,23 @@ CreateShaderBindingTable() noexcept {
   return {};
 } // CreateShaderBindingTable
 
-static tl::expected<void, std::system_error>
-CreateTraceSemaphore() noexcept {
+static tl::expected<void, std::system_error> CreateTraceFence() noexcept {
   IRIS_LOG_ENTER();
 
-  VkSemaphoreCreateInfo semaphoreCI = {};
-  semaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  if (auto result =
-        vkCreateSemaphore(iris::Renderer::sDevice, &semaphoreCI, nullptr,
-                          &sTraceable.traceCompleteSemaphore);
+  if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
+                                  &sTraceable.traceCompleteFence);
       result != VK_SUCCESS) {
-    sLogger->error("Error creating semaphore: {}", iris::to_string(result));
+    sLogger->error("Error creating fence: {}", iris::to_string(result));
     std::exit(EXIT_FAILURE);
   }
 
   IRIS_LOG_LEAVE();
   return {};
-} // CreateTraceSemaphore
+}
 
 #if PLATFORM_WINDOWS
 extern "C" {
@@ -571,16 +548,17 @@ int main(int argc, char** argv) {
                         iris::Renderer::Options::kEnableValidation,
                       {console_sink, file_sink}, 0)
                       .and_then(AcquireCommandQueue)
-                      .and_then(CreateDescriptorPool)
                       .and_then(CreateDescriptor)
                       .and_then(CreatePipeline)
                       .and_then(CreateOutputImage)
                       .and_then(CreateSpheres)
+                      .and_then(CreateGeometry)
                       .and_then(CreateBottomLevelAccelerationStructure)
+                      .and_then(CreateInstance)
                       .and_then(CreateTopLevelAccelerationStructure)
                       .and_then(WriteDescriptorSets)
                       .and_then(CreateShaderBindingTable)
-                      .and_then(CreateTraceSemaphore);
+                      .and_then(CreateTraceFence);
       !result) {
     sLogger->critical("initialization failed: {}", result.error().what());
     std::exit(EXIT_FAILURE);
@@ -590,21 +568,15 @@ int main(int argc, char** argv) {
     sLogger->info("Loading {}", positional[i]);
     if (auto result = iris::Renderer::LoadFile(positional[i]); !result) {
       sLogger->error("Error loading {}: {}", positional[i],
-                   result.error().what());
+                     result.error().what());
     }
   }
 
-  std::uint64_t frameCount = 0;
-
   iris::Renderer::AddTraceable(sTraceable);
-
   while (iris::Renderer::IsRunning()) {
     iris::Renderer::BeginFrame();
-
     iris::Renderer::EndFrame();
-    frameCount++;
   }
 
   sLogger->info("exiting");
 }
-

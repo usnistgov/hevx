@@ -6,25 +6,24 @@
 #include "renderer.h"
 #include "renderer_private.h"
 
-tl::expected<iris::AccelerationStructure, std::system_error>
-iris::CreateAccelerationStructure(VkAccelerationStructureInfoNV info,
-                                  VkDeviceSize compactedSize) noexcept {
+namespace iris {
+
+static tl::expected<iris::AccelerationStructure, std::system_error>
+CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
+                            VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
   Expects(Renderer::sDevice != VK_NULL_HANDLE);
   Expects(Renderer::sAllocator != VK_NULL_HANDLE);
 
   AccelerationStructure structure;
-  structure.info = std::move(info);
 
-  VkAccelerationStructureCreateInfoNV accelerationStructureCI = {};
-  accelerationStructureCI.sType =
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
-  accelerationStructureCI.compactedSize = compactedSize;
-  accelerationStructureCI.info = structure.info;
+  VkAccelerationStructureCreateInfoNV asCI = {};
+  asCI.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV;
+  asCI.compactedSize = compactedSize;
+  asCI.info = info;
 
   if (auto result = vkCreateAccelerationStructureNV(
-        Renderer::sDevice, &accelerationStructureCI, nullptr,
-        &structure.structure);
+        Renderer::sDevice, &asCI, nullptr, &structure.structure);
       result != VK_SUCCESS) {
     return tl::unexpected(std::system_error(
       make_error_code(result), "Cannot create acceleration structure"));
@@ -97,44 +96,12 @@ iris::CreateAccelerationStructure(VkAccelerationStructureInfoNV info,
 
   IRIS_LOG_LEAVE();
   return structure;
-} // iris::CreateAccelerationStructure
+} // CreateAccelerationStructure
 
-tl::expected<iris::AccelerationStructure, std::system_error>
-iris::CreateAccelerationStructure(std::uint32_t instanceCount,
-                                  VkDeviceSize compactedSize) noexcept {
-  IRIS_LOG_ENTER();
-
-  VkAccelerationStructureInfoNV asInfo = {};
-  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
-  asInfo.instanceCount = instanceCount;
-  asInfo.geometryCount = 0;
-  asInfo.pGeometries = nullptr;
-
-  IRIS_LOG_LEAVE();
-  return CreateAccelerationStructure(asInfo, compactedSize);
-} // iris::CreateAccelerationStructure
-
-tl::expected<iris::AccelerationStructure, std::system_error>
-iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
-                                  VkDeviceSize compactedSize) noexcept {
-  IRIS_LOG_ENTER();
-
-  VkAccelerationStructureInfoNV asInfo = {};
-  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-  asInfo.flags = 0;
-  asInfo.instanceCount = 0;
-  asInfo.geometryCount = gsl::narrow_cast<std::uint32_t>(geometries.size());
-  asInfo.pGeometries = geometries.data();
-
-  IRIS_LOG_LEAVE();
-  return CreateAccelerationStructure(asInfo, compactedSize);
-} // iris::CreateAccelerationStructure
-
-tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
+static tl::expected<void, std::system_error> BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
-  VkQueue queue, VkFence fence, VkBuffer instanceData) noexcept {
+  VkQueue queue, VkFence fence, VkAccelerationStructureInfoNV const& info,
+  VkBuffer instanceData) noexcept {
   IRIS_LOG_ENTER();
   Expects(Renderer::sDevice != VK_NULL_HANDLE);
   Expects(structure.structure != VK_NULL_HANDLE);
@@ -160,7 +127,7 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
     return tl::unexpected(std::system_error(
       scratch.error().code(),
       "Cannot allocate acceleration structure build scratch memory: "s +
-        scratch.error().what()));
+      scratch.error().what()));
   }
 
   auto commandBuffer = Renderer::BeginOneTimeSubmit(commandPool);
@@ -170,19 +137,21 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
     return tl::unexpected(std::system_error(commandBuffer.error()));
   }
 
-  vkCmdBuildAccelerationStructureNV(*commandBuffer, &structure.info,
-                                    instanceData,        // instanceData
-                                    0,                   // instanceOffset
-                                    VK_FALSE,            // update
-                                    structure.structure, // dst
-                                    VK_NULL_HANDLE,      // dst
-                                    scratch->buffer,     // scratchBuffer
-                                    0                    // scratchOffset
+  vkCmdBuildAccelerationStructureNV(
+    *commandBuffer,      // commandBuffer
+    &info,               // pInfo (VkAccelerationStructureInfoNV const*)
+    instanceData,        // instanceData
+    0,                   // instanceOffset
+    VK_FALSE,            // update
+    structure.structure, // dst
+    VK_NULL_HANDLE,      // src
+    scratch->buffer,     // scratchBuffer
+    0                    // scratchOffset
   );
 
   if (auto result = iris::Renderer::EndOneTimeSubmit(*commandBuffer,
                                                      commandPool, queue, fence);
-      !result) {
+    !result) {
     using namespace std::string_literals;
     DestroyBuffer(*scratch);
     IRIS_LOG_LEAVE();
@@ -194,6 +163,100 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
   DestroyBuffer(*scratch);
   IRIS_LOG_LEAVE();
   return {};
+} // BuildAccelerationStructure
+
+} // namespace iris
+
+tl::expected<iris::AccelerationStructure, std::system_error>
+iris::CreateAccelerationStructure(std::uint32_t instanceCount,
+                                  VkDeviceSize compactedSize) noexcept {
+  IRIS_LOG_ENTER();
+
+  VkAccelerationStructureInfoNV asInfo = {};
+  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+  asInfo.instanceCount = instanceCount;
+  asInfo.geometryCount = 0;
+  asInfo.pGeometries = nullptr;
+
+  auto ret = CreateAccelerationStructure(asInfo, compactedSize);
+  IRIS_LOG_LEAVE();
+  return ret;
+} // iris::CreateAccelerationStructure
+
+tl::expected<iris::AccelerationStructure, std::system_error>
+iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
+                                  VkDeviceSize compactedSize) noexcept {
+  IRIS_LOG_ENTER();
+
+  VkAccelerationStructureInfoNV asInfo = {};
+  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+  asInfo.flags = 0;
+  asInfo.instanceCount = 0;
+  asInfo.geometryCount = gsl::narrow_cast<std::uint32_t>(geometries.size());
+  asInfo.pGeometries = geometries.data();
+
+  auto ret = CreateAccelerationStructure(asInfo, compactedSize);
+  IRIS_LOG_LEAVE();
+  return ret;
+} // iris::CreateAccelerationStructure
+
+tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
+  AccelerationStructure const& structure, VkCommandPool commandPool,
+  VkQueue queue, VkFence fence, gsl::span<GeometryInstance> instances) noexcept {
+  IRIS_LOG_ENTER();
+
+  auto instanceBuffer = iris::AllocateBuffer(
+    instances.size() * sizeof(iris::GeometryInstance),
+    VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!instanceBuffer) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(instanceBuffer.error());
+  }
+
+  if (auto ptr = instanceBuffer->Map<iris::GeometryInstance*>()) {
+    std::memcpy(*ptr, instances.data(),
+                instances.size() * sizeof(GeometryInstance));
+    instanceBuffer->Unmap();
+  } else {
+    DestroyBuffer(*instanceBuffer);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ptr.error());
+  }
+
+  VkAccelerationStructureInfoNV asInfo = {};
+  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+  asInfo.instanceCount = gsl::narrow_cast<std::uint32_t>(instances.size());
+  asInfo.geometryCount = 0;
+  asInfo.pGeometries = nullptr;
+
+  auto ret = BuildAccelerationStructure(structure, commandPool, queue, fence,
+                                        asInfo, instanceBuffer->buffer);
+
+  DestroyBuffer(*instanceBuffer);
+  IRIS_LOG_LEAVE();
+  return ret;
+} // iris::BuildAccelerationStructure
+
+tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
+  AccelerationStructure const& structure, VkCommandPool commandPool,
+  VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept {
+  IRIS_LOG_ENTER();
+
+  VkAccelerationStructureInfoNV asInfo = {};
+  asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+  asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+  asInfo.flags = 0;
+  asInfo.instanceCount = 0;
+  asInfo.geometryCount = gsl::narrow_cast<std::uint32_t>(geometries.size());
+  asInfo.pGeometries = geometries.data();
+
+  auto ret = BuildAccelerationStructure(structure, commandPool, queue, fence,
+                                        asInfo, VK_NULL_HANDLE);
+  IRIS_LOG_LEAVE();
+  return ret;
 } // iris::BuildAccelerationStructure
 
 void iris::DestroyAccelerationStructure(

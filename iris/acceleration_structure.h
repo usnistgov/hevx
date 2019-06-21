@@ -29,7 +29,6 @@ struct AccelerationStructure {
   VkAccelerationStructureNV structure{VK_NULL_HANDLE};
   VmaAllocation allocation{VK_NULL_HANDLE};
   std::uint64_t handle{UINT64_MAX};
-  VkAccelerationStructureInfoNV info{};
 
   explicit operator bool() const noexcept {
     return structure != VK_NULL_HANDLE && allocation != VK_NULL_HANDLE;
@@ -56,10 +55,6 @@ struct GeometryInstance {
 }; // GeometryInstance
 
 [[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
-CreateAccelerationStructure(VkAccelerationStructureInfoNV info,
-                            VkDeviceSize compactedSize) noexcept;
-
-[[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
 CreateAccelerationStructure(std::uint32_t instanceCount,
                             VkDeviceSize compactedSize) noexcept;
 
@@ -67,11 +62,13 @@ CreateAccelerationStructure(std::uint32_t instanceCount,
 CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
                             VkDeviceSize compactedSize) noexcept;
 
-tl::expected<void, std::system_error>
-BuildAccelerationStructure(AccelerationStructure const& structure,
-                           VkCommandPool commandPool, VkQueue queue,
-                           VkFence fence,
-                           VkBuffer instanceData = VK_NULL_HANDLE) noexcept;
+[[nodiscard]] tl::expected<void, std::system_error> BuildAccelerationStructure(
+  AccelerationStructure const& structure, VkCommandPool commandPool,
+  VkQueue queue, VkFence fence, gsl::span<GeometryInstance> instances) noexcept;
+
+[[nodiscard]] tl::expected<void, std::system_error> BuildAccelerationStructure(
+  AccelerationStructure const& structure, VkCommandPool commandPool,
+  VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept;
 
 void DestroyAccelerationStructure(AccelerationStructure structure) noexcept;
 
