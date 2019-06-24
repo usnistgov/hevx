@@ -328,23 +328,6 @@ void from_json(json const& j, OcclusionTextureInfo& info) {
   if (j.find("strength") != j.end()) info.strength = j["strength"];
 }
 
-struct MaterialShaderToy {
-  static constexpr char const* const kExtensionName = "HEV_materials_shadertoy";
-  std::optional<std::string> url;
-  std::optional<std::string> code;
-}; // struct MaterialShaderToy
-
-void to_json(json& j, MaterialShaderToy const& m) {
-  j = json{};
-  if (m.url) j["url"] = *m.url;
-  if (m.code) j["code"] = *m.code;
-}
-
-void from_json(json const& j, MaterialShaderToy& m) {
-  if (j.find("url") != j.end()) m.url = j["url"];
-  if (j.find("code") != j.end()) m.code = j["code"];
-}
-
 struct Material {
   std::optional<std::string> name;
   std::optional<PBRMetallicRoughness> pbrMetallicRoughness;
@@ -355,7 +338,6 @@ struct Material {
   std::optional<std::string> alphaMode;
   std::optional<double> alphaCutoff;
   std::optional<bool> doubleSided;
-  std::optional<MaterialShaderToy> shaderToy;
 }; // struct Material
 
 void to_json(json& j, Material const& m) {
@@ -371,10 +353,6 @@ void to_json(json& j, Material const& m) {
   if (m.alphaMode) j["alphaMode"] = *m.alphaMode;
   if (m.alphaCutoff) j["alphaCutoff"] = *m.alphaCutoff;
   if (m.doubleSided) j["doubleSided"] = *m.doubleSided;
-  if (m.shaderToy) {
-    j["extensions"] = json{};
-    j["extensions"][MaterialShaderToy::kExtensionName] = *m.shaderToy;
-  }
 }
 
 void from_json(json const& j, Material& m) {
@@ -395,12 +373,6 @@ void from_json(json const& j, Material& m) {
   if (j.find("alphaMode") != j.end()) m.alphaMode = j["alphaMode"];
   if (j.find("alphaCutoff") != j.end()) m.alphaCutoff = j["alphaCutoff"];
   if (j.find("doubleSided") != j.end()) m.doubleSided = j["doubleSided"];
-  if (j.find("extensions") != j.end()) {
-    auto&& e = j["extensions"];
-    if (e.find(MaterialShaderToy::kExtensionName) != e.end()) {
-      m.shaderToy = j["extensions"][MaterialShaderToy::kExtensionName];
-    }
-  }
 }
 
 struct Primitive {
@@ -445,7 +417,6 @@ void from_json(json const& j, Mesh& mesh) {
 }
 
 struct NodeShaderToy {
-  static constexpr char const* const kExtensionName = "HEV_nodes_shadertoy";
   std::optional<std::string> url;
   std::optional<std::string> code;
 }; // struct NodeShaderToy
@@ -482,8 +453,9 @@ void to_json(json& j, Node const& node) {
   if (node.translation) j["translation"] = *node.translation;
   if (node.name) j["name"] = *node.name;
   if (node.shaderToy) {
-    j["extensions"] = json{};
-    j["extensions"][NodeShaderToy::kExtensionName] = *node.shaderToy;
+    j["extras"] = json{};
+    j["extras"]["HEV"] = json{};
+    j["extras"]["HEV"]["shadertoy"] = *node.shaderToy;
   }
 }
 
@@ -501,10 +473,13 @@ void from_json(json const& j, Node& node) {
     node.translation = j["translation"].get<glm::vec3>();
   }
   if (j.find("name") != j.end()) node.name = j["name"];
-  if (j.find("extensions") != j.end()) {
-    auto&& e = j["extensions"];
-    if (e.find(NodeShaderToy::kExtensionName) != e.end()) {
-      node.shaderToy = j["extensions"][NodeShaderToy::kExtensionName];
+  if (j.find("extras") != j.end()) {
+    auto&& e = j["extras"];
+    if (e.find("HEV") != e.end()) {
+      auto&& h = e["HEV"];
+      if (h.find("shadertoy") != h.end()) {
+        node.shaderToy = h["shadertoy"];
+      }
     }
   }
 }
@@ -1486,11 +1461,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           IRIS_LOG_LEAVE();
           return tl::unexpected(dt.error());
         }
-      }
-
-      if (material.shaderToy) {
-        IRIS_LOG_ERROR("{} extension not implemented",
-                       gltf::MaterialShaderToy::kExtensionName);
       }
     }
 

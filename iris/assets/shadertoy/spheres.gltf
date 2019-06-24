@@ -2,12 +2,6 @@
     "asset": {
         "version": "2.0"
     },
-    "extensionsUsed": [
-        "HEV_nodes_shadertoy"
-    ],
-    "extensionsRequired": [
-        "HEV_nodes_shadertoy"
-    ],
     "scene": 0,
     "scenes": [
         {
@@ -19,9 +13,11 @@
     "nodes": [
         {
             "name": "spheres",
-            "extensions": {
-                "HEV_nodes_shadertoy": {
-                  "url": "https://www.shadertoy.com/view/MsSSWV"
+            "extras": {
+                "HEV": {
+                    "shadertoy": {
+                        "url": "https://www.shadertoy.com/view/MsSSWV"
+                    }
                 }
             }
         }

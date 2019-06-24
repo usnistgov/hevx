@@ -103,13 +103,11 @@ int main(int argc, char** argv) {
 
   if (!shadertoy_url.empty()) {
     iris::io::json node = {
-      {"extensions", {{"HEV_nodes_shadertoy", {{"url", shadertoy_url}}}}}};
+      {"extras", {{"HEV", {{"shadertoy", {{"url", shadertoy_url}}}}}}}};
 
     iris::io::json scene = {{"nodes", {0}}};
 
     iris::io::json gltf = {{"asset", {{"version", "2.0"}}},
-                           {"extensionsUsed", {"HEV_nodes_shadertoy"}},
-                           {"extensionsRequired", {"HEV_nodes_shadertoy"}},
                            {"scene", 0},
                            {"scenes", {scene}},
                            {"nodes", {node}}};
