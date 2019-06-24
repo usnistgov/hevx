@@ -10,9 +10,9 @@
         "height": 1600,
         "show_system_decoration": true,
         "background_color": {
-          "r": 0.0,
-          "g": 0.0,
-          "b": 0.0,
+          "r": 0.19607843137254902,
+          "g": 0.19607843137254902,
+          "b": 0.19607843137254902,
           "a": 0.0
         },
         "show_ui": true

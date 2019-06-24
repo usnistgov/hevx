@@ -2362,7 +2362,7 @@ void iris::Renderer::EndFrame(
   // Update the lights buffer once
   if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
     (*ptr)->Lights[0].direction =
-      glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 1.f);
+      glm::vec4(0.f, -std::sqrt(2.f), std::sqrt(2.f), 0.f);
     (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
     (*ptr)->NumLights = 1;
     sLightsBuffer.Unmap();
