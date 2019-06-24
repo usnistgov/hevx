@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
   control.mutable_window()->set_width(720);
   control.mutable_window()->set_height(800);
   control.mutable_window()->set_show_system_decoration(true);
-  control.mutable_window()->set_show_ui(false);
+  control.mutable_window()->set_show_ui(true);
 
   if (auto result = iris::Renderer::ProcessControlMessage(control); !result) {
     logger.critical("cannot load window: {}", result.error().what());
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
       }
 
       ImGui::Combo("Wave", reinterpret_cast<int*>(&audioData.waveType),
-                   AudioData::WaveLabels, IM_ARRAYSIZE(AudioData::WaveLabels));
+                   AudioData::WaveLabels, 4);
 
       ImGui::EndGroup();
     }

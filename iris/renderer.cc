@@ -733,11 +733,10 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   return commandBuffer;
 } // BuildRenderableCommandBuffer
 
-static absl::InlinedVector<VkCommandBuffer, 32>
-BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
+static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   ImGui::Render();
   ImDrawData* drawData = ImGui::GetDrawData();
-  if (!drawData || drawData->TotalVtxCount == 0) return {};
+  if (!drawData || drawData->TotalVtxCount == 0) return VK_NULL_HANDLE;
 
   if (auto vb = ReallocateBuffer(
         window.uiVertexBuffer, drawData->TotalVtxCount * sizeof(ImDrawVert),
@@ -748,7 +747,7 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     IRIS_LOG_WARN("Unable to create/resize ui vertex buffer for window {}: {}",
                   window.title, vb.error().what());
-    return {};
+    return VK_NULL_HANDLE;
   }
 
   if (auto ib = ReallocateBuffer(
@@ -760,7 +759,7 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     IRIS_LOG_WARN("Unable to create/resize ui index buffer for window {}: {}",
                   window.title, ib.error().what());
-    return {};
+    return VK_NULL_HANDLE;
   }
 
   ImDrawVert* pVertices;
@@ -771,7 +770,7 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     IRIS_LOG_WARN("Unable to map ui vertex buffer for window {}: {}",
                   window.title, ptr.error().what());
-    return {};
+    return VK_NULL_HANDLE;
   }
 
   if (auto ptr = window.uiIndexBuffer.Map<ImDrawIdx*>()) {
@@ -779,20 +778,27 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   } else {
     IRIS_LOG_WARN("Unable to map ui index buffer for window {}: {}",
                   window.title, ptr.error().what());
-    return {};
+    return VK_NULL_HANDLE;
   }
 
   for (int i = 0; i < drawData->CmdListsCount; ++i) {
     ImDrawList const* cmdList = drawData->CmdLists[i];
+
     std::memcpy(pVertices, cmdList->VtxBuffer.Data,
                 cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+    pVertices += cmdList->VtxBuffer.Size;
+
     std::memcpy(pIndices, cmdList->IdxBuffer.Data,
                 cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
-    pVertices += cmdList->VtxBuffer.Size;
     pIndices += cmdList->IdxBuffer.Size;
   }
 
+  vmaFlushAllocation(sAllocator, window.uiVertexBuffer.allocation, 0,
+                     window.uiVertexBuffer.size);
   window.uiVertexBuffer.Unmap();
+
+  vmaFlushAllocation(sAllocator, window.uiIndexBuffer.allocation, 0,
+                     window.uiIndexBuffer.size);
   window.uiIndexBuffer.Unmap();
 
   VkDescriptorImageInfo uiSamplerInfo = {};
@@ -831,60 +837,113 @@ BuildUICommandBuffer(VkCommandBuffer commandBuffer, Window& window) {
   glm::vec2 const displaySize = drawData->DisplaySize;
   glm::vec2 const displayPos = drawData->DisplayPos;
 
-  VkViewport viewport = {0.f, 0.f, displaySize.x, displaySize.y, 0.f, 1.f};
-
   absl::FixedArray<glm::vec2> uiPushConstants(2);
   uiPushConstants[0] = glm::vec2(2.f, 2.f) / displaySize;
   uiPushConstants[1] = glm::vec2(-1.f, -1.f) - displayPos * uiPushConstants[0];
 
-  absl::InlinedVector<VkCommandBuffer, 32> commandBuffers;
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sCommandPools[0];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
+                   iris::to_string(result));
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  commandBufferII.renderPass = sRenderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT |
+                          VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
+
+  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+  vk::BeginDebugLabel(commandBuffer, "UI Bind and Push");
+
+  vkCmdSetViewport(commandBuffer, 0, 1, &window.viewport);
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    sUIPipeline.pipeline);
+
+  vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+                          sUIPipeline.layout,              // layout
+                          0,                               // firstSet
+                          1,                               // descriptorSetCount
+                          &sGlobalDescriptorSet,           // pDescriptorSets
+                          0,                               // dynamicOffsetCount
+                          nullptr                          // pDynamicOffsets
+  );
+
+  vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
+                          sUIPipeline.layout,              // layout
+                          1,                               // firstSet
+                          1,                               // descriptorSetCount
+                          &sUIDescriptorSet,               // pDescriptorSets
+                          0,                               // dynamicOffsetCount
+                          nullptr                          // pDynamicOffsets
+  );
+
+  vkCmdPushConstants(
+    commandBuffer, sUIPipeline.layout,
+    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+    gsl::narrow_cast<std::uint32_t>(sizeof(glm::vec3) * uiPushConstants.size()),
+    uiPushConstants.data());
+
+  VkDeviceSize vertexBindingOffset = 0;
+  vkCmdBindVertexBuffers(commandBuffer, 0, 1, &window.uiVertexBuffer.buffer,
+                         &vertexBindingOffset);
+
+  vkCmdBindIndexBuffer(commandBuffer, window.uiIndexBuffer.buffer, 0,
+                       VK_INDEX_TYPE_UINT16);
+  vk::EndDebugLabel(commandBuffer);
 
   for (int j = 0, idOff = 0, vtOff = 0; j < drawData->CmdListsCount; ++j) {
     ImDrawList* cmdList = drawData->CmdLists[j];
 
-    for (auto&& drawCmd : cmdList->CmdBuffer) {
+    for (int k = 0; k < cmdList->CmdBuffer.Size; ++k) {
+      ImDrawCmd* drawCmd = &cmdList->CmdBuffer[k];
+
       VkRect2D scissor;
-      scissor.offset.x = (int32_t)(drawCmd.ClipRect.x - displayPos.x) > 0
-                           ? (int32_t)(drawCmd.ClipRect.x - displayPos.x)
+      scissor.offset.x = int32_t(drawCmd->ClipRect.x - displayPos.x) > 0
+                           ? int32_t(drawCmd->ClipRect.x - displayPos.x)
                            : 0;
-      scissor.offset.y = (int32_t)(drawCmd.ClipRect.y - displayPos.y) > 0
-                           ? (int32_t)(drawCmd.ClipRect.y - displayPos.y)
+      // glm::min<std::int32_t>(0, drawCmd.ClipRect.x - displayPos.x);
+      scissor.offset.y = int32_t(drawCmd->ClipRect.y - displayPos.y) > 0
+                           ? int32_t(drawCmd->ClipRect.y - displayPos.y)
                            : 0;
-      scissor.extent.width =
-        (uint32_t)(drawCmd.ClipRect.z - drawCmd.ClipRect.x);
-      scissor.extent.height =
-        (uint32_t)(drawCmd.ClipRect.w - drawCmd.ClipRect.y + 1);
+      // glm::min<std::int32_t>(0, drawCmd.ClipRect.y - displayPos.y);
+      scissor.extent.width = gsl::narrow_cast<std::uint32_t>(
+        drawCmd->ClipRect.z - drawCmd->ClipRect.x);
+      scissor.extent.height = gsl::narrow_cast<std::uint32_t>(
+        drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
       // TODO: why + 1 above?
 
-      Component::Renderable renderable;
-      renderable.pipeline = sUIPipeline;
-      renderable.descriptorSetLayout = sUIDescriptorSetLayout;
-      renderable.descriptorSet = sUIDescriptorSet;
-      renderable.textures.push_back(window.uiFontTexture);
-      renderable.textureViews.push_back(window.uiFontTextureView);
-      renderable.textureSamplers.push_back(window.uiFontTextureSampler);
-      renderable.vertexBuffer = window.uiVertexBuffer;
-      renderable.indexBuffer = window.uiIndexBuffer;
-      renderable.indexType = VK_INDEX_TYPE_UINT16;
-      renderable.numIndices = drawCmd.ElemCount;
-      renderable.firstIndex = idOff;
-      renderable.firstVertex = vtOff;
+      vk::BeginDebugLabel(commandBuffer, "UI Draw");
+      vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-      VkCommandBuffer cb = BuildRenderableCommandBuffer(
-        renderable, &viewport, &scissor,
-        gsl::make_span<std::byte>(
-          reinterpret_cast<std::byte*>(uiPushConstants.data()),
-          uiPushConstants.size() * sizeof(glm::vec2)));
-      vkCmdExecuteCommands(commandBuffer, 1, &cb);
-      commandBuffers.push_back(cb);
+      vkCmdDrawIndexed(commandBuffer, drawCmd->ElemCount, 1, idOff, vtOff, 0);
+      vk::EndDebugLabel(commandBuffer);
 
-      idOff += drawCmd.ElemCount;
+      idOff += drawCmd->ElemCount;
     }
 
     vtOff += cmdList->VtxBuffer.Size;
   }
 
-  return commandBuffers;
+  vkEndCommandBuffer(commandBuffer);
+  return commandBuffer;
 } // BuildUICommandBuffer
 
 static void BeginFrameWindow(std::string const& title,
@@ -1226,9 +1285,11 @@ EndFrameWindow(std::string const& title, Window& window,
         traceable.outputImageView, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                                   sizeof(PushConstants)));
-      vk::BeginDebugLabel(frame.commandBuffer, "Traceable BlitImage");
-      vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
-      vk::EndDebugLabel(frame.commandBuffer);
+      if (blitCommandBuffer != VK_NULL_HANDLE) {
+        vk::BeginDebugLabel(frame.commandBuffer, "Traceable BlitImage");
+        vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
+        vk::EndDebugLabel(frame.commandBuffer);
+      }
       vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
       sOldCommandBuffers.push_back(blitCommandBuffer);
     }
@@ -1244,15 +1305,17 @@ EndFrameWindow(std::string const& title, Window& window,
         glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
       vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildRenderableCommandBuffer");
-      VkCommandBuffer commandBuffer = BuildRenderableCommandBuffer(
+      VkCommandBuffer renderableCommandBuffer = BuildRenderableCommandBuffer(
         renderable, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                                   sizeof(PushConstants)));
-      vk::BeginDebugLabel(frame.commandBuffer, "Renderable");
-      vkCmdExecuteCommands(frame.commandBuffer, 1, &commandBuffer);
-      vk::EndDebugLabel(frame.commandBuffer);
+      if (renderableCommandBuffer != VK_NULL_HANDLE) {
+        vk::BeginDebugLabel(frame.commandBuffer, "Renderable");
+        vkCmdExecuteCommands(frame.commandBuffer, 1, &renderableCommandBuffer);
+        vk::EndDebugLabel(frame.commandBuffer);
+      }
       vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
-      sOldCommandBuffers.push_back(commandBuffer);
+      sOldCommandBuffers.push_back(renderableCommandBuffer);
     }
   } // end std::lock_guard block
 
@@ -1266,10 +1329,14 @@ EndFrameWindow(std::string const& title, Window& window,
 
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                       "BuildUICommandBuffer");
-  auto uiCBs = BuildUICommandBuffer(frame.commandBuffer, window);
+  VkCommandBuffer uiCommandBuffer = BuildUICommandBuffer(window);
+  if (uiCommandBuffer != VK_NULL_HANDLE) {
+    vk::BeginDebugLabel(frame.commandBuffer, "UI");
+    vkCmdExecuteCommands(frame.commandBuffer, 1, &uiCommandBuffer);
+    vk::EndDebugLabel(frame.commandBuffer);
+  }
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
-  sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
-                            uiCBs.end());
+  sOldCommandBuffers.push_back(uiCommandBuffer);
 
   vkCmdEndRenderPass(frame.commandBuffer);
   vk::EndDebugLabel(frame.commandBuffer);
