@@ -1029,79 +1029,81 @@ static void EndFrameWindowUI(Window& window) {
   sViewMatrix = glm::lookAt(position, center, up);
 
   // TODO: how to handle this at application scope?
-  if (window.showUI && ImGui::Begin("Status")) {
-    ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.f);
-    ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
-                io.Framerate);
-    ImGui::Text("Total Time %.3f s", sTime.count());
+  if (window.showUI) {
+    if (ImGui::Begin("Status")) {
+      ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.f);
+      ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
+                  io.Framerate);
+      ImGui::Text("Total Time %.3f s", sTime.count());
 
-    ImGui::Separator();
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
 
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Position", "%+.3f", position);
-    ImGui::Columns(1);
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Position", "%+.3f", position);
+      ImGui::Columns(1);
 
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Center", "%+.3f", center);
-    ImGui::Columns(1);
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Center", "%+.3f", center);
+      ImGui::Columns(1);
 
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Up", "%+.3f", up);
-    ImGui::Columns(1);
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Up", "%+.3f", up);
+      ImGui::Columns(1);
 
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Matrix", "%+.3f", sViewMatrix);
-    ImGui::Columns(1);
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Matrix", "%+.3f", sViewMatrix);
+      ImGui::Columns(1);
 
-    ImGui::EndGroup();
+      ImGui::EndGroup();
 
-    ImGui::Separator();
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
-    ImGui::SameLine();
-    if (ImGui::Button("Reset")) Nav::Reset();
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
+      ImGui::SameLine();
+      if (ImGui::Button("Reset")) Nav::Reset();
 
-    static float response = Nav::Response();
-    if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
-      Nav::SetResponse(response);
+      static float response = Nav::Response();
+      if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
+        Nav::SetResponse(response);
+      }
+
+      static float scale = Nav::Scale();
+      if (ImGui::SliderFloat("Scale", &scale, 0.001f, 100.f)) {
+        Nav::Rescale(scale);
+      }
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Position", "%+.3f", Nav::Position());
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Orientation", "%+.3f", Nav::Orientation());
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Matrix", "%+.3f", Nav::Matrix());
+      ImGui::Columns(1);
+
+      ImGui::EndGroup();
+
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
+      ImGui::Columns(1);
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Matrix", "%+.3f", sWorldMatrix);
+      ImGui::Columns(1);
+
+      ImGui::EndGroup();
     }
-
-    static float scale = Nav::Scale();
-    if (ImGui::SliderFloat("Scale", &scale, 0.001f, 100.f)) {
-      Nav::Rescale(scale);
-    }
-
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Position", "%+.3f", Nav::Position());
-    ImGui::Columns(1);
-
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Orientation", "%+.3f", Nav::Orientation());
-    ImGui::Columns(1);
-
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Matrix", "%+.3f", Nav::Matrix());
-    ImGui::Columns(1);
-
-    ImGui::EndGroup();
-
-    ImGui::Separator();
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
-
-    ImGui::Columns(5, NULL, false);
-    Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
-    ImGui::Columns(1);
-
-    ImGui::Columns(5, NULL, false);
-    Text(5, "Matrix", "%+.3f", sWorldMatrix);
-    ImGui::Columns(1);
-
-    ImGui::EndGroup();
+    ImGui::End(); // Status
   }
-  ImGui::End(); // Status
 
   ImGui::EndFrame();
 
@@ -1262,13 +1264,12 @@ EndFrameWindow(std::string const& title, Window& window,
     vk::EndDebugLabel(frame.commandBuffer);
   }
 
-  if (window.showUI) {
-    vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildUICommandBuffer");
-    auto uiCBs = BuildUICommandBuffer(frame.commandBuffer, window);
-    vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
-    sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
-                              uiCBs.end());
-  }
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                      "BuildUICommandBuffer");
+  auto uiCBs = BuildUICommandBuffer(frame.commandBuffer, window);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
+  sOldCommandBuffers.insert(sOldCommandBuffers.end(), uiCBs.begin(),
+                            uiCBs.end());
 
   vkCmdEndRenderPass(frame.commandBuffer);
   vk::EndDebugLabel(frame.commandBuffer);

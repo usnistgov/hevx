@@ -6,14 +6,15 @@
 #include "absl/debugging/symbolize.h"
 #include "absl/flags/parse.h"
 #include "gsl/gsl"
+#include "imgui.h"
+#include "iris/protos.h"
+#include "iris/renderer.h"
 #include "portaudio.h"
 #include "spdlog/logger.h"
 #include "spdlog/sinks/ansicolor_sink.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <cmath>
-
-static std::shared_ptr<spdlog::logger> sLogger;
 
 struct Oscillator {
   static constexpr float const k2PI = 2.f * gsl::narrow_cast<float>(M_PI);
@@ -137,7 +138,19 @@ struct AudioData {
   Square square;
   Saw saw;
   Triangle triangle;
+
+  enum class WaveType : int {
+    kSine,
+    kSquare,
+    kSaw,
+    kTriangle
+  } waveType = WaveType::kSine;
+
+  static char const* const WaveLabels[];
 }; // struct AudioData
+
+char const* const AudioData::WaveLabels[] = {"Sine", "Square", "Saw",
+                                             "Triangle"};
 
 static int Callback(void const* inputBuffer [[maybe_unused]],
                     void* outputBuffer, unsigned long framesPerBuffer,
@@ -152,7 +165,23 @@ static int Callback(void const* inputBuffer [[maybe_unused]],
 
   auto fltOutput = static_cast<float*>(outputBuffer);
   for (unsigned long i = 0; i < framesPerBuffer; ++i) {
-    float const sample = audioData->triangle(audioData->osc);
+    float sample = 0.f;
+
+    switch (audioData->waveType) {
+    case AudioData::WaveType::kSine:
+      sample = audioData->sine(audioData->osc);
+      break;
+    case AudioData::WaveType::kSquare:
+      sample = audioData->square(audioData->osc);
+      break;
+    case AudioData::WaveType::kSaw:
+      sample = audioData->saw(audioData->osc);
+      break;
+    case AudioData::WaveType::kTriangle:
+      sample = audioData->triangle(audioData->osc);
+      break;
+    }
+
     *fltOutput++ = sample * .2f;
     *fltOutput++ = sample * .2f;
   }
@@ -160,7 +189,34 @@ static int Callback(void const* inputBuffer [[maybe_unused]],
   return 0;
 } // paCallback
 
+#if PLATFORM_WINDOWS
+extern "C" {
+_declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+}
+
+#include <Windows.h>
+#include <shellapi.h>
+
+int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+  // Oh my goodness
+  char* cmdLine = ::GetCommandLineA();
+  int argc = 1;
+  char* argv[128]; // 128 command line argument max
+  argv[0] = cmdLine;
+
+  for (char* p = cmdLine; *p; ++p) {
+    if (*p == ' ') {
+      *p++ = '\0';
+      if (*(p + 1)) argv[argc++] = p;
+    }
+  }
+
+#else
+
 int main(int argc, char** argv) {
+
+#endif
+
   absl::InitializeSymbolizer(argv[0]);
   absl::InstallFailureSignalHandler({});
 
@@ -173,15 +229,40 @@ int main(int argc, char** argv) {
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::trace);
 
-  sLogger = std::shared_ptr<spdlog::logger>(
-    new spdlog::logger("iris-viewer", {console_sink, file_sink}));
-  sLogger->set_level(spdlog::level::trace);
+  spdlog::logger logger("iris-swsynth", {console_sink, file_sink});
+  logger.set_level(spdlog::level::trace);
 
-  sLogger->info("Logging initialized");
+  logger.info("Logging initialized");
+
+  if (auto result = iris::Renderer::Initialize(
+        "iris-viewer",
+        iris::Renderer::Options::kReportDebugMessages |
+          iris::Renderer::Options::kEnableValidation,
+        {console_sink, file_sink}, 0);
+      !result) {
+    logger.critical("cannot initialize renderer: {}", result.error().what());
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Create a custom Window control message that turns off the Debug UI.
+  iris::Control::Control control;
+  control.mutable_window()->set_name("synthWindow");
+  control.mutable_window()->set_is_stereo(false);
+  control.mutable_window()->set_x(100);
+  control.mutable_window()->set_y(100);
+  control.mutable_window()->set_width(720);
+  control.mutable_window()->set_height(800);
+  control.mutable_window()->set_show_system_decoration(true);
+  control.mutable_window()->set_show_ui(false);
+
+  if (auto result = iris::Renderer::ProcessControlMessage(control); !result) {
+    logger.critical("cannot load window: {}", result.error().what());
+    std::exit(EXIT_FAILURE);
+  }
 
   PaError err = Pa_Initialize();
   if (err != paNoError) {
-    sLogger->error("error initializing audio: {}", Pa_GetErrorText(err));
+    logger.error("error initializing audio: {}", Pa_GetErrorText(err));
     std::exit(EXIT_FAILURE);
   }
 
@@ -200,33 +281,64 @@ int main(int argc, char** argv) {
   );
 
   if (err != paNoError) {
-    sLogger->error("error opening default stream: {}", Pa_GetErrorText(err));
+    logger.error("error opening default stream: {}", Pa_GetErrorText(err));
     std::exit(EXIT_FAILURE);
   }
 
-  err = Pa_StartStream(stream);
-  if (err != paNoError) {
-    sLogger->error("error starting stream: {}", Pa_GetErrorText(err));
-    std::exit(EXIT_FAILURE);
-  }
+  while (iris::Renderer::IsRunning()) {
+    iris::Renderer::BeginFrame();
 
-  Pa_Sleep(5 * 1000);
+    if (ImGui::Begin("Synth")) {
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Stream");
+      PaStreamInfo const* streamInfo = Pa_GetStreamInfo(stream);
+      ImGui::LabelText("Sample Rate", "%.3f", streamInfo->sampleRate);
+      ImGui::LabelText("Input Latency", "%.3f", streamInfo->inputLatency);
+      ImGui::LabelText("Output Latency", "%.3f", streamInfo->outputLatency);
+      ImGui::LabelText("CPU Load", "%.3f", Pa_GetStreamCpuLoad(stream));
+      ImGui::EndGroup();
 
-  err = Pa_StopStream(stream);
-  if (err != paNoError) {
-    sLogger->error("error stopping stream: {}", Pa_GetErrorText(err));
-    std::exit(EXIT_FAILURE);
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Controls");
+
+      static bool playing = false;
+      if (ImGui::Button((playing ? "Stop" : "Play"))) {
+        if (playing) {
+          err = Pa_StopStream(stream);
+          if (err != paNoError) {
+            logger.error("error stopping stream: {}", Pa_GetErrorText(err));
+            break;
+          }
+        } else {
+          err = Pa_StartStream(stream);
+          if (err != paNoError) {
+            logger.error("error starting stream: {}", Pa_GetErrorText(err));
+            break;
+          }
+        }
+        playing = !playing;
+      }
+
+      ImGui::Combo("Wave", reinterpret_cast<int*>(&audioData.waveType),
+                   AudioData::WaveLabels, IM_ARRAYSIZE(AudioData::WaveLabels));
+
+      ImGui::EndGroup();
+    }
+    ImGui::End(); // Synth
+
+    iris::Renderer::EndFrame();
   }
 
   err = Pa_CloseStream(stream);
   if (err != paNoError) {
-    sLogger->error("error closing stream: {}", Pa_GetErrorText(err));
+    logger.error("error closing stream: {}", Pa_GetErrorText(err));
     std::exit(EXIT_FAILURE);
   }
 
   err = Pa_Terminate();
   if (err != paNoError) {
-    sLogger->error("error terminating audio: {}", Pa_GetErrorText(err));
+    logger.error("error terminating audio: {}", Pa_GetErrorText(err));
   }
-  sLogger->info("exiting");
+
+  logger.info("exiting");
 }
