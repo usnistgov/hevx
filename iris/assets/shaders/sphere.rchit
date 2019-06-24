@@ -51,16 +51,16 @@ layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
 
-layout(location = 0) rayPayloadInNV vec3 hitValue;
+layout(location = 0) rayPayloadInNV vec4 hitValue;
 hitAttributeNV vec3 normalVector;
 
 void main() {
-  const vec4 P = vec4(hitValue, 1.f);
+  const vec4 P = vec4(hitValue.xyz, 1.f);
 
   vec3 Ve = normalize(EyePosition.xyz*P.w - P.xyz*EyePosition.w);
   vec3 v = normalize(Ve);
   const vec3 n = normalize((ViewMatrixInverse * vec4(normalVector, 0.f)).xyz);
-
+#if 0
   hitValue = vec3(.2f); // ambient
 
   for (int i = 0; i < NumLights; ++i) {
@@ -76,7 +76,7 @@ void main() {
       hitValue += NdotL * Lights[i].color.rgb * vec3(.6f, .6f, .6f);
     }
   }
-
-  //hitValue = vec4(.5f) * vec4(n + vec3(1.f), 1.f);
+#endif
+  hitValue = vec4(.5f) * vec4(n + vec3(1.f), 2.f);
 }
 

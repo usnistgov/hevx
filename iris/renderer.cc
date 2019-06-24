@@ -915,19 +915,14 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
     for (int k = 0; k < cmdList->CmdBuffer.Size; ++k) {
       ImDrawCmd* drawCmd = &cmdList->CmdBuffer[k];
 
-      VkRect2D scissor;
-      scissor.offset.x = int32_t(drawCmd->ClipRect.x - displayPos.x) > 0
-                           ? int32_t(drawCmd->ClipRect.x - displayPos.x)
-                           : 0;
-      // glm::min<std::int32_t>(0, drawCmd.ClipRect.x - displayPos.x);
-      scissor.offset.y = int32_t(drawCmd->ClipRect.y - displayPos.y) > 0
-                           ? int32_t(drawCmd->ClipRect.y - displayPos.y)
-                           : 0;
-      // glm::min<std::int32_t>(0, drawCmd.ClipRect.y - displayPos.y);
-      scissor.extent.width = gsl::narrow_cast<std::uint32_t>(
-        drawCmd->ClipRect.z - drawCmd->ClipRect.x);
-      scissor.extent.height = gsl::narrow_cast<std::uint32_t>(
-        drawCmd->ClipRect.w - drawCmd->ClipRect.y + 1);
+      VkRect2D scissor{
+        VkOffset2D{
+          glm::max<std::int32_t>(0, drawCmd->ClipRect.x - displayPos.x),
+          glm::max<std::int32_t>(0, drawCmd->ClipRect.y - displayPos.y)},
+        VkExtent2D{gsl::narrow_cast<std::uint32_t>(drawCmd->ClipRect.z -
+                                                   drawCmd->ClipRect.x),
+                   gsl::narrow_cast<std::uint32_t>(drawCmd->ClipRect.w -
+                                                   drawCmd->ClipRect.y + 1)}};
       // TODO: why + 1 above?
 
       vk::BeginDebugLabel(commandBuffer, "UI Draw");

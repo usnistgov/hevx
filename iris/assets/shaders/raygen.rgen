@@ -25,7 +25,7 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
 layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
 layout(set = 1, binding = 1, rgba8) uniform image2D image;
 
-layout(location = 0) rayPayloadNV vec3 hitValue;
+layout(location = 0) rayPayloadNV vec4 hitValue;
 
 void main() {
   const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(.5f);
@@ -49,6 +49,6 @@ void main() {
           0                    // payload
   );
 
-  imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(hitValue, 1.f));
+  imageStore(image, ivec2(gl_LaunchIDNV.xy), hitValue);
 }
 
