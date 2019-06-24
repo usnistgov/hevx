@@ -349,6 +349,9 @@ layout(location = 0) out vec2 UV;
 void main() {
     UV = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
     gl_Position = vec4(UV * 2.0 - 1.0, 0.f, 1.0);
+    // We created the vertices for normal Vulkan viewports, but IRIS uses a
+    // negative viewport to handle OpenGL shaders, so reflip Y here.
+    gl_Position.y *= -1.0;
 })";
 
 static char const* sImageBlitFragmentShaderSource = R"(#version 460 core
@@ -871,7 +874,11 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
   vk::BeginDebugLabel(commandBuffer, "UI Bind and Push");
 
-  vkCmdSetViewport(commandBuffer, 0, 1, &window.viewport);
+  VkViewport uiViewport = window.viewport;
+  uiViewport.y = 0.f;
+  uiViewport.height *= -1.f;
+
+  vkCmdSetViewport(commandBuffer, 0, 1, &uiViewport);
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     sUIPipeline.pipeline);
 
@@ -1546,6 +1553,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     VK_TRUE;
   physicalDeviceFeatures.features.shaderStorageImageArrayDynamicIndexing =
     VK_TRUE;
+  physicalDeviceFeatures.features.shaderStorageImageMultisample = VK_TRUE;
   physicalDeviceFeatures.features.shaderClipDistance = VK_TRUE;
   physicalDeviceFeatures.features.shaderCullDistance = VK_TRUE;
   physicalDeviceFeatures.features.shaderFloat64 = VK_TRUE;
@@ -1557,6 +1565,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    "VK_KHR_maintenance1"
   }};
 
   // These are additional extensions that we would like for the physical device.
@@ -1973,12 +1982,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   VkSamplerCreateInfo imageBlitSamplerCI = {};
   imageBlitSamplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  imageBlitSamplerCI.magFilter = VK_FILTER_LINEAR;
-  imageBlitSamplerCI.minFilter = VK_FILTER_LINEAR;
+  imageBlitSamplerCI.magFilter = VK_FILTER_NEAREST;
+  imageBlitSamplerCI.minFilter = VK_FILTER_NEAREST;
   imageBlitSamplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   imageBlitSamplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   imageBlitSamplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  imageBlitSamplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  imageBlitSamplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
   imageBlitSamplerCI.mipLodBias = 0.f;
   imageBlitSamplerCI.anisotropyEnable = VK_FALSE;
   imageBlitSamplerCI.maxAnisotropy = 1;
@@ -2353,7 +2362,7 @@ void iris::Renderer::EndFrame(
   // Update the lights buffer once
   if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
     (*ptr)->Lights[0].direction =
-      glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 0.f);
+      glm::vec4(0.f, -std::sqrt(2), std::sqrt(2), 1.f);
     (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
     (*ptr)->NumLights = 1;
     sLightsBuffer.Unmap();

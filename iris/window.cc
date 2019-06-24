@@ -388,7 +388,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       ? glm::clamp(newExtent.height, caps.minImageExtent.height,
                    caps.maxImageExtent.height)
       : caps.currentExtent.height;
-
+#if 0
   VkViewport newViewport{
     0.f,                                  // x
     0.f,                                  // y
@@ -396,6 +396,15 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     static_cast<float>(newExtent.height), // height
     0.f,                                  // minDepth
     1.f,                                  // maxDepth
+  };
+#endif
+  VkViewport newViewport{
+    0.f,                                   // x
+    static_cast<float>(newExtent.height),  // y
+    static_cast<float>(newExtent.width),   // width
+    -static_cast<float>(newExtent.height), // height
+    0.f,                                   // minDepth
+    1.f,                                   // maxDepth
   };
 
   VkRect2D newScissor{{0, 0}, newExtent};

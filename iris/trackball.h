@@ -64,7 +64,7 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
                          : deltaMouse.x * kTwist / io.DeltaTime;
       float const dp = ImGui::IsKeyDown(wsi::Keys::kZ)
                          ? 0.f
-                         : -deltaMouse.y * kTwist / io.DeltaTime;
+                         : deltaMouse.y * kTwist / io.DeltaTime;
       attitude_.heading = EulerAngles::Heading(glm::radians(dh));
       attitude_.pitch = EulerAngles::Pitch(glm::radians(dp));
     }; // rotateHeadingPitch
@@ -78,7 +78,7 @@ inline void Trackball::Update(ImGuiIO const& io) noexcept {
                            : deltaMouse.x * kSpeed / io.DeltaTime;
         float const dz = ImGui::IsKeyDown(wsi::Keys::kX)
                            ? 0.f
-                           : deltaMouse.y * kSpeed / io.DeltaTime;
+                           : -deltaMouse.y * kSpeed / io.DeltaTime;
         position_ = glm::vec3(dx, 0.f, dz);
       }
     } else if (ImGui::IsMouseDragging(wsi::Buttons::kButtonMiddle)) {

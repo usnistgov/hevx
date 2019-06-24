@@ -39,6 +39,10 @@ void main() {
     fragCoord = vec2((gl_VertexIndex << 1) & 2, (gl_VertexIndex & 2));
     gl_Position = vec4(fragCoord * 2.0 - 1.0, 0.f, 1.0);
 
+    // We created the vertices for normal Vulkan viewports, but IRIS uses a
+    // negative viewport to handle OpenGL shaders, so reflip Y here.
+    gl_Position.y *= -1;
+
     // flip to match shadertoy
     fragCoord.y *= -1;
     fragCoord.y += 1;

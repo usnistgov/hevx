@@ -1279,9 +1279,13 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       }
     }
 
-    if (normals.empty()) normals = GenerateNormals(positions, indices);
+    if (normals.empty()) {
+      IRIS_LOG_WARN("GLTF model with no normals: generating");
+      normals = GenerateNormals(positions, indices);
+    }
 
     if (tangents.empty() && !texcoords.empty()) {
+      IRIS_LOG_WARN("GLTF model with texcoords but no tangents: generating");
       TangentGenerator tg(positions.data(), normals.data(), texcoords.data(),
                           indices.empty() ? positions.size() : indices.size(),
                           indices.empty() ? nullptr : indices.data());
@@ -1514,7 +1518,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     }
 
     if (auto fs =
-          LoadShaderFromFile("assets/shaders/gltf.frag",
+          LoadShaderFromFile("assets/shaders/gltf_pbr.frag",
                              VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
       shaders[1] = std::move(*fs);
     } else {

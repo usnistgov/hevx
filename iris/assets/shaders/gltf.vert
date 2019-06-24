@@ -76,7 +76,6 @@ out gl_PerVertex {
 
 void main() {
   Po = vec4(Vertex, 1.0);
-  Po.y = -Po.y;
   Pe = ModelViewMatrix * Po;
 
   No = normalize(Normal);

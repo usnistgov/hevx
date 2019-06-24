@@ -39,7 +39,7 @@ void main() {
   const vec3 aabbMax = vec3(sphere.aabbMaxX, sphere.aabbMaxY, sphere.aabbMaxZ);
 
   const vec3 center =
-    (ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f)).xyz;
+  (ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f)).xyz;
   const float radius = (aabbMax.x - aabbMin.x) / 2.f;
 
   const vec3 oc = origin - center.xyz;
@@ -56,10 +56,12 @@ void main() {
     if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
       const vec3 hitValue = origin + t1 * direction;
       normalVector = (hitValue - center.xyz) / radius;
+      normalVector.y *= -1.f; // Deal with the wacky viewport stuff
       reportIntersectionNV(t1, 0);
     } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
       const vec3 hitValue = origin + t2 * direction;
       normalVector = (hitValue - center.xyz) / radius;
+      normalVector.y *= -1.f; // Deal with the wacky viewport stuff
       reportIntersectionNV(t2, 0);
     }
   }

@@ -57,11 +57,6 @@ static iris::Renderer::CommandQueue sCommandQueue;
 absl::InlinedVector<iris::ShaderGroup, 4> sShaderGroups;
 static iris::Renderer::Component::Traceable sTraceable;
 
-static glm::vec3 const position = glm::vec3(0.f, 0.f, 0.f);
-static glm::vec3 const center = glm::vec3(0.f, 1.f, 0.f);
-static glm::vec3 const up = glm::vec3(0.f, 0.f, 1.f);
-static glm::mat4 sViewMatrix = glm::lookAt(position, center, up);
-
 static tl::expected<void, std::system_error> AcquireCommandQueue() noexcept {
   IRIS_LOG_ENTER();
 
@@ -189,8 +184,12 @@ static tl::expected<void, std::system_error> CreatePipeline() noexcept {
   sShaderGroups.push_back(iris::ShaderGroup::ProceduralHit(2, 3));
 
   if (auto pipe = iris::CreateRayTracingPipeline(
-        shaders, sShaderGroups,
-        gsl::make_span(&sTraceable.descriptorSetLayout, 1), 4)) {
+        shaders,       // shaders
+        sShaderGroups, // groups
+        gsl::make_span(&sTraceable.descriptorSetLayout,
+                       1), // descriptorSetLayouts
+        4                  // maxRecursionDepth
+        )) {
     sTraceable.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();

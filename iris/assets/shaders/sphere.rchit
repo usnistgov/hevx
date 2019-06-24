@@ -35,9 +35,6 @@ layout(set = 0, binding = 1) uniform LightsBuffer {
   int NumLights;
 };
 
-layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
-layout(set = 1, binding = 1, rgba8) uniform image2D image;
-
 struct Sphere {
   float aabbMinX;
   float aabbMinY;
@@ -47,6 +44,8 @@ struct Sphere {
   float aabbMaxZ;
 };
 
+layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
+layout(set = 1, binding = 1, rgba8) uniform image2D image;
 layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
@@ -55,28 +54,8 @@ layout(location = 0) rayPayloadInNV vec4 hitValue;
 hitAttributeNV vec3 normalVector;
 
 void main() {
-  const vec4 P = vec4(hitValue.xyz, 1.f);
-
-  vec3 Ve = normalize(EyePosition.xyz*P.w - P.xyz*EyePosition.w);
-  vec3 v = normalize(Ve);
-  const vec3 n = normalize((ViewMatrixInverse * vec4(normalVector, 0.f)).xyz);
-#if 0
-  hitValue = vec3(.2f); // ambient
-
-  for (int i = 0; i < NumLights; ++i) {
-    if (Lights[i].color.a > 0) {
-      vec3 l = normalize(Lights[i].direction.xyz);
-      vec3 h = normalize(l + v);
-
-      float NdotL = clamp(dot(n, l), 0.001, 1.0);
-      float NdotH = clamp(dot(n, h), 0.0, 1.0);
-      float LdotH = clamp(dot(l, h), 0.0, 1.0);
-      float VdotH = clamp(dot(v, h), 0.0, 1.0);
-
-      hitValue += NdotL * Lights[i].color.rgb * vec3(.6f, .6f, .6f);
-    }
-  }
-#endif
-  hitValue = vec4(.5f) * vec4(n + vec3(1.f), 2.f);
+  const vec3 P = hitValue.xyz;
+  const vec3 N = normalize((ViewMatrixInverse * vec4(normalVector, 0.f)).xyz);
+  hitValue = vec4(.5f) * vec4(N + vec3(1.f), 2.f);
 }
 

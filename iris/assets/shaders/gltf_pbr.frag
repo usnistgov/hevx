@@ -211,14 +211,13 @@ void main() {
 
   vec3 v = normalize(Ve);
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
-  vec3 reflection = -normalize(reflect(v, n));
 
   float roughnessSq = alphaRoughness * alphaRoughness;
-  vec3 color = vec3(0.2) * diffuseColor; // ambient
+  vec3 color = vec3(0.0);
 
   for (int i = 0; i < NumLights; ++i) {
     if (Lights[i].color.a > 0) {
-      vec3 l = normalize(Lights[i].direction.xyz);
+      vec3 l = normalize(Lights[i].direction.xyz - Pe.xyz);
       vec3 h = normalize(l + v);
 
       float NdotL = clamp(dot(n, l), 0.001, 1.0);
@@ -252,7 +251,7 @@ void main() {
   // Apply optional PBR terms for additional (optional) shading
 #ifdef HAS_OCCLUSION_MAP
   float ao = texture(OcclusionSampler, UV.st).r;
-  color = mix(color, color * ao,MetallicRoughnessNormalOcclusion.w);
+  color = mix(color, color * ao, MetallicRoughnessNormalOcclusion.w);
 #endif
 
 #ifdef HAS_EMISSIVE_MAP
