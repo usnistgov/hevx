@@ -171,6 +171,9 @@ static std::chrono::duration<float> sTime{0.f};
 static std::chrono::steady_clock::time_point sStartTime{};
 static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 
+static bool sShowDemoWindow{false};
+static bool sDebugNormals{false};
+
 template <class T, class ID>
 struct ComponentSystem {
   ID Insert(T component) {
@@ -1046,6 +1049,7 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
   pushConstants.iFrame = gsl::narrow_cast<float>(sFrameNum);
   pushConstants.iFrameRate = pushConstants.iFrame / pushConstants.iTime;
   pushConstants.iResolution = glm::vec3(0.f, 0.f, 0.f);
+  pushConstants.bDebugNormals = sDebugNormals;
   pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
 
   pushConstants.ModelMatrix =
@@ -1091,11 +1095,31 @@ static void EndFrameWindowUI(Window& window) {
 
   // TODO: how to handle this at application scope?
   if (window.showUI) {
+    if (sShowDemoWindow) ImGui::ShowDemoWindow(&sShowDemoWindow);
     if (ImGui::Begin("Status")) {
       ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.f);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
       ImGui::Text("Total Time %.3f s", sTime.count());
+
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Debug");
+
+      ImGui::Checkbox("Demo Window", &sShowDemoWindow);
+      ImGui::Checkbox("Debug Normals", &sDebugNormals);
+
+      ImGui::EndGroup();
+
+      ImGui::Separator();
+      ImGui::BeginGroup();
+      ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Projection");
+
+      ImGui::Columns(5, NULL, false);
+      Text(5, "Matrix", "%+.3f", window.projectionMatrix);
+      ImGui::Columns(1);
+
+      ImGui::EndGroup();
 
       ImGui::Separator();
       ImGui::BeginGroup();
@@ -1123,7 +1147,7 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::BeginGroup();
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Nav");
       ImGui::SameLine();
-      if (ImGui::Button("Reset")) Nav::Reset();
+      if (ImGui::SmallButton("Reset")) Nav::Reset();
 
       static float response = Nav::Response();
       if (ImGui::SliderFloat("Response", &response, 0.f, 100.f)) {
@@ -1266,6 +1290,7 @@ EndFrameWindow(std::string const& title, Window& window,
   pushConstants.iResolution.y = ImGui::GetIO().DisplaySize.y;
   pushConstants.iResolution.z =
     pushConstants.iResolution.x / pushConstants.iResolution.y;
+  pushConstants.bDebugNormals = sDebugNormals;
   pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
 
   clearValues[sColorTargetAttachmentIndex].color = window.clearColor;

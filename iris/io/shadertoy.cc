@@ -28,9 +28,11 @@ layout(push_constant) uniform uPC {
     float iFrameRate;
     float iFrame;
     vec3 iResolution;
-    float padding0;
+    bool bDebugNormals;
+    vec4 EyePosition;
+    mat4 ModelMatrix;
     mat4 ModelViewMatrix;
-    mat4 ModelViewMatrixInverse;
+    mat3 NormalMatrix;
 };
 
 layout(location = 0) out vec2 fragCoord;
@@ -60,7 +62,11 @@ layout(push_constant) uniform uPC {
     float iFrameRate;
     float iFrame;
     vec3 iResolution;
-    float padding0;
+    bool bDebugNormals;
+    vec4 EyePosition;
+    mat4 ModelMatrix;
+    mat4 ModelViewMatrix;
+    mat3 NormalMatrix;
 };
 
 layout(location = 0) in vec2 fragCoord;

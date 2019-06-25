@@ -34,7 +34,7 @@ layout(push_constant) uniform PushConstants {
   float iFrameRate;
   float iFrame;
   vec3 iResolution;
-  float padding0;
+  bool bDebugNormals;
   vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
@@ -55,15 +55,14 @@ layout(location = 2) in vec4 Tangent;
 layout(location = 3) in vec2 Texcoord;
 #endif
 
-//layout(location = 0) out vec4 Po; // surface position in object-space
-//layout(location = 1) out vec4 Eo; // eye position in object-space
-//layout(location = 2) out vec3 Vo; // view vector in object-space
-//layout(location = 3) out vec3 No; // normal vector in object-space
+layout(location = 0) out vec4 Po; // surface position in object-space
+layout(location = 1) out vec4 Eo; // eye position in object-space
+layout(location = 2) out vec3 Vo; // view vector in object-space
+layout(location = 3) out vec3 No; // normal vector in object-space
 
-//layout(location = 4) out vec4 Pe; // surface position in eye-space
-layout(location = 4) out vec3 Pe; // surface position in eye-space
-//layout(location = 5) out vec4 Ee; // eye position in eye-space
-//layout(location = 6) out vec3 Ve; // view vector in eye-space
+layout(location = 4) out vec4 Pe; // surface position in eye-space
+layout(location = 5) out vec4 Ee; // eye position in eye-space
+layout(location = 6) out vec3 Ve; // view vector in eye-space
 layout(location = 7) out vec3 Ne; // normal vector in eye-space
 
 layout(location = 8) out vec2 UV;
@@ -76,7 +75,6 @@ out gl_PerVertex {
 };
 
 void main() {
-#if 0
   Po = vec4(Vertex, 1.0);
   Pe = ModelViewMatrix * Po;
 
@@ -88,11 +86,6 @@ void main() {
 
   Vo = normalize(Eo.xyz*Po.w - Po.xyz*Eo.w);
   Ve = normalize(Ee.xyz*Pe.w - Pe.xyz*Ee.w);
-#endif
-
-  vec4 pos = ModelViewMatrix * vec4(Vertex, 1.0);
-  Pe = vec3(pos.xyz) / pos.w;
-  Ne = normalize(NormalMatrix * Normal);
 
 #ifdef HAS_TEXCOORDS
   vec3 normalW = normalize(Ne);
@@ -107,5 +100,5 @@ void main() {
   UV = vec2(0.0, 0.0);
 #endif
 
-  gl_Position = ProjectionMatrix * pos;
+  gl_Position = ProjectionMatrix * Pe;
 }

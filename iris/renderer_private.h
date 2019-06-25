@@ -68,7 +68,7 @@ struct PushConstants {
     float iFrameRate;
     float iFrame;
     glm::vec3 iResolution;
-    float padding0;
+    bool bDebugNormals;
     glm::vec4 EyePosition;
     glm::mat4 ModelMatrix;
     glm::mat4 ModelViewMatrix;

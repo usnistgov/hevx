@@ -8,7 +8,7 @@ layout(push_constant) uniform PushConstants {
   float iFrameRate;
   float iFrame;
   vec3 padding1;
-  float padding2;
+  bool bDebugNormals;
   vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
@@ -28,9 +28,15 @@ layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
 
-hitAttributeNV vec3 normalVector;
+hitAttributeNV vec3 No; // Normal in world-space
 
 void main() {
+  /////
+  //
+  // All of these coordinates are in world space.
+  //
+  ////
+
   const vec3 origin = gl_WorldRayOriginNV;
   const vec3 direction = normalize(gl_WorldRayDirectionNV);
 
@@ -39,29 +45,27 @@ void main() {
   const vec3 aabbMax = vec3(sphere.aabbMaxX, sphere.aabbMaxY, sphere.aabbMaxZ);
 
   const vec3 center =
-  (ModelMatrix * vec4((aabbMax + aabbMin) / vec3(2.f), 1.f)).xyz;
+    (ModelMatrix * vec4((aabbMax.xyz + aabbMin.xyz) / vec3(2.f), 1.f)).xyz;
   const float radius = (aabbMax.x - aabbMin.x) / 2.f;
 
-  const vec3 oc = origin - center.xyz;
+  const vec3 oc = origin - center;
   const float a = dot(direction, direction);
   const float b = dot(oc, direction);
   const float c = dot(oc, oc) - (radius * radius);
   const float d = b * b - a * c;
 
   if (d > 0.f) {
-    const float sd = sqrt(d);
-    const float t1 = (-b - sd) / a;
-    const float t2 = (-b + sd) / a;
+    const float s_d = sqrt(d);
+    const float t1 = (-b - s_d) / a;
+    const float t2 = (-b + s_d) / a;
 
     if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
-      const vec3 hitValue = origin + t1 * direction;
-      normalVector = (hitValue - center.xyz) / radius;
-      normalVector.y *= -1.f; // Deal with the wacky viewport stuff
+      const vec3 Po = origin + direction * t1;
+      No = (Po - center) / radius;
       reportIntersectionNV(t1, 0);
     } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
-      const vec3 hitValue = origin + t2 * direction;
-      normalVector = (hitValue - center.xyz) / radius;
-      normalVector.y *= -1.f; // Deal with the wacky viewport stuff
+      const vec3 Po = origin + direction * t2;
+      No = (Po - center) / radius;
       reportIntersectionNV(t2, 0);
     }
   }

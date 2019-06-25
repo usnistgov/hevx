@@ -16,7 +16,7 @@ layout(push_constant) uniform PushConstants {
   float iFrameRate;
   float iFrame;
   vec3 padding1;
-  float padding2;
+  bool bDebugNormals;
   vec4 EyePosition;
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
@@ -51,11 +51,23 @@ layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
 };
 
 layout(location = 0) rayPayloadInNV vec4 hitValue;
-hitAttributeNV vec3 normalVector;
+
+hitAttributeNV vec3 No; // Normal in world-space
 
 void main() {
-  const vec3 P = hitValue.xyz;
-  const vec3 N = normalize((ViewMatrixInverse * vec4(normalVector, 0.f)).xyz);
-  hitValue = vec4(.5f) * vec4(N + vec3(1.f), 2.f);
+  const vec4 Po = vec4(hitValue.xyz, 1.f);
+  const vec4 Pe = ModelViewMatrix * Po;
+
+  if (bDebugNormals) {
+    // HEV is -Z up, so surfaces with upward normals have high Z component.
+    // Most other engines use +Y up, so flip the components here to visualize it.
+    const vec3 n = normalize(vec3(No.x, -No.z, -No.y));
+    hitValue = vec4(vec3(.5f) * (n + vec3(1.f)), 1.f);
+    return;
+  }
+
+  const vec3 l = normalize(Lights[0].direction.xyz * Pe.w - Lights[0].direction.w * Pe.xyz);
+  const float dP = max(dot(l, normalize(No)), .2f);
+  hitValue = vec4(dP, dP, dP, 1.f);
 }
 

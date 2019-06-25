@@ -1,0 +1,360 @@
+{
+  "asset": {
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+      ]
+    },
+    {
+      "mesh": 0
+    },
+    {
+      "mesh": 1
+    },
+    {
+      "mesh": 2
+    },
+    {
+      "mesh": 3
+    },
+    {
+      "mesh": 4
+    },
+    {
+      "mesh": 5
+    },
+    {
+      "mesh": 6
+    },
+    {
+      "mesh": 7
+    },
+    {
+      "mesh": 8
+    },
+    {
+      "mesh": 9
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2
+          },
+          "mode": 5,
+          "material": 0
+        }
+      ],
+      "name": "mesh0",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 3, 3, 4, 4, 4, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 4
+          },
+          "mode": 5,
+          "material": 1
+        }
+      ],
+      "name": "mesh1",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 4, 4, 4, 4, 5, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 6
+          },
+          "mode": 5,
+          "material": 2
+        }
+      ],
+      "name": "mesh2",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 3, 4, 4, 5, 5, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 7,
+            "POSITION": 8
+          },
+          "mode": 5,
+          "material": 0
+        }
+      ],
+      "name": "mesh3",
+      "extras": {
+        "old_drawArrayLengths": [ 4, 4, 18, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 9,
+            "POSITION": 10
+          },
+          "mode": 5,
+          "material": 1
+        }
+      ],
+      "name": "mesh4",
+      "extras": {
+        "old_drawArrayLengths": [ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 11,
+            "POSITION": 12
+          },
+          "mode": 5,
+          "material": 2
+        }
+      ],
+      "name": "mesh5",
+      "extras": {
+        "old_drawArrayLengths": [ 4, 4, 18, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 13,
+            "POSITION": 14
+          },
+          "mode": 5,
+          "material": 3
+        }
+      ],
+      "name": "mesh6",
+      "extras": {
+        "old_drawArrayLengths": [ 4, 4, 4, 4, 4, 4, 6, 9, 12, 6, 8, 10, 11, 7, 10, 6, 45 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 15,
+            "POSITION": 16
+          },
+          "mode": 5,
+          "material": 0
+        }
+      ],
+      "name": "mesh7",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 3, 4, 8, 6, 20, 20, 6, 8, 5, 6, 5, 7, 6, 6, 7, 6, 6, 5, 5, 5, 5 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 17,
+            "POSITION": 18
+          },
+          "mode": 5,
+          "material": 1
+        }
+      ],
+      "name": "mesh8",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 7, 5, 8 ]
+      }
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 19,
+            "POSITION": 20
+          },
+          "mode": 5,
+          "material": 2
+        }
+      ],
+      "name": "mesh9",
+      "extras": {
+        "old_drawArrayLengths": [ 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 8, 20, 5, 6, 8, 6, 5, 5, 5 ]
+      }
+    },
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "name": "Red",
+      "extras": {
+        "old_ambient": [ 0.3, 0.3, 0.3, 1.0 ],
+        "old_specular": [ 0.7, 0.7, 0.7, 1.0 ],
+        "old_shininess": 20.48
+      }
+    },
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.0,
+          1.0,
+          0.0,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "name": "Green",
+      "extras": {
+        "old_ambient": [ 0.181176, 0.217647, 0.269412, 1.0 ],
+        "old_specular": [ 0.422745, 0.507843, 0.628627, 1.0 ],
+        "old_shininess": 20.48
+      }
+    },
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "name": "Blue",
+      "extras": {
+        "old_ambient": [ 0.181176, 0.217647, 0.269412, 1.0 ],
+        "old_specular": [ 0.422745, 0.507843, 0.628627, 1.0 ],
+        "old_shininess": 20.48
+      }
+    },
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7,
+          0.7,
+          0.7,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "name": "Gray",
+      "extras": {
+        "old_shininess": 0,
+        "old_specular": [ 0.2, 0.2, 0.2, 1.0 ],
+        "old_ambient": [ 0.3, 0.3, 0.3, 1.0 ]
+      }
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 1104,
+      "target": 34962,
+      "name": "mesh0"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1104,
+      "byteLength": 1056,
+      "target": 34962,
+      "name": "mesh1"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2160,
+      "byteLength": 1056,
+      "target": 34962,
+      "name": "mesh2"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 3216,
+      "byteLength": 1104,
+      "target": 34962,
+      "name": "mesh3"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 4320,
+      "byteLength": 1440,
+      "target": 34962,
+      "name": "mesh4"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 5760,
+      "byteLength": 1104,
+      "target": 34962,
+      "name": "mesh5"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 6864,
+      "byteLength": 3696,
+      "target": 34962,
+      "name": "mesh6"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 10560,
+      "byteLength": 3648,
+      "target": 34962,
+      "name": "mesh7"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 14208,
+      "byteLength": 1728,
+      "target": 34962,
+      "name": "mesh8"
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 15936,
+      "byteLength": 2544,
+      "target": 34962,
+      "name": "mesh9"
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1840,
+      "uri": "gnomon.bin"
+    }
+  ]
+}
