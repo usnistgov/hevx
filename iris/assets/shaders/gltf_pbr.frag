@@ -234,11 +234,12 @@ void main() {
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
 
   float roughnessSq = alphaRoughness * alphaRoughness;
-  vec3 color = vec3(0.0);
+  vec3 color = vec3(0.2) * diffuseColor; // ambient
 
   for (int i = 0; i < NumLights; ++i) {
     if (Lights[i].color.a > 0) {
-      vec3 l = normalize(Lights[i].direction.xyz * Pe.w - Lights[i].direction.w * Pe.xyz);
+      //vec3 l = normalize(Lights[i].direction.xyz * Pe.w - Lights[i].direction.w * Pe.xyz);
+      vec3 l = normalize(Lights[i].direction.xyz);
       vec3 h = normalize(l + v);
 
       float NdotL = clamp(dot(n, l), 0.001, 1.0);
