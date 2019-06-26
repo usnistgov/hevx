@@ -5,6 +5,8 @@ import struct
 meshdata = [
   {
     # PrimitiveSets 1
+    "m": 0,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 11
     "l": [ 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5 ],
 
@@ -111,6 +113,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 1,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 10
     "l": [ 3, 4, 4, 4, 4, 5, 5, 5, 5, 5 ],
 
@@ -213,6 +217,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 2,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 10
     "l": [ 3, 3, 4, 4, 5, 5, 5, 5, 5, 5 ],
 
@@ -315,6 +321,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 0,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 7
     "l": [ 4, 4, 18, 5, 5, 5, 5 ],
 
@@ -421,6 +429,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 1,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 14
     "l": [ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5 ],
 
@@ -555,6 +565,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 2,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 7
     "l": [ 4, 4, 18, 5, 5, 5, 5 ],
 
@@ -661,6 +673,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 3,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 17
     "l": [ 4, 4, 4, 4, 4, 4, 6, 9, 12, 6, 8, 10, 11, 7, 10, 6, 45 ],
 
@@ -983,6 +997,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 0,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 22
     "l": [ 3, 3, 4, 8, 6, 20, 20, 6, 8, 5, 6, 5, 7, 6, 6, 7, 6, 6, 5, 5, 5, 5 ],
 
@@ -1301,6 +1317,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 1,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 16
     "l": [ 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 7, 5, 8 ],
 
@@ -1459,6 +1477,8 @@ meshdata = [
 
   {
     # PrimitiveSets 1
+    "m": 2,
+
     #  DrawArrayLengths TRIANGLE_STRIP 0 19
     "l": [ 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 8, 20, 5, 6, 8, 6, 5, 5, 5 ],
 
@@ -1684,53 +1704,6 @@ meshdata = [
   }
 ] # meshdata
 
-def write_array(fh, arr):
-  f = 'f' * len(arr)
-  fh.write(struct.pack(f, *arr))
-  return struct.calcsize(f)
-
-def min_element3(arr, start, count):
-  end = start + count * 3
-  m = [arr[start], arr[start + 1], arr[start + 2]]
-
-  for i in range(start + 3, end, 3):
-    if arr[i] < m[0]:
-      m[0] = arr[i]
-    if arr[i + 1] < m[1]:
-      m[1] = arr[i + 1]
-    if arr[i + 2] < m[2]:
-      m[2] = arr[i + 2]
-
-  if arr[end - 2] < m[0]:
-    m[0] = arr[end - 2]
-  if arr[end - 1] < m[1]:
-    m[1] = arr[end - 1]
-  if arr[end] < m[2]:
-    m[2] = arr[end]
-
-  return m
-
-def max_element3(arr, start, count):
-  end = start + count * 3
-  m = [arr[start], arr[start + 1], arr[start + 2]]
-
-  for i in range(start + 3, end, 3):
-    if arr[i] > m[0]:
-      m[0] = arr[i]
-    if arr[i + 1] > m[1]:
-      m[1] = arr[i + 1]
-    if arr[i + 2] > m[2]:
-      m[2] = arr[i + 2]
-
-  if arr[end - 2] > m[0]:
-    m[0] = arr[end - 2]
-  if arr[end - 1] > m[1]:
-    m[1] = arr[end - 1]
-  if arr[end] > m[2]:
-    m[2] = arr[end]
-
-  return m
-
 gltf = {
   "accessors": [
   ],
@@ -1860,90 +1833,124 @@ gltf = {
   ]
 }
 
-with open('gnomon.bin', 'wb') as fh:
-  o = 0
-  k = 0
+def write_array(fh, arr):
+  f = 'f' * len(arr)
+  fh.write(struct.pack(f, *arr))
+  return struct.calcsize(f)
 
-  for i, data in enumerate(meshdata):
-    if i > 0: break
-    vs = data['v']
-    ns = data['n']
+def min_element3(arr, start, count):
+  start *= 3
+  end = start + count * 3
+  m = [arr[start], arr[start + 1], arr[start + 2]]
 
-    sv = write_array(fh, vs)
-    sn = write_array(fh, ns)
+  for i in range(start + 3, end, 3):
+    if arr[i] < m[0]:
+      m[0] = arr[i]
+    if arr[i + 1] < m[1]:
+      m[1] = arr[i + 1]
+    if arr[i + 2] < m[2]:
+      m[2] = arr[i + 2]
 
-    bufferView = {
-      "buffer": 0,
-      "byteOffset": o,
-      "byteLength": sv + sn,
-      "byteStride": 12,
-      "target": 34962,
-      "name": "mesh{}".format(i)
+  return m
+
+def max_element3(arr, start, count):
+  start *= 3
+  end = start + count * 3
+  m = [arr[start], arr[start + 1], arr[start + 2]]
+
+  for i in range(start + 3, end, 3):
+    if arr[i] > m[0]:
+      m[0] = arr[i]
+    if arr[i + 1] > m[1]:
+      m[1] = arr[i + 1]
+    if arr[i + 2] > m[2]:
+      m[2] = arr[i + 2]
+
+  return m
+
+if __name__ == "__main__":
+  with open('gnomon.bin', 'wb') as fh:
+    o = 0
+    k = 0
+
+    for i, data in enumerate(meshdata):
+      vs = data['v']
+      ns = data['n']
+
+      sv = write_array(fh, vs)
+      sn = write_array(fh, ns)
+
+      bufferView = {
+        "buffer": 0,
+        "byteOffset": o,
+        "byteLength": sv + sn,
+        "byteStride": 12,
+        "target": 34962,
+        "name": "mesh{}".format(i)
+      }
+
+      gltf["bufferViews"].append(bufferView)
+
+      o += sv + sn
+
+      mesh = {
+        "primitives": [
+        ],
+        "name": "mesh{}".format(i)
+      }
+
+      ao = 0
+      bo = 0
+
+      for j in range(len(data['l'])):
+        count = data['l'][j]
+
+        primitive = {
+          "attributes": {
+            "POSITION": k + (j * 2),
+            "NORMAL": k + (j * 2 + 1)
+          },
+          "mode": 5,
+          "material": data['m']
+        }
+
+        p_accessor = {
+          "bufferView": i,
+          "byteOffset": bo,
+          "componentType": 5126,
+          "count": count,
+          "type": "VEC3",
+          "max": max_element3(vs, ao, count),
+          "min": min_element3(vs, ao, count),
+          "name": "mesh{}_prim{}_position".format(i, j)
+        }
+
+        n_accessor = {
+          "bufferView": i,
+          "byteOffset": sv + bo,
+          "componentType": 5126,
+          "count": count,
+          "type": "VEC3",
+          "name": "mesh{}_prim{}_normal".format(i, j)
+        }
+
+        mesh['primitives'].append(primitive)
+        gltf['accessors'].append(p_accessor)
+        gltf['accessors'].append(n_accessor)
+
+        ao += count
+        bo += struct.calcsize('f' * count * 3)
+
+      gltf['meshes'].append(mesh)
+
+      k += j * 2 + 2
+
+    buffer = {
+      "byteLength": o,
+      "uri": "gnomon.bin"
     }
 
-    gltf["bufferViews"].append(bufferView)
+    gltf["buffers"].append(buffer)
 
-    o += sv + sn
-
-    mesh = {
-      "primitives": [
-      ],
-      "name": "mesh{}".format(i)
-    }
-
-    ao = 0
-    bo = 0
-
-    for j in range(len(data['l'])):
-      count = data['l'][j]
-
-      primitive = {
-        "attributes": {
-          "POSITION": k + (j * 2),
-          "NORMAL": k + (j * 2 + 1)
-        },
-        "mode": 5,
-        "material": 0
-      }
-
-      p_accessor = {
-        "bufferView": i,
-        "byteOffset": bo,
-        "componentType": 5126,
-        "count": count,
-        "type": "VEC3",
-        "max": max_element3(vs, ao, count),
-        "min": min_element3(vs, ao, count)
-      }
-
-      n_accessor = {
-        "bufferView": i,
-        "byteOffset": o - sn + bo,
-        "componentType": 5126,
-        "count": count,
-        "type": "VEC3"
-      }
-
-      mesh['primitives'].append(primitive)
-      gltf['accessors'].append(p_accessor)
-      gltf['accessors'].append(n_accessor)
-
-      ao += count
-      bo += struct.calcsize('f' * count * 3)
-
-    gltf['meshes'].append(mesh)
-
-    k += j * 2 + 2
-
-  buffer = {
-    "byteLength": o,
-    "uri": "gnomon.bin"
-  }
-
-  gltf["buffers"].append(buffer)
-
-with open('gnomon.gltf', 'w') as fh:
-  json.dump(gltf, fh, indent=2)
-
-print(len(gltf['accessors']))
-print(len(gltf['bufferViews']))
+  with open('gnomon.gltf', 'w') as fh:
+    json.dump(gltf, fh, indent=2)
