@@ -5,7 +5,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 11
-    #  3 3 3 4 4 4 5 5 5 5 5
+    "l": [ 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 46
     "v": [
@@ -111,7 +111,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 10
-    #  3 4 4 4 4 5 5 5 5 5
+    "l": [ 3, 4, 4, 4, 4, 5, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 44
     "v": [
@@ -213,7 +213,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 10
-    #  3 3 4 4 5 5 5 5 5 5
+    "l": [ 3, 3, 4, 4, 5, 5, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 44
     "v": [
@@ -315,7 +315,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 7
-    #  4 4 18 5 5 5 5
+    "l": [ 4, 4, 18, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 46
     "v": [
@@ -421,7 +421,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 14
-    #  4 4 4 4 4 4 4 4 4 4 5 5 5 5
+    "l": [ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 60
     "v": [
@@ -555,7 +555,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 7
-    #  4 4 18 5 5 5 5
+    "l": [ 4, 4, 18, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 46
     "v": [
@@ -661,7 +661,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 17
-    #  4 4 4 4 4 4 6 9 12 6 8 10 11 7 10 6 45
+    "l": [ 4, 4, 4, 4, 4, 4, 6, 9, 12, 6, 8, 10, 11, 7, 10, 6, 45 ],
 
     # VertexArray Vec3Array 154
     "v": [
@@ -983,7 +983,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 22
-    #  3 3 4 8 6 20 20 6 8 5 6 5 7 6 6 7 6 6 5 5 5 5
+    "l": [ 3, 3, 4, 8, 6, 20, 20, 6, 8, 5, 6, 5, 7, 6, 6, 7, 6, 6, 5, 5, 5, 5 ],
 
     # VertexArray Vec3Array 152
     "v": [
@@ -1301,7 +1301,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 16
-    #  3 4 4 4 4 4 4 4 4 4 4 4 5 7 5 8
+    "l": [ 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 7, 5, 8 ],
 
     # VertexArray Vec3Array 72
     "v": [
@@ -1459,7 +1459,7 @@ meshes = [
   {
     # PrimitiveSets 1
     #  DrawArrayLengths TRIANGLE_STRIP 0 19
-    #  3 3 4 4 4 4 4 4 4 4 8 20 5 6 8 6 5 5 5
+    "l": [ 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 8, 20, 5, 6, 8, 6, 5, 5, 5 ],
 
     # VertexArray Vec3Array 106
     "v": [
@@ -1683,20 +1683,18 @@ meshes = [
   }
 ] # meshes
 
+def write_array(fh, arr, pmm):
+  l = len(arr)
+  f = 'f' * l
+  fh.write(struct.pack(f, *arr))
+  s = struct.calcsize(f)
+  print(i, o, s)
+  return s
+
 with open('gnomon.bin', 'wb') as fh:
   o = 0;
   for i, mesh in enumerate(meshes):
-
-    l = len(mesh['v'])
-    fh.write(struct.pack('f' * l, *mesh['v']))
-    s = struct.calcsize('f' * l)
-    print(i, o, s)
-    o += s
-
-    l = len(mesh['n'])
-    fh.write(struct.pack('f' * l, *mesh['n']))
-    s = struct.calcsize('f' * l)
-    print(i, o, s)
-    o += s
+    o += write_array(fh, mesh['v'], True)
+    o += write_array(fh, mesh['n'], False)
 
   print(o)

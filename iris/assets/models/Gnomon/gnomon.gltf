@@ -52,162 +52,112 @@
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 1,
-            "POSITION": 2
           },
           "mode": 5,
           "material": 0
         }
       ],
-      "name": "mesh0",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 3, 3, 4, 4, 4, 5, 5, 5, 5 ]
-      }
+      "name": "mesh0"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 3,
-            "POSITION": 4
           },
           "mode": 5,
           "material": 1
         }
       ],
-      "name": "mesh1",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 4, 4, 4, 4, 5, 5, 5, 5, 5 ]
-      }
+      "name": "mesh1"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 5,
-            "POSITION": 6
           },
           "mode": 5,
           "material": 2
         }
       ],
-      "name": "mesh2",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 3, 4, 4, 5, 5, 5, 5, 5, 5 ]
-      }
+      "name": "mesh2"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 7,
-            "POSITION": 8
           },
           "mode": 5,
           "material": 0
         }
       ],
-      "name": "mesh3",
-      "extras": {
-        "old_drawArrayLengths": [ 4, 4, 18, 5, 5, 5, 5 ]
-      }
+      "name": "mesh3"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 9,
-            "POSITION": 10
           },
           "mode": 5,
           "material": 1
         }
       ],
-      "name": "mesh4",
-      "extras": {
-        "old_drawArrayLengths": [ 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5 ]
-      }
+      "name": "mesh4"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 11,
-            "POSITION": 12
           },
           "mode": 5,
           "material": 2
         }
       ],
-      "name": "mesh5",
-      "extras": {
-        "old_drawArrayLengths": [ 4, 4, 18, 5, 5, 5, 5 ]
-      }
+      "name": "mesh5"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 13,
-            "POSITION": 14
           },
           "mode": 5,
           "material": 3
         }
       ],
-      "name": "mesh6",
-      "extras": {
-        "old_drawArrayLengths": [ 4, 4, 4, 4, 4, 4, 6, 9, 12, 6, 8, 10, 11, 7, 10, 6, 45 ]
-      }
+      "name": "mesh6"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 15,
-            "POSITION": 16
           },
           "mode": 5,
           "material": 0
         }
       ],
-      "name": "mesh7",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 3, 4, 8, 6, 20, 20, 6, 8, 5, 6, 5, 7, 6, 6, 7, 6, 6, 5, 5, 5, 5 ]
-      }
+      "name": "mesh7"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 17,
-            "POSITION": 18
           },
           "mode": 5,
           "material": 1
         }
       ],
-      "name": "mesh8",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 7, 5, 8 ]
-      }
+      "name": "mesh8"
     },
     {
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 19,
-            "POSITION": 20
           },
           "mode": 5,
           "material": 2
         }
       ],
-      "name": "mesh9",
-      "extras": {
-        "old_drawArrayLengths": [ 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 8, 20, 5, 6, 8, 6, 5, 5, 5 ]
-      }
-    },
+      "name": "mesh9"
+    }
   ],
   "materials": [
     {
@@ -284,6 +234,7 @@
       "buffer": 0,
       "byteOffset": 0,
       "byteLength": 1104,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh0"
     },
@@ -291,6 +242,7 @@
       "buffer": 0,
       "byteOffset": 1104,
       "byteLength": 1056,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh1"
     },
@@ -298,6 +250,7 @@
       "buffer": 0,
       "byteOffset": 2160,
       "byteLength": 1056,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh2"
     },
@@ -305,6 +258,7 @@
       "buffer": 0,
       "byteOffset": 3216,
       "byteLength": 1104,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh3"
     },
@@ -312,6 +266,7 @@
       "buffer": 0,
       "byteOffset": 4320,
       "byteLength": 1440,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh4"
     },
@@ -319,6 +274,7 @@
       "buffer": 0,
       "byteOffset": 5760,
       "byteLength": 1104,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh5"
     },
@@ -326,6 +282,7 @@
       "buffer": 0,
       "byteOffset": 6864,
       "byteLength": 3696,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh6"
     },
@@ -333,6 +290,7 @@
       "buffer": 0,
       "byteOffset": 10560,
       "byteLength": 3648,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh7"
     },
@@ -340,6 +298,7 @@
       "buffer": 0,
       "byteOffset": 14208,
       "byteLength": 1728,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh8"
     },
@@ -347,13 +306,14 @@
       "buffer": 0,
       "byteOffset": 15936,
       "byteLength": 2544,
+      "byteStride": 12,
       "target": 34962,
       "name": "mesh9"
     }
   ],
   "buffers": [
     {
-      "byteLength": 1840,
+      "byteLength": 18480,
       "uri": "gnomon.bin"
     }
   ]
