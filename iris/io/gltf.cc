@@ -1885,93 +1885,98 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(result.error());
     }
 
-    auto indexAccessor = (*accessors)[*primitive.indices];
-
-    VkDeviceSize const indexBufferSize =
-      indexAccessor.count * (indexAccessor.componentType == 5123
-                               ? sizeof(std::uint16_t)
-                               : sizeof(std::uint32_t));
-
-    staging = ReallocateBuffer(*staging, indexBufferSize,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VMA_MEMORY_USAGE_CPU_TO_GPU);
-    if (!staging) {
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(staging.error());
-    }
-
-    std::byte* pIndexBuffer;
-    if (auto ptr = staging->Map<std::byte*>()) {
-      pIndexBuffer = *ptr;
+    if (!primitive.indices) {
+      renderable.numVertices =
+        gsl::narrow_cast<std::uint32_t>(positions.size());
     } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(ptr.error());
+      auto indexAccessor = (*accessors)[*primitive.indices];
+
+      VkDeviceSize const indexBufferSize =
+        indexAccessor.count * (indexAccessor.componentType == 5123
+                                 ? sizeof(std::uint16_t)
+                                 : sizeof(std::uint32_t));
+
+      staging = ReallocateBuffer(*staging, indexBufferSize,
+                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                 VMA_MEMORY_USAGE_CPU_TO_GPU);
+      if (!staging) {
+        DestroyBuffer(renderable.vertexBuffer);
+        DestroyBuffer(renderable.buffers.back());
+        renderable.buffers.pop_back();
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(staging.error());
+      }
+
+      std::byte* pIndexBuffer;
+      if (auto ptr = staging->Map<std::byte*>()) {
+        pIndexBuffer = *ptr;
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(ptr.error());
+      }
+
+      auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
+      auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
+
+      std::memcpy(pIndexBuffer,
+                  buffersBytes[indexBufferView.buffer].data() +
+                    indexBufferView.byteOffset.value_or(0),
+                  indexBufferSize);
+
+      staging->Unmap();
+
+      if (auto buf = AllocateBuffer(indexBufferSize,
+                                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                    VMA_MEMORY_USAGE_GPU_ONLY)) {
+        renderable.indexBuffer = std::move(*buf);
+      } else {
+        DestroyBuffer(renderable.vertexBuffer);
+        DestroyBuffer(renderable.buffers.back());
+        renderable.buffers.pop_back();
+        DestroyBuffer(*staging);
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(buf.error());
+      }
+
+      if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
+        commandBuffer = *cb;
+      } else {
+        DestroyBuffer(renderable.indexBuffer);
+        DestroyBuffer(renderable.vertexBuffer);
+        DestroyBuffer(renderable.buffers.back());
+        renderable.buffers.pop_back();
+        DestroyBuffer(*staging);
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(cb.error());
+      }
+
+      region = {};
+      region.srcOffset = 0;
+      region.dstOffset = 0;
+      region.size = indexBufferSize;
+
+      vkCmdCopyBuffer(commandBuffer, staging->buffer,
+                      renderable.indexBuffer.buffer, 1, &region);
+
+      if (auto result = Renderer::EndOneTimeSubmit(
+            commandBuffer, commandQueue.commandPool, commandQueue.queue,
+            commandQueue.submitFence);
+          !result) {
+        DestroyBuffer(renderable.indexBuffer);
+        DestroyBuffer(renderable.vertexBuffer);
+        DestroyBuffer(renderable.buffers.back());
+        renderable.buffers.pop_back();
+        DestroyBuffer(*staging);
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(result.error());
+      }
+
+      renderable.indexType =
+        (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
+                                             : VK_INDEX_TYPE_UINT32);
+      renderable.numIndices = indexAccessor.count;
     }
-
-    auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
-    auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
-
-    std::memcpy(pIndexBuffer,
-                buffersBytes[indexBufferView.buffer].data() +
-                  indexBufferView.byteOffset.value_or(0),
-                indexBufferSize);
-
-    staging->Unmap();
-
-    if (auto buf = AllocateBuffer(indexBufferSize,
-                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                  VMA_MEMORY_USAGE_GPU_ONLY)) {
-      renderable.indexBuffer = std::move(*buf);
-    } else {
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(buf.error());
-    }
-
-    if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
-      commandBuffer = *cb;
-    } else {
-      DestroyBuffer(renderable.indexBuffer);
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(cb.error());
-    }
-
-    region = {};
-    region.srcOffset = 0;
-    region.dstOffset = 0;
-    region.size = indexBufferSize;
-
-    vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                    renderable.indexBuffer.buffer, 1, &region);
-
-    if (auto result = Renderer::EndOneTimeSubmit(
-          commandBuffer, commandQueue.commandPool, commandQueue.queue,
-          commandQueue.submitFence);
-        !result) {
-      DestroyBuffer(renderable.indexBuffer);
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(result.error());
-    }
-
-    renderable.indexType =
-      (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
-                                           : VK_INDEX_TYPE_UINT32);
-    renderable.numIndices = indexAccessor.count;
 
     renderable.modelMatrix = nodeMat;
 
@@ -2390,6 +2395,7 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
   }
 
   if (auto renderables = ParseGLTF(j, path)) {
+    IRIS_LOG_DEBUG("Adding {} renderables", renderables->size());
     for (auto&& r : *renderables) Renderer::AddRenderable(r);
   } else {
     IRIS_LOG_ERROR("Error creating renderable: {}", renderables.error().what());
