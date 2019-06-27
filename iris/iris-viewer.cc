@@ -112,8 +112,6 @@ int main(int argc, char** argv) {
                            {"scenes", {scene}},
                            {"nodes", {node}}};
 
-    logger.info(gltf.dump(2));
-
     if (auto result = iris::Renderer::LoadGLTF(gltf); !result) {
       logger.error("Error loading {}: {}", shadertoy_url,
                    result.error().what());

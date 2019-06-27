@@ -51,8 +51,6 @@ struct Renderable {
   std::uint32_t numVertices{0};
   std::uint32_t firstVertex{0};
 
-  std::uint32_t numTextures{0};
-
   glm::vec4 boundingSphere{};
 }; // struct Renderable
 
