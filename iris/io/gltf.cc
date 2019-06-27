@@ -1526,34 +1526,54 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       return tl::unexpected(fs.error());
     }
 
-    std::uint32_t vertexSize = sizeof(glm::vec3) * 2;
-    if (!tangents.empty()) vertexSize += sizeof(glm::vec4);
-    if (!texcoords.empty()) vertexSize += sizeof(glm::vec2);
+    std::uint32_t vertexStride = sizeof(glm::vec3) * 2;
+    if (!tangents.empty()) vertexStride += sizeof(glm::vec4);
+    if (!texcoords.empty()) vertexStride += sizeof(glm::vec2);
 
     absl::FixedArray<VkVertexInputBindingDescription>
       vertexInputBindingDescriptions(1);
-    vertexInputBindingDescriptions[0] = {0, vertexSize,
-                                         VK_VERTEX_INPUT_RATE_VERTEX};
+    vertexInputBindingDescriptions[0] = {
+      0,                          // binding
+      vertexStride,               // stride
+      VK_VERTEX_INPUT_RATE_VERTEX // inputRate
+    };
 
     absl::InlinedVector<VkVertexInputAttributeDescription, 4>
       vertexInputAttributeDescriptions(2);
 
-    vertexInputAttributeDescriptions[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
+    vertexInputAttributeDescriptions[0] = {
+      0,                          // location
+      0,                          // binding
+      VK_FORMAT_R32G32B32_SFLOAT, // format
+      0                           // offset
+    };
     std::uint32_t offset = sizeof(glm::vec3);
 
-    vertexInputAttributeDescriptions[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT,
-                                           offset};
+    vertexInputAttributeDescriptions[1] = {
+      1,                          // location
+      0,                          // binding
+      VK_FORMAT_R32G32B32_SFLOAT, // format
+      offset                      // offset
+    };
     offset += sizeof(glm::vec3);
 
     if (!tangents.empty()) {
-      vertexInputAttributeDescriptions.push_back(
-        {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offset});
+      vertexInputAttributeDescriptions.push_back({
+        2,                             // location
+        0,                             // binding
+        VK_FORMAT_R32G32B32A32_SFLOAT, // format
+        offset                         // offset
+      });
       offset += sizeof(glm::vec4);
     }
 
     if (!texcoords.empty()) {
-      vertexInputAttributeDescriptions.push_back(
-        {3, 0, VK_FORMAT_R32G32_SFLOAT, offset});
+      vertexInputAttributeDescriptions.push_back({
+        3,                       // location
+        0,                       // binding
+        VK_FORMAT_R32G32_SFLOAT, // format
+        offset                   // offset
+      });
       offset += sizeof(glm::vec2);
     }
 
@@ -1795,7 +1815,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
       writeDescriptorSets.data(), 0, nullptr);
 
-    VkDeviceSize const vertexBufferSize = vertexSize * positions.size();
+    VkDeviceSize const vertexBufferSize = vertexStride * positions.size();
 
     staging = ReallocateBuffer(*staging, vertexBufferSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

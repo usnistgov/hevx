@@ -8,6 +8,7 @@
 #include "iris/config.h"
 
 #include "iris/buffer.h"
+#include "iris/components/material.h"
 #include "iris/types.h"
 #include "iris/vulkan.h"
 
@@ -50,7 +51,14 @@ namespace Control {
 class Control;
 } // namespace Control
 
+/*!
+\namespace Renderer::Component
+\brief the \ref Renderer components.
+
+\see \ref ECS for a brief overview of the Entity Component System (ECS).
+*/
 namespace Renderer::Component {
+struct Material;
 struct Renderable;
 struct Traceable;
 } // namespace Renderer::Component
@@ -146,6 +154,13 @@ BeginFrame.
 executed into the primary command buffer for each \ref Window.
 */
 void EndFrame(gsl::span<const VkCommandBuffer> secondaryCBs = {}) noexcept;
+
+using MaterialID = ComponentID<struct MaterialIDTab>;
+
+MaterialID AddMaterial(Component::Material material) noexcept;
+
+tl::expected<void, std::system_error>
+RemoveMaterial(MaterialID const& id) noexcept;
 
 using RenderableID = ComponentID<struct RenderableIDTag>;
 
@@ -317,6 +332,13 @@ inline Features operator&=(Features& lhs, Features const& rhs) noexcept {
 } // namespace iris
 
 namespace std {
+
+template <>
+struct hash<iris::Renderer::MaterialID> {
+  std::size_t operator()(iris::Renderer::MaterialID const& v) const noexcept {
+    return std::hash<iris::Renderer::MaterialID::id_type>{}(v());
+  }
+};
 
 template <>
 struct hash<iris::Renderer::RenderableID> {

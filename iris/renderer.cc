@@ -174,7 +174,7 @@ static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 static bool sShowDemoWindow{false};
 static bool sDebugNormals{false};
 
-template <class T, class ID>
+template <class ID, class T>
 struct ComponentSystem {
   ID Insert(T component) {
     std::lock_guard<decltype(mutex)> lck(mutex);
@@ -201,8 +201,9 @@ struct ComponentSystem {
   absl::flat_hash_map<ID, T> components;
 }; // struct ComponentSystem
 
-static ComponentSystem<Component::Renderable, RenderableID> sRenderables{};
-static ComponentSystem<Component::Traceable, TraceableID> sTraceables{};
+static ComponentSystem<MaterialID, Component::Material> sMaterials{};
+static ComponentSystem<RenderableID, Component::Renderable> sRenderables{};
+static ComponentSystem<TraceableID, Component::Traceable> sTraceables{};
 
 // TODO: move this
 static Trackball sTrackball;
@@ -2468,6 +2469,82 @@ void iris::Renderer::EndFrame(
 
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // iris::Renderer::EndFrame
+
+iris::Renderer::MaterialID
+iris::Renderer::AddMaterial(Component::Material material) noexcept {
+  IRIS_LOG_ENTER();
+
+  auto&& id = sMaterials.Insert(std::move(material));
+
+  IRIS_LOG_LEAVE();
+  return id;
+} // AddMaterial
+
+tl::expected<void, std::system_error>
+iris::Renderer::RemoveMaterial(MaterialID const& id) noexcept {
+  IRIS_LOG_ENTER();
+
+  class ReleaseTask : public tbb::task {
+  public:
+      ReleaseTask(Component::Material m) noexcept
+        : material_(std::move(m)) {}
+
+      tbb::task* execute() override {
+        IRIS_LOG_ENTER();
+
+        if (material_.materialBuffer) DestroyBuffer(material_.materialBuffer);
+
+        for (auto&& sampler : material_.textureSamplers) {
+          if (sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(sDevice, sampler, nullptr);
+          }
+        }
+
+        for (auto&& view : material_.textureViews) {
+          if (view != VK_NULL_HANDLE) {
+            vkDestroyImageView(sDevice, view, nullptr);
+          }
+        }
+
+        for (auto&& image : material_.textures) {
+          if (image) DestroyImage(image);
+        }
+
+        if (material_.descriptorSet != VK_NULL_HANDLE) {
+          vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
+                               &material_.descriptorSet);
+        }
+
+        if (material_.descriptorSetLayout != VK_NULL_HANDLE) {
+          vkDestroyDescriptorSetLayout(sDevice, material_.descriptorSetLayout,
+                                       nullptr);
+        }
+
+        if (material_.pipeline) DestroyPipeline(material_.pipeline);
+
+        IRIS_LOG_LEAVE();
+        return nullptr;
+      }
+
+  private:
+      Component::Material material_;
+  }; // struct IOTask
+
+  if (auto old = sMaterials.Remove(id)) {
+    try {
+      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
+      tbb::task::enqueue(*task);
+    } catch (std::exception const& e) {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(
+        std::system_error(make_error_code(Error::kEnqueueError),
+                          fmt::format("Enqueing release task: {}", e.what())));
+    }
+  }
+
+  IRIS_LOG_LEAVE();
+  return {};
+} // iris::Renderer::RemoveMaterial
 
 iris::Renderer::RenderableID
 iris::Renderer::AddRenderable(Component::Renderable renderable) noexcept {

@@ -10,12 +10,6 @@
 #include "iris/vulkan.h"
 #include <cstdint>
 
-/*!
-\namespace iris::Renderer::Component
-\brief the \ref Renderer components.
-
-\see \ref ECS for a brief overview of the Entity Component System (ECS).
-*/
 namespace iris::Renderer::Component {
 
 struct Renderable {
