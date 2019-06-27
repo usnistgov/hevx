@@ -586,6 +586,17 @@ struct GLTF {
   CreateTexture(Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
                 std::vector<VkExtent2D> const& imagesExtents,
                 std::vector<std::vector<std::byte>> imagesBytes, bool srgb);
+
+  tl::expected<Renderer::Component::Material, std::system_error> CreateMaterial(
+    Renderer::CommandQueue commandQueue, VkPrimitiveTopology topology,
+    absl::InlinedVector<std::string, 8> const& shaderMacros,
+    decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
+      vertexInputBindingDescriptions,
+    decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
+      vertexInputAttributeDescriptions,
+    decltype(Renderer::Component::Material::descriptorSetLayoutBindings)
+      descriptorSetLayoutBindings,
+    Material const& material);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -1279,10 +1290,30 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       }
     }
 
+    decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
+      vertexInputAttributeDescriptions;
+    std::uint32_t vertexStride = 0;
+
+    vertexInputAttributeDescriptions.push_back({
+      0,                          // location
+      0,                          // binding
+      VK_FORMAT_R32G32B32_SFLOAT, // format
+      vertexStride                // offset
+    });
+    vertexStride += sizeof(glm::vec3);
+
     if (normals.empty()) {
       IRIS_LOG_WARN("GLTF model with no normals: generating");
       normals = GenerateNormals(positions, indices);
     }
+
+    vertexInputAttributeDescriptions.push_back({
+      1,                          // location
+      0,                          // binding
+      VK_FORMAT_R32G32B32_SFLOAT, // format
+      vertexStride                // offset
+    });
+    vertexStride += sizeof(glm::vec3);
 
     if (tangents.empty() && !texcoords.empty()) {
       IRIS_LOG_WARN("GLTF model with texcoords but no tangents: generating");
@@ -1298,6 +1329,33 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           Error::kFileLoadFailed, "unable to generate tangent space"));
       }
     }
+
+    if (!tangents.empty()) {
+      vertexInputAttributeDescriptions.push_back({
+        2,                             // location
+        0,                             // binding
+        VK_FORMAT_R32G32B32A32_SFLOAT, // format
+        vertexStride                   // offset
+      });
+      vertexStride += sizeof(glm::vec4);
+    }
+
+    if (!texcoords.empty()) {
+      vertexInputAttributeDescriptions.push_back({
+        3,                       // location
+        0,                       // binding
+        VK_FORMAT_R32G32_SFLOAT, // format
+        vertexStride             // offset
+      });
+      vertexStride += sizeof(glm::vec2);
+    }
+
+    decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
+      vertexInputBindingDescriptions{{
+        0,                          // binding
+        vertexStride,               // stride
+        VK_VERTEX_INPUT_RATE_VERTEX // inputRate
+      }};
 
     Renderer::Component::Renderable renderable;
 
@@ -1524,57 +1582,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(fs.error());
-    }
-
-    std::uint32_t vertexStride = sizeof(glm::vec3) * 2;
-    if (!tangents.empty()) vertexStride += sizeof(glm::vec4);
-    if (!texcoords.empty()) vertexStride += sizeof(glm::vec2);
-
-    absl::FixedArray<VkVertexInputBindingDescription>
-      vertexInputBindingDescriptions(1);
-    vertexInputBindingDescriptions[0] = {
-      0,                          // binding
-      vertexStride,               // stride
-      VK_VERTEX_INPUT_RATE_VERTEX // inputRate
-    };
-
-    absl::InlinedVector<VkVertexInputAttributeDescription, 4>
-      vertexInputAttributeDescriptions(2);
-
-    vertexInputAttributeDescriptions[0] = {
-      0,                          // location
-      0,                          // binding
-      VK_FORMAT_R32G32B32_SFLOAT, // format
-      0                           // offset
-    };
-    std::uint32_t offset = sizeof(glm::vec3);
-
-    vertexInputAttributeDescriptions[1] = {
-      1,                          // location
-      0,                          // binding
-      VK_FORMAT_R32G32B32_SFLOAT, // format
-      offset                      // offset
-    };
-    offset += sizeof(glm::vec3);
-
-    if (!tangents.empty()) {
-      vertexInputAttributeDescriptions.push_back({
-        2,                             // location
-        0,                             // binding
-        VK_FORMAT_R32G32B32A32_SFLOAT, // format
-        offset                         // offset
-      });
-      offset += sizeof(glm::vec4);
-    }
-
-    if (!texcoords.empty()) {
-      vertexInputAttributeDescriptions.push_back({
-        3,                       // location
-        0,                       // binding
-        VK_FORMAT_R32G32_SFLOAT, // format
-        offset                   // offset
-      });
-      offset += sizeof(glm::vec2);
     }
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
@@ -2037,6 +2044,30 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   return renderables;
 } // GLTF::ParseNode
 
+tl::expected<Renderer::Component::Material, std::system_error>
+GLTF::CreateMaterial(
+  Renderer::CommandQueue commandQueue, VkPrimitiveTopology topology,
+  absl::InlinedVector<std::string, 8> const& shaderMacros,
+  decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
+    vertexInputBindingDescriptions,
+  decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
+    vertexInputAttributeDescriptions,
+  decltype(Renderer::Component::Material::descriptorSetLayoutBindings)
+    descriptorSetLayoutBindings, Material const& material) {
+  IRIS_LOG_ENTER();
+
+  Renderer::Component::Material component;
+  component.vertexInputBindingDescriptions =
+    std::move(vertexInputBindingDescriptions);
+  component.vertexInputAttributeDescriptions =
+    std::move(vertexInputAttributeDescriptions);
+  component.topology = topology;
+  component.descriptorSetLayoutBindings =
+    std::move(descriptorSetLayoutBindings);
+
+  IRIS_LOG_LEAVE();
+} // GLTF::CreateMaterial
+
 tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
   std::vector<VkExtent2D> const& imagesExtents,
@@ -2334,6 +2365,22 @@ tl::expected<std::vector<Renderer::Component::Renderable>,
     IRIS_LOG_LEAVE();
     return tl::unexpected(std::system_error(Error::kFileLoadFailed,
                                             "could not acquire command queue"));
+  }
+
+  //
+  // Create all materials
+  //
+  auto&& materials =
+    g.materials.value_or<decltype(gltf::GLTF::materials)::value_type>({});
+  auto&& meshes =
+    g.meshes.value_or<decltype(gltf::GLTF::meshes)::value_type>({});
+
+  for (auto&& material : materials) {
+    for (auto&& mesh : meshes) {
+      for (auto&& prim : mesh.primitives) {
+        IRIS_LOG_WARN("implement");
+      }
+    }
   }
 
   //
