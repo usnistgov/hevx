@@ -2046,14 +2046,14 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
 tl::expected<Renderer::Component::Material, std::system_error>
 GLTF::CreateMaterial(
-  Renderer::CommandQueue commandQueue, VkPrimitiveTopology topology,
-  absl::InlinedVector<std::string, 8> const& shaderMacros,
+  Renderer::CommandQueue commandQueue[[maybe_unused]], VkPrimitiveTopology topology,
+  absl::InlinedVector<std::string, 8> const& shaderMacros[[maybe_unused]],
   decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
     vertexInputBindingDescriptions,
   decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
     vertexInputAttributeDescriptions,
   decltype(Renderer::Component::Material::descriptorSetLayoutBindings)
-    descriptorSetLayoutBindings, Material const& material) {
+    descriptorSetLayoutBindings, Material const& material[[maybe_unused]]) {
   IRIS_LOG_ENTER();
 
   Renderer::Component::Material component;
@@ -2066,6 +2066,7 @@ GLTF::CreateMaterial(
     std::move(descriptorSetLayoutBindings);
 
   IRIS_LOG_LEAVE();
+  return tl::unexpected(std::system_error(Error::kNotImplemented, "not implemented"));
 } // GLTF::CreateMaterial
 
 tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
@@ -2375,9 +2376,9 @@ tl::expected<std::vector<Renderer::Component::Renderable>,
   auto&& meshes =
     g.meshes.value_or<decltype(gltf::GLTF::meshes)::value_type>({});
 
-  for (auto&& material : materials) {
-    for (auto&& mesh : meshes) {
-      for (auto&& prim : mesh.primitives) {
+  for (auto&& material[[maybe_unused]] : materials) {
+    for (auto&& mesh[[maybe_unused]] : meshes) {
+      for (auto&& prim[[maybe_unused]] : mesh.primitives) {
         IRIS_LOG_WARN("implement");
       }
     }

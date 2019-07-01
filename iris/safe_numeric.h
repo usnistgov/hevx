@@ -17,6 +17,8 @@ aren't mixed.
 template <class T, class Tag>
 class SafeNumeric {
 public:
+  using type = T;
+
   constexpr SafeNumeric() noexcept = default;
   constexpr explicit SafeNumeric(T value) noexcept
     : value_(std::move(value)) {}
@@ -31,53 +33,53 @@ private:
 }; // class SafeNumeric
 
 template <class T, class Tag>
-SafeNumeric<T, Tag> operator+(SafeNumeric<T, Tag> const& a,
-                              SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag> operator+(SafeNumeric<T, Tag> const& a,
+                                        SafeNumeric<T, Tag> const& b) noexcept {
   return SafeNumeric<T, Tag>(T(a) + T(b));
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag> operator-(SafeNumeric<T, Tag> const& a,
-                              SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag> operator-(SafeNumeric<T, Tag> const& a,
+                                        SafeNumeric<T, Tag> const& b) noexcept {
   return SafeNumeric<T, Tag>(T(a) - T(b));
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag> operator*(SafeNumeric<T, Tag> const& a,
-                              SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag> operator*(SafeNumeric<T, Tag> const& a,
+                                        SafeNumeric<T, Tag> const& b) noexcept {
   return SafeNumeric<T, Tag>(T(a) * T(b));
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag> operator/(SafeNumeric<T, Tag> const& a,
-                              SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag> operator/(SafeNumeric<T, Tag> const& a,
+                                        SafeNumeric<T, Tag> const& b) noexcept {
   return SafeNumeric<T, Tag>(T(a) / T(b));
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag>& operator+=(SafeNumeric<T, Tag>& a,
-                                SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag>&
+operator+=(SafeNumeric<T, Tag>& a, SafeNumeric<T, Tag> const& b) noexcept {
   a = a + b;
   return a;
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag>& operator-=(SafeNumeric<T, Tag>& a,
-                                SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag>&
+operator-=(SafeNumeric<T, Tag>& a, SafeNumeric<T, Tag> const& b) noexcept {
   a = a - b;
   return a;
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag>& operator*=(SafeNumeric<T, Tag>& a,
-                                SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag>&
+operator*=(SafeNumeric<T, Tag>& a, SafeNumeric<T, Tag> const& b) noexcept {
   a = a * b;
   return a;
 }
 
 template <class T, class Tag>
-SafeNumeric<T, Tag>& operator/=(SafeNumeric<T, Tag>& a,
-                                SafeNumeric<T, Tag> const& b) noexcept {
+constexpr SafeNumeric<T, Tag>&
+operator/=(SafeNumeric<T, Tag>& a, SafeNumeric<T, Tag> const& b) noexcept {
   a = a / b;
   return a;
 }
