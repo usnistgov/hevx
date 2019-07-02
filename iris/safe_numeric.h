@@ -23,10 +23,10 @@ public:
   constexpr explicit SafeNumeric(T value) noexcept
     : value_(std::move(value)) {}
 
-  explicit operator T() const noexcept { return value_; }
+  constexpr explicit operator T() const noexcept { return value_; }
 
-  T& get() noexcept { return value_; }
-  T const& get() const noexcept { return value_; }
+  constexpr T& get() noexcept { return value_; }
+  constexpr T const& get() const noexcept { return value_; }
 
 private:
   T value_{};
