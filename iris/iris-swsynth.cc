@@ -485,7 +485,7 @@ int main(int argc, char** argv) {
       ImGui::LabelText("Sample Rate", "%.3f", streamInfo->sampleRate);
       ImGui::LabelText("Input Latency", "%.3f", streamInfo->inputLatency);
       ImGui::LabelText("Output Latency", "%.3f", streamInfo->outputLatency);
-      ImGui::LabelText("Number of Notes", "%d", audioData.notes.size());
+      ImGui::LabelText("Number of Notes", "%ld", audioData.notes.size());
       char loadOverlay[16];
       std::snprintf(loadOverlay, 16, "CPU Load: %.2f",
                     Pa_GetStreamCpuLoad(stream));
