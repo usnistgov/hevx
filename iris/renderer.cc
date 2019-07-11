@@ -4,6 +4,7 @@
 #include "config.h"
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "acceleration_structure.h"
 #include "components/renderable.h"
@@ -174,34 +175,7 @@ static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 static bool sShowDemoWindow{false};
 static bool sDebugNormals{false};
 
-template <class ID, class T>
-struct ComponentSystem {
-  ID Insert(T component) {
-    std::lock_guard<decltype(mutex)> lck(mutex);
-    auto const newID = nextID++;
-    components.emplace(newID, std::move(component));
-    return ID(newID);
-  }
-
-  std::optional<T> Remove(ID const& id) {
-    std::lock_guard<decltype(mutex)> lck(mutex);
-    if (auto pos = components.find(id); pos == components.end()) {
-      return {};
-    } else {
-      auto old = pos->second;
-      components.erase(pos);
-      return old;
-    }
-  }
-
-  std::size_t size() const noexcept { return components.size(); }
-
-  std::mutex mutex{};
-  typename ID::id_type nextID{0};
-  absl::flat_hash_map<ID, T> components;
-}; // struct ComponentSystem
-
-static ComponentSystem<MaterialID, Component::Material> sMaterials{};
+static UniqueComponentSystem<MaterialID, Component::Material> sMaterials{};
 static ComponentSystem<RenderableID, Component::Renderable> sRenderables{};
 static ComponentSystem<TraceableID, Component::Traceable> sTraceables{};
 
@@ -683,11 +657,11 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   vk::BeginDebugLabel(commandBuffer, "Renderable Bind and Push");
 
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    material.pipeline.pipeline);
+                    material->pipeline.pipeline);
 
   vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
                           VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-                          material.pipeline.layout,        // layout
+                          material->pipeline.layout,       // layout
                           0,                               // firstSet
                           1,                               // descriptorSetCount
                           &sGlobalDescriptorSet,           // pDescriptorSets
@@ -695,19 +669,19 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
                           nullptr                          // pDynamicOffsets
   );
 
-  vkCmdPushConstants(commandBuffer, material.pipeline.layout,
+  vkCmdPushConstants(commandBuffer, material->pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
                      pushConstants.data());
 
-  if (material.descriptorSet != VK_NULL_HANDLE) {
+  if (material->descriptorSet != VK_NULL_HANDLE) {
     vkCmdBindDescriptorSets(
       commandBuffer,                   // commandBuffer
       VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-      material.pipeline.layout,        // layout
+      material->pipeline.layout,       // layout
       1,                               // firstSet
       1,                               // descriptorSetCount
-      &material.descriptorSet,         // pDescriptorSets
+      &material->descriptorSet,        // pDescriptorSets
       0,                               // dynamicOffsetCount
       nullptr                          // pDynamicOffsets
     );
@@ -2479,10 +2453,13 @@ iris::Renderer::MaterialID
 iris::Renderer::AddMaterial(Component::Material material) noexcept {
   IRIS_LOG_ENTER();
 
-  auto&& id = sMaterials.Insert(std::move(material));
-
-  IRIS_LOG_LEAVE();
-  return id;
+  if (auto id = sMaterials.Insert(std::move(material))) {
+    IRIS_LOG_LEAVE();
+    return *id;
+  } else {
+    IRIS_LOG_CRITICAL("Cannot add material: {}", id.error().what());
+    std::terminate();
+  }
 } // AddMaterial
 
 tl::expected<void, std::system_error>

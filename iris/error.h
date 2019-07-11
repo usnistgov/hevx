@@ -14,23 +14,24 @@ namespace iris {
 
 //! \brief IRIS errors.
 enum class Error {
-  kNone = 0,              //!< No error
-  kInitializationFailed,  //!< Initialization failed for some reason.
-  kNoPhysicalDevice,      //!< No physical device available.
-  kFileLoadFailed,        //!< File load failed.
-  kFileNotSupported,      //!< File is not supported.
-  kFileParseFailed,       //!< Parsing a file failed.
-  kURIInvalid,            //!< Invalid URI.
-  kControlMessageInvalid, //!< Control message invalid.
-  kControlMessageFailed,  //!< Control message failed.
-  kSurfaceNotSupported,   //!< Surface not supported by physical device.
-  kWindowResizeFailed,    //!< Resizing a window failed.
-  kImageTransitionFailed, //!< Image transition failed.
-  kShaderCompileFailed,   //!< Shader compilation failed.
-  kNoCommandQueuesFree,   //!< All command queues are in use.
-  kTimeout,               //!< A timeout occured.
-  kEnqueueError,          //!< Enqueing a task failed.
-  kNotImplemented,        //!< Not implemented
+  kNone = 0,                 //!< No error
+  kInitializationFailed,     //!< Initialization failed for some reason.
+  kNoPhysicalDevice,         //!< No physical device available.
+  kFileLoadFailed,           //!< File load failed.
+  kFileNotSupported,         //!< File is not supported.
+  kFileParseFailed,          //!< Parsing a file failed.
+  kURIInvalid,               //!< Invalid URI.
+  kControlMessageInvalid,    //!< Control message invalid.
+  kControlMessageFailed,     //!< Control message failed.
+  kSurfaceNotSupported,      //!< Surface not supported by physical device.
+  kWindowResizeFailed,       //!< Resizing a window failed.
+  kImageTransitionFailed,    //!< Image transition failed.
+  kShaderCompileFailed,      //!< Shader compilation failed.
+  kNoCommandQueuesFree,      //!< All command queues are in use.
+  kTimeout,                  //!< A timeout occured.
+  kEnqueueError,             //!< Enqueing a task failed.
+  kUniqueComponentNotMapped, //!< Unique component not mapped.
+  kNotImplemented,           //!< Not implemented
 };
 
 //! \brief Implements std::error_category for \ref Error
@@ -61,6 +62,8 @@ public:
     case Error::kNoCommandQueuesFree: return "no command queues free"s;
     case Error::kTimeout: return "timed out"s;
     case Error::kEnqueueError: return "enqueue error"s;
+    case Error::kUniqueComponentNotMapped:
+      return "unique component not mapped"s;
     case Error::kNotImplemented: return "not implemented";
     }
     return "unknown"s;

@@ -1,9 +1,13 @@
 #ifndef HEV_IRIS_TYPES_H_
 #define HEV_IRIS_TYPES_H_
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "glm/vec3.hpp"
 #include "glm/gtc/quaternion.hpp"
+#include "iris/error.h"
 #include "iris/safe_numeric.h"
+#include <mutex>
 
 namespace iris {
 
@@ -32,6 +36,74 @@ public:
 private:
     id_type id_{UINT32_MAX};
 }; // struct ComponentID
+
+template <class ID, class T>
+struct ComponentSystem {
+  ID Insert(T component) {
+    std::lock_guard<decltype(mutex)> lck(mutex);
+    ID const newID(nextID++);
+    components.emplace(newID, std::move(component));
+    return newID;
+  }
+
+  std::optional<T> Remove(ID const& id) {
+    std::lock_guard<decltype(mutex)> lck(mutex);
+    if (auto pos = components.find(id); pos == components.end()) {
+      return {};
+    } else {
+      auto old = pos->second;
+      components.erase(pos);
+      return old;
+    }
+  }
+
+  std::size_t size() const noexcept { return components.size(); }
+
+  std::mutex mutex{};
+  typename ID::id_type nextID{0};
+  absl::flat_hash_map<ID, T> components;
+}; // struct ComponentSystem
+
+template <class ID, class T>
+struct UniqueComponentSystem {
+  tl::expected<ID, std::system_error> Insert(T component) {
+    std::lock_guard<decltype(mutex)> lck(mutex);
+    if (auto&& [position, inserted] = uniques.insert(std::move(component));
+      inserted) {
+      ID const newID(nextID++);
+      components.insert(std::make_pair(newID, std::addressof(*position)));
+      return newID;
+    } else {
+      for (auto&& comp : components) {
+        if (std::addressof(*position) == comp.second) return comp.first;
+      }
+      return tl::unexpected(std::system_error(Error::kUniqueComponentNotMapped));
+    }
+  }
+
+  tl::expected<T, std::system_error> Remove(ID const& id) {
+    std::lock_guard<decltype(mutex)> lck(mutex);
+    if (auto pos = components.find(id); pos == components.end()) {
+      return {};
+    } else {
+      auto old = uniques.find(*pos->second);
+      if (old == uniques.end()) {
+        return tl::unexpected(std::system_error(Error::kUniqueComponentNotMapped));
+      }
+
+      uniques.erase(old++);
+      components.erase(pos);
+      return *old;
+    }
+  }
+
+  std::size_t size() const noexcept { return components.size(); }
+
+  std::mutex mutex{};
+  typename ID::id_type nextID{0};
+  absl::node_hash_set<T> uniques;
+  absl::flat_hash_map<ID, T const*> components;
+}; // struct UniqueComponentSystem
 
 /*!
 \brief EulerAngles is a struct that holds intrinsic Tait-Bryan angles. These

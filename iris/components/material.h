@@ -40,11 +40,16 @@ struct Material {
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
   Pipeline pipeline{};
-}; // struct Material
 
-inline bool operator==(Material const& lhs, Material const& rhs) noexcept {
-  return lhs.pipeline.pipeline == rhs.pipeline.pipeline;
-}
+  friend bool operator==(Material const& lhs, Material const& rhs) noexcept {
+    return lhs.pipeline.pipeline == rhs.pipeline.pipeline;
+  }
+
+  template <typename H>
+  friend H AbslHashValue(H h, Material const& material) {
+    return H::combine(std::move(h), material.pipeline.pipeline);
+  }
+}; // struct Material
 
 } // namespace iris::Renderer::Component
 
