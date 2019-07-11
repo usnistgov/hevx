@@ -5,26 +5,16 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
 #include "iris/buffer.h"
-#include "iris/image.h"
-#include "iris/pipeline.h"
+#include "iris/renderer.h"
 #include "iris/vulkan.h"
 #include <cstdint>
 
 namespace iris::Renderer::Component {
 
 struct Renderable {
-  static constexpr std::size_t const kMaxTextures = 8;
+  MaterialID material{};
+
   static constexpr std::size_t const kMaxBuffers = 4;
-
-  Pipeline pipeline{};
-
-  VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
-  VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
-
-  absl::InlinedVector<Image, kMaxTextures> textures{};
-  absl::InlinedVector<VkImageView, kMaxTextures> textureViews{};
-  absl::InlinedVector<VkSampler, kMaxTextures> textureSamplers{};
-
   absl::InlinedVector<Buffer, kMaxBuffers> buffers{};
 
   Buffer vertexBuffer{};

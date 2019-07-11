@@ -76,8 +76,6 @@ layout(location = 0) out vec4 fragColor;
 tl::expected<iris::Renderer::Component::Renderable, std::system_error>
 CreateRenderable(std::string_view code) {
   IRIS_LOG_ENTER();
-  Renderer::Component::Renderable renderable;
-
   absl::FixedArray<Shader> shaders(2);
 
   if (auto vs = CompileShaderFromSource(sVertexShaderSource,
@@ -155,16 +153,22 @@ void main() {
   absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
                                                  VK_DYNAMIC_STATE_SCISSOR};
 
+  Renderer::Component::Material material;
+
   if (auto pipe = CreateRasterizationPipeline(
         shaders, {}, {}, inputAssemblyStateCI, viewportStateCI,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0, {})) {
-    renderable.pipeline = std::move(*pipe);
+    material.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
     return tl::unexpected(pipe.error());
   }
 
+  auto materialID = Renderer::AddMaterial(material);
+
+  Renderer::Component::Renderable renderable;
+  renderable.material = materialID;
   renderable.numVertices = 3;
 
   IRIS_LOG_LEAVE();

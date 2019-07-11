@@ -13,7 +13,7 @@ public:
     using id_type = std::uint32_t;
 
     constexpr ComponentID() noexcept = default;
-    constexpr ComponentID(id_type id) noexcept
+    constexpr explicit ComponentID(id_type id) noexcept
       : id_(std::move(id)) {}
 
     id_type& operator()() noexcept { return id_; }

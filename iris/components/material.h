@@ -43,62 +43,7 @@ struct Material {
 }; // struct Material
 
 inline bool operator==(Material const& lhs, Material const& rhs) noexcept {
-  if (lhs.vertexInputBindingDescriptions.size() !=
-      rhs.vertexInputBindingDescriptions.size()) {
-    return false;
-  }
-
-  for (auto&& lIBD : lhs.vertexInputBindingDescriptions) {
-    bool found = false;
-
-    for (auto&& rIBD : rhs.vertexInputBindingDescriptions) {
-      found = (lIBD.binding == rIBD.binding) && (lIBD.stride == rIBD.stride) &&
-              (lIBD.inputRate == rIBD.inputRate);
-      if (found) break;
-    }
-
-    // !found means we didn't find lIBD in rhs.vertexInputBindingDescriptions
-    if (!found) return false;
-  }
-
-  if (lhs.vertexInputAttributeDescriptions.size() !=
-      rhs.vertexInputAttributeDescriptions.size()) {
-    return false;
-  }
-
-  for (auto&& lIAD : lhs.vertexInputAttributeDescriptions) {
-    bool found = false;
-
-    for (auto&& rIAD : rhs.vertexInputAttributeDescriptions) {
-      found = (lIAD.location == rIAD.location) &&
-              (lIAD.binding == rIAD.binding) && (lIAD.format == rIAD.format) &&
-              (lIAD.offset == rIAD.offset);
-      if (found) break;
-    }
-
-    // !found means we didn't find lIAD in rhs.vertexInputAttributeDescriptions
-    if (!found) return false;
-  }
-
-  if (rhs.descriptorSetLayoutBindings.size() !=
-      lhs.descriptorSetLayoutBindings.size()) {
-    return false;
-  }
-
-  for (auto&& lSLB : lhs.descriptorSetLayoutBindings) {
-    bool found = false;
-
-    for (auto&& rSLB : rhs.descriptorSetLayoutBindings) {
-      found = (lSLB.binding == rSLB.binding) &&
-              (lSLB.descriptorType == rSLB.descriptorType) &&
-              (lSLB.descriptorCount == rSLB.descriptorCount) &&
-              (lSLB.stageFlags == rSLB.stageFlags);
-      if (found) break;
-    }
-  }
-
-  return (lhs.topology == rhs.topology) &&
-         (lhs.polygonMode == rhs.polygonMode) && (lhs.cullMode == rhs.cullMode);
+  return lhs.pipeline.pipeline == rhs.pipeline.pipeline;
 }
 
 } // namespace iris::Renderer::Component

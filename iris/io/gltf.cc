@@ -3,6 +3,7 @@
 #include "config.h"
 
 #include "absl/container/fixed_array.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "components/renderable.h"
 #include "error.h"
@@ -573,7 +574,7 @@ struct GLTF {
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes,
-            std::vector<VkExtent2D> imagesExtents,
+            std::vector<VkExtent2D> const& imagesExtents,
             std::vector<std::vector<std::byte>> imagesBytes);
 
   struct DeviceTexture {
@@ -588,15 +589,15 @@ struct GLTF {
                 std::vector<std::vector<std::byte>> imagesBytes, bool srgb);
 
   tl::expected<Renderer::Component::Material, std::system_error> CreateMaterial(
-    Renderer::CommandQueue commandQueue, VkPrimitiveTopology topology,
-    absl::InlinedVector<std::string, 8> const& shaderMacros,
+    Renderer::CommandQueue commandQueue, std::string const& meshName,
+    VkPrimitiveTopology topology, bool hasTexCoords,
     decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
       vertexInputBindingDescriptions,
     decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
       vertexInputAttributeDescriptions,
-    decltype(Renderer::Component::Material::descriptorSetLayoutBindings)
-      descriptorSetLayoutBindings,
-    Material const& material);
+    VkFrontFace frontFace, int materialIndex,
+    std::vector<VkExtent2D> const& imagesExtents,
+    std::vector<std::vector<std::byte>> imagesBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -1063,10 +1064,10 @@ tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 glm::mat4x4 parentMat, filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
-                std::vector<VkExtent2D> imagesExtents,
+                std::vector<VkExtent2D> const& imagesExtents,
                 std::vector<std::vector<std::byte>> imagesBytes) {
   IRIS_LOG_ENTER();
-  std::vector<Renderer::Component::Renderable> renderables;
+  std::vector<Renderer::Component::Renderable> components;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
     return tl::unexpected(
@@ -1090,7 +1091,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   if (node.shaderToy) {
     if (node.shaderToy->url) {
       if (auto r = io::LoadShaderToy(*node.shaderToy->url)) {
-        renderables.push_back(std::move(*r));
+        components.push_back(std::move(*r));
       } else {
         return tl::unexpected(r.error());
       }
@@ -1127,7 +1128,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   for (auto&& child : children) {
     if (auto r = ParseNode(commandQueue, child, nodeMat, path, buffersBytes,
                            imagesExtents, imagesBytes)) {
-      renderables.insert(renderables.end(), r->begin(), r->end());
+      components.insert(components.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(r.error());
@@ -1136,7 +1137,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
   if (!node.mesh) {
     IRIS_LOG_ENTER();
-    return renderables;
+    return components;
   }
 
   if (!meshes || meshes->empty()) {
@@ -1202,14 +1203,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     std::string const meshName =
       nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
-
-    VkPrimitiveTopology topology;
-    if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-      topology = *t;
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(t.error());
-    }
 
     //
     // First, get the positions
@@ -1357,479 +1350,38 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         VK_VERTEX_INPUT_RATE_VERTEX // inputRate
       }};
 
-    Renderer::Component::Renderable renderable;
+    Renderer::Component::Renderable component;
 
-    int baseColorIndex = -1;
-    int metallicRoughnessIndex = -1;
-    int normalIndex = -1;
-    int emissiveIndex = -1;
-    int occlusionIndex = -1;
+    VkPrimitiveTopology topology;
+    if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
+      topology = *t;
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(t.error());
+    }
 
-    absl::InlinedVector<std::string, 8> shaderMacros;
-    if (!texcoords.empty()) shaderMacros.push_back("#define HAS_TEXCOORDS");
-
-    absl::InlinedVector<VkDescriptorSetLayoutBinding,
-                        Renderer::Component::Renderable::kMaxTextures + 1>
-      descriptorSetLayoutBindings{
-        {
-          0,                                 // binding
-          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
-          1,                                 // descriptorCount
-          VK_SHADER_STAGE_FRAGMENT_BIT,      // stageFlags
-          nullptr                            // pImmutableSamplers
-        } // This is the MaterialBuffer in gltf.frag
-      };
-
-    // Create renderable textures/views/samplers here so that the
-    // descriptorSetLayout and descriptorSet are correct.
+    VkFrontFace const frontFace = (glm::determinant(nodeMat) < 0.f)
+                                    ? VK_FRONT_FACE_CLOCKWISE
+                                    : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
     if (primitive.material) {
-      if (!materials ||
-          materials->size() < static_cast<std::size_t>(*primitive.material)) {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(
-          std::system_error(Error::kFileParseFailed,
-                            "primitive references non-existent material"));
-      }
-
-      auto&& material = (*materials)[*primitive.material];
-
-      if (material.pbrMetallicRoughness) {
-        if (material.pbrMetallicRoughness->baseColorTexture) {
-          if (auto dt = CreateTexture(
-                commandQueue, *material.pbrMetallicRoughness->baseColorTexture,
-                imagesExtents, imagesBytes, true)) {
-            shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
-            baseColorIndex = gsl::narrow_cast<int>(renderable.textures.size());
-
-            renderable.textures.push_back(std::move(dt->texture));
-            renderable.textureViews.push_back(dt->view);
-            renderable.textureSamplers.push_back(dt->sampler);
-
-            descriptorSetLayoutBindings.push_back({
-              kBaseColorBinding,                         // binding
-              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-              1,                                         // descriptorCount
-              VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
-              nullptr                                    // pImmutableSamplers
-            });
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(dt.error());
-          }
-        }
-
-        if (material.pbrMetallicRoughness->metallicRoughnessTexture) {
-          if (auto dt = CreateTexture(
-                commandQueue,
-                *material.pbrMetallicRoughness->metallicRoughnessTexture,
-                imagesExtents, imagesBytes, false)) {
-            shaderMacros.push_back("#define HAS_METALLICROUGHNESS_MAP");
-            metallicRoughnessIndex =
-              gsl::narrow_cast<int>(renderable.textures.size());
-
-            renderable.textures.push_back(std::move(dt->texture));
-            renderable.textureViews.push_back(dt->view);
-            renderable.textureSamplers.push_back(dt->sampler);
-
-            descriptorSetLayoutBindings.push_back({
-              kMetallicRoughnessBinding,                 // binding
-              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-              1,                                         // descriptorCount
-              VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
-              nullptr                                    // pImmutableSamplers
-            });
-          } else {
-            IRIS_LOG_LEAVE();
-            return tl::unexpected(dt.error());
-          }
-        }
-      }
-
-      if (material.normalTexture) {
-        // The NormalTextureInfo scale is handled down below
-        TextureInfo ti;
-        ti.index = material.normalTexture->index;
-        ti.texCoord = material.normalTexture->texCoord;
-
-        if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
-                                    imagesBytes, false)) {
-          shaderMacros.push_back("#define HAS_NORMAL_MAP");
-          normalIndex = gsl::narrow_cast<int>(renderable.textures.size());
-
-          renderable.textures.push_back(std::move(dt->texture));
-          renderable.textureViews.push_back(dt->view);
-          renderable.textureSamplers.push_back(dt->sampler);
-
-          descriptorSetLayoutBindings.push_back({
-            kNormalBinding,                            // binding
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-            1,                                         // descriptorCount
-            VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
-            nullptr                                    // pImmutableSamplers
-          });
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(dt.error());
-        }
-      }
-
-      if (material.emissiveTexture) {
-        if (auto dt = CreateTexture(commandQueue, *material.emissiveTexture,
-                                    imagesExtents, imagesBytes, false)) {
-          shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
-          emissiveIndex = gsl::narrow_cast<int>(renderable.textures.size());
-
-          renderable.textures.push_back(std::move(dt->texture));
-          renderable.textureViews.push_back(dt->view);
-          renderable.textureSamplers.push_back(dt->sampler);
-
-          descriptorSetLayoutBindings.push_back({
-            kEmissiveBinding,                          // binding
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-            1,                                         // descriptorCount
-            VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
-            nullptr                                    // pImmutableSamplers
-          });
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(dt.error());
-        }
-      }
-
-      if (material.occlusionTexture) {
-        // The OcclusionInfo strength is handled below
-        TextureInfo ti;
-        ti.index = material.occlusionTexture->index;
-        ti.texCoord = material.occlusionTexture->texCoord;
-
-        if (auto dt = CreateTexture(commandQueue, ti, imagesExtents,
-                                    imagesBytes, false)) {
-          shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
-          occlusionIndex = gsl::narrow_cast<int>(renderable.textures.size());
-
-          renderable.textures.push_back(std::move(dt->texture));
-          renderable.textureViews.push_back(dt->view);
-          renderable.textureSamplers.push_back(dt->sampler);
-
-          descriptorSetLayoutBindings.push_back({
-            kOcclusionBinding,                         // binding
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-            1,                                         // descriptorCount
-            VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
-            nullptr                                    // pImmutableSamplers
-          });
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(dt.error());
-        }
-      }
-    }
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
-    descriptorSetLayoutCI.sType =
-      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCI.bindingCount =
-      gsl::narrow_cast<std::uint32_t>(descriptorSetLayoutBindings.size());
-    descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
-
-    if (auto result =
-          vkCreateDescriptorSetLayout(Renderer::sDevice, &descriptorSetLayoutCI,
-                                      nullptr, &renderable.descriptorSetLayout);
-        result != VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot create descriptor set layout"));
-    }
-
-    Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                         renderable.descriptorSetLayout,
-                         (meshName + ":DescriptorSetLayout").c_str());
-
-    VkDescriptorSetAllocateInfo descriptorSetAI = {};
-    descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAI.descriptorPool = Renderer::sDescriptorPool;
-    descriptorSetAI.descriptorSetCount = 1;
-    descriptorSetAI.pSetLayouts = &renderable.descriptorSetLayout;
-
-    if (auto result = vkAllocateDescriptorSets(
-          Renderer::sDevice, &descriptorSetAI, &renderable.descriptorSet);
-        result != VK_SUCCESS) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot allocate descriptor set"));
-    }
-
-    Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                         renderable.descriptorSet,
-                         (meshName + ":DescriptorSet").c_str());
-
-    absl::FixedArray<Shader> shaders(2);
-
-    if (auto vs =
-          LoadShaderFromFile("assets/shaders/gltf.vert",
-                             VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-      shaders[0] = std::move(*vs);
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(vs.error());
-    }
-
-    if (auto fs =
-          LoadShaderFromFile("assets/shaders/gltf_pbr.frag",
-                             VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
-      shaders[1] = std::move(*fs);
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(fs.error());
-    }
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
-    inputAssemblyStateCI.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyStateCI.topology = topology;
-
-    VkPipelineViewportStateCreateInfo viewportStateCI = {};
-    viewportStateCI.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportStateCI.viewportCount = 1;
-    viewportStateCI.scissorCount = 1;
-
-    VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
-    rasterizationStateCI.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
-    if (glm::determinant(nodeMat) < 0.f) {
-      rasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    } else {
-      rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    }
-    rasterizationStateCI.lineWidth = 1.f;
-
-    VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
-    multisampleStateCI.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleStateCI.rasterizationSamples = Renderer::sSurfaceSampleCount;
-    multisampleStateCI.minSampleShading = 1.f;
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
-    depthStencilStateCI.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilStateCI.depthTestEnable = VK_TRUE;
-    depthStencilStateCI.depthWriteEnable = VK_TRUE;
-    depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
-
-    absl::FixedArray<VkPipelineColorBlendAttachmentState>
-      colorBlendAttachmentStates(1);
-    colorBlendAttachmentStates[0] = {
-      VK_FALSE,                            // blendEnable
-      VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
-      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
-      VK_BLEND_OP_ADD,                     // colorBlendOp
-      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
-      VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
-      VK_BLEND_OP_ADD,                     // alphaBlendOp
-      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
-    };
-
-    absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
-                                                   VK_DYNAMIC_STATE_SCISSOR};
-
-    if (auto pipe = CreateRasterizationPipeline(
-          shaders, vertexInputBindingDescriptions,
-          vertexInputAttributeDescriptions, inputAssemblyStateCI,
-          viewportStateCI, rasterizationStateCI, multisampleStateCI,
-          depthStencilStateCI, colorBlendAttachmentStates, dynamicStates, 0,
-          gsl::make_span(&renderable.descriptorSetLayout, 1))) {
-      renderable.pipeline = std::move(*pipe);
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(
-        std::system_error(iris::Error::kFileLoadFailed,
-                          fmt::format("unable to create graphics pipeline: {}",
-                                      pipe.error().what())));
-    }
-
-    auto staging =
-      AllocateBuffer(sizeof(MaterialBuffer), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                     VMA_MEMORY_USAGE_CPU_TO_GPU);
-    if (!staging) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(staging.error());
-    }
-
-    if (auto ptr = staging->Map<MaterialBuffer*>()) {
-      if (primitive.material) {
-        if (!materials ||
-            materials->size() < static_cast<std::size_t>(*primitive.material)) {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(
-            std::system_error(Error::kFileParseFailed,
-                              "primitive references non-existent material"));
-        }
-
-        // Set a default material first
-        (*ptr)->MetallicRoughnessNormalOcclusion =
-          glm::vec4(1.f, 1.f, 1.f, 1.f);
-        (*ptr)->BaseColorFactor = glm::vec4(1.f);
-        (*ptr)->EmissiveFactor = glm::vec3(0.f);
-
-        auto&& material = (*materials)[*primitive.material];
-
-        if (material.pbrMetallicRoughness) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.x = gsl::narrow_cast<float>(
-            material.pbrMetallicRoughness->metallicFactor.value_or(1.0));
-          (*ptr)->MetallicRoughnessNormalOcclusion.y = gsl::narrow_cast<float>(
-            material.pbrMetallicRoughness->roughnessFactor.value_or(1.0));
-          (*ptr)->BaseColorFactor =
-            material.pbrMetallicRoughness->baseColorFactor.value_or(
-              glm::vec4(1.f));
-        }
-
-        if (material.normalTexture) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.z = gsl::narrow_cast<float>(
-            material.normalTexture->scale.value_or(1.0));
-        }
-
-        if (material.occlusionTexture) {
-          (*ptr)->MetallicRoughnessNormalOcclusion.w = gsl::narrow_cast<float>(
-            material.occlusionTexture->strength.value_or(1.0));
-        }
-
-        (*ptr)->EmissiveFactor =
-          material.emissiveFactor.value_or(glm::vec3(0.f));
-      }
-
-      staging->Unmap();
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(ptr.error());
-    }
-
-    if (auto buf = AllocateBuffer(sizeof(MaterialBuffer),
-                                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-                                    VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                  VMA_MEMORY_USAGE_GPU_ONLY)) {
-      renderable.buffers.push_back(std::move(*buf));
-    } else {
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(buf.error());
-    }
-
-    VkCommandBuffer commandBuffer;
-
-    if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
-      commandBuffer = *cb;
-    } else {
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(cb.error());
-    }
-
-    VkBufferCopy region = {};
-    region.srcOffset = 0;
-    region.dstOffset = 0;
-    region.size = sizeof(MaterialBuffer);
-
-    vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                    renderable.buffers.back().buffer, 1, &region);
-
-    if (auto result = Renderer::EndOneTimeSubmit(
-          commandBuffer, commandQueue.commandPool, commandQueue.queue,
-          commandQueue.submitFence);
-        !result) {
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
-      DestroyBuffer(*staging);
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(result.error());
-    }
-
-    VkDescriptorBufferInfo materialBufferInfo = {};
-    materialBufferInfo.buffer = renderable.buffers.back().buffer;
-    materialBufferInfo.offset = 0;
-    materialBufferInfo.range = VK_WHOLE_SIZE;
-
-    absl::InlinedVector<VkWriteDescriptorSet,
-                        Renderer::Component::Renderable::kMaxTextures + 1>
-      writeDescriptorSets{{
-        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-        renderable.descriptorSet, // dstSet
-        0,                        // dstBinding
-        0,                        // dstArrayElement
-        1,                        // descriptorCount
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        nullptr,             // pImageInfo
-        &materialBufferInfo, // pBufferInfo
-        nullptr              // pTexelBufferView
-      }};
-
-    Expects(descriptorSetLayoutBindings.size() - 1 ==
-            renderable.textureViews.size());
-    Expects(renderable.textureViews.size() ==
-            renderable.textureSamplers.size());
-
-    absl::FixedArray<VkDescriptorImageInfo> imageInfos(
-      descriptorSetLayoutBindings.size() - 1);
-
-    std::size_t const nBindings = descriptorSetLayoutBindings.size();
-    for (std::size_t i = 1; i < nBindings; ++i) {
-      imageInfos[i - 1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-      if (descriptorSetLayoutBindings[i].binding == kBaseColorBinding) {
-        imageInfos[i - 1].sampler = renderable.textureSamplers[baseColorIndex];
-        imageInfos[i - 1].imageView = renderable.textureViews[baseColorIndex];
-      } else if (descriptorSetLayoutBindings[i].binding == kNormalBinding) {
-        imageInfos[i - 1].sampler = renderable.textureSamplers[normalIndex];
-        imageInfos[i - 1].imageView = renderable.textureViews[normalIndex];
-      } else if (descriptorSetLayoutBindings[i].binding == kEmissiveBinding) {
-        imageInfos[i - 1].sampler = renderable.textureSamplers[emissiveIndex];
-        imageInfos[i - 1].imageView = renderable.textureViews[emissiveIndex];
-      } else if (descriptorSetLayoutBindings[i].binding ==
-                 kMetallicRoughnessBinding) {
-        imageInfos[i - 1].sampler =
-          renderable.textureSamplers[metallicRoughnessIndex];
-        imageInfos[i - 1].imageView =
-          renderable.textureViews[metallicRoughnessIndex];
-      } else if (descriptorSetLayoutBindings[i].binding == kOcclusionBinding) {
-        imageInfos[i - 1].sampler = renderable.textureSamplers[occlusionIndex];
-        imageInfos[i - 1].imageView = renderable.textureViews[occlusionIndex];
+      if (auto m = CreateMaterial(
+            commandQueue, meshName, topology, !texcoords.empty(),
+            vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+            frontFace, *primitive.material, imagesExtents, imagesBytes)) {
+        component.material = Renderer::AddMaterial(std::move(*m));
       } else {
-        IRIS_LOG_ERROR("Unknown binding: {}",
-                       descriptorSetLayoutBindings[i].binding);
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(m.error());
       }
-
-      writeDescriptorSets.push_back({
-        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-        renderable.descriptorSet,               // dstSet
-        descriptorSetLayoutBindings[i].binding, // dstBinding
-        0,                                      // dstArrayElement
-        1,                                      // descriptorCount
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        &imageInfos[i - 1], // pImageInfo
-        nullptr,            // pBufferInfo
-        nullptr             // pTexelBufferView
-      });
     }
-
-    vkUpdateDescriptorSets(
-      Renderer::sDevice,
-      gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
-      writeDescriptorSets.data(), 0, nullptr);
 
     VkDeviceSize const vertexBufferSize = vertexStride * positions.size();
 
-    staging = ReallocateBuffer(*staging, vertexBufferSize,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VMA_MEMORY_USAGE_CPU_TO_GPU);
+    auto staging =
+      AllocateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
       IRIS_LOG_LEAVE();
       return tl::unexpected(staging.error());
     }
@@ -1838,8 +1390,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     if (auto ptr = staging->Map<float*>()) {
       pVertexBuffer = *ptr;
     } else {
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(ptr.error());
@@ -1872,49 +1422,43 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                   VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VMA_MEMORY_USAGE_GPU_ONLY)) {
-      renderable.vertexBuffer = std::move(*buf);
+      component.vertexBuffer = std::move(*buf);
     } else {
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(buf.error());
     }
 
+    VkCommandBuffer commandBuffer;
     if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
+      DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(cb.error());
     }
 
-    region = {};
+    VkBufferCopy region = {};
     region.srcOffset = 0;
     region.dstOffset = 0;
     region.size = vertexBufferSize;
 
     vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                    renderable.vertexBuffer.buffer, 1, &region);
+                    component.vertexBuffer.buffer, 1, &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
           commandBuffer, commandQueue.commandPool, commandQueue.queue,
           commandQueue.submitFence);
         !result) {
-      DestroyBuffer(renderable.vertexBuffer);
-      DestroyBuffer(renderable.buffers.back());
-      renderable.buffers.pop_back();
+      DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return tl::unexpected(result.error());
     }
 
     if (!primitive.indices) {
-      renderable.numVertices =
-        gsl::narrow_cast<std::uint32_t>(positions.size());
+      component.numVertices = gsl::narrow_cast<std::uint32_t>(positions.size());
     } else {
       auto indexAccessor = (*accessors)[*primitive.indices];
 
@@ -1927,9 +1471,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                  VMA_MEMORY_USAGE_CPU_TO_GPU);
       if (!staging) {
-        DestroyBuffer(renderable.vertexBuffer);
-        DestroyBuffer(renderable.buffers.back());
-        renderable.buffers.pop_back();
+        DestroyBuffer(component.vertexBuffer);
         IRIS_LOG_LEAVE();
         return tl::unexpected(staging.error());
       }
@@ -1956,11 +1498,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                       VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                     VMA_MEMORY_USAGE_GPU_ONLY)) {
-        renderable.indexBuffer = std::move(*buf);
+        component.indexBuffer = std::move(*buf);
       } else {
-        DestroyBuffer(renderable.vertexBuffer);
-        DestroyBuffer(renderable.buffers.back());
-        renderable.buffers.pop_back();
+        DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
         return tl::unexpected(buf.error());
@@ -1969,10 +1509,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
         commandBuffer = *cb;
       } else {
-        DestroyBuffer(renderable.indexBuffer);
-        DestroyBuffer(renderable.vertexBuffer);
-        DestroyBuffer(renderable.buffers.back());
-        renderable.buffers.pop_back();
+        DestroyBuffer(component.indexBuffer);
+        DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
         return tl::unexpected(cb.error());
@@ -1984,28 +1522,26 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       region.size = indexBufferSize;
 
       vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                      renderable.indexBuffer.buffer, 1, &region);
+                      component.indexBuffer.buffer, 1, &region);
 
       if (auto result = Renderer::EndOneTimeSubmit(
             commandBuffer, commandQueue.commandPool, commandQueue.queue,
             commandQueue.submitFence);
           !result) {
-        DestroyBuffer(renderable.indexBuffer);
-        DestroyBuffer(renderable.vertexBuffer);
-        DestroyBuffer(renderable.buffers.back());
-        renderable.buffers.pop_back();
+        DestroyBuffer(component.indexBuffer);
+        DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
         return tl::unexpected(result.error());
       }
 
-      renderable.indexType =
+      component.indexType =
         (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
                                              : VK_INDEX_TYPE_UINT32);
-      renderable.numIndices = indexAccessor.count;
+      component.numIndices = indexAccessor.count;
     }
 
-    renderable.modelMatrix = nodeMat;
+    component.modelMatrix = nodeMat;
 
     // Compute the bounding sphere
     struct CoordAccessor {
@@ -2024,12 +1560,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     Miniball::Miniball<CoordAccessor> mb(3, positions.begin(), positions.end());
 
-    renderable.boundingSphere =
+    component.boundingSphere =
       glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
                 std::sqrt(mb.squared_radius()));
-    IRIS_LOG_DEBUG("boundingSphere: ({} {} {}), {}",
-                   renderable.boundingSphere.x, renderable.boundingSphere.y,
-                   renderable.boundingSphere.z, renderable.boundingSphere.w);
+    IRIS_LOG_DEBUG("boundingSphere: ({} {} {}), {}", component.boundingSphere.x,
+                   component.boundingSphere.y, component.boundingSphere.z,
+                   component.boundingSphere.w);
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -2037,37 +1573,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 #pragma GCC diagnostic pop
 #endif
 
-    renderables.push_back(renderable);
+    components.push_back(component);
   }
 
   IRIS_LOG_LEAVE();
-  return renderables;
+  return components;
 } // GLTF::ParseNode
-
-tl::expected<Renderer::Component::Material, std::system_error>
-GLTF::CreateMaterial(
-  Renderer::CommandQueue commandQueue[[maybe_unused]], VkPrimitiveTopology topology,
-  absl::InlinedVector<std::string, 8> const& shaderMacros[[maybe_unused]],
-  decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
-    vertexInputBindingDescriptions,
-  decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
-    vertexInputAttributeDescriptions,
-  decltype(Renderer::Component::Material::descriptorSetLayoutBindings)
-    descriptorSetLayoutBindings, Material const& material[[maybe_unused]]) {
-  IRIS_LOG_ENTER();
-
-  Renderer::Component::Material component;
-  component.vertexInputBindingDescriptions =
-    std::move(vertexInputBindingDescriptions);
-  component.vertexInputAttributeDescriptions =
-    std::move(vertexInputAttributeDescriptions);
-  component.topology = topology;
-  component.descriptorSetLayoutBindings =
-    std::move(descriptorSetLayoutBindings);
-
-  IRIS_LOG_LEAVE();
-  return tl::unexpected(std::system_error(Error::kNotImplemented, "not implemented"));
-} // GLTF::CreateMaterial
 
 tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
@@ -2254,14 +1765,466 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   return std::move(deviceTexture);
 } // GLTF::CreateTexture
 
+tl::expected<Renderer::Component::Material, std::system_error>
+GLTF::CreateMaterial(
+  Renderer::CommandQueue commandQueue, std::string const& meshName,
+  VkPrimitiveTopology topology, bool hasTexCoords,
+  decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
+    vertexInputBindingDescriptions,
+  decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
+    vertexInputAttributeDescriptions,
+  VkFrontFace frontFace, int materialIndex,
+  std::vector<VkExtent2D> const& imagesExtents,
+  std::vector<std::vector<std::byte>> imagesBytes) {
+  IRIS_LOG_ENTER();
+
+  int baseColorIndex = -1;
+  int metallicRoughnessIndex = -1;
+  int normalIndex = -1;
+  int emissiveIndex = -1;
+  int occlusionIndex = -1;
+
+  absl::InlinedVector<std::string, 8> shaderMacros;
+  if (hasTexCoords) shaderMacros.push_back("#define HAS_TEXCOORDS");
+
+  absl::InlinedVector<VkDescriptorSetLayoutBinding,
+                      Renderer::Component::Material::kMaxTextures + 1>
+    descriptorSetLayoutBindings{
+      {
+        0,                                 // binding
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+        1,                                 // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,      // stageFlags
+        nullptr                            // pImmutableSamplers
+      } // This is the MaterialBuffer in gltf.frag
+    };
+
+  // Create renderable textures/views/samplers here so that the
+  // descriptorSetLayout and descriptorSet are correct.
+
+  if (!materials ||
+      materials->size() < static_cast<std::size_t>(materialIndex)) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kFileParseFailed, "primitive references non-existent material"));
+  }
+
+  Renderer::Component::Material component;
+
+  auto&& material = (*materials)[materialIndex];
+
+  if (material.pbrMetallicRoughness) {
+    if (material.pbrMetallicRoughness->baseColorTexture) {
+      if (auto dt = CreateTexture(
+            commandQueue, *material.pbrMetallicRoughness->baseColorTexture,
+            imagesExtents, imagesBytes, true)) {
+        shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
+        baseColorIndex = gsl::narrow_cast<int>(component.textures.size());
+
+        component.textures.push_back(std::move(dt->texture));
+        component.textureViews.push_back(dt->view);
+        component.textureSamplers.push_back(dt->sampler);
+
+        descriptorSetLayoutBindings.push_back({
+          kBaseColorBinding,                         // binding
+          VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+          1,                                         // descriptorCount
+          VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+          nullptr                                    // pImmutableSamplers
+        });
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(dt.error());
+      }
+    }
+
+    if (material.pbrMetallicRoughness->metallicRoughnessTexture) {
+      if (auto dt = CreateTexture(
+            commandQueue,
+            *material.pbrMetallicRoughness->metallicRoughnessTexture,
+            imagesExtents, imagesBytes, false)) {
+        shaderMacros.push_back("#define HAS_METALLICROUGHNESS_MAP");
+        metallicRoughnessIndex =
+          gsl::narrow_cast<int>(component.textures.size());
+
+        component.textures.push_back(std::move(dt->texture));
+        component.textureViews.push_back(dt->view);
+        component.textureSamplers.push_back(dt->sampler);
+
+        descriptorSetLayoutBindings.push_back({
+          kMetallicRoughnessBinding,                 // binding
+          VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+          1,                                         // descriptorCount
+          VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+          nullptr                                    // pImmutableSamplers
+        });
+      } else {
+        IRIS_LOG_LEAVE();
+        return tl::unexpected(dt.error());
+      }
+    }
+  }
+
+  if (material.normalTexture) {
+    // The NormalTextureInfo scale is handled down below
+    TextureInfo ti;
+    ti.index = material.normalTexture->index;
+    ti.texCoord = material.normalTexture->texCoord;
+
+    if (auto dt =
+          CreateTexture(commandQueue, ti, imagesExtents, imagesBytes, false)) {
+      shaderMacros.push_back("#define HAS_NORMAL_MAP");
+      normalIndex = gsl::narrow_cast<int>(component.textures.size());
+
+      component.textures.push_back(std::move(dt->texture));
+      component.textureViews.push_back(dt->view);
+      component.textureSamplers.push_back(dt->sampler);
+
+      descriptorSetLayoutBindings.push_back({
+        kNormalBinding,                            // binding
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+        1,                                         // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+        nullptr                                    // pImmutableSamplers
+      });
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(dt.error());
+    }
+  }
+
+  if (material.emissiveTexture) {
+    if (auto dt = CreateTexture(commandQueue, *material.emissiveTexture,
+                                imagesExtents, imagesBytes, false)) {
+      shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
+      emissiveIndex = gsl::narrow_cast<int>(component.textures.size());
+
+      component.textures.push_back(std::move(dt->texture));
+      component.textureViews.push_back(dt->view);
+      component.textureSamplers.push_back(dt->sampler);
+
+      descriptorSetLayoutBindings.push_back({
+        kEmissiveBinding,                          // binding
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+        1,                                         // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+        nullptr                                    // pImmutableSamplers
+      });
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(dt.error());
+    }
+  }
+
+  if (material.occlusionTexture) {
+    // The OcclusionInfo strength is handled below
+    TextureInfo ti;
+    ti.index = material.occlusionTexture->index;
+    ti.texCoord = material.occlusionTexture->texCoord;
+
+    if (auto dt =
+          CreateTexture(commandQueue, ti, imagesExtents, imagesBytes, false)) {
+      shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
+      occlusionIndex = gsl::narrow_cast<int>(component.textures.size());
+
+      component.textures.push_back(std::move(dt->texture));
+      component.textureViews.push_back(dt->view);
+      component.textureSamplers.push_back(dt->sampler);
+
+      descriptorSetLayoutBindings.push_back({
+        kOcclusionBinding,                         // binding
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
+        1,                                         // descriptorCount
+        VK_SHADER_STAGE_FRAGMENT_BIT,              // stageFlags
+        nullptr                                    // pImmutableSamplers
+      });
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(dt.error());
+    }
+  }
+
+  VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
+  descriptorSetLayoutCI.sType =
+    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptorSetLayoutCI.bindingCount =
+    gsl::narrow_cast<std::uint32_t>(descriptorSetLayoutBindings.size());
+  descriptorSetLayoutCI.pBindings = descriptorSetLayoutBindings.data();
+
+  if (auto result =
+        vkCreateDescriptorSetLayout(Renderer::sDevice, &descriptorSetLayoutCI,
+                                    nullptr, &component.descriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      make_error_code(result), "Cannot create descriptor set layout"));
+  }
+
+  Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                       component.descriptorSetLayout,
+                       (meshName + ":DescriptorSetLayout").c_str());
+
+  VkDescriptorSetAllocateInfo descriptorSetAI = {};
+  descriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptorSetAI.descriptorPool = Renderer::sDescriptorPool;
+  descriptorSetAI.descriptorSetCount = 1;
+  descriptorSetAI.pSetLayouts = &component.descriptorSetLayout;
+
+  if (auto result = vkAllocateDescriptorSets(
+        Renderer::sDevice, &descriptorSetAI, &component.descriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(make_error_code(result),
+                                            "Cannot allocate descriptor set"));
+  }
+
+  Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, component.descriptorSet,
+                       (meshName + ":DescriptorSet").c_str());
+
+  absl::FixedArray<Shader> shaders(2);
+
+  if (auto vs = LoadShaderFromFile("assets/shaders/gltf.vert",
+                                   VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
+    shaders[0] = std::move(*vs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(vs.error());
+  }
+
+  if (auto fs =
+        LoadShaderFromFile("assets/shaders/gltf_pbr.frag",
+                           VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
+    shaders[1] = std::move(*fs);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(fs.error());
+  }
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
+  inputAssemblyStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyStateCI.topology = topology;
+
+  VkPipelineViewportStateCreateInfo viewportStateCI = {};
+  viewportStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewportStateCI.viewportCount = 1;
+  viewportStateCI.scissorCount = 1;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationStateCI = {};
+  rasterizationStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
+  rasterizationStateCI.frontFace = frontFace;
+  rasterizationStateCI.lineWidth = 1.f;
+
+  VkPipelineMultisampleStateCreateInfo multisampleStateCI = {};
+  multisampleStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleStateCI.rasterizationSamples = Renderer::sSurfaceSampleCount;
+  multisampleStateCI.minSampleShading = 1.f;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = {};
+  depthStencilStateCI.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilStateCI.depthTestEnable = VK_TRUE;
+  depthStencilStateCI.depthWriteEnable = VK_TRUE;
+  depthStencilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
+
+  absl::FixedArray<VkPipelineColorBlendAttachmentState>
+    colorBlendAttachmentStates(1);
+  colorBlendAttachmentStates[0] = {
+    VK_FALSE,                            // blendEnable
+    VK_BLEND_FACTOR_SRC_ALPHA,           // srcColorBlendFactor
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // dstColorBlendFactor
+    VK_BLEND_OP_ADD,                     // colorBlendOp
+    VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, // srcAlphaBlendFactor
+    VK_BLEND_FACTOR_ZERO,                // dstAlphaBlendFactor
+    VK_BLEND_OP_ADD,                     // alphaBlendOp
+    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask
+  };
+
+  absl::FixedArray<VkDynamicState> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                 VK_DYNAMIC_STATE_SCISSOR};
+
+  if (auto pipe = CreateRasterizationPipeline(
+        shaders, vertexInputBindingDescriptions,
+        vertexInputAttributeDescriptions, inputAssemblyStateCI, viewportStateCI,
+        rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
+        colorBlendAttachmentStates, dynamicStates, 0,
+        gsl::make_span(&component.descriptorSetLayout, 1))) {
+    component.pipeline = std::move(*pipe);
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(
+      std::system_error(iris::Error::kFileLoadFailed,
+                        fmt::format("unable to create graphics pipeline: {}",
+                                    pipe.error().what())));
+  }
+
+  auto staging =
+    AllocateBuffer(sizeof(MaterialBuffer), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!staging) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(staging.error());
+  }
+
+  if (auto ptr = staging->Map<MaterialBuffer*>()) {
+    // Set a default material first
+    (*ptr)->MetallicRoughnessNormalOcclusion = glm::vec4(1.f, 1.f, 1.f, 1.f);
+    (*ptr)->BaseColorFactor = glm::vec4(1.f);
+    (*ptr)->EmissiveFactor = glm::vec3(0.f);
+
+    if (material.pbrMetallicRoughness) {
+      (*ptr)->MetallicRoughnessNormalOcclusion.x = gsl::narrow_cast<float>(
+        material.pbrMetallicRoughness->metallicFactor.value_or(1.0));
+      (*ptr)->MetallicRoughnessNormalOcclusion.y = gsl::narrow_cast<float>(
+        material.pbrMetallicRoughness->roughnessFactor.value_or(1.0));
+      (*ptr)->BaseColorFactor =
+        material.pbrMetallicRoughness->baseColorFactor.value_or(glm::vec4(1.f));
+    }
+
+    if (material.normalTexture) {
+      (*ptr)->MetallicRoughnessNormalOcclusion.z =
+        gsl::narrow_cast<float>(material.normalTexture->scale.value_or(1.0));
+    }
+
+    if (material.occlusionTexture) {
+      (*ptr)->MetallicRoughnessNormalOcclusion.w = gsl::narrow_cast<float>(
+        material.occlusionTexture->strength.value_or(1.0));
+    }
+
+    (*ptr)->EmissiveFactor = material.emissiveFactor.value_or(glm::vec3(0.f));
+
+    staging->Unmap();
+  } else {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(ptr.error());
+  }
+
+  if (auto buf = AllocateBuffer(sizeof(MaterialBuffer),
+                                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                VMA_MEMORY_USAGE_GPU_ONLY)) {
+    component.materialBuffer = std::move(*buf);
+  } else {
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(buf.error());
+  }
+
+  VkCommandBuffer commandBuffer;
+
+  if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    DestroyBuffer(component.materialBuffer);
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(cb.error());
+  }
+
+  VkBufferCopy region = {};
+  region.srcOffset = 0;
+  region.dstOffset = 0;
+  region.size = sizeof(MaterialBuffer);
+
+  vkCmdCopyBuffer(commandBuffer, staging->buffer,
+                  component.materialBuffer.buffer, 1, &region);
+
+  if (auto result = Renderer::EndOneTimeSubmit(
+        commandBuffer, commandQueue.commandPool, commandQueue.queue,
+        commandQueue.submitFence);
+      !result) {
+    DestroyBuffer(component.materialBuffer);
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(result.error());
+  }
+
+  VkDescriptorBufferInfo materialBufferInfo = {};
+  materialBufferInfo.buffer = component.materialBuffer.buffer;
+  materialBufferInfo.offset = 0;
+  materialBufferInfo.range = VK_WHOLE_SIZE;
+
+  absl::InlinedVector<VkWriteDescriptorSet,
+                      Renderer::Component::Material::kMaxTextures + 1>
+    writeDescriptorSets{{
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+      component.descriptorSet, // dstSet
+      0,                       // dstBinding
+      0,                       // dstArrayElement
+      1,                       // descriptorCount
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      nullptr,             // pImageInfo
+      &materialBufferInfo, // pBufferInfo
+      nullptr              // pTexelBufferView
+    }};
+
+  Expects(descriptorSetLayoutBindings.size() - 1 ==
+          component.textureViews.size());
+  Expects(component.textureViews.size() == component.textureSamplers.size());
+
+  absl::FixedArray<VkDescriptorImageInfo> imageInfos(
+    descriptorSetLayoutBindings.size() - 1);
+
+  std::size_t const nBindings = descriptorSetLayoutBindings.size();
+  for (std::size_t i = 1; i < nBindings; ++i) {
+    imageInfos[i - 1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    if (descriptorSetLayoutBindings[i].binding == kBaseColorBinding) {
+      imageInfos[i - 1].sampler = component.textureSamplers[baseColorIndex];
+      imageInfos[i - 1].imageView = component.textureViews[baseColorIndex];
+    } else if (descriptorSetLayoutBindings[i].binding == kNormalBinding) {
+      imageInfos[i - 1].sampler = component.textureSamplers[normalIndex];
+      imageInfos[i - 1].imageView = component.textureViews[normalIndex];
+    } else if (descriptorSetLayoutBindings[i].binding == kEmissiveBinding) {
+      imageInfos[i - 1].sampler = component.textureSamplers[emissiveIndex];
+      imageInfos[i - 1].imageView = component.textureViews[emissiveIndex];
+    } else if (descriptorSetLayoutBindings[i].binding ==
+               kMetallicRoughnessBinding) {
+      imageInfos[i - 1].sampler =
+        component.textureSamplers[metallicRoughnessIndex];
+      imageInfos[i - 1].imageView =
+        component.textureViews[metallicRoughnessIndex];
+    } else if (descriptorSetLayoutBindings[i].binding == kOcclusionBinding) {
+      imageInfos[i - 1].sampler = component.textureSamplers[occlusionIndex];
+      imageInfos[i - 1].imageView = component.textureViews[occlusionIndex];
+    } else {
+      IRIS_LOG_ERROR("Unknown binding: {}",
+                     descriptorSetLayoutBindings[i].binding);
+    }
+
+    writeDescriptorSets.push_back({
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+      component.descriptorSet,                // dstSet
+      descriptorSetLayoutBindings[i].binding, // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      &imageInfos[i - 1], // pImageInfo
+      nullptr,            // pBufferInfo
+      nullptr             // pTexelBufferView
+    });
+  }
+
+  vkUpdateDescriptorSets(
+    Renderer::sDevice,
+    gsl::narrow_cast<std::uint32_t>(writeDescriptorSets.size()),
+    writeDescriptorSets.data(), 0, nullptr);
+
+  IRIS_LOG_LEAVE();
+  return component;
+} // GLTF::CreateMaterial
+
 } // namespace iris::gltf
 
 namespace iris::io {
 
-tl::expected<std::vector<Renderer::Component::Renderable>,
-             std::system_error> static ParseGLTF(json const& j,
-                                                 filesystem::path const& path =
-                                                   "") noexcept {
+tl::expected<void, std::system_error> static ParseGLTF(
+  json const& j, filesystem::path const& path = "") noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
@@ -2369,22 +2332,6 @@ tl::expected<std::vector<Renderer::Component::Renderable>,
   }
 
   //
-  // Create all materials
-  //
-  auto&& materials =
-    g.materials.value_or<decltype(gltf::GLTF::materials)::value_type>({});
-  auto&& meshes =
-    g.meshes.value_or<decltype(gltf::GLTF::meshes)::value_type>({});
-
-  for (auto&& material[[maybe_unused]] : materials) {
-    for (auto&& mesh[[maybe_unused]] : meshes) {
-      for (auto&& prim[[maybe_unused]] : mesh.primitives) {
-        IRIS_LOG_WARN("implement");
-      }
-    }
-  }
-
-  //
   // Parse the scene graph
   // TODO: this removes the hierarchy: need to maintain those relationships
   // TODO: implement Animatable(?) component to support animations
@@ -2437,8 +2384,11 @@ tl::expected<std::vector<Renderer::Component::Renderable>,
     }
   }
 
+  IRIS_LOG_DEBUG("Adding {} renderables", renderables.size());
+  for (auto&& r : renderables) Renderer::AddRenderable(r);
+
   IRIS_LOG_LEAVE();
-  return renderables;
+  return {};
 } // ParseGLTF
 
 } // namespace iris::io
@@ -2462,11 +2412,8 @@ iris::io::LoadGLTF(filesystem::path const& path) noexcept {
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 
-  if (auto renderables = ParseGLTF(j, path)) {
-    IRIS_LOG_DEBUG("Adding {} renderables", renderables->size());
-    for (auto&& r : *renderables) Renderer::AddRenderable(r);
-  } else {
-    IRIS_LOG_ERROR("Error creating renderable: {}", renderables.error().what());
+  if (auto ret = ParseGLTF(j, path); !ret) {
+    IRIS_LOG_ERROR("Error parsing GLTF: {}", ret.error().what());
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 
@@ -2478,10 +2425,8 @@ std::function<std::system_error(void)>
 iris::io::LoadGLTF(json const& gltf) noexcept {
   IRIS_LOG_ENTER();
 
-  if (auto renderables = ParseGLTF(gltf)) {
-    for (auto&& r : *renderables) Renderer::AddRenderable(r);
-  } else {
-    IRIS_LOG_ERROR("Error creating renderable: {}", renderables.error().what());
+  if (auto ret = ParseGLTF(gltf); !ret) {
+    IRIS_LOG_ERROR("Error parsing GLTF: {}", ret.error().what());
     return []() { return std::system_error(Error::kFileLoadFailed); };
   }
 

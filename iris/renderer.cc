@@ -649,6 +649,9 @@ static VkCommandBuffer
 BuildRenderableCommandBuffer(Component::Renderable const& renderable,
                              VkViewport* pViewport, VkRect2D* pScissor,
                              gsl::span<std::byte> pushConstants) noexcept {
+  std::lock_guard<decltype(sMaterials.mutex)> lck(sMaterials.mutex);
+  auto&& material = sMaterials.components[renderable.material];
+
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sCommandPools[0];
@@ -680,11 +683,11 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   vk::BeginDebugLabel(commandBuffer, "Renderable Bind and Push");
 
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    renderable.pipeline.pipeline);
+                    material.pipeline.pipeline);
 
   vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
                           VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-                          renderable.pipeline.layout,      // layout
+                          material.pipeline.layout,        // layout
                           0,                               // firstSet
                           1,                               // descriptorSetCount
                           &sGlobalDescriptorSet,           // pDescriptorSets
@@ -692,19 +695,19 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
                           nullptr                          // pDynamicOffsets
   );
 
-  vkCmdPushConstants(commandBuffer, renderable.pipeline.layout,
+  vkCmdPushConstants(commandBuffer, material.pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
                      pushConstants.data());
 
-  if (renderable.descriptorSet != VK_NULL_HANDLE) {
+  if (material.descriptorSet != VK_NULL_HANDLE) {
     vkCmdBindDescriptorSets(
       commandBuffer,                   // commandBuffer
       VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-      renderable.pipeline.layout,      // layout
+      material.pipeline.layout,        // layout
       1,                               // firstSet
       1,                               // descriptorSetCount
-      &renderable.descriptorSet,       // pDescriptorSets
+      &material.descriptorSet,         // pDescriptorSets
       0,                               // dynamicOffsetCount
       nullptr                          // pDynamicOffsets
     );
@@ -1102,6 +1105,8 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
       ImGui::Text("Total Time %.3f s", sTime.count());
+      ImGui::Text("%zu Renderables / %zu Materials", sRenderables.size(),
+                  sMaterials.size());
 
       ImGui::Separator();
       ImGui::BeginGroup();
@@ -2604,34 +2609,6 @@ iris::Renderer::RemoveRenderable(RenderableID const& id) noexcept {
       for (auto&& buffer : renderable_.buffers) {
         if (buffer) DestroyBuffer(buffer);
       }
-
-      for (auto&& sampler : renderable_.textureSamplers) {
-        if (sampler != VK_NULL_HANDLE) {
-          vkDestroySampler(sDevice, sampler, nullptr);
-        }
-      }
-
-      for (auto&& view : renderable_.textureViews) {
-        if (view != VK_NULL_HANDLE) {
-          vkDestroyImageView(sDevice, view, nullptr);
-        }
-      }
-
-      for (auto&& image : renderable_.textures) {
-        if (image) DestroyImage(image);
-      }
-
-      if (renderable_.descriptorSet != VK_NULL_HANDLE) {
-        vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
-                             &renderable_.descriptorSet);
-      }
-
-      if (renderable_.descriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(sDevice, renderable_.descriptorSetLayout,
-                                     nullptr);
-      }
-
-      if (renderable_.pipeline) DestroyPipeline(renderable_.pipeline);
 
       IRIS_LOG_LEAVE();
       return nullptr;
