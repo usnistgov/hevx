@@ -213,7 +213,7 @@ private:
 
 [[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
 CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
-              filesystem::path const& path,
+              std::filesystem::path const& path,
               gsl::span<std::string> macroDefinitions [[maybe_unused]],
               std::string const& entryPoint) {
   IRIS_LOG_ENTER();
@@ -346,7 +346,7 @@ tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
 } // iris::CompileShaderFromSource
 
 tl::expected<iris::Shader, std::system_error>
-iris::LoadShaderFromFile(filesystem::path const& path,
+iris::LoadShaderFromFile(std::filesystem::path const& path,
                          VkShaderStageFlagBits stage,
                          gsl::span<std::string> macroDefinitions) noexcept {
   IRIS_LOG_ENTER();

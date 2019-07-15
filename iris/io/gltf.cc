@@ -574,7 +574,7 @@ struct GLTF {
 
   tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
-            glm::mat4x4 parentMat, filesystem::path const& path,
+            glm::mat4x4 parentMat, std::filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes,
             std::vector<VkExtent2D> const& imagesExtents,
             std::vector<std::vector<std::byte>> imagesBytes);
@@ -1064,7 +1064,7 @@ struct TangentGenerator {
 
 tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
-                glm::mat4x4 parentMat, filesystem::path const& path,
+                glm::mat4x4 parentMat, std::filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
                 std::vector<VkExtent2D> const& imagesExtents,
                 std::vector<std::vector<std::byte>> imagesBytes) {
@@ -2233,11 +2233,11 @@ GLTF::CreateMaterial(
 namespace iris::io {
 
 tl::expected<void, std::system_error> static ParseGLTF(
-  json const& j, filesystem::path const& path = "") noexcept {
+  json const& j, std::filesystem::path const& path = "") noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
-  filesystem::path const baseDir = path.parent_path();
+  std::filesystem::path const baseDir = path.parent_path();
 
   gltf::GLTF g;
   try {
@@ -2275,7 +2275,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
 
   for (auto&& buffer : buffers) {
     if (buffer.uri) {
-      filesystem::path uriPath(*buffer.uri);
+      std::filesystem::path uriPath(*buffer.uri);
       if (auto b =
             ReadFile(uriPath.is_relative() ? baseDir / uriPath : uriPath)) {
         buffersBytes.push_back(std::move(*b));
@@ -2300,7 +2300,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
 
   for (auto&& image : images) {
     if (image.uri) {
-      filesystem::path uriPath(*image.uri);
+      std::filesystem::path uriPath(*image.uri);
       if (uriPath.is_relative()) {
         uriPath = kIRISContentDirectory / baseDir / uriPath;
       }
@@ -2348,48 +2348,38 @@ tl::expected<void, std::system_error> static ParseGLTF(
 
   std::vector<Renderer::Component::Renderable> renderables;
 
+  if (!g.scene) {
+    IRIS_LOG_WARN("no default scene specified; using first scene");
+    g.scene = 0;
+  }
+
   if (!g.scenes) {
-    IRIS_LOG_DEBUG("no scenes specified; using first node");
-    if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
+    IRIS_LOG_DEBUG("no scenes; creating default scene with single node");
+    gltf::Scene scene;
+    scene.nodes = std::vector<int>{0};
+    g.scenes->push_back(scene);
+  }
+
+  if (static_cast<std::size_t>(*g.scene) >= g.scenes->size()) {
+    IRIS_LOG_LEAVE();
+    return tl::unexpected(std::system_error(
+      Error::kFileLoadFailed, "default scene references non-existent scene"));
+  }
+
+  auto&& scene = (*g.scenes)[*g.scene];
+
+  if (!scene.nodes) {
+    IRIS_LOG_DEBUG("no nodes in scene; using first node");
+    scene.nodes = std::vector<int>{0};
+  }
+
+  for (auto&& node : *scene.nodes) {
+    if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
                              buffersBytes, imagesExtents, imagesBytes)) {
       renderables.insert(renderables.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(r.error());
-    }
-  } else {
-    if (!g.scene) {
-      IRIS_LOG_WARN("no default scene specified; using first scene");
-      g.scene = 0;
-    }
-
-    if (static_cast<std::size_t>(*g.scene) >= g.scenes->size()) {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileLoadFailed, "default scene references non-existent scene"));
-    }
-
-    auto&& scene = (*g.scenes)[*g.scene];
-
-    if (!scene.nodes) {
-      IRIS_LOG_DEBUG("no nodes in scene; using first node");
-      if (auto r = g.ParseNode(commandQueue, 0, glm::mat4x4(1.f), path,
-                               buffersBytes, imagesExtents, imagesBytes)) {
-        renderables.insert(renderables.end(), r->begin(), r->end());
-      } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(r.error());
-      }
-    } else {
-      for (auto&& node : *scene.nodes) {
-        if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
-                                 buffersBytes, imagesExtents, imagesBytes)) {
-          renderables.insert(renderables.end(), r->begin(), r->end());
-        } else {
-          IRIS_LOG_LEAVE();
-          return tl::unexpected(r.error());
-        }
-      }
     }
   }
 
@@ -2403,7 +2393,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
 } // namespace iris::io
 
 std::function<std::system_error(void)>
-iris::io::LoadGLTF(filesystem::path const& path) noexcept {
+iris::io::LoadGLTF(std::filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   json j;

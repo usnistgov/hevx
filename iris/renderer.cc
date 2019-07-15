@@ -4,8 +4,8 @@
 #include "config.h"
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/node_hash_set.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/container/node_hash_set.h"
 #include "acceleration_structure.h"
 #include "components/renderable.h"
 #include "components/traceable.h"
@@ -26,6 +26,7 @@
 #include "gsl/gsl"
 #include "io/gltf.h"
 #include "io/json.h"
+#include "io/savg.h"
 #include "io/shadertoy.h"
 #include "pipeline.h"
 #include "protos.h"
@@ -151,7 +152,8 @@ std::uint32_t const sCommandQueueGraphics = 0;
 absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
-static std::uint32_t sCommandQueueHead{1}; // Reserve 0 (sCommandQueueGraphics) for Renderer
+static std::uint32_t sCommandQueueHead{
+  1}; // Reserve 0 (sCommandQueueGraphics) for Renderer
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
 static std::timed_mutex sCommandQueueMutex;
 
@@ -931,7 +933,8 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
 
 static void BeginFrameWindow(std::string const& title,
                              Window& window) noexcept {
-  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BeginFrameWindow");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                      "BeginFrameWindow");
 
   ImGui::SetCurrentContext(window.uiContext.get());
 
@@ -1058,7 +1061,8 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
 } // BeginFrameTraceable
 
 static void EndFrameWindowUI(Window& window) {
-  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrameWindowUI");
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                      "EndFrameWindowUI");
 
   ImGui::SetCurrentContext(window.uiContext.get());
   ImGuiIO& io = ImGui::GetIO();
@@ -1287,7 +1291,8 @@ EndFrameWindow(std::string const& title, Window& window,
     std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
     for (auto&& [id, traceable] : sTraceables.components) {
       // FIXME: this overwrites the framebuffer with the last traceable.
-      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildBlitImageCommandBuffer");
+      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                          "BuildBlitImageCommandBuffer");
       VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(
         traceable.outputImageView, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
@@ -1311,7 +1316,8 @@ EndFrameWindow(std::string const& title, Window& window,
       pushConstants.NormalMatrix =
         glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
-      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "BuildRenderableCommandBuffer");
+      vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                          "BuildRenderableCommandBuffer");
       VkCommandBuffer renderableCommandBuffer = BuildRenderableCommandBuffer(
         renderable, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
@@ -1565,13 +1571,11 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   physicalDeviceFeatures.features.shaderInt64 = VK_TRUE;
 
   // These are the extensions that we require from the physical device.
-  absl::InlinedVector<char const*, 32> requiredPhysicalDeviceExtensionNames{{
-    VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
-    // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
-    VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    "VK_KHR_maintenance1"
-  }};
+  absl::InlinedVector<char const*, 32> requiredPhysicalDeviceExtensionNames{
+    {VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+     // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
+     VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+     VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_maintenance1"}};
 
   // These are additional extensions that we would like for the physical device.
   absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{{
@@ -2367,7 +2371,7 @@ void iris::Renderer::EndFrame(
   // Update the lights buffer once
   if (auto ptr = sLightsBuffer.Map<LightsBuffer*>()) {
     (*ptr)->Lights[0].direction =
-      glm::vec4(0.f, -std::sqrt(2.f), std::sqrt(2.f), 0.f);
+      glm::vec4(0.f, -std::sqrt(2.f), -std::sqrt(2.f), 0.f);
     (*ptr)->Lights[0].color = glm::vec4(.8f, .8f, .8f, 1.f);
     (*ptr)->NumLights = 1;
     sLightsBuffer.Unmap();
@@ -2408,9 +2412,10 @@ void iris::Renderer::EndFrame(
     submitI.pSignalSemaphores = &sImagesReadyForPresent;
   }
 
-  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics], "EndFrame Submit and Present");
-  if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1, &submitI,
-                                  sFrameFinishedFences[sFrameIndex]);
+  vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                      "EndFrame Submit and Present");
+  if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1,
+                                  &submitI, sFrameFinishedFences[sFrameIndex]);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting command buffer: {}",
                    iris::to_string(result));
@@ -2429,7 +2434,8 @@ void iris::Renderer::EndFrame(
     presentI.pImageIndices = imageIndices.data();
     presentI.pResults = presentResults.data();
 
-    if (auto result = vkQueuePresentKHR(sCommandQueues[sCommandQueueGraphics], &presentI);
+    if (auto result =
+          vkQueuePresentKHR(sCommandQueues[sCommandQueueGraphics], &presentI);
         result != VK_SUCCESS) {
       IRIS_LOG_ERROR("Error presenting swapchains: {}",
                      iris::to_string(result));
@@ -2465,48 +2471,48 @@ iris::Renderer::RemoveMaterial(MaterialID const& id) noexcept {
 
   class ReleaseTask : public tbb::task {
   public:
-      ReleaseTask(Component::Material m) noexcept
-        : material_(std::move(m)) {}
+    ReleaseTask(Component::Material m) noexcept
+      : material_(std::move(m)) {}
 
-      tbb::task* execute() override {
-        IRIS_LOG_ENTER();
+    tbb::task* execute() override {
+      IRIS_LOG_ENTER();
 
-        if (material_.materialBuffer) DestroyBuffer(material_.materialBuffer);
+      if (material_.materialBuffer) DestroyBuffer(material_.materialBuffer);
 
-        for (auto&& sampler : material_.textureSamplers) {
-          if (sampler != VK_NULL_HANDLE) {
-            vkDestroySampler(sDevice, sampler, nullptr);
-          }
+      for (auto&& sampler : material_.textureSamplers) {
+        if (sampler != VK_NULL_HANDLE) {
+          vkDestroySampler(sDevice, sampler, nullptr);
         }
-
-        for (auto&& view : material_.textureViews) {
-          if (view != VK_NULL_HANDLE) {
-            vkDestroyImageView(sDevice, view, nullptr);
-          }
-        }
-
-        for (auto&& image : material_.textures) {
-          if (image) DestroyImage(image);
-        }
-
-        if (material_.descriptorSet != VK_NULL_HANDLE) {
-          vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
-                               &material_.descriptorSet);
-        }
-
-        if (material_.descriptorSetLayout != VK_NULL_HANDLE) {
-          vkDestroyDescriptorSetLayout(sDevice, material_.descriptorSetLayout,
-                                       nullptr);
-        }
-
-        if (material_.pipeline) DestroyPipeline(material_.pipeline);
-
-        IRIS_LOG_LEAVE();
-        return nullptr;
       }
 
+      for (auto&& view : material_.textureViews) {
+        if (view != VK_NULL_HANDLE) {
+          vkDestroyImageView(sDevice, view, nullptr);
+        }
+      }
+
+      for (auto&& image : material_.textures) {
+        if (image) DestroyImage(image);
+      }
+
+      if (material_.descriptorSet != VK_NULL_HANDLE) {
+        vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
+                             &material_.descriptorSet);
+      }
+
+      if (material_.descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(sDevice, material_.descriptorSetLayout,
+                                     nullptr);
+      }
+
+      if (material_.pipeline) DestroyPipeline(material_.pipeline);
+
+      IRIS_LOG_LEAVE();
+      return nullptr;
+    }
+
   private:
-      Component::Material material_;
+    Component::Material material_;
   }; // struct IOTask
 
   if (auto old = sMaterials.Remove(id)) {
@@ -2850,6 +2856,8 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
         sIOContinuations.push(io::LoadJSON(path_));
       } else if (ext.compare(".gltf") == 0) {
         sIOContinuations.push(io::LoadGLTF(path_));
+      } else if (ext.compare(".savg") == 0) {
+        sIOContinuations.push(io::LoadSAVG(path_));
       } else {
         IRIS_LOG_ERROR("Unhandled file extension '{}' for {}", ext.string(),
                        path_.string());
@@ -2876,43 +2884,6 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::LoadFile
-
-tl::expected<void, std::system_error>
-iris::Renderer::LoadGLTF(io::json const& gltf) noexcept {
-  IRIS_LOG_ENTER();
-
-  class IOTask : public tbb::task {
-  public:
-    IOTask(io::json g) noexcept
-      : gltf_(std::move(g)) {}
-
-    tbb::task* execute() override {
-      IRIS_LOG_ENTER();
-
-      IRIS_LOG_DEBUG("Loading GLTF");
-      sIOContinuations.push(io::LoadGLTF(gltf_));
-
-      IRIS_LOG_LEAVE();
-      return nullptr;
-    }
-
-  private:
-    io::json gltf_;
-  }; // struct IOTask
-
-  try {
-    IOTask* task = new (tbb::task::allocate_root()) IOTask(gltf);
-    tbb::task::enqueue(*task);
-  } catch (std::exception const& e) {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(Error::kEnqueueError),
-      fmt::format("Enqueing IO task for GLTF: {}", e.what())));
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-}
 
 tl::expected<void, std::system_error> iris::Renderer::ProcessControlMessage(
   iris::Control::Control const& controlMessage) noexcept {

@@ -262,9 +262,9 @@ std::string GetCode(web::http::uri const& uri) {
 tl::expected<Renderer::Component::Renderable, std::system_error>
 LoadFile(web::http::uri const& uri) {
 #if PLATFORM_WINDOWS
-  filesystem::path const path = wstring_to_string(uri.path());
+  std::filesystem::path const path = wstring_to_string(uri.path());
 #else
-  filesystem::path const path = uri.path();
+  std::filesystem::path const path = uri.path();
 #endif
 
   std::string code;

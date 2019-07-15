@@ -8,6 +8,7 @@
 #include "iris/error.h"
 #include "iris/safe_numeric.h"
 #include <mutex>
+#include <variant>
 
 namespace iris {
 
@@ -179,6 +180,21 @@ inline EulerAngles& operator/=(EulerAngles& a, float s) noexcept {
   a = a / s;
   return a;
 };
+
+namespace match_detail {
+  template <class... Ts>
+  struct overloaded : Ts... {
+    using Ts::operator()...;
+    };
+  template <class... Ts>
+  overloaded(Ts...) -> overloaded<Ts...>;
+  } // namespace match_detail
+
+template <typename V, typename... Ms>
+auto match(V&& variant, Ms... matchers) {
+  return std::visit(match_detail::overloaded{std::forward<Ms>(matchers)...},
+    std::forward<V>(variant));
+  }
 
 } // namespace iris
 

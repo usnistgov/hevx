@@ -24,7 +24,7 @@
 #include <vector>
 
 std::function<std::system_error(void)>
-iris::io::LoadJSON(filesystem::path const& path) noexcept {
+iris::io::LoadJSON(std::filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   std::string json;

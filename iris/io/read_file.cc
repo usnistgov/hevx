@@ -8,16 +8,16 @@
 #include <string>
 
 tl::expected<std::vector<std::byte>, std::system_error>
-iris::io::ReadFile(filesystem::path const& path) noexcept {
+iris::io::ReadFile(std::filesystem::path const& path) noexcept {
   IRIS_LOG_ENTER();
 
   std::unique_ptr<std::FILE, decltype(&std::fclose)> fh{nullptr, std::fclose};
 
-  if (filesystem::exists(path)) {
+  if (std::filesystem::exists(path)) {
     IRIS_LOG_DEBUG("Reading {}", path.string());
     fh.reset(std::fopen(path.string().c_str(), "rb"));
   } else {
-    if (filesystem::exists(kIRISContentDirectory / path)) {
+    if (std::filesystem::exists(kIRISContentDirectory / path)) {
       IRIS_LOG_DEBUG("Reading {}", (kIRISContentDirectory / path).string());
       fh.reset(
         std::fopen((kIRISContentDirectory / path).string().c_str(), "rb"));

@@ -2,6 +2,7 @@
  * \brief main rendering application
  */
 #include "iris/config.h"
+#include "iris/io/gltf.h"
 #include "iris/renderer.h"
 
 #if PLATFORM_COMPILER_MSVC
@@ -112,9 +113,10 @@ int main(int argc, char** argv) {
                            {"scenes", {scene}},
                            {"nodes", {node}}};
 
-    if (auto result = iris::Renderer::LoadGLTF(gltf); !result) {
+    auto result = iris::io::LoadGLTF(gltf)();
+    if (result.code()) {
       logger.error("Error loading {}: {}", shadertoy_url,
-                   result.error().what());
+                   result.what());
     }
   }
 
