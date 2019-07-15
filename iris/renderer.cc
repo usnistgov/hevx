@@ -175,7 +175,7 @@ static std::chrono::steady_clock::time_point sPreviousFrameTime{};
 static bool sShowDemoWindow{false};
 static bool sDebugNormals{false};
 
-static UniqueComponentSystem<MaterialID, Component::Material> sMaterials{};
+static ComponentSystem<MaterialID, Component::Material> sMaterials{};
 static ComponentSystem<RenderableID, Component::Renderable> sRenderables{};
 static ComponentSystem<TraceableID, Component::Traceable> sTraceables{};
 
@@ -657,11 +657,11 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   vk::BeginDebugLabel(commandBuffer, "Renderable Bind and Push");
 
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    material->pipeline.pipeline);
+                    material.pipeline.pipeline);
 
   vkCmdBindDescriptorSets(commandBuffer,                   // commandBuffer
                           VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-                          material->pipeline.layout,       // layout
+                          material.pipeline.layout,        // layout
                           0,                               // firstSet
                           1,                               // descriptorSetCount
                           &sGlobalDescriptorSet,           // pDescriptorSets
@@ -669,19 +669,19 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
                           nullptr                          // pDynamicOffsets
   );
 
-  vkCmdPushConstants(commandBuffer, material->pipeline.layout,
+  vkCmdPushConstants(commandBuffer, material.pipeline.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
                      pushConstants.data());
 
-  if (material->descriptorSet != VK_NULL_HANDLE) {
+  if (material.descriptorSet != VK_NULL_HANDLE) {
     vkCmdBindDescriptorSets(
       commandBuffer,                   // commandBuffer
       VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint
-      material->pipeline.layout,       // layout
+      material.pipeline.layout,        // layout
       1,                               // firstSet
       1,                               // descriptorSetCount
-      &material->descriptorSet,        // pDescriptorSets
+      &material.descriptorSet,         // pDescriptorSets
       0,                               // dynamicOffsetCount
       nullptr                          // pDynamicOffsets
     );
@@ -2453,13 +2453,10 @@ iris::Renderer::MaterialID
 iris::Renderer::AddMaterial(Component::Material material) noexcept {
   IRIS_LOG_ENTER();
 
-  if (auto id = sMaterials.Insert(std::move(material))) {
-    IRIS_LOG_LEAVE();
-    return *id;
-  } else {
-    IRIS_LOG_CRITICAL("Cannot add material: {}", id.error().what());
-    std::terminate();
-  }
+  auto&& id = sMaterials.Insert(std::move(material));
+
+  IRIS_LOG_LEAVE();
+  return id;
 } // AddMaterial
 
 tl::expected<void, std::system_error>

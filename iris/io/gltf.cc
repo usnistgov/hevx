@@ -570,6 +570,8 @@ struct GLTF {
   std::optional<std::vector<std::string>> extensionsUsed;
   std::optional<std::vector<std::string>> extensionsRequired;
 
+  absl::flat_hash_map<int, Renderer::MaterialID> materialsMap;
+
   tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, filesystem::path const& path,
@@ -1365,14 +1367,21 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                                     : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
     if (primitive.material) {
-      if (auto m = CreateMaterial(
-            commandQueue, meshName, topology, !texcoords.empty(),
-            vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
-            frontFace, *primitive.material, imagesExtents, imagesBytes)) {
-        component.material = Renderer::AddMaterial(std::move(*m));
+      if (auto it = materialsMap.find(*primitive.material);
+          it != materialsMap.end()) {
+        component.material = it->second;
       } else {
-        IRIS_LOG_LEAVE();
-        return tl::unexpected(m.error());
+        if (auto m = CreateMaterial(
+              commandQueue, meshName, topology, !texcoords.empty(),
+              vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+              frontFace, *primitive.material, imagesExtents, imagesBytes)) {
+          auto matID = Renderer::AddMaterial(std::move(*m));
+          materialsMap.insert(std::make_pair(*primitive.material, matID));
+          component.material = matID;
+        } else {
+          IRIS_LOG_LEAVE();
+          return tl::unexpected(m.error());
+        }
       }
     }
 
