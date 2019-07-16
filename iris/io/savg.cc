@@ -1,9 +1,11 @@
 #include "io/savg.h"
+#include "config.h"
+
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
-#include "config.h"
+#include "components/renderable.h"
 #include "error.h"
 #include "expected.hpp"
 #include "glm/vec3.hpp"
@@ -18,20 +20,6 @@
 
 namespace iris::savg {
 
-template <typename T, typename It>
-tl::expected<T, std::system_error> ParseVec(It first, It last) noexcept {
-  T vec;
-
-  for (int i = 0; i < T::length(); ++i) {
-    if (!absl::SimpleAtof(*first++, &vec[i])) {
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "Invalid value for primitive color"));
-    }
-  }
-
-  return vec;
-} // ParseVec
-
 struct Primitive {
   explicit Primitive(glm::vec4 c)
     : primColor(std::move(c)) {}
@@ -39,88 +27,10 @@ struct Primitive {
 
   glm::vec4 primColor;
 
-  std::vector<glm::vec3> positions;
-  std::vector<glm::vec4> colors;
-  std::vector<glm::vec3> normals;
-
-  template <class T>
-  static T Start(std::vector<std::string_view> const& tokens) noexcept {
-    if (tokens.size() == 5) {
-      if (auto color = ParseVec<glm::vec4>(tokens.begin() + 1, tokens.end())) {
-        return T(*color);
-      } else {
-        IRIS_LOG_WARN("Error parsing primitive color: {}; ignoring",
-                      color.error().what());
-        return T();
-      }
-    } else {
-      if (tokens.size() != 1) {
-        IRIS_LOG_WARN(
-          "Wrong number of values for primitive color: {}; ignoring",
-          tokens.size() - 1);
-      }
-      return T();
-    }
-  } // Start
-
-  virtual void ParseData(std::vector<std::string_view> const& tokens) noexcept {
-    if (tokens.size() != 3 && tokens.size() != 6 && tokens.size() != 7 &&
-        tokens.size() != 10) {
-      IRIS_LOG_WARN("Wrong number of values for primitive data: {}; ignoring",
-                    tokens.size());
-      return;
-    }
-
-    auto first = tokens.begin(), last = first + glm::vec3::length();
-    if (auto position = ParseVec<glm::vec3>(first, last)) {
-      positions.push_back(*position);
-      first = last;
-    } else {
-      IRIS_LOG_WARN("Error parsing xyz for primitive data: {}; ignoring",
-                    position.error().what());
-    }
-
-    switch (tokens.size()) {
-    case 6:
-      last = first + glm::vec3::length();
-      if (auto normal = ParseVec<glm::vec3>(first, last)) {
-        normals.push_back(*normal);
-      } else {
-        IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
-                      normal.error().what());
-      }
-      break;
-    case 7:
-      last = first + glm::vec4::length();
-      if (auto color = ParseVec<glm::vec4>(first, last)) {
-        colors.push_back(*color);
-      } else {
-        IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
-                      color.error().what());
-      }
-      break;
-    case 10:
-      last = first + glm::vec4::length();
-      if (auto color = ParseVec<glm::vec4>(first, last)) {
-        colors.push_back(*color);
-        first = last;
-      } else {
-        IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
-                      color.error().what());
-        return;
-      }
-
-      last = first + glm::vec3::length();
-      if (auto normal = ParseVec<glm::vec3>(first, last)) {
-        normals.push_back(*normal);
-      } else {
-        IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
-                      normal.error().what());
-      }
-      break;
-    }
-  } // ParseData
-};  // struct Primitive
+  std::vector<glm::vec3> positions{};
+  std::vector<glm::vec4> colors{};
+  std::vector<glm::vec3> normals{};
+}; // struct Primitive
 
 struct Tristrips final : public Primitive {
   Tristrips(glm::vec4 c = glm::vec4(0.f, 0.f, 0.f, 0.f))
@@ -138,23 +48,117 @@ struct Points final : public Primitive {
 }; // struct Points
 
 struct Shape {
-  enum class Geometries { kAABBs, kTriangles };
-
-  Geometries geometry;
 }; // struct Shape
-
-std::string to_string(Shape::Geometries geometry) noexcept {
-  using namespace std::string_literals;
-  switch (geometry) {
-  case Shape::Geometries::kAABBs: return "aabbs"s;
-  case Shape::Geometries::kTriangles: return "triangles"s;
-  default: return "bad enum value"s;
-  }
-}
 
 using State = std::variant<std::monostate, Tristrips, Lines, Points, Shape>;
 
-tl::expected<void, std::system_error>
+template <typename T, typename It>
+tl::expected<T, std::system_error> ParseVec(It start) noexcept {
+  T vec;
+
+  for (int i = 0; i < T::length(); ++i, ++start) {
+    if (!absl::SimpleAtof(*start, &vec[i])) {
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, "Invalid value for primitive color"));
+    }
+  }
+
+  return vec;
+} // ParseVec
+
+template <class T>
+static T Start(std::vector<std::string_view> const& tokens) noexcept {
+  if (tokens.size() == 5) {
+    if (auto color = ParseVec<glm::vec4>(tokens.begin() + 1)) {
+      return T(*color);
+    } else {
+      IRIS_LOG_WARN("Error parsing primitive color: {}; ignoring",
+                    color.error().what());
+      return T();
+    }
+  } else {
+    if (tokens.size() != 1) {
+      IRIS_LOG_WARN("Wrong number of values for primitive color: {}; ignoring",
+                    tokens.size() - 1);
+    }
+    return T();
+  }
+} // Start
+
+void ParseData(std::monostate, std::vector<std::string_view> const&) noexcept {}
+
+std::optional<Renderer::Component::Renderable> End(std::monostate) noexcept {
+  return std::nullopt;
+}
+
+void ParseData(Primitive& primitive,
+               std::vector<std::string_view> const& tokens) noexcept {
+  if (tokens.size() != 3 && tokens.size() != 6 && tokens.size() != 7 &&
+      tokens.size() != 10) {
+    IRIS_LOG_WARN("Wrong number of values for primitive data: {}; ignoring",
+                  tokens.size());
+    return;
+  }
+
+  auto first = tokens.begin();
+  if (auto position = ParseVec<glm::vec3>(first)) {
+    primitive.positions.push_back(*position);
+    first += glm::vec3::length();
+  } else {
+    IRIS_LOG_WARN("Error parsing xyz for primitive data: {}; ignoring",
+                  position.error().what());
+  }
+
+  switch (tokens.size()) {
+  case 6:
+    if (auto normal = ParseVec<glm::vec3>(first)) {
+      primitive.normals.push_back(*normal);
+    } else {
+      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
+                    normal.error().what());
+    }
+    break;
+  case 7:
+    if (auto color = ParseVec<glm::vec4>(first)) {
+      primitive.colors.push_back(*color);
+    } else {
+      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
+                    color.error().what());
+    }
+    break;
+  case 10:
+    if (auto color = ParseVec<glm::vec4>(first)) {
+      primitive.colors.push_back(*color);
+      first += glm::vec4::length();
+    } else {
+      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
+                    color.error().what());
+      return;
+    }
+
+    if (auto normal = ParseVec<glm::vec3>(first)) {
+      primitive.normals.push_back(*normal);
+    } else {
+      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
+                    normal.error().what());
+    }
+    break;
+  }
+} // ParseData
+
+std::optional<Renderer::Component::Renderable> End(Tristrips&) noexcept {}
+
+std::optional<Renderer::Component::Renderable> End(Lines&) noexcept {}
+
+std::optional<Renderer::Component::Renderable> End(Points&) noexcept {}
+
+void ParseData(Shape&, std::vector<std::string_view> const&) noexcept {}
+
+std::optional<Renderer::Component::Renderable> End(Shape&) noexcept {
+  return std::nullopt;
+}
+
+tl::expected<std::optional<Renderer::Component::Renderable>, std::system_error>
 ParseLine(State& state, std::string_view line) noexcept {
   using namespace std::string_literals;
   IRIS_LOG_ENTER();
@@ -165,83 +169,36 @@ ParseLine(State& state, std::string_view line) noexcept {
 
   if (tokens.empty() || tokens[0].empty() || tokens[0][0] == '#') {
     IRIS_LOG_LEAVE();
-    return {};
+    return std::nullopt;
   }
 
-  auto nextState = match(
-    state,
-    [=](std::monostate) -> std::optional<State> {
-      if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
-        return Primitive::Start<Tristrips>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
-        return Primitive::Start<Lines>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
-        return Primitive::Start<Points>(tokens);
-      }
+  std::optional<Renderer::Component::Renderable> renderable{};
 
-      IRIS_LOG_WARN("Unsupported SAVG keyword: {}", tokens[0]);
-      return std::nullopt;
-    },
-    [=](Tristrips& tristrips) -> std::optional<State> {
-      if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
-        IRIS_LOG_DEBUG("Finished parsing tristrips with {} positions",
-                       tristrips.positions.size());
-        return State{};
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
-        return Primitive::Start<Tristrips>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
-        return Primitive::Start<Lines>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
-        return Primitive::Start<Points>(tokens);
-      }
+  if (auto nextState = std::visit(
+        [&renderable, &tokens](auto&& currState) -> std::optional<State> {
+          if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
+            renderable = End(currState);
+            return State{};
+          } else if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
+            renderable = End(currState);
+            return Start<Tristrips>(tokens);
+          } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
+            renderable = End(currState);
+            return Start<Lines>(tokens);
+          } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
+            renderable = End(currState);
+            return Start<Points>(tokens);
+          }
 
-      tristrips.ParseData(tokens);
-      return std::nullopt;
-    },
-    [=](Lines& lines) -> std::optional<State> {
-      if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
-        IRIS_LOG_DEBUG("Finished parsing lines with {} positions",
-                       lines.positions.size());
-        return State{};
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
-        return Primitive::Start<Tristrips>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
-        return Primitive::Start<Lines>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
-        return Primitive::Start<Points>(tokens);
-      }
-
-      lines.ParseData(tokens);
-      return std::nullopt;
-    },
-    [=](Points& points) -> std::optional<State> {
-      if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
-        IRIS_LOG_DEBUG("Finished parsing points with {} positions",
-                       points.positions.size());
-        return State{};
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
-        return Primitive::Start<Tristrips>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
-        return Primitive::Start<Lines>(tokens);
-      } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
-        return Primitive::Start<Points>(tokens);
-      }
-
-      points.ParseData(tokens);
-      return std::nullopt;
-    },
-    [=](Shape const& shape) -> std::optional<State> {
-      if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
-        IRIS_LOG_DEBUG("Finished parsing {} shape", to_string(shape.geometry));
-        return State{};
-      }
-      return std::nullopt;
-    });
-
-  if (nextState) state = *nextState;
+          ParseData(currState, tokens);
+          return std::nullopt;
+        },
+        state)) {
+    state = *nextState;
+  }
 
   IRIS_LOG_LEAVE();
-  return {};
+  return renderable;
 } // ParseLine
 
 } // namespace iris::savg
@@ -260,9 +217,13 @@ tl::expected<void, std::system_error> static ParseSAVG(
     if (bytes[curr] == std::byte('\n') || curr == nBytes - 1) {
       std::string line(reinterpret_cast<char const*>(&bytes[prev]),
                        reinterpret_cast<char const*>(&bytes[curr]));
-      if (auto result = ParseLine(state, line); !result) {
+      if (auto possibleRenderable = ParseLine(state, line)) {
+        if (*possibleRenderable) {
+          Renderer::AddRenderable(std::move(**possibleRenderable));
+        }
+      } else {
         IRIS_LOG_ERROR("Error parsing line: {}", line);
-        return tl::unexpected(result.error());
+        return tl::unexpected(possibleRenderable.error());
       }
       prev = curr + 1;
     }
