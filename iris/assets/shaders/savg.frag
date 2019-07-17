@@ -47,12 +47,36 @@ layout(location = 6) in vec3 Ve; // view vector in eye-space
 layout(location = 7) in vec3 Ne; // normal vector in eye-space
 #endif
 
-#ifdef HAS_COLORS
-layout(location = 8) out vec4 C; // color
-#endif
+layout(location = 8) in vec4 C; // color
 
 layout(location = 0) out vec4 Color;
 
+const float M_PI = 3.141592653589793;
+
 void main() {
+#ifdef HAS_NORMALS
+  vec3 n = normalize(Ne);
+  vec3 v = normalize(Ve);
+  float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
+
+  vec3 color = vec3(0.2) * C.rgb; // ambient
+
+  for (int i = 0; i < NumLights; ++i) {
+    if (Lights[i].color.a > 0) {
+      vec3 l = normalize(Lights[i].direction.xyz * Pe.w - Lights[i].direction.w * Pe.xyz);
+      vec3 h = normalize(l + v);
+
+      float NdotL = clamp(dot(n, l), 0.001, 1.0);
+      float NdotH = clamp(dot(n, h), 0.0, 1.0);
+      float LdotH = clamp(dot(l, h), 0.0, 1.0);
+      float VdotH = clamp(dot(v, h), 0.0, 1.0);
+
+      color += NdotL * Lights[i].color.rgb * (C.rgb / M_PI + pow(NdotH, 2.f));
+    }
+  }
+
+  Color = vec4(pow(color, vec3(1.0/2.2)), C.a);
+#else
   Color = vec4(pow(C.rgb, vec3(1.0/2.2)), C.a);
+#endif
 }

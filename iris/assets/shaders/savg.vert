@@ -22,11 +22,9 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
 };
 
 layout(location = 0) in vec3 Vertex;
+layout(location = 1) in vec4 Color;
 #ifdef HAS_NORMALS
-layout(location = 1) in vec3 Normal;
-#endif
-#ifdef HAS_COLORS
-layout(location = 2) in vec4 Color;
+layout(location = 2) in vec3 Normal;
 #endif
 
 layout(location = 0) out vec4 Po; // surface position in object-space
@@ -43,9 +41,7 @@ layout(location = 6) out vec3 Ve; // view vector in eye-space
 layout(location = 7) out vec3 Ne; // normal vector in eye-space
 #endif
 
-#ifdef HAS_COLORS
 layout(location = 8) out vec4 C; // color
-#endif
 
 out gl_PerVertex {
   vec4 gl_Position;
@@ -66,9 +62,6 @@ void main() {
   Ne = NormalMatrix * No;
 #endif
 
-#ifdef HAS_COLORS
   C = Color;
-#endif
-
   gl_Position = ProjectionMatrix * Pe;
 }
