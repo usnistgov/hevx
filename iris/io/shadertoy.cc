@@ -168,6 +168,7 @@ void main() {
   auto materialID = Renderer::AddMaterial(material);
 
   Renderer::Component::Renderable renderable;
+  renderable.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   renderable.material = materialID;
   renderable.numVertices = 3;
 

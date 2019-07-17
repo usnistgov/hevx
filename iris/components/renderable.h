@@ -12,6 +12,7 @@
 namespace iris::Renderer::Component {
 
 struct Renderable {
+  VkPrimitiveTopology topology{};
   MaterialID material{};
 
   static constexpr std::size_t const kMaxBuffers = 4;

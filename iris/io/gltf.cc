@@ -1354,9 +1354,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
     Renderer::Component::Renderable component;
 
-    VkPrimitiveTopology topology;
     if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-      topology = *t;
+      component.topology = *t;
     } else {
       IRIS_LOG_LEAVE();
       return tl::unexpected(t.error());
@@ -1372,7 +1371,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         component.material = it->second;
       } else {
         if (auto m = CreateMaterial(
-              commandQueue, meshName, topology, !texcoords.empty(),
+              commandQueue, meshName, component.topology, !texcoords.empty(),
               vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
               frontFace, *primitive.material, imagesExtents, imagesBytes)) {
           auto matID = Renderer::AddMaterial(std::move(*m));

@@ -1,11 +1,13 @@
 #include "io/savg.h"
 #include "config.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
 #include "components/renderable.h"
+#include "components/traceable.h"
 #include "error.h"
 #include "expected.hpp"
 #include "glm/gtc/type_ptr.hpp"
@@ -61,116 +63,56 @@ struct Points final : public Primitive {
     : Primitive(std::move(c)) {}
 }; // struct Points
 
-struct Shape {}; // struct Shape
+struct AABB {
+  glm::vec3 min{};
+  glm::vec3 max{};
+}; // struct AABB
 
-using State = std::variant<std::monostate, Tristrips, Lines, Points, Shape>;
-
-static Renderer::Component::Material sTristripsMaterial;
-static Renderer::MaterialID sTristripsMaterialID{UINT32_MAX};
-static Renderer::Component::Material sLinesMaterial;
-static Renderer::MaterialID sLinesMaterialID{UINT32_MAX};
-//static Renderer::Component::Material sPointsMaterial;
-//static Renderer::MaterialID sPointsMaterialID{UINT32_MAX};
-
-template <typename T, typename It>
-static tl::expected<T, std::system_error> ParseVec(It start) noexcept {
-  T vec;
-
-  for (int i = 0; i < T::length(); ++i, ++start) {
-    if (!absl::SimpleAtof(*start, &vec[i])) {
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "Invalid value for primitive color"));
-    }
-  }
-
-  return vec;
-} // ParseVec
-
-template <class T>
-static T Start(std::vector<std::string_view> const& tokens) noexcept {
-  if (tokens.size() == 5) {
-    if (auto color = ParseVec<glm::vec4>(tokens.begin() + 1)) {
-      return T(*color);
-    } else {
-      IRIS_LOG_WARN("Error parsing primitive color: {}; ignoring",
-                    color.error().what());
-      return T();
-    }
+static VkShaderStageFlagBits
+ShaderTypeToStage(std::string_view shaderType) noexcept {
+  if (absl::StartsWithIgnoreCase(shaderType, "VERTEX")) {
+    return VK_SHADER_STAGE_VERTEX_BIT;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "GEOMETRY")) {
+    return VK_SHADER_STAGE_GEOMETRY_BIT;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "FRAGMENT")) {
+    return VK_SHADER_STAGE_FRAGMENT_BIT;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "RAYGEN")) {
+    return VK_SHADER_STAGE_RAYGEN_BIT_NV;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "INTERSECTION")) {
+    return VK_SHADER_STAGE_INTERSECTION_BIT_NV;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "CLOSESTHIT")) {
+    return VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "ANYHIT")) {
+    return VK_SHADER_STAGE_ANY_HIT_BIT_NV;
+  } else if (absl::StartsWithIgnoreCase(shaderType, "MISS")) {
+    return VK_SHADER_STAGE_MISS_BIT_NV;
   } else {
-    if (tokens.size() != 1) {
-      IRIS_LOG_WARN("Wrong number of values for primitive color: {}; ignoring",
-                    tokens.size() - 1);
-    }
-    return T();
+    IRIS_LOG_WARN("Bad shader type: {}", shaderType);
+    return VK_SHADER_STAGE_ALL;
   }
-} // Start
+} // ShaderTypeToFlag
 
-static void ParseData(std::monostate,
-                      std::vector<std::string_view> const&) noexcept {}
+struct Program {
+  Shader shader;
 
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
-End(std::monostate&, Renderer::CommandQueue&) noexcept {
-  return std::nullopt;
-}
-
-static void ParseData(Primitive& primitive,
-                      std::vector<std::string_view> const& tokens) noexcept {
-  if (tokens.size() != 3 && tokens.size() != 6 && tokens.size() != 7 &&
-      tokens.size() != 10) {
-    IRIS_LOG_WARN("Wrong number of values for primitive data: {}; ignoring",
-                  tokens.size());
-    return;
+  Program(std::vector<std::string_view> const& tokens) {
+    if (auto s = LoadShaderFromFile(tokens[2], ShaderTypeToStage(tokens[1]))) {
+      shader = std::move(*s);
+    } else {
+      IRIS_LOG_WARN("Invalid PROGRAM in SAVG file; ignoring");
+    }
   }
+};
 
-  auto first = tokens.begin();
-  if (auto position = ParseVec<glm::vec3>(first)) {
-    primitive.positions.push_back(*position);
-    first += glm::vec3::length();
-  } else {
-    IRIS_LOG_WARN("Error parsing xyz for primitive data: {}; ignoring",
-                  position.error().what());
-  }
+using State =
+  std::variant<std::monostate, Tristrips, Lines, Points, AABB, Program>;
 
-  switch (tokens.size()) {
-  case 6:
-    if (auto normal = ParseVec<glm::vec3>(first)) {
-      primitive.normals.push_back(*normal);
-    } else {
-      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
-                    normal.error().what());
-    }
-    break;
-  case 7:
-    if (auto color = ParseVec<glm::vec4>(first)) {
-      primitive.colors.push_back(*color);
-    } else {
-      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
-                    color.error().what());
-    }
-    break;
-  case 10:
-    if (auto color = ParseVec<glm::vec4>(first)) {
-      primitive.colors.push_back(*color);
-      first += glm::vec4::length();
-    } else {
-      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
-                    color.error().what());
-      return;
-    }
-
-    if (auto normal = ParseVec<glm::vec3>(first)) {
-      primitive.normals.push_back(*normal);
-    } else {
-      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
-                    normal.error().what());
-    }
-    break;
-  }
-} // ParseData
+using Component =
+  std::variant<Renderer::Component::Renderable, Renderer::Component::Traceable>;
 
 static tl::expected<Renderer::Component::Material, std::system_error>
-CreateDefaultMaterial(VkPrimitiveTopology topology) noexcept {
+CreateMaterial(VkPrimitiveTopology topology,
+               std::vector<Shader> shaders = {}) noexcept {
   IRIS_LOG_ENTER();
   Renderer::Component::Material material;
 
@@ -210,23 +152,24 @@ CreateDefaultMaterial(VkPrimitiveTopology topology) noexcept {
     vertexInputBindingDescriptions[0].stride += sizeof(glm::vec3);
   }
 
-  absl::FixedArray<Shader> shaders(2);
+  if (shaders.empty()) {
+    if (auto vs =
+          LoadShaderFromFile("assets/shaders/savg.vert",
+                             VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
+      shaders.push_back(std::move(*vs));
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(vs.error());
+    }
 
-  if (auto vs = LoadShaderFromFile("assets/shaders/savg.vert",
-                                   VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-    shaders[0] = std::move(*vs);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(vs.error());
-  }
-
-  if (auto fs =
-        LoadShaderFromFile("assets/shaders/savg.frag",
-                           VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
-    shaders[1] = std::move(*fs);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(fs.error());
+    if (auto fs =
+          LoadShaderFromFile("assets/shaders/savg.frag",
+                             VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
+      shaders.push_back(std::move(*fs));
+    } else {
+      IRIS_LOG_LEAVE();
+      return tl::unexpected(fs.error());
+    }
   }
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
@@ -293,33 +236,7 @@ CreateDefaultMaterial(VkPrimitiveTopology topology) noexcept {
 
   IRIS_LOG_LEAVE();
   return material;
-} // CreateDefaultMaterial
-
-static tl::expected<void, std::system_error>
-CreateDefaultMaterials(Renderer::CommandQueue&) noexcept {
-  IRIS_LOG_ENTER();
-
-  if (auto m = CreateDefaultMaterial(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP)) {
-    sTristripsMaterial = std::move(*m);
-  } else {
-    return tl::unexpected(m.error());
-  }
-
-  if (auto m = CreateDefaultMaterial(VK_PRIMITIVE_TOPOLOGY_LINE_LIST)) {
-    sLinesMaterial = std::move(*m);
-  } else {
-    return tl::unexpected(m.error());
-  }
-#if 0
-  if (auto m = CreateDefaultMaterial(VK_PRIMITIVE_TOPOLOGY_POINT_LIST)) {
-    sPointsMaterial = std::move(*m);
-  } else {
-    return tl::unexpected(m.error());
-  }
-#endif
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateDefaultMaterials
+} // CreateMaterial
 
 static std::vector<glm::vec3>
 GenerateNormals(std::vector<glm::vec3> const& positions) noexcept {
@@ -341,10 +258,11 @@ GenerateNormals(std::vector<glm::vec3> const& positions) noexcept {
 } // GenerateNormals
 
 static tl::expected<Renderer::Component::Renderable, std::system_error>
-CreateRenderable(Primitive const* primitive,
+CreateRenderable(Primitive const* primitive, VkPrimitiveTopology topology,
                  Renderer::CommandQueue& commandQueue) noexcept {
   IRIS_LOG_ENTER();
   Renderer::Component::Renderable renderable;
+  renderable.topology = topology;
 
   VkDeviceSize const vertexStride =
     sizeof(glm::vec3) + sizeof(glm::vec4) +
@@ -397,7 +315,7 @@ CreateRenderable(Primitive const* primitive,
 
   if (auto buf = AllocateBuffer(vertexBufferSize,
                                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 VMA_MEMORY_USAGE_GPU_ONLY)) {
     renderable.vertexBuffer = std::move(*buf);
   } else {
@@ -425,9 +343,9 @@ CreateRenderable(Primitive const* primitive,
                   renderable.vertexBuffer.buffer, 1, &region);
 
   if (auto result = Renderer::EndOneTimeSubmit(
-        commandBuffer, commandQueue.commandPool, commandQueue.queue,
-        commandQueue.submitFence);
-      !result) {
+      commandBuffer, commandQueue.commandPool, commandQueue.queue,
+      commandQueue.submitFence);
+    !result) {
     DestroyBuffer(renderable.vertexBuffer);
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
@@ -446,7 +364,7 @@ CreateRenderable(Primitive const* primitive,
   };
 
 #if PLATFORM_COMPILER_MSVC
-#pragma warning(push)
+  #pragma warning(push)
 #pragma warning(disable : 4458)
 #elif PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -473,89 +391,189 @@ CreateRenderable(Primitive const* primitive,
   return renderable;
 } // CreateRenderable
 
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
-End(Tristrips& tristrips, Renderer::CommandQueue& commandQueue) noexcept {
-  IRIS_LOG_ENTER();
+template <typename T, typename It>
+static tl::expected<T, std::system_error> ParseVec(It start) noexcept {
+  T vec;
 
+  for (int i = 0; i < T::length(); ++i, ++start) {
+    if (!absl::SimpleAtof(*start, &vec[i])) {
+      return tl::unexpected(std::system_error(
+        Error::kFileParseFailed, "Invalid value for primitive color"));
+    }
+  }
+
+  return vec;
+} // ParseVec
+
+template <class T>
+static T Start(std::vector<std::string_view> const& tokens) noexcept {
+  if (tokens.size() == 5) {
+    if (auto color = ParseVec<glm::vec4>(tokens.begin() + 1)) {
+      return T(*color);
+    } else {
+      IRIS_LOG_WARN("Error parsing primitive color: {}; ignoring",
+                    color.error().what());
+      return T();
+    }
+  } else {
+    if (tokens.size() != 1) {
+      IRIS_LOG_WARN("Wrong number of values for primitive color: {}; ignoring",
+                    tokens.size() - 1);
+    }
+    return T();
+  }
+} // Start
+
+static void ParseData(std::monostate,
+                      std::vector<std::string_view> const&) noexcept {}
+
+static tl::expected<std::optional<Component>, std::system_error>
+End(std::monostate&, Renderer::CommandQueue&) noexcept {
+  return std::nullopt;
+}
+
+static void ParseData(Primitive& primitive,
+                      std::vector<std::string_view> const& tokens) noexcept {
+  if (tokens.size() != 3 && tokens.size() != 6 && tokens.size() != 7 &&
+      tokens.size() != 10) {
+    IRIS_LOG_WARN("Wrong number of values for primitive data: {}; ignoring",
+                  tokens.size());
+    return;
+  }
+
+  auto first = tokens.begin();
+  if (auto position = ParseVec<glm::vec3>(first)) {
+    primitive.positions.push_back(*position);
+    first += glm::vec3::length();
+  } else {
+    IRIS_LOG_WARN("Error parsing xyz for primitive data: {}; ignoring",
+                  position.error().what());
+  }
+
+  switch (tokens.size()) {
+  case 6:
+    if (auto normal = ParseVec<glm::vec3>(first)) {
+      primitive.normals.push_back(*normal);
+    } else {
+      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
+                    normal.error().what());
+    }
+    break;
+  case 7:
+    if (auto color = ParseVec<glm::vec4>(first)) {
+      primitive.colors.push_back(*color);
+    } else {
+      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
+                    color.error().what());
+    }
+    break;
+  case 10:
+    if (auto color = ParseVec<glm::vec4>(first)) {
+      primitive.colors.push_back(*color);
+      first += glm::vec4::length();
+    } else {
+      IRIS_LOG_WARN("Error parsing rgba for primitive data: {}; ignoring",
+                    color.error().what());
+      return;
+    }
+
+    if (auto normal = ParseVec<glm::vec3>(first)) {
+      primitive.normals.push_back(*normal);
+    } else {
+      IRIS_LOG_WARN("Error parsing xnynzn for primitive data: {}; ignoring",
+                    normal.error().what());
+    }
+    break;
+  }
+} // ParseData
+
+static tl::expected<std::optional<Component>, std::system_error>
+End(Tristrips& tristrips, Renderer::CommandQueue& commandQueue) noexcept {
   if (tristrips.normals.empty()) {
     tristrips.normals = GenerateNormals(tristrips.positions);
   }
 
-  Renderer::Component::Renderable component;
-  if (auto c = CreateRenderable(&tristrips, commandQueue)) {
-    component = std::move(*c);
+  if (auto c = CreateRenderable(
+        &tristrips, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, commandQueue)) {
+    return *c;
   } else {
     return tl::unexpected(c.error());
   }
-
-  if (sTristripsMaterialID == Renderer::MaterialID(UINT32_MAX)) {
-    sTristripsMaterialID = Renderer::AddMaterial(sTristripsMaterial);
-  }
-
-  component.material = sTristripsMaterialID;
-
-  IRIS_LOG_LEAVE();
-  return component;
 }
 
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
+static tl::expected<std::optional<Component>, std::system_error>
 End(Lines& lines, Renderer::CommandQueue& commandQueue) noexcept {
-  IRIS_LOG_ENTER();
-
-  Renderer::Component::Renderable component;
-  if (auto c = CreateRenderable(&lines, commandQueue)) {
-    component = std::move(*c);
+  if (auto c = CreateRenderable(&lines, VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+                                commandQueue)) {
+    return *c;
   } else {
     return tl::unexpected(c.error());
   }
-
-  if (sLinesMaterialID == Renderer::MaterialID(UINT32_MAX)) {
-    sLinesMaterialID = Renderer::AddMaterial(sLinesMaterial);
-  }
-
-  component.material = sLinesMaterialID;
-
-  IRIS_LOG_LEAVE();
-  return component;
 } // End
 
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
+static tl::expected<std::optional<Component>, std::system_error>
 End(Points& points, Renderer::CommandQueue& commandQueue) noexcept {
-  IRIS_LOG_ENTER();
-
-  Renderer::Component::Renderable component;
-  if (auto c = CreateRenderable(&points, commandQueue)) {
-    component = std::move(*c);
+  if (auto c = CreateRenderable(&points, VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+                                commandQueue)) {
+    return *c;
   } else {
     return tl::unexpected(c.error());
   }
-#if 0
-  if (sPointsMaterialID == Renderer::MaterialID(UINT32_MAX)) {
-    sPointsMaterialID = Renderer::AddMaterial(sPointsMaterial);
+} // End
+
+static void ParseData(AABB& aabb,
+                      std::vector<std::string_view> const& tokens) noexcept {
+  if (tokens.size() != 4 && tokens.size() != 6) {
+    IRIS_LOG_WARN("Wrong number of values for aabb data: {}; ignoring",
+                  tokens.size());
+    return;
   }
 
-  component.material = sPointsMaterialID;
-#endif
-  IRIS_LOG_LEAVE();
-  return component;
-}
+  switch (tokens.size()) {
+  case 4:
+    if (auto center = ParseVec<glm::vec3>(tokens.begin())) {
+      float radius;
+      if (absl::SimpleAtof(tokens[3], &radius)) {
+        aabb.min = *center - glm::vec3(radius);
+        aabb.max = *center + glm::vec3(radius);
+      } else {
+        IRIS_LOG_WARN("Error parsing aabb radius; ignoring");
+      }
+    } else {
+      IRIS_LOG_WARN("Error parsing aabb center: {}; ignoring",
+                    center.error().what());
+    }
+    break;
+  case 6:
+    if (auto m = ParseVec<glm::vec3>(tokens.begin())) {
+      aabb.min = std::move(*m);
+    } else {
+      IRIS_LOG_WARN("Error parsing aabb min: {}; ignoring", m.error().what());
+    }
+    if (auto m = ParseVec<glm::vec3>(tokens.begin() + 3)) {
+      aabb.max = std::move(*m);
+    } else {
+      IRIS_LOG_WARN("Error parsing aabb max: {}; ignoring", m.error().what());
+    }
+    break;
+  }
+} // ParseData
 
-static void ParseData(Shape&, std::vector<std::string_view> const&) noexcept {}
-
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
-End(Shape&, Renderer::CommandQueue&) noexcept {
-  IRIS_LOG_ENTER();
-
-  IRIS_LOG_LEAVE();
+static tl::expected<std::optional<Component>, std::system_error>
+End(AABB&, Renderer::CommandQueue&) noexcept {
+  IRIS_LOG_WARN("Implement End(AABB)");
+  // TODO: Create a traceable object.
   return std::nullopt;
+} // End
+
+static void ParseData(Program, std::vector<std::string_view> const&) noexcept {}
+
+static tl::expected<std::optional<Component>, std::system_error>
+End(Program&, Renderer::CommandQueue&) noexcept {
+  return {};
 }
 
-static tl::expected<std::optional<Renderer::Component::Renderable>,
-                    std::system_error>
+static tl::expected<std::optional<Component>, std::system_error>
 ParseLine(State& state, std::string_view line,
           Renderer::CommandQueue& commandQueue) noexcept {
   std::vector<std::string_view> tokens =
@@ -565,25 +583,29 @@ ParseLine(State& state, std::string_view line,
     return std::nullopt;
   }
 
-  tl::expected<std::optional<Renderer::Component::Renderable>,
-               std::system_error>
-    renderable{};
+  tl::expected<std::optional<Component>, std::system_error> component{};
 
   if (auto nextState = std::visit(
-        [&renderable, &tokens,
+        [&component, &tokens,
          &commandQueue](auto&& currState) -> std::optional<State> {
           if (absl::StartsWithIgnoreCase(tokens[0], "END")) {
-            renderable = End(currState, commandQueue);
+            component = End(currState, commandQueue);
             return State{};
           } else if (absl::StartsWithIgnoreCase(tokens[0], "TRI")) {
-            renderable = End(currState, commandQueue);
+            component = End(currState, commandQueue);
             return Start<Tristrips>(tokens);
           } else if (absl::StartsWithIgnoreCase(tokens[0], "LIN")) {
-            renderable = End(currState, commandQueue);
+            component = End(currState, commandQueue);
             return Start<Lines>(tokens);
           } else if (absl::StartsWithIgnoreCase(tokens[0], "POI")) {
-            renderable = End(currState, commandQueue);
+            component = End(currState, commandQueue);
             return Start<Points>(tokens);
+          } else if (absl::StartsWithIgnoreCase(tokens[0], "AAB")) {
+            component = End(currState, commandQueue);
+            return AABB{};
+          } else if (absl::StartsWithIgnoreCase(tokens[0], "PRO")) {
+            component = End(currState, commandQueue);
+            return Program(tokens);
           }
 
           ParseData(currState, tokens);
@@ -593,7 +615,7 @@ ParseLine(State& state, std::string_view line,
     state = *nextState;
   }
 
-  return renderable;
+  return component;
 } // ParseLine
 
 } // namespace iris::savg
@@ -612,10 +634,8 @@ tl::expected<void, std::system_error> static ParseSAVG(
     return tl::unexpected(cq.error());
   }
 
-  if (auto result = savg::CreateDefaultMaterials(commandQueue); !result) {
-    return tl::unexpected(result.error());
-  }
-
+  std::vector<Shader> shaders;
+  std::vector<savg::Component> components;
   savg::State state;
 
   std::size_t const nBytes = bytes.size();
@@ -623,33 +643,57 @@ tl::expected<void, std::system_error> static ParseSAVG(
     if (bytes[curr] == std::byte('\n') || curr == nBytes) {
       std::string line(reinterpret_cast<char const*>(&bytes[prev]),
                        reinterpret_cast<char const*>(&bytes[curr]));
-      if (auto possibleRenderable = savg::ParseLine(state, line, commandQueue)) {
-        if (*possibleRenderable) {
-          Renderer::AddRenderable(std::move(**possibleRenderable));
-        }
+
+      if (auto c = savg::ParseLine(state, line, commandQueue)) {
+        if (*c) components.push_back(std::move(**c));
       } else {
         IRIS_LOG_ERROR("Error parsing line: {}", line);
-        return tl::unexpected(possibleRenderable.error());
+        return tl::unexpected(c.error());
       }
+
+      if (auto program = std::get_if<savg::Program>(&state)) {
+        shaders.push_back(program->shader);
+      }
+
       prev = curr + 1;
     }
   }
 
-  if (auto possibleRenderable = std::visit(
+  // Files may end with 'END' and so we need to (possibly) create a renderable
+  if (auto c = std::visit(
         [&commandQueue](auto&& finalState) {
           return savg::End(finalState, commandQueue);
         },
         state)) {
-    if (*possibleRenderable) {
-      Renderer::AddRenderable(std::move(**possibleRenderable));
-    }
+    if (*c) components.push_back(std::move(**c));
   } else {
     IRIS_LOG_ERROR("Error ending final state");
-    return tl::unexpected(possibleRenderable.error());
+    return tl::unexpected(c.error());
+  }
+
+  absl::flat_hash_map<VkPrimitiveTopology, Renderer::MaterialID> materialMap;
+
+  for (auto&& component : components) {
+    if (auto renderable =
+          std::get_if<Renderer::Component::Renderable>(&component)) {
+      if (materialMap.count(renderable->topology) == 0) {
+        if (auto m = savg::CreateMaterial(renderable->topology, shaders)) {
+          materialMap.insert(
+            std::make_pair(renderable->topology, Renderer::AddMaterial(*m)));
+        } else {
+          return tl::unexpected(m.error());
+        }
+      }
+
+      renderable->material = materialMap.find(renderable->topology)->second;
+      Renderer::AddRenderable(*renderable);
+    } else if (auto traceable =
+                 std::get_if<Renderer::Component::Traceable>(&component)) {
+      // Renderer::AddTraceable(*traceable);
+    }
   }
 
   // Renderer::ReleaseCommandQueue(commandQueue);
-
   IRIS_LOG_LEAVE();
   return {};
 } // ParseSAVG
