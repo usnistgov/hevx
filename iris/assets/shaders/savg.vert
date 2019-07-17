@@ -14,6 +14,13 @@ layout(push_constant) uniform PushConstants {
   mat3 NormalMatrix;
 };
 
+layout(set = 0, binding = 0) uniform MatricesBuffer {
+  mat4 ViewMatrix;
+  mat4 ViewMatrixInverse;
+  mat4 ProjectionMatrix;
+  mat4 ProjectionMatrixInverse;
+};
+
 layout(location = 0) in vec3 Vertex;
 #ifdef HAS_NORMALS
 layout(location = 1) in vec3 Normal;

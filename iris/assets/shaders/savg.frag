@@ -47,3 +47,12 @@ layout(location = 6) in vec3 Ve; // view vector in eye-space
 layout(location = 7) in vec3 Ne; // normal vector in eye-space
 #endif
 
+#ifdef HAS_COLORS
+layout(location = 8) out vec4 C; // color
+#endif
+
+layout(location = 0) out vec4 Color;
+
+void main() {
+  Color = vec4(pow(C.rgb, vec3(1.0/2.2)), C.a);
+}
