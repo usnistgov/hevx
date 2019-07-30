@@ -127,12 +127,6 @@ VkDevice sDevice{VK_NULL_HANDLE};
 VmaAllocator sAllocator{VK_NULL_HANDLE};
 VkRenderPass sRenderPass{VK_NULL_HANDLE};
 
-VkSurfaceFormatKHR const sSurfaceColorFormat{VK_FORMAT_B8G8R8A8_UNORM,
-                                             VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-VkFormat const sSurfaceDepthStencilFormat{VK_FORMAT_D32_SFLOAT};
-VkSampleCountFlagBits const sSurfaceSampleCount{VK_SAMPLE_COUNT_4_BIT};
-VkPresentModeKHR const sSurfacePresentMode{VK_PRESENT_MODE_FIFO_KHR};
-
 VkDescriptorPool sDescriptorPool{VK_NULL_HANDLE};
 VkDescriptorSetLayout sGlobalDescriptorSetLayout{VK_NULL_HANDLE};
 VkDescriptorSet sGlobalDescriptorSet{VK_NULL_HANDLE};
@@ -146,22 +140,13 @@ absl::flat_hash_map<std::string, iris::Window>& Windows() {
 
 std::uint32_t sQueueFamilyIndex{UINT32_MAX};
 
-std::uint32_t const sCommandQueueGraphics = 0;
-
-// FIXME: refactor this into a struct?
+// TODO: refactor this into a struct?
 absl::InlinedVector<VkQueue, 16> sCommandQueues;
 absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 absl::InlinedVector<VkFence, 16> sCommandFences;
-static std::uint32_t sCommandQueueHead{
-  1}; // Reserve 0 (sCommandQueueGraphics) for Renderer
+static std::uint32_t sCommandQueueHead{1};
 static std::uint32_t sCommandQueueFree{UINT32_MAX};
 static std::timed_mutex sCommandQueueMutex;
-
-std::uint32_t const sNumRenderPassAttachments{4};
-std::uint32_t const sColorTargetAttachmentIndex{0};
-std::uint32_t const sColorResolveAttachmentIndex{1};
-std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
-std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
 
 static Features sFeatures{Features::kNone};
 static bool sRunning{false};
@@ -1290,7 +1275,7 @@ EndFrameWindow(std::string const& title, Window& window,
   { // this block locks sTraceables so that we can iterate over them safely
     std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
     for (auto&& [id, traceable] : sTraceables.components) {
-      // FIXME: this overwrites the framebuffer with the last traceable.
+      // TODO: this overwrites the framebuffer with the last traceable.
       vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                           "BuildBlitImageCommandBuffer");
       VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(

@@ -548,7 +548,7 @@ void from_json(json const& j, Texture& tex) {
 }
 
 struct GLTF {
-  // FIXME: These need to match gltf.frag
+  // TODO: These need to match gltf.frag
   static constexpr std::size_t const kBaseColorBinding = 1;
   static constexpr std::size_t const kNormalBinding = 2;
   static constexpr std::size_t const kMetallicRoughnessBinding = 3;
@@ -1104,7 +1104,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     }
   }
 
-  // FIXME: Translate the GLTF camera matrix space into Nav matrix space
+  // TODO: Translate the GLTF camera matrix space into Nav matrix space
   // if (node.name && *node.name == "Camera") {
   // if (node.rotation) Renderer::Nav::Reorient(*node.rotation);
   // if (node.translation) Renderer::Nav::Reposition(*node.translation);

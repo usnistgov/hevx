@@ -32,21 +32,25 @@ extern VkDevice sDevice;
 extern VmaAllocator sAllocator;
 extern VkRenderPass sRenderPass;
 
-extern VkSurfaceFormatKHR const sSurfaceColorFormat;
-extern VkFormat const sSurfaceDepthStencilFormat;
-extern VkSampleCountFlagBits const sSurfaceSampleCount;
-extern VkPresentModeKHR const sSurfacePresentMode;
+inline constexpr VkSurfaceFormatKHR const sSurfaceColorFormat{
+  VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+inline constexpr VkFormat const sSurfaceDepthStencilFormat{
+  VK_FORMAT_D32_SFLOAT};
+inline constexpr VkSampleCountFlagBits const sSurfaceSampleCount{
+  VK_SAMPLE_COUNT_4_BIT};
+inline constexpr VkPresentModeKHR const sSurfacePresentMode{
+  VK_PRESENT_MODE_FIFO_KHR};
 
 extern VkDescriptorPool sDescriptorPool;
 extern VkDescriptorSetLayout sGlobalDescriptorSetLayout;
 
-extern std::uint32_t const sCommandQueueGraphics;
+inline constexpr std::uint32_t const sCommandQueueGraphics{0};
 
-extern std::uint32_t const sNumRenderPassAttachments;
-extern std::uint32_t const sColorTargetAttachmentIndex;
-extern std::uint32_t const sColorResolveAttachmentIndex;
-extern std::uint32_t const sDepthStencilTargetAttachmentIndex;
-extern std::uint32_t const sDepthStencilResolveAttachmentIndex;
+inline constexpr std::uint32_t const sNumRenderPassAttachments{4};
+inline constexpr std::uint32_t const sColorTargetAttachmentIndex{0};
+inline constexpr std::uint32_t const sColorResolveAttachmentIndex{1};
+inline constexpr std::uint32_t const sDepthStencilTargetAttachmentIndex{2};
+inline constexpr std::uint32_t const sDepthStencilResolveAttachmentIndex{3};
 
 template <class T>
 void NameObject(VkObjectType objectType [[maybe_unused]],

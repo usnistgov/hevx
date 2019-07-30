@@ -205,6 +205,10 @@ add_executable(iris-swsynth WIN32 iris-swsynth.cc)
 target_link_libraries(iris-swsynth iris
   absl::failure_signal_handler absl::flags absl::flags_parse)
 
+add_executable(iris-dxr WIN32 iris-dxr.cc)
+target_link_libraries(iris-dxr iris
+  absl::failure_signal_handler absl::flags absl::flags_parse)
+
 if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
