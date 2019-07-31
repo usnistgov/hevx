@@ -13,7 +13,7 @@
 namespace iris::Renderer::Component {
 
 struct Material {
-  static constexpr std::size_t const kMaxTextures = 8;
+  static constexpr std::size_t const kMaxTextures = 4;
   absl::InlinedVector<Image, kMaxTextures> textures{};
   absl::InlinedVector<VkImageView, kMaxTextures> textureViews{};
   absl::InlinedVector<VkSampler, kMaxTextures> textureSamplers{};

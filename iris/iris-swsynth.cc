@@ -4,7 +4,6 @@
 
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
-#include "absl/flags/parse.h"
 #include "gsl/gsl"
 #include "imgui.h"
 #include "iris/protos.h"
@@ -16,6 +15,11 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <cmath>
+
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "absl/flags/parse.h"
 
 namespace synth {
 

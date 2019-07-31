@@ -27,7 +27,7 @@
 #include <system_error>
 #include <vector>
 
-static char const* sCubeVertexShaderSource = R"(#version 460 core
+static char const* sCubeVertexShaderSource [[maybe_unused]] = R"(#version 460 core
 layout(push_constant) uniform PushConstants {
   vec4 iMouse;
   float iTime;
@@ -70,7 +70,7 @@ void main() {
   gl_Position = ProjectionMatrix * Pe;
 })";
 
-static char const* sCubeVertexShaderSource = R"(#version 460 core
+static char const* sCubeFragmentShaderSource [[maybe_unused]] = R"(#version 460 core
 #define MAX_LIGHTS 100
 
 struct Light {
@@ -136,7 +136,7 @@ std::pair<T, T> minmax_element(json const& encoding, json const& data) {
     data.begin(), data.end(),
     [&](json const& a, json const& b) { return compare(encoding, a, b); });
   auto&& field = encoding["field"].get<std::string>();
-  return {(*p.first)[field].get<T>(), (*p.second)[field].get<T>()};
+  return {(*p.first)[field].get<typename T>(), (*p.second)[field].get<typename T>()};
 } // minmax_element
 
 #if PLATFORM_WINDOWS
@@ -159,7 +159,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #else
 
-int main(int argc, char** argv) {
+int main(int , char** argv) {
 
 #endif
 

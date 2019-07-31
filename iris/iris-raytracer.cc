@@ -3,7 +3,6 @@
 #include "absl/container/fixed_array.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
-#include "absl/flags/parse.h"
 #include "fmt/format.h"
 #include "glm/mat4x4.hpp"
 #include "iris/acceleration_structure.h"
@@ -28,6 +27,11 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "absl/flags/parse.h"
 
 static std::shared_ptr<spdlog::logger> sLogger;
 

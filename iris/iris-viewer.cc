@@ -14,7 +14,6 @@
 
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
-#include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "fmt/format.h"
 #include "spdlog/logger.h"
@@ -28,6 +27,11 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#if PLATFORM_COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wshadow"
+#endif
+#include "absl/flags/flag.h"
 
 ABSL_FLAG(std::string, shadertoy_url, "", "ShaderToy URL to load");
 
