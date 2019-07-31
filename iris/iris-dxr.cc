@@ -136,7 +136,8 @@ std::pair<T, T> minmax_element(json const& encoding, json const& data) {
     data.begin(), data.end(),
     [&](json const& a, json const& b) { return compare(encoding, a, b); });
   auto&& field = encoding["field"].get<std::string>();
-  return {(*p.first)[field].get<typename T>(), (*p.second)[field].get<typename T>()};
+  return std::make_pair(T{}, T{});
+  //return {(*p.first)[field].get<T>(), (*p.second)[field].get<T>()};
 } // minmax_element
 
 #if PLATFORM_WINDOWS
