@@ -1,0 +1,115 @@
+{
+  "asset": {
+    "version": "2.0"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "AABB": 0
+          },
+          "material": 0
+        },
+        {
+          "attributes": {
+            "AABB": 1
+          },
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "extensions": {
+        "NIST_techniques_raytracing": {
+          "technique": 0
+        }
+      }
+    }
+  ],
+  "extensions": {
+    "NIST_techniques_raytracing": {
+      "programs": [
+        {
+          "raygenShader": 0,
+          "intersectionShader": 1,
+          "closestHitShader": 2,
+          "missShader": 3,
+        }
+      ],
+      "shaders": [
+        {
+          "type": 256,
+          "uri": "raygen.rgen"
+        },
+        {
+          "type": 4096,
+          "uri": "sphere.rint"
+        },
+        {
+          "type": 1024,
+          "uri": "sphere.rchit"
+        },
+        {
+          "type": 2048,
+          "uri": "miss.miss"
+        }
+      ],
+      "techniques": [
+        {
+          "program": 0,
+        }
+      ]
+    }
+  },
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 2,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 192,
+      "componentType": 5126,
+      "count": 2,
+      "type": "VEC3"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 384
+    }
+  ]
+  "buffers": [
+    {
+      "byteLength": 384,
+      "uri": "spheres.bin"
+    }
+  ],
+  "extensionsUsed": [
+    "NIST_techniques_raytracing"
+  ],
+  "extensionsRequired": [
+    "NIST_techniques_raytracing"
+  ]
+}
+
