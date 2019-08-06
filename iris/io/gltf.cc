@@ -1628,16 +1628,228 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
 template <>
 iris::expected<iris::Renderer::Component::Traceable, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue,
-                std::string const& meshName, glm::mat4x4 const& nodeMat,
+                std::string const& , glm::mat4x4 const& nodeMat,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
-                std::vector<VkExtent2D> const& imagesExtents,
-                std::vector<std::vector<std::byte>> imagesBytes,
-                Node const& node, Primitive const& primitive) {
+                std::vector<VkExtent2D> const& ,
+                std::vector<std::vector<std::byte>> ,
+                Node const& , Primitive const& ) {
   IRIS_LOG_ENTER();
 
-  // TODO: implement
+  Renderer::Component::Traceable component;
+
+  absl::FixedArray<VkDescriptorSetLayoutBinding, 4> bindings{
+    {
+      0,                                            // binding
+      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+      1,                                            // descriptorCount
+      VK_SHADER_STAGE_RAYGEN_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
+      nullptr                               // pImmutableSamplers
+    },
+    {
+      1,                                // binding
+      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
+      1,                                // descriptorCount
+      VK_SHADER_STAGE_RAYGEN_BIT_NV,    // stageFlags
+      nullptr                           // pImmutableSamplers
+    },
+    {
+      2,                                 // binding
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+      1,                                 // descriptorCount
+      VK_SHADER_STAGE_INTERSECTION_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
+      nullptr                               // pImmutableSamplers
+    },
+  };
+
+  VkDescriptorSetLayoutCreateInfo layoutCI = {};
+  layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(bindings.size());
+  layoutCI.pBindings = bindings.data();
+
+  if (auto result = vkCreateDescriptorSetLayout(
+        Renderer::sDevice, &layoutCI, nullptr, &component.descriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create descriptor set layout"));
+  }
+
+  VkDescriptorSetAllocateInfo setAI = {};
+  setAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  setAI.descriptorPool = Renderer::sDescriptorPool;
+  setAI.descriptorSetCount = 1;
+  setAI.pSetLayouts = &component.descriptorSetLayout;
+
+  if (auto result = vkAllocateDescriptorSets(Renderer::sDevice, &setAI,
+                                             &component.descriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot allocate descriptor set"));
+  }
+
+  using namespace std::string_literals;
+  absl::FixedArray<Shader> shaders(4);
+
+  if (auto rgen = LoadShaderFromFile(kIRISContentDirectory +
+                                       "/assets/shaders/raygen.rgen"s,
+                                     VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
+    shaders[0] = std::move(*rgen);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(rgen.error());
+  }
+
+  if (auto rmiss = LoadShaderFromFile(kIRISContentDirectory +
+                                        "/assets/shaders/miss.rmiss"s,
+                                      VK_SHADER_STAGE_MISS_BIT_NV)) {
+    shaders[1] = std::move(*rmiss);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(rmiss.error());
+  }
+
+  if (auto rint = LoadShaderFromFile(kIRISContentDirectory +
+                                       "/assets/shaders/sphere.rint"s,
+                                     VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
+    shaders[2] = std::move(*rint);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(rint.error());
+  }
+
+  if (auto rchit = LoadShaderFromFile(kIRISContentDirectory +
+                                        "/assets/shaders/sphere.rchit"s,
+                                      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+    shaders[3] = std::move(*rchit);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(rchit.error());
+  }
+
+  absl::InlinedVector<iris::ShaderGroup, 4> shaderGroups;
+  shaderGroups.push_back(ShaderGroup::General(0));
+  shaderGroups.push_back(ShaderGroup::General(1));
+  shaderGroups.push_back(ShaderGroup::ProceduralHit(2, 3));
+
+  if (auto pipe =
+        CreateRayTracingPipeline(shaders,      // shaders
+                                 shaderGroups, // groups
+                                 gsl::make_span(&component.descriptorSetLayout,
+                                                1), // descriptorSetLayouts
+                                 4                  // maxRecursionDepth
+                                 )) {
+    component.pipeline = std::move(*pipe);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(pipe.error());
+  }
+
+  component.outputImageExtent = VkExtent2D{1000, 1000};
+
+  if (auto img =
+        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM, component.outputImageExtent, 1,
+                      1, VK_SAMPLE_COUNT_1_BIT,
+                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                      VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
+    component.outputImage = std::move(*img);
+  } else {
+    IRIS_LOG_LEAVE();
+    using namespace std::string_literals;
+    return unexpected(
+      std::system_error(img.error().code(),
+                        "cannot create output image: "s + img.error().what()));
+  }
+
+  if (auto view = CreateImageView(component.outputImage, VK_IMAGE_VIEW_TYPE_2D,
+                                  VK_FORMAT_R8G8B8A8_UNORM,
+                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+    component.outputImageView = *view;
+  } else {
+    IRIS_LOG_LEAVE();
+    using namespace std::string_literals;
+    return unexpected(std::system_error(view.error().code(),
+                                        "cannot create output image view: "s +
+                                          view.error().what()));
+  }
+
+  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
+  rayTracingProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &rayTracingProperties;
+
+  vkGetPhysicalDeviceProperties2(Renderer::sPhysicalDevice,
+                                 &physicalDeviceProperties);
+  VkDeviceSize const shaderGroupHandleSize =
+    rayTracingProperties.shaderGroupHandleSize;
+
+  absl::FixedArray<std::byte> shaderGroupHandles(shaderGroupHandleSize *
+                                                 shaderGroups.size());
+
+  if (auto result = vkGetRayTracingShaderGroupHandlesNV(
+        Renderer::sDevice,                                    // device
+        component.pipeline.pipeline,                          // pipeline
+        0,                                                    // firstGroup
+        gsl::narrow_cast<std::uint32_t>(shaderGroups.size()), // groupCount
+        gsl::narrow_cast<std::uint32_t>(shaderGroupHandles.size()), // dataSize
+        shaderGroupHandles.data()                                   // pData
+      );
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot get shader group handles"));
+  }
+
+  if (auto buf = CreateBuffer(
+        commandQueue.commandPool, commandQueue.queue, commandQueue.submitFence,
+        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY,
+        shaderGroupHandleSize * 3, shaderGroupHandles.data())) {
+    component.shaderBindingTable = std::move(*buf);
+  } else {
+    using namespace std::string_literals;
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(
+      buf.error().code(),
+      "Cannot create shader binding table: "s + buf.error().what()));
+  }
+
+  component.missBindingOffset = shaderGroupHandleSize;
+  component.missBindingStride = shaderGroupHandleSize;
+  component.hitBindingOffset =
+    component.missBindingOffset + component.missBindingStride;
+  component.hitBindingStride = shaderGroupHandleSize;
+
+  VkFenceCreateInfo fenceCI = {};
+  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  if (auto result = vkCreateFence(Renderer::sDevice, &fenceCI, nullptr,
+                                  &component.traceCompleteFence);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(make_error_code(result), "Cannot create fence"));
+  }
+
+  // TODO: implement:
+  //  CreateSpheres
+  //  CreateGeometry
+  //  CreateBottomLevelAccelerationStructure
+  //  CreateInstance
+  //  CreateTopLevelAccelerationStructure
+  //  WriteDescriptorSets
+
+  component.modelMatrix = nodeMat;
 
   IRIS_LOG_LEAVE();
+  return component;
 } // GLTF::ParseNode
 
 expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
@@ -2117,7 +2329,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(
-      std::system_error(iris::Error::kFileLoadFailed,
+      std::system_error(Error::kFileLoadFailed,
                         fmt::format("unable to create graphics pipeline: {}",
                                     pipe.error().what())));
   }

@@ -19,14 +19,6 @@ struct Traceable {
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
-  VkGeometryNV geometry{};
-  bool bottomLevelDirty{true};
-  AccelerationStructure bottomLevelAccelerationStructure{};
-
-  GeometryInstance instance{};
-  bool topLevelDirty{true};
-  AccelerationStructure topLevelAccelerationStructure{};
-
   Image outputImage{};
   VkExtent2D outputImageExtent{};
   VkImageView outputImageView{VK_NULL_HANDLE};
@@ -40,6 +32,14 @@ struct Traceable {
   VkDeviceSize hitBindingStride{0};
 
   VkFence traceCompleteFence{VK_NULL_HANDLE};
+
+  VkGeometryNV geometry{};
+  bool bottomLevelDirty{true};
+  AccelerationStructure bottomLevelAccelerationStructure{};
+
+  GeometryInstance instance{};
+  bool topLevelDirty{true};
+  AccelerationStructure topLevelAccelerationStructure{};
 
   glm::mat4 modelMatrix{1.f};
 }; // struct Traceable
