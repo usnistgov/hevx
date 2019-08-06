@@ -26,7 +26,6 @@
 #include "gsl/gsl"
 #include "io/gltf.h"
 #include "io/json.h"
-#include "io/savg.h"
 #include "io/shadertoy.h"
 #include "pipeline.h"
 #include "protos.h"
@@ -2841,8 +2840,6 @@ iris::Renderer::LoadFile(std::filesystem::path const& path) noexcept {
         sIOContinuations.push(io::LoadJSON(path_));
       } else if (ext.compare(".gltf") == 0) {
         sIOContinuations.push(io::LoadGLTF(path_));
-      } else if (ext.compare(".savg") == 0) {
-        sIOContinuations.push(io::LoadSAVG(path_));
       } else {
         IRIS_LOG_ERROR("Unhandled file extension '{}' for {}", ext.string(),
                        path_.string());

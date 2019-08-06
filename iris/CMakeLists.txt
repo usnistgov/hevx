@@ -108,7 +108,6 @@ set(SOURCES
   io/gltf.cc
   io/json.cc
   io/read_file.cc
-  io/savg.cc
   io/shadertoy.cc
   pipeline.cc
   renderer.cc

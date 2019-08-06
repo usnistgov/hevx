@@ -1,8 +1,0 @@
-AABB
-0 0 0 .5
-0 0 100.5 100
-
-PROGRAM RAYGEN assets/shaders/raygen.rgen
-PROGRAM INTERSECTION assets/shaders/sphere.rint
-PROGRAM CLOSESTHIT assets/shaders/sphere.rchit
-PROGRAM MISS assets/shaders/miss.rmiss
