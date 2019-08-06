@@ -49,7 +49,7 @@
           "raygenShader": 0,
           "intersectionShader": 1,
           "closestHitShader": 2,
-          "missShader": 3,
+          "missShader": 3
         }
       ],
       "shaders": [
@@ -72,7 +72,7 @@
       ],
       "techniques": [
         {
-          "program": 0,
+          "program": 0
         }
       ]
     }
@@ -98,7 +98,7 @@
       "buffer": 0,
       "byteLength": 384
     }
-  ]
+  ],
   "buffers": [
     {
       "byteLength": 384,

@@ -187,8 +187,13 @@ vec3 GetNormal() {
 
 void main() {
   vec3 n = GetNormal();
-  //Color = vec4(n / vec3(2.f, 2.f, 2.f) + vec3(.5f, .5f, .5f), 1.f);
-  //return;
+  if (bDebugNormals) {
+    // HEV is -Z up, so surfaces with upward normals have high Z component.
+    // Most other engines use +Y up, so flip the components here to visualize it.
+    const vec3 nv = vec3(n.x, -n.z, -n.y);
+    Color = vec4(vec3(.5f) * (nv + vec3(1.f)), 1.f);
+    return;
+  }
 
   float metallic = MetallicRoughnessNormalOcclusion.x;
   float perceptualRoughness = MetallicRoughnessNormalOcclusion.y;
@@ -234,7 +239,7 @@ void main() {
   float NdotV = clamp(abs(dot(n, v)), 0.001, 1.0);
 
   float roughnessSq = alphaRoughness * alphaRoughness;
-  vec3 color = vec3(0.2) * diffuseColor; // ambient
+  vec3 color = vec3(0.0); //vec3(0.2) * diffuseColor; // ambient
 
   for (int i = 0; i < NumLights; ++i) {
     if (Lights[i].color.a > 0) {

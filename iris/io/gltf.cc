@@ -2265,6 +2265,12 @@ tl::expected<void, std::system_error> static ParseGLTF(
     }
   }
 
+  if (g.extensionsRequired) {
+    for (auto&& extension : *g.extensionsRequired) {
+      IRIS_LOG_DEBUG("glTF extension: {}", extension);
+    }
+  }
+
   //
   // Read all the buffers into memory
   //
