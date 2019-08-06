@@ -571,7 +571,17 @@ struct GLTF {
 
   absl::flat_hash_map<int, Renderer::MaterialID> materialsMap;
 
-  expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+  template <typename T>
+  expected<T, std::system_error>
+  ParseNode(Renderer::CommandQueue commandQueue, std::string const& meshName,
+            glm::mat4x4 const& nodeMat,
+            std::vector<std::vector<std::byte>> const& buffersBytes,
+            std::vector<VkExtent2D> const& imagesExtents,
+            std::vector<std::vector<std::byte>> imagesBytes, Node const& node,
+            Primitive const& primitive);
+
+  template <typename T>
+  expected<std::vector<T>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, std::filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes,
@@ -1061,14 +1071,15 @@ struct TangentGenerator {
   }
 }; // struct TangentGenerator
 
-expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+template <typename T>
+expected<std::vector<T>, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 glm::mat4x4 parentMat, std::filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
                 std::vector<VkExtent2D> const& imagesExtents,
                 std::vector<std::vector<std::byte>> imagesBytes) {
   IRIS_LOG_ENTER();
-  std::vector<Renderer::Component::Renderable> components;
+  std::vector<T> components;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
     return unexpected(
@@ -1088,20 +1099,6 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   IRIS_LOG_TRACE("nodeIdx: {} node: {}", nodeIdx, json(node).dump());
   std::string const nodeName =
     path.string() + ":" + (node.name ? *node.name : fmt::format("{}", nodeIdx));
-
-  if (node.shaderToy) {
-    if (node.shaderToy->url) {
-      if (auto r = io::LoadShaderToy(*node.shaderToy->url)) {
-        components.push_back(std::move(*r));
-      } else {
-        return unexpected(r.error());
-      }
-    } else {
-      return unexpected(
-        std::system_error(Error::kFileParseFailed,
-                          "node has unsupported shaderToy type (not url)"));
-    }
-  }
 
   // TODO: Translate the GLTF camera matrix space into Nav matrix space
   // if (node.name && *node.name == "Camera") {
@@ -1127,12 +1124,21 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     node.children.value_or(decltype(gltf::Node::children)::value_type({}));
 
   for (auto&& child : children) {
-    if (auto r = ParseNode(commandQueue, child, nodeMat, path, buffersBytes,
-                           imagesExtents, imagesBytes)) {
-      components.insert(components.end(), r->begin(), r->end());
+    if (auto c = ParseNode<T>(commandQueue, child, nodeMat, path, buffersBytes,
+                              imagesExtents, imagesBytes)) {
+      components.insert(components.end(), c->begin(), c->end());
     } else {
       IRIS_LOG_LEAVE();
-      return unexpected(r.error());
+      return unexpected(c.error());
+    }
+  }
+
+  if (node.shaderToy) {
+    if (auto c = ParseNode<T>(commandQueue, "", nodeMat, buffersBytes,
+                              imagesExtents, imagesBytes, node, {})) {
+      components.push_back(std::move(*c));
+    } else {
+      return unexpected(c.error());
     }
   }
 
@@ -1205,357 +1211,392 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     std::string const meshName =
       nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
 
-    //
-    // First, get the positions
-    //
-    std::vector<glm::vec3> positions;
-    for (auto&& [semantic, index] : primitive.attributes) {
-      if (semantic == "POSITION") {
-        IRIS_LOG_TRACE("reading POSITION");
-        if (auto p = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
-                                                      accessors, bufferViews,
-                                                      buffersBytes)) {
-          positions = std::move(*p);
-        } else {
-          IRIS_LOG_LEAVE();
-          return unexpected(p.error());
-        }
-      }
+    if (auto c = ParseNode<T>(commandQueue, meshName, nodeMat, buffersBytes,
+                              imagesExtents, imagesBytes, node, primitive)) {
+      components.push_back(std::move(*c));
+    } else {
+      return unexpected(c.error());
     }
+  }
 
-    // primitives with no positions are "ignored"
-    if (positions.empty()) continue;
+  IRIS_LOG_LEAVE();
+  return components;
+} // GLTF::ParseNode
 
-    // Next, get the indices if present. We're only getting the indices here
-    // to use them for possible normal/tangent generation. We will use the
-    // original format of the indices in the draw call.
-    std::vector<unsigned int> indices;
-    if (primitive.indices) {
-      IRIS_LOG_TRACE("reading indices");
-      std::array<int, 2> componentTypes{5123, 5125};
-      if (auto i = gltf::GetAccessorData<unsigned int>(
-            *primitive.indices, "SCALAR", componentTypes, false, accessors,
-            bufferViews, buffersBytes)) {
-        indices = std::move(*i);
+template <>
+iris::expected<iris::Renderer::Component::Renderable, std::system_error>
+GLTF::ParseNode(Renderer::CommandQueue commandQueue,
+                std::string const& meshName, glm::mat4x4 const& nodeMat,
+                std::vector<std::vector<std::byte>> const& buffersBytes,
+                std::vector<VkExtent2D> const& imagesExtents,
+                std::vector<std::vector<std::byte>> imagesBytes,
+                Node const& node, Primitive const& primitive) {
+  IRIS_LOG_ENTER();
+
+  if (node.shaderToy) {
+    if (node.shaderToy->url) {
+      if (auto c = io::LoadShaderToy(*node.shaderToy->url)) {
+        IRIS_LOG_LEAVE();
+        return std::move(*c);
       } else {
         IRIS_LOG_LEAVE();
-        return unexpected(i.error());
+        return unexpected(c.error());
       }
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "node has unsupported shaderToy type (not url)"));
     }
+  }
 
-    //
-    // Now get texcoords, normals, and tangents
-    //
-    std::vector<glm::vec2> texcoords;
-    std::vector<glm::vec3> normals;
-    std::vector<glm::vec4> tangents;
-
-    for (auto&& [semantic, index] : primitive.attributes) {
-      if (semantic == "TEXCOORD_0") {
-        IRIS_LOG_TRACE("reading TEXCOORD_0");
-        if (auto t = gltf::GetAccessorData<glm::vec2>(index, "VEC2", 5126, true,
-                                                      accessors, bufferViews,
-                                                      buffersBytes)) {
-          texcoords = std::move(*t);
-        } else {
-          IRIS_LOG_LEAVE();
-          return unexpected(t.error());
-        }
-      } else if (semantic == "NORMAL") {
-        IRIS_LOG_TRACE("reading NORMAL");
-        if (auto n = gltf::GetAccessorData<glm::vec3>(index, "VEC3", 5126, true,
-                                                      accessors, bufferViews,
-                                                      buffersBytes)) {
-          normals = std::move(*n);
-        } else {
-          IRIS_LOG_LEAVE();
-          return unexpected(n.error());
-        }
-      } else if (semantic == "TANGENT") {
-        IRIS_LOG_TRACE("reading TANGENT");
-        if (auto t = gltf::GetAccessorData<glm::vec4>(index, "VEC4", 5126, true,
-                                                      accessors, bufferViews,
-                                                      buffersBytes)) {
-          tangents = std::move(*t);
-        } else {
-          IRIS_LOG_LEAVE();
-          return unexpected(t.error());
-        }
-      }
-    }
-
-    decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
-      vertexInputAttributeDescriptions;
-    std::uint32_t vertexStride = 0;
-
-    vertexInputAttributeDescriptions.push_back({
-      0,                          // location
-      0,                          // binding
-      VK_FORMAT_R32G32B32_SFLOAT, // format
-      vertexStride                // offset
-    });
-    vertexStride += sizeof(glm::vec3);
-
-    if (normals.empty()) {
-      IRIS_LOG_WARN("GLTF model with no normals: generating");
-      normals = GenerateNormals(positions, indices);
-    }
-
-    vertexInputAttributeDescriptions.push_back({
-      1,                          // location
-      0,                          // binding
-      VK_FORMAT_R32G32B32_SFLOAT, // format
-      vertexStride                // offset
-    });
-    vertexStride += sizeof(glm::vec3);
-
-    if (tangents.empty() && !texcoords.empty()) {
-      IRIS_LOG_WARN("GLTF model with texcoords but no tangents: generating");
-      TangentGenerator tg(positions.data(), normals.data(), texcoords.data(),
-                          indices.empty() ? positions.size() : indices.size(),
-                          indices.empty() ? nullptr : indices.data());
-
-      if (tg()) {
-        tangents = std::move(tg.tangents);
+  //
+  // First, get the positions
+  //
+  std::vector<glm::vec3> positions;
+  for (auto&& [semantic, index] : primitive.attributes) {
+    if (semantic == "POSITION") {
+      IRIS_LOG_TRACE("reading POSITION");
+      if (auto p = gltf::GetAccessorData<glm::vec3>(
+            index, "VEC3", 5126, true, accessors, bufferViews, buffersBytes)) {
+        positions = std::move(*p);
       } else {
         IRIS_LOG_LEAVE();
-        return unexpected(std::system_error(
-          Error::kFileLoadFailed, "unable to generate tangent space"));
+        return unexpected(p.error());
       }
     }
+  }
+
+  // primitives with no positions are "ignored"
+  if (positions.empty()) return {};
+
+  // Next, get the indices if present. We're only getting the indices here
+  // to use them for possible normal/tangent generation. We will use the
+  // original format of the indices in the draw call.
+  std::vector<unsigned int> indices;
+  if (primitive.indices) {
+    IRIS_LOG_TRACE("reading indices");
+    std::array<int, 2> componentTypes{5123, 5125};
+    if (auto i = gltf::GetAccessorData<unsigned int>(
+          *primitive.indices, "SCALAR", componentTypes, false, accessors,
+          bufferViews, buffersBytes)) {
+      indices = std::move(*i);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(i.error());
+    }
+  }
+
+  //
+  // Now get texcoords, normals, and tangents
+  //
+  std::vector<glm::vec2> texcoords;
+  std::vector<glm::vec3> normals;
+  std::vector<glm::vec4> tangents;
+
+  for (auto&& [semantic, index] : primitive.attributes) {
+    if (semantic == "TEXCOORD_0") {
+      IRIS_LOG_TRACE("reading TEXCOORD_0");
+      if (auto t = gltf::GetAccessorData<glm::vec2>(
+            index, "VEC2", 5126, true, accessors, bufferViews, buffersBytes)) {
+        texcoords = std::move(*t);
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(t.error());
+      }
+    } else if (semantic == "NORMAL") {
+      IRIS_LOG_TRACE("reading NORMAL");
+      if (auto n = gltf::GetAccessorData<glm::vec3>(
+            index, "VEC3", 5126, true, accessors, bufferViews, buffersBytes)) {
+        normals = std::move(*n);
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(n.error());
+      }
+    } else if (semantic == "TANGENT") {
+      IRIS_LOG_TRACE("reading TANGENT");
+      if (auto t = gltf::GetAccessorData<glm::vec4>(
+            index, "VEC4", 5126, true, accessors, bufferViews, buffersBytes)) {
+        tangents = std::move(*t);
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(t.error());
+      }
+    }
+  }
+
+  decltype(Renderer::Component::Material::vertexInputAttributeDescriptions)
+    vertexInputAttributeDescriptions;
+  std::uint32_t vertexStride = 0;
+
+  vertexInputAttributeDescriptions.push_back({
+    0,                          // location
+    0,                          // binding
+    VK_FORMAT_R32G32B32_SFLOAT, // format
+    vertexStride                // offset
+  });
+  vertexStride += sizeof(glm::vec3);
+
+  if (normals.empty()) {
+    IRIS_LOG_WARN("GLTF model with no normals: generating");
+    normals = GenerateNormals(positions, indices);
+  }
+
+  vertexInputAttributeDescriptions.push_back({
+    1,                          // location
+    0,                          // binding
+    VK_FORMAT_R32G32B32_SFLOAT, // format
+    vertexStride                // offset
+  });
+  vertexStride += sizeof(glm::vec3);
+
+  if (tangents.empty() && !texcoords.empty()) {
+    IRIS_LOG_WARN("GLTF model with texcoords but no tangents: generating");
+    TangentGenerator tg(positions.data(), normals.data(), texcoords.data(),
+                        indices.empty() ? positions.size() : indices.size(),
+                        indices.empty() ? nullptr : indices.data());
+
+    if (tg()) {
+      tangents = std::move(tg.tangents);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(std::system_error(Error::kFileLoadFailed,
+                                          "unable to generate tangent space"));
+    }
+  }
+
+  if (!tangents.empty()) {
+    vertexInputAttributeDescriptions.push_back({
+      2,                             // location
+      0,                             // binding
+      VK_FORMAT_R32G32B32A32_SFLOAT, // format
+      vertexStride                   // offset
+    });
+    vertexStride += sizeof(glm::vec4);
+  }
+
+  if (!texcoords.empty()) {
+    vertexInputAttributeDescriptions.push_back({
+      3,                       // location
+      0,                       // binding
+      VK_FORMAT_R32G32_SFLOAT, // format
+      vertexStride             // offset
+    });
+    vertexStride += sizeof(glm::vec2);
+  }
+
+  decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
+    vertexInputBindingDescriptions{{
+      0,                          // binding
+      vertexStride,               // stride
+      VK_VERTEX_INPUT_RATE_VERTEX // inputRate
+    }};
+
+  Renderer::Component::Renderable component;
+
+  if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
+    component.topology = *t;
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(t.error());
+  }
+
+  VkFrontFace const frontFace = (glm::determinant(nodeMat) < 0.f)
+                                  ? VK_FRONT_FACE_CLOCKWISE
+                                  : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+  if (primitive.material) {
+    if (auto it = materialsMap.find(*primitive.material);
+        it != materialsMap.end()) {
+      component.material = it->second;
+    } else {
+      if (auto m = CreateMaterial(
+            commandQueue, meshName, component.topology, !texcoords.empty(),
+            vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+            frontFace, *primitive.material, imagesExtents, imagesBytes)) {
+        auto matID = Renderer::AddMaterial(std::move(*m));
+        materialsMap.insert(std::make_pair(*primitive.material, matID));
+        component.material = matID;
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(m.error());
+      }
+    }
+  }
+
+  VkDeviceSize const vertexBufferSize = vertexStride * positions.size();
+
+  auto staging =
+    AllocateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!staging) {
+    IRIS_LOG_LEAVE();
+    return unexpected(staging.error());
+  }
+
+  float* pVertexBuffer;
+  if (auto ptr = staging->Map<float*>()) {
+    pVertexBuffer = *ptr;
+  } else {
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return unexpected(ptr.error());
+  }
+
+  for (std::size_t i = 0; i < positions.size(); i++) {
+    *pVertexBuffer++ = positions[i].x;
+    *pVertexBuffer++ = positions[i].y;
+    *pVertexBuffer++ = positions[i].z;
+    *pVertexBuffer++ = normals[i].x;
+    *pVertexBuffer++ = normals[i].y;
+    *pVertexBuffer++ = normals[i].z;
 
     if (!tangents.empty()) {
-      vertexInputAttributeDescriptions.push_back({
-        2,                             // location
-        0,                             // binding
-        VK_FORMAT_R32G32B32A32_SFLOAT, // format
-        vertexStride                   // offset
-      });
-      vertexStride += sizeof(glm::vec4);
+      *pVertexBuffer++ = tangents[i].x;
+      *pVertexBuffer++ = tangents[i].y;
+      *pVertexBuffer++ = tangents[i].z;
+      *pVertexBuffer++ = tangents[i].w;
     }
 
     if (!texcoords.empty()) {
-      vertexInputAttributeDescriptions.push_back({
-        3,                       // location
-        0,                       // binding
-        VK_FORMAT_R32G32_SFLOAT, // format
-        vertexStride             // offset
-      });
-      vertexStride += sizeof(glm::vec2);
+      *pVertexBuffer++ = texcoords[i].x;
+      *pVertexBuffer++ = texcoords[i].y;
     }
+  }
 
-    decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
-      vertexInputBindingDescriptions{{
-        0,                          // binding
-        vertexStride,               // stride
-        VK_VERTEX_INPUT_RATE_VERTEX // inputRate
-      }};
+  staging->Unmap();
 
-    Renderer::Component::Renderable component;
+  if (auto buf = AllocateBuffer(vertexBufferSize,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                VMA_MEMORY_USAGE_GPU_ONLY)) {
+    component.vertexBuffer = std::move(*buf);
+  } else {
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return unexpected(buf.error());
+  }
 
-    if (auto t = gltf::ModeToVkPrimitiveTopology(primitive.mode)) {
-      component.topology = *t;
-    } else {
-      IRIS_LOG_LEAVE();
-      return unexpected(t.error());
-    }
+  VkCommandBuffer commandBuffer;
+  if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
+    commandBuffer = *cb;
+  } else {
+    DestroyBuffer(component.vertexBuffer);
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return unexpected(cb.error());
+  }
 
-    VkFrontFace const frontFace = (glm::determinant(nodeMat) < 0.f)
-                                    ? VK_FRONT_FACE_CLOCKWISE
-                                    : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  VkBufferCopy region = {};
+  region.srcOffset = 0;
+  region.dstOffset = 0;
+  region.size = vertexBufferSize;
 
-    if (primitive.material) {
-      if (auto it = materialsMap.find(*primitive.material);
-          it != materialsMap.end()) {
-        component.material = it->second;
-      } else {
-        if (auto m = CreateMaterial(
-              commandQueue, meshName, component.topology, !texcoords.empty(),
-              vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
-              frontFace, *primitive.material, imagesExtents, imagesBytes)) {
-          auto matID = Renderer::AddMaterial(std::move(*m));
-          materialsMap.insert(std::make_pair(*primitive.material, matID));
-          component.material = matID;
-        } else {
-          IRIS_LOG_LEAVE();
-          return unexpected(m.error());
-        }
-      }
-    }
+  vkCmdCopyBuffer(commandBuffer, staging->buffer, component.vertexBuffer.buffer,
+                  1, &region);
 
-    VkDeviceSize const vertexBufferSize = vertexStride * positions.size();
+  if (auto result = Renderer::EndOneTimeSubmit(
+        commandBuffer, commandQueue.commandPool, commandQueue.queue,
+        commandQueue.submitFence);
+      !result) {
+    DestroyBuffer(component.vertexBuffer);
+    DestroyBuffer(*staging);
+    IRIS_LOG_LEAVE();
+    return unexpected(result.error());
+  }
 
-    auto staging =
-      AllocateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                     VMA_MEMORY_USAGE_CPU_TO_GPU);
+  if (!primitive.indices) {
+    component.numVertices = gsl::narrow_cast<std::uint32_t>(positions.size());
+  } else {
+    auto indexAccessor = (*accessors)[*primitive.indices];
+
+    VkDeviceSize const indexBufferSize =
+      indexAccessor.count * (indexAccessor.componentType == 5123
+                               ? sizeof(std::uint16_t)
+                               : sizeof(std::uint32_t));
+
+    staging = ReallocateBuffer(*staging, indexBufferSize,
+                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
+      DestroyBuffer(component.vertexBuffer);
       IRIS_LOG_LEAVE();
       return unexpected(staging.error());
     }
 
-    float* pVertexBuffer;
-    if (auto ptr = staging->Map<float*>()) {
-      pVertexBuffer = *ptr;
+    std::byte* pIndexBuffer;
+    if (auto ptr = staging->Map<std::byte*>()) {
+      pIndexBuffer = *ptr;
     } else {
-      DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return unexpected(ptr.error());
     }
 
-    for (std::size_t i = 0; i < positions.size(); i++) {
-      *pVertexBuffer++ = positions[i].x;
-      *pVertexBuffer++ = positions[i].y;
-      *pVertexBuffer++ = positions[i].z;
-      *pVertexBuffer++ = normals[i].x;
-      *pVertexBuffer++ = normals[i].y;
-      *pVertexBuffer++ = normals[i].z;
+    auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
+    auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
 
-      if (!tangents.empty()) {
-        *pVertexBuffer++ = tangents[i].x;
-        *pVertexBuffer++ = tangents[i].y;
-        *pVertexBuffer++ = tangents[i].z;
-        *pVertexBuffer++ = tangents[i].w;
-      }
-
-      if (!texcoords.empty()) {
-        *pVertexBuffer++ = texcoords[i].x;
-        *pVertexBuffer++ = texcoords[i].y;
-      }
-    }
+    std::memcpy(pIndexBuffer,
+                buffersBytes[indexBufferView.buffer].data() +
+                  indexBufferView.byteOffset.value_or(0),
+                indexBufferSize);
 
     staging->Unmap();
 
-    if (auto buf = AllocateBuffer(vertexBufferSize,
-                                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+    if (auto buf = AllocateBuffer(indexBufferSize,
+                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VMA_MEMORY_USAGE_GPU_ONLY)) {
-      component.vertexBuffer = std::move(*buf);
+      component.indexBuffer = std::move(*buf);
     } else {
+      DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
 
-    VkCommandBuffer commandBuffer;
     if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
       commandBuffer = *cb;
     } else {
+      DestroyBuffer(component.indexBuffer);
       DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return unexpected(cb.error());
     }
 
-    VkBufferCopy region = {};
+    region = {};
     region.srcOffset = 0;
     region.dstOffset = 0;
-    region.size = vertexBufferSize;
+    region.size = indexBufferSize;
 
     vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                    component.vertexBuffer.buffer, 1, &region);
+                    component.indexBuffer.buffer, 1, &region);
 
     if (auto result = Renderer::EndOneTimeSubmit(
           commandBuffer, commandQueue.commandPool, commandQueue.queue,
           commandQueue.submitFence);
         !result) {
+      DestroyBuffer(component.indexBuffer);
       DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
       return unexpected(result.error());
     }
 
-    if (!primitive.indices) {
-      component.numVertices = gsl::narrow_cast<std::uint32_t>(positions.size());
-    } else {
-      auto indexAccessor = (*accessors)[*primitive.indices];
+    component.indexType =
+      (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
+                                           : VK_INDEX_TYPE_UINT32);
+    component.numIndices = indexAccessor.count;
+  }
 
-      VkDeviceSize const indexBufferSize =
-        indexAccessor.count * (indexAccessor.componentType == 5123
-                                 ? sizeof(std::uint16_t)
-                                 : sizeof(std::uint32_t));
+  component.modelMatrix = nodeMat;
 
-      staging = ReallocateBuffer(*staging, indexBufferSize,
-                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                 VMA_MEMORY_USAGE_CPU_TO_GPU);
-      if (!staging) {
-        DestroyBuffer(component.vertexBuffer);
-        IRIS_LOG_LEAVE();
-        return unexpected(staging.error());
-      }
-
-      std::byte* pIndexBuffer;
-      if (auto ptr = staging->Map<std::byte*>()) {
-        pIndexBuffer = *ptr;
-      } else {
-        IRIS_LOG_LEAVE();
-        return unexpected(ptr.error());
-      }
-
-      auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
-      auto indexBufferSrc = (*buffers)[indexBufferView.buffer];
-
-      std::memcpy(pIndexBuffer,
-                  buffersBytes[indexBufferView.buffer].data() +
-                    indexBufferView.byteOffset.value_or(0),
-                  indexBufferSize);
-
-      staging->Unmap();
-
-      if (auto buf = AllocateBuffer(indexBufferSize,
-                                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                    VMA_MEMORY_USAGE_GPU_ONLY)) {
-        component.indexBuffer = std::move(*buf);
-      } else {
-        DestroyBuffer(component.vertexBuffer);
-        DestroyBuffer(*staging);
-        IRIS_LOG_LEAVE();
-        return unexpected(buf.error());
-      }
-
-      if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
-        commandBuffer = *cb;
-      } else {
-        DestroyBuffer(component.indexBuffer);
-        DestroyBuffer(component.vertexBuffer);
-        DestroyBuffer(*staging);
-        IRIS_LOG_LEAVE();
-        return unexpected(cb.error());
-      }
-
-      region = {};
-      region.srcOffset = 0;
-      region.dstOffset = 0;
-      region.size = indexBufferSize;
-
-      vkCmdCopyBuffer(commandBuffer, staging->buffer,
-                      component.indexBuffer.buffer, 1, &region);
-
-      if (auto result = Renderer::EndOneTimeSubmit(
-            commandBuffer, commandQueue.commandPool, commandQueue.queue,
-            commandQueue.submitFence);
-          !result) {
-        DestroyBuffer(component.indexBuffer);
-        DestroyBuffer(component.vertexBuffer);
-        DestroyBuffer(*staging);
-        IRIS_LOG_LEAVE();
-        return unexpected(result.error());
-      }
-
-      component.indexType =
-        (indexAccessor.componentType == 5123 ? VK_INDEX_TYPE_UINT16
-                                             : VK_INDEX_TYPE_UINT32);
-      component.numIndices = indexAccessor.count;
-    }
-
-    component.modelMatrix = nodeMat;
-
-    // Compute the bounding sphere
-    struct CoordAccessor {
-      using Pit = decltype(positions)::const_iterator;
-      using Cit = float const*;
-      inline Cit operator()(Pit it) const { return glm::value_ptr(*it); }
-    };
+  // Compute the bounding sphere
+  struct CoordAccessor {
+    using Pit = decltype(positions)::const_iterator;
+    using Cit = float const*;
+    inline Cit operator()(Pit it) const { return glm::value_ptr(*it); }
+  };
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -1565,14 +1606,14 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 #pragma GCC diagnostic ignored "-Wshadow"
 #endif
 
-    Miniball::Miniball<CoordAccessor> mb(3, positions.begin(), positions.end());
+  Miniball::Miniball<CoordAccessor> mb(3, positions.begin(), positions.end());
 
-    component.boundingSphere =
-      glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
-                std::sqrt(mb.squared_radius()));
-    IRIS_LOG_DEBUG("boundingSphere: ({} {} {}), {}", component.boundingSphere.x,
-                   component.boundingSphere.y, component.boundingSphere.z,
-                   component.boundingSphere.w);
+  component.boundingSphere =
+    glm::vec4(mb.center()[0], mb.center()[1], mb.center()[2],
+              std::sqrt(mb.squared_radius()));
+  IRIS_LOG_DEBUG("boundingSphere: ({} {} {}), {}", component.boundingSphere.x,
+                 component.boundingSphere.y, component.boundingSphere.z,
+                 component.boundingSphere.w);
 
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(pop)
@@ -1580,11 +1621,23 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 #pragma GCC diagnostic pop
 #endif
 
-    components.push_back(component);
-  }
+  IRIS_LOG_LEAVE();
+  return component;
+} // GLTF::ParseNode
+
+template <>
+iris::expected<iris::Renderer::Component::Traceable, std::system_error>
+GLTF::ParseNode(Renderer::CommandQueue commandQueue,
+                std::string const& meshName, glm::mat4x4 const& nodeMat,
+                std::vector<std::vector<std::byte>> const& buffersBytes,
+                std::vector<VkExtent2D> const& imagesExtents,
+                std::vector<std::vector<std::byte>> imagesBytes,
+                Node const& node, Primitive const& primitive) {
+  IRIS_LOG_ENTER();
+
+  // TODO: implement
 
   IRIS_LOG_LEAVE();
-  return components;
 } // GLTF::ParseNode
 
 expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
@@ -2380,8 +2433,9 @@ expected<void, std::system_error> static ParseGLTF(
     std::vector<Renderer::Component::Renderable> renderables;
 
     for (auto&& node : *scene.nodes) {
-      if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
-                               buffersBytes, imagesExtents, imagesBytes)) {
+      if (auto r = g.ParseNode<Renderer::Component::Renderable>(
+            commandQueue, node, glm::mat4x4(1.f), path, buffersBytes,
+            imagesExtents, imagesBytes)) {
         renderables.insert(renderables.end(), r->begin(), r->end());
       } else {
         IRIS_LOG_LEAVE();
@@ -2393,17 +2447,18 @@ expected<void, std::system_error> static ParseGLTF(
     for (auto&& r : renderables) Renderer::AddRenderable(r);
   } else {
     std::vector<Renderer::Component::Traceable> traceables;
-#if 0
+
     for (auto&& node : *scene.nodes) {
-      if (auto t = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
-                               buffersBytes, imagesExtents, imagesBytes)) {
+      if (auto t = g.ParseNode<Renderer::Component::Traceable>(
+            commandQueue, node, glm::mat4x4(1.f), path, buffersBytes,
+            imagesExtents, imagesBytes)) {
         traceables.insert(traceables.end(), t->begin(), t->end());
       } else {
         IRIS_LOG_LEAVE();
         return unexpected(t.error());
       }
     }
-#endif
+
     IRIS_LOG_DEBUG("Adding {} traceables", traceables.size());
     for (auto&& t : traceables) Renderer::AddTraceable(t);
   }
