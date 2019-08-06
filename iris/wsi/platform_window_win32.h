@@ -5,8 +5,9 @@
 #ifndef HEV_IRIS_WSI_PLATFORM_WINDOW_WIN32_H_
 #define HEV_IRIS_WSI_PLATFORM_WINDOW_WIN32_H_
 
+#include "iris/types.h"
+
 #include "absl/container/fixed_array.h"
-#include "expected.hpp"
 #include "gsl/gsl"
 #include "wsi/platform_window.h"
 #include <Windows.h>
@@ -48,7 +49,7 @@ public:
   \param[in] options the Options describing how to create the window.
   \return a std::expected of either the Impl pointer or a std::exception.
   */
-  static tl::expected<std::unique_ptr<Impl>, std::exception>
+  static expected<std::unique_ptr<Impl>, std::exception>
   Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
          Options const& options, int);
 

@@ -20,13 +20,13 @@
       "primitives": [
         {
           "attributes": {
-            "AABB": 0
+            "_AABB": 0
           },
           "material": 0
         },
         {
           "attributes": {
-            "AABB": 1
+            "_AABB": 1
           },
           "material": 0
         }

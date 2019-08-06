@@ -3,17 +3,17 @@
 
 #include "iris/config.h"
 
+#include "iris/types.h"
 #include "iris/vulkan.h"
 
 #if PLATFORM_COMPILER_MSVC
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
-#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#pragma warning(disable : ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
 #include "absl/container/inlined_vector.h"
-#include "expected.hpp"
 #include "gsl/gsl"
 #include <cstdint>
 #include <exception>
@@ -37,14 +37,14 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#ex
 \see
 https://vulkan.lunarg.com/doc/sdk/1.1.82.1/windows/layer_configuration.html
 */
-[[nodiscard]] tl::expected<VkInstance, std::system_error> CreateInstance(
+[[nodiscard]] expected<VkInstance, std::system_error> CreateInstance(
   gsl::czstring<> appName, std::uint32_t appVersion,
   gsl::span<gsl::czstring<>> extensionNames,
   gsl::span<gsl::czstring<>> layerNames,
   PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback =
     nullptr) noexcept;
 
-[[nodiscard]] tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
+[[nodiscard]] expected<VkDebugUtilsMessengerEXT, std::system_error>
 CreateDebugUtilsMessenger(
   VkInstance instance,
   PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept;
@@ -58,15 +58,15 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#fe
 ComparePhysicalDeviceFeatures(VkPhysicalDeviceFeatures2 a,
                               VkPhysicalDeviceFeatures2 b) noexcept;
 
-[[nodiscard]] tl::expected<std::uint32_t, std::system_error>
+[[nodiscard]] expected<std::uint32_t, std::system_error>
 GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
                     VkQueueFlags queueFlags) noexcept;
 
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
                    char const* indent = "") noexcept;
 
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 DumpPhysicalDevices(VkInstance instance) noexcept;
 
 /*! \brief Check if a specific physical device meets specified requirements.
@@ -74,7 +74,7 @@ DumpPhysicalDevices(VkInstance instance) noexcept;
 \see
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
 */
-[[nodiscard]] tl::expected<bool, std::system_error> IsPhysicalDeviceGood(
+[[nodiscard]] expected<bool, std::system_error> IsPhysicalDeviceGood(
   VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
   gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept;
 
@@ -83,7 +83,7 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#de
 \see
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-physical-device-enumeration
 */
-[[nodiscard]] tl::expected<VkPhysicalDevice, std::system_error>
+[[nodiscard]] expected<VkPhysicalDevice, std::system_error>
 ChoosePhysicalDevice(VkInstance instance, VkPhysicalDeviceFeatures2 features,
                      gsl::span<gsl::czstring<>> requiredExtensionNames,
                      gsl::span<gsl::czstring<>> optionalExtensionNames,
@@ -96,18 +96,17 @@ https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#de
 \see
 https://www.khronos.org/registry/vulkan/specs/1.1-extensions/html/vkspec.html#devsandqueues-queues
 */
-[[nodiscard]] tl::expected<std::pair<VkDevice, std::uint32_t>,
-                           std::system_error>
+[[nodiscard]] expected<std::pair<VkDevice, std::uint32_t>, std::system_error>
 CreateDevice(VkPhysicalDevice physicalDevice,
              VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
              gsl::span<gsl::czstring<>> extensionNames,
              std::uint32_t queueFamilyIndex) noexcept;
 
-[[nodiscard]] tl::expected<VmaAllocator, std::system_error>
+[[nodiscard]] expected<VmaAllocator, std::system_error>
 CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 
-[[nodiscard]] tl::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>,
-                           std::system_error>
+[[nodiscard]] expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>,
+                       std::system_error>
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);
 

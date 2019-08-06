@@ -8,7 +8,7 @@
 
 namespace iris {
 
-static tl::expected<iris::AccelerationStructure, std::system_error>
+static expected<iris::AccelerationStructure, std::system_error>
 CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
                             VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
@@ -25,7 +25,7 @@ CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
   if (auto result = vkCreateAccelerationStructureNV(
         Renderer::sDevice, &asCI, nullptr, &structure.structure);
       result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result), "Cannot create acceleration structure"));
   }
 
@@ -52,8 +52,8 @@ CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
       result != VK_SUCCESS) {
     vkDestroyAccelerationStructureNV(Renderer::sDevice, structure.structure,
                                      nullptr);
-    return tl::unexpected(std::system_error(iris::make_error_code(result),
-                                            "Cannot allocate memory"));
+    return unexpected(std::system_error(iris::make_error_code(result),
+                                        "Cannot allocate memory"));
   }
 
   VmaAllocationInfo allocationInfo;
@@ -75,7 +75,7 @@ CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
     vmaFreeMemory(Renderer::sAllocator, structure.allocation);
     vkDestroyAccelerationStructureNV(Renderer::sDevice, structure.structure,
                                      nullptr);
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result), "Cannot bind memory to acceleration structure"));
   }
 
@@ -86,7 +86,7 @@ CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
     vmaFreeMemory(Renderer::sAllocator, structure.allocation);
     vkDestroyAccelerationStructureNV(Renderer::sDevice, structure.structure,
                                      nullptr);
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result), "Cannot get acceleration structure handle"));
   }
 
@@ -98,7 +98,7 @@ CreateAccelerationStructure(VkAccelerationStructureInfoNV const& info,
   return structure;
 } // CreateAccelerationStructure
 
-static tl::expected<void, std::system_error> BuildAccelerationStructure(
+static expected<void, std::system_error> BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, VkAccelerationStructureInfoNV const& info,
   VkBuffer instanceData) noexcept {
@@ -124,17 +124,17 @@ static tl::expected<void, std::system_error> BuildAccelerationStructure(
   if (!scratch) {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       scratch.error().code(),
       "Cannot allocate acceleration structure build scratch memory: "s +
-      scratch.error().what()));
+        scratch.error().what()));
   }
 
   auto commandBuffer = Renderer::BeginOneTimeSubmit(commandPool);
   if (!commandBuffer) {
     DestroyBuffer(*scratch);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(commandBuffer.error()));
+    return unexpected(std::system_error(commandBuffer.error()));
   }
 
   vkCmdBuildAccelerationStructureNV(
@@ -151,11 +151,11 @@ static tl::expected<void, std::system_error> BuildAccelerationStructure(
 
   if (auto result = iris::Renderer::EndOneTimeSubmit(*commandBuffer,
                                                      commandPool, queue, fence);
-    !result) {
+      !result) {
     using namespace std::string_literals;
     DestroyBuffer(*scratch);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       result.error().code(),
       "Cannot build acceleration struture: "s + result.error().what()));
   }
@@ -167,7 +167,7 @@ static tl::expected<void, std::system_error> BuildAccelerationStructure(
 
 } // namespace iris
 
-tl::expected<iris::AccelerationStructure, std::system_error>
+iris::expected<iris::AccelerationStructure, std::system_error>
 iris::CreateAccelerationStructure(std::uint32_t instanceCount,
                                   VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
@@ -184,7 +184,7 @@ iris::CreateAccelerationStructure(std::uint32_t instanceCount,
   return ret;
 } // iris::CreateAccelerationStructure
 
-tl::expected<iris::AccelerationStructure, std::system_error>
+iris::expected<iris::AccelerationStructure, std::system_error>
 iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
                                   VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
@@ -202,9 +202,10 @@ iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
   return ret;
 } // iris::CreateAccelerationStructure
 
-tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
+iris::expected<void, std::system_error> iris::BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
-  VkQueue queue, VkFence fence, gsl::span<GeometryInstance> instances) noexcept {
+  VkQueue queue, VkFence fence,
+  gsl::span<GeometryInstance> instances) noexcept {
   IRIS_LOG_ENTER();
 
   auto instanceBuffer = iris::AllocateBuffer(
@@ -212,7 +213,7 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
     VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_CPU_TO_GPU);
   if (!instanceBuffer) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(instanceBuffer.error());
+    return unexpected(instanceBuffer.error());
   }
 
   if (auto ptr = instanceBuffer->Map<iris::GeometryInstance*>()) {
@@ -222,7 +223,7 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
   } else {
     DestroyBuffer(*instanceBuffer);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(ptr.error());
+    return unexpected(ptr.error());
   }
 
   VkAccelerationStructureInfoNV asInfo = {};
@@ -240,7 +241,7 @@ tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
   return ret;
 } // iris::BuildAccelerationStructure
 
-tl::expected<void, std::system_error> iris::BuildAccelerationStructure(
+iris::expected<void, std::system_error> iris::BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept {
   IRIS_LOG_ENTER();

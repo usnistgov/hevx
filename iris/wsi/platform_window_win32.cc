@@ -135,7 +135,7 @@ static Keys KeycodeToKeys(int keycode) noexcept {
 
 } // namespace iris::wsi
 
-tl::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
+iris::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
 iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
                                         Extent2D extent, Options const& options,
                                         int) {
@@ -151,13 +151,13 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   } catch (std::exception const& e) {
     IRIS_LOG_CRITICAL("Unhandled exception from std::make_unique<Impl>");
     IRIS_LOG_LEAVE();
-    return tl::unexpected(e);
+    return unexpected(e);
   }
 
   pWin->handle_.hInstance = ::GetModuleHandleA(nullptr);
   if (pWin->handle_.hInstance == 0) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       std::error_code(::GetLastError(), std::system_category()),
       "Cannot get module handle"));
   }
@@ -168,7 +168,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     int err = ::GetLastError();
     if (err != ERROR_CLASS_ALREADY_EXISTS) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
+      return unexpected(std::system_error(
         std::error_code(::GetLastError(), std::system_category()),
         "Cannot register window class"));
     }
@@ -191,7 +191,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
                                 sWindowClass.hInstance, pWin.get());
   if (hWnd == 0 || pWin->handle_.hWnd == 0) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       std::error_code(::GetLastError(), std::system_category()),
       "Cannot create window"));
   }

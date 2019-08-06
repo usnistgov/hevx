@@ -3,16 +3,16 @@
 
 #include "iris/config.h"
 
+#include "iris/types.h"
 #include "iris/vulkan.h"
 
 #if PLATFORM_COMPILER_MSVC
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
-#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#pragma warning(disable : ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
-#include "expected.hpp"
 #include <filesystem>
 #include <system_error>
 
@@ -50,11 +50,11 @@ struct ShaderGroup {
   }
 }; // struct ShaderGroup
 
-[[nodiscard]] tl::expected<Shader, std::system_error>
+[[nodiscard]] expected<Shader, std::system_error>
 CompileShaderFromSource(std::string_view source, VkShaderStageFlagBits stage,
                         gsl::span<std::string> macroDefinitions = {}) noexcept;
 
-[[nodiscard]] tl::expected<Shader, std::system_error>
+[[nodiscard]] expected<Shader, std::system_error>
 LoadShaderFromFile(std::filesystem::path const& path,
                    VkShaderStageFlagBits stage,
                    gsl::span<std::string> macroDefinitions = {}) noexcept;
@@ -62,4 +62,3 @@ LoadShaderFromFile(std::filesystem::path const& path,
 } // namespace iris
 
 #endif // HEV_IRIS_SHADER_H_
-

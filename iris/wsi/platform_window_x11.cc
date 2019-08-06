@@ -187,7 +187,7 @@ KeyCodeToKeys(::xcb_keycode_t keycode,
 
 } // namespace iris::wsi
 
-tl::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
+iris::expected<std::unique_ptr<iris::wsi::PlatformWindow::Impl>, std::exception>
 iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
                                         Extent2D extent,
                                         Options const& options [[maybe_unused]],
@@ -204,7 +204,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   } catch (std::exception const& e) {
     IRIS_LOG_CRITICAL("Unhandled exception from std::make_unique<Impl>");
     IRIS_LOG_LEAVE();
-    return tl::unexpected(e);
+    return unexpected(e);
   }
 
   std::string const displayName = fmt::format(":0.{}", display);
@@ -213,9 +213,8 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   pWin->handle_.connection = ::xcb_connect(displayName.c_str(), nullptr);
   if (int error = ::xcb_connection_has_error(pWin->handle_.connection) > 0) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(std::error_code(error, GetXCategory()),
-                        "Cannot open display connection"));
+    return unexpected(std::system_error(std::error_code(error, GetXCategory()),
+                                        "Cannot open display connection"));
   }
 
   // Get the first screen on the display
@@ -255,12 +254,12 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     auto const errorCode = error->error_code;
     std::free(error);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       std::error_code(errorCode, GetXCategory()), "Cannot create window"));
   }
 
   auto getAtomReply =
-    [&conn](auto cookie) -> tl::expected<::xcb_atom_t, std::error_code> {
+    [&conn](auto cookie) -> expected<::xcb_atom_t, std::error_code> {
     ::xcb_generic_error_t* error{nullptr};
     if (auto reply = ::xcb_intern_atom_reply(conn, cookie, &error)) {
       ::xcb_atom_t atom = reply->atom;
@@ -271,14 +270,14 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     auto const errorCode = error->error_code;
     std::free(error);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::error_code(errorCode, GetXCategory()));
+    return unexpected(std::error_code(errorCode, GetXCategory()));
   };
 
   if (auto atom = getAtomReply(atomCookies[WM_NAME])) {
     pWin->atoms_[WM_NAME] = *atom;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(atom.error(), "Cannot intern WM_NAME atom"));
   }
 
@@ -286,7 +285,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     pWin->atoms_[WM_ICON_NAME] = *atom;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(atom.error(), "Cannot intern WM_ICON_NAME atom"));
   }
 
@@ -294,7 +293,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     pWin->atoms_[WM_PROTOCOLS] = *atom;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(atom.error(), "Cannot intern WM_PROTOCOLS atom"));
   }
 
@@ -302,7 +301,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     pWin->atoms_[WM_DELETE_WINDOW] = *atom;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(atom.error(), "Cannot intern WM_DELETE_WINDOW atom"));
   }
 
@@ -310,7 +309,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     pWin->atoms_[_MOTIF_WM_HINTS] = *atom;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(atom.error(), "Cannot intern _MOTIF_WM_HINTS atom"));
   }
 
@@ -326,7 +325,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
     auto const errorCode = error->error_code;
     std::free(error);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(std::error_code(errorCode, GetXCategory()),
                         "Cannot set WM_PROTOCOLS/WM_DELETE_WINDOW property"));
   }
@@ -354,7 +353,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
       auto const errorCode = error->error_code;
       std::free(error);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(
+      return unexpected(
         std::system_error(std::error_code(errorCode, GetXCategory()),
                           "Cannot set (no) window decorations property"));
     }
@@ -377,7 +376,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
       auto const errorCode = error->error_code;
       std::free(error);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(
+      return unexpected(
         std::system_error(std::error_code(errorCode, GetXCategory()),
                           "Cannot set window size hints"));
     }
@@ -402,7 +401,7 @@ iris::wsi::PlatformWindow::Impl::Create(gsl::czstring<> title, Offset2D offset,
   if (error) {
     auto const errorCode = error->error_code;
     std::free(error);
-    return tl::unexpected(
+    return unexpected(
       std::system_error(std::error_code(errorCode, GetXCategory()),
                         "Cannot get keyboard mapping"));
   }

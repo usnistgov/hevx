@@ -12,7 +12,6 @@
 #pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
 #endif
 
-#include "expected.hpp"
 #include "gsl/gsl"
 #include <cstddef>
 #include <cstdint>

@@ -4,6 +4,7 @@
 #include "iris/config.h"
 
 #include "iris/shader.h"
+#include "iris/types.h"
 #include "iris/vulkan.h"
 
 #if PLATFORM_COMPILER_MSVC
@@ -13,7 +14,6 @@
 #pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
 #endif
 
-#include "expected.hpp"
 #include "gsl/gsl"
 #include <system_error>
 
@@ -32,7 +32,7 @@ struct Pipeline {
   }
 }; // struct Pipeline
 
-tl::expected<Pipeline, std::system_error> CreateRasterizationPipeline(
+expected<Pipeline, std::system_error> CreateRasterizationPipeline(
   gsl::span<const Shader> shaders,
   gsl::span<const VkVertexInputBindingDescription>
     vertexInputBindingDescriptions,
@@ -49,7 +49,7 @@ tl::expected<Pipeline, std::system_error> CreateRasterizationPipeline(
   std::uint32_t renderPassSubpass,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts) noexcept;
 
-tl::expected<Pipeline, std::system_error> CreateRayTracingPipeline(
+expected<Pipeline, std::system_error> CreateRayTracingPipeline(
   gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
   std::uint32_t maxRecursionDepth) noexcept;

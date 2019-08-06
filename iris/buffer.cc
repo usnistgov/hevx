@@ -7,11 +7,11 @@
 #include "renderer_private.h"
 
 template <>
-tl::expected<void*, std::system_error> iris::Buffer::Map() noexcept {
+iris::expected<void*, std::system_error> iris::Buffer::Map() noexcept {
   void* ptr;
   if (auto result = vmaMapMemory(Renderer::sAllocator, allocation, &ptr);
       result != VK_SUCCESS) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot map memory"));
   }
   return ptr;
@@ -21,7 +21,7 @@ void iris::Buffer::Unmap() noexcept {
   vmaUnmapMemory(Renderer::sAllocator, allocation);
 } // iris::Buffer::Unmap
 
-tl::expected<iris::Buffer, std::system_error>
+iris::expected<iris::Buffer, std::system_error>
 iris::AllocateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
                      VmaMemoryUsage memoryUsage) noexcept {
   IRIS_LOG_ENTER();
@@ -43,7 +43,7 @@ iris::AllocateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
         vmaCreateBuffer(Renderer::sAllocator, &bufferCI, &allocationCI,
                         &buffer.buffer, &buffer.allocation, nullptr);
       result != VK_SUCCESS) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create buffer"));
   }
 
@@ -54,7 +54,7 @@ iris::AllocateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage,
   return buffer;
 } // iris::AllocateBuffer
 
-tl::expected<iris::Buffer, std::system_error>
+iris::expected<iris::Buffer, std::system_error>
 iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
                        VkBufferUsageFlags bufferUsage,
                        VmaMemoryUsage memoryUsage) noexcept {
@@ -90,7 +90,7 @@ iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
         vmaCreateBuffer(Renderer::sAllocator, &bufferCI, &allocationCI,
                         &newBuffer.buffer, &newBuffer.allocation, nullptr);
       result != VK_SUCCESS) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create buffer"));
   }
 
@@ -102,7 +102,7 @@ iris::ReallocateBuffer(Buffer oldBuffer, VkDeviceSize newSize,
   return newBuffer;
 } // iris::ReallocateBuffer
 
-tl::expected<iris::Buffer, std::system_error>
+iris::expected<iris::Buffer, std::system_error>
 iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                    VkBufferUsageFlags bufferUsage, VmaMemoryUsage memoryUsage,
                    VkDeviceSize size, gsl::not_null<std::byte*> data) noexcept {
@@ -118,9 +118,9 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   if (!staging) {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(staging.error().code(),
-                                            "Cannot create staging buffer: "s +
-                                              staging.error().what()));
+    return unexpected(std::system_error(staging.error().code(),
+                                        "Cannot create staging buffer: "s +
+                                          staging.error().what()));
   }
 
   if (auto ptr = staging->Map<std::byte*>()) {
@@ -130,7 +130,7 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
     using namespace std::string_literals;
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
   }
 
@@ -151,7 +151,7 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     DestroyBuffer(*staging);
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create buffer"));
   }
 
@@ -161,7 +161,7 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   } else {
     IRIS_LOG_LEAVE();
     DestroyBuffer(*staging);
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   VkBufferCopy region = {};
@@ -176,7 +176,7 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
       !result) {
     IRIS_LOG_LEAVE();
     DestroyBuffer(*staging);
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   DestroyBuffer(*staging);
@@ -191,4 +191,3 @@ iris::CreateBuffer(VkCommandPool commandPool, VkQueue queue, VkFence fence,
 void iris::DestroyBuffer(Buffer buffer) noexcept {
   vmaDestroyBuffer(Renderer::sAllocator, buffer.buffer, buffer.allocation);
 } // iris::DestroyBuffer
-

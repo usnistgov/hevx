@@ -3,6 +3,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/node_hash_set.h"
+#include "expected.hpp"
 #include "glm/vec3.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "iris/error.h"
@@ -11,6 +12,9 @@
 #include <variant>
 
 namespace iris {
+
+using tl::expected;
+using tl::unexpected;
 
 template <class Tag>
 struct ComponentID {
@@ -67,7 +71,7 @@ struct ComponentSystem {
 
 template <class ID, class T>
 struct UniqueComponentSystem {
-  tl::expected<ID, std::system_error> Insert(T component) {
+  expected<ID, std::system_error> Insert(T component) {
     std::lock_guard<decltype(mutex)> lck(mutex);
     if (auto&& [position, inserted] = uniques.insert(std::move(component));
       inserted) {
@@ -78,18 +82,18 @@ struct UniqueComponentSystem {
       for (auto&& comp : components) {
         if (std::addressof(*position) == comp.second) return comp.first;
       }
-      return tl::unexpected(std::system_error(Error::kUniqueComponentNotMapped));
+      return unexpected(std::system_error(Error::kUniqueComponentNotMapped));
     }
   }
 
-  tl::expected<T, std::system_error> Remove(ID const& id) {
+  expected<T, std::system_error> Remove(ID const& id) {
     std::lock_guard<decltype(mutex)> lck(mutex);
     if (auto pos = components.find(id); pos == components.end()) {
       return {};
     } else {
       auto old = uniques.find(*pos->second);
       if (old == uniques.end()) {
-        return tl::unexpected(std::system_error(Error::kUniqueComponentNotMapped));
+        return unexpected(std::system_error(Error::kUniqueComponentNotMapped));
       }
 
       uniques.erase(old++);

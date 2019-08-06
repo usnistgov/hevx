@@ -6,6 +6,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "components/renderable.h"
+#include "components/traceable.h"
 #include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
@@ -478,9 +479,7 @@ void from_json(json const& j, Node& node) {
     auto&& e = j["extras"];
     if (e.find("HEV") != e.end()) {
       auto&& h = e["HEV"];
-      if (h.find("shadertoy") != h.end()) {
-        node.shaderToy = h["shadertoy"];
-      }
+      if (h.find("shadertoy") != h.end()) { node.shaderToy = h["shadertoy"]; }
     }
   }
 }
@@ -572,7 +571,7 @@ struct GLTF {
 
   absl::flat_hash_map<int, Renderer::MaterialID> materialsMap;
 
-  tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+  expected<std::vector<Renderer::Component::Renderable>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, std::filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes,
@@ -585,12 +584,12 @@ struct GLTF {
     VkSampler sampler;
   };
 
-  tl::expected<DeviceTexture, std::system_error>
+  expected<DeviceTexture, std::system_error>
   CreateTexture(Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
                 std::vector<VkExtent2D> const& imagesExtents,
                 std::vector<std::vector<std::byte>> imagesBytes, bool srgb);
 
-  tl::expected<Renderer::Component::Material, std::system_error> CreateMaterial(
+  expected<Renderer::Component::Material, std::system_error> CreateMaterial(
     Renderer::CommandQueue commandQueue, std::string const& meshName,
     VkPrimitiveTopology topology, bool hasTexCoords,
     decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
@@ -755,7 +754,7 @@ inline glm::vec4 GetAccessorDataComponent(gsl::not_null<float*> bytes) {
 }
 
 template <class T>
-tl::expected<std::vector<T>, std::system_error>
+expected<std::vector<T>, std::system_error>
 GetAccessorData(int index, std::string const& accessorType,
                 gsl::span<int> requiredComponentTypes, bool canBeZero,
                 std::optional<std::vector<Accessor>> accessors,
@@ -764,10 +763,10 @@ GetAccessorData(int index, std::string const& accessorType,
   std::vector<T> data;
 
   if (!accessors || accessors->empty()) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "no accessors"));
   } else if (accessors->size() < static_cast<std::size_t>(index)) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "too few accessors"));
   }
 
@@ -775,7 +774,7 @@ GetAccessorData(int index, std::string const& accessorType,
   IRIS_LOG_TRACE("accessor: {}", json(accessor).dump());
 
   if (accessor.type != accessorType) {
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, "accessor has wrong type '" + accessor.type +
                                  "'; expecting '" + accessorType + "'"));
   }
@@ -786,8 +785,8 @@ GetAccessorData(int index, std::string const& accessorType,
       if (accessor.componentType == componentType) goodComponentType = true;
     }
     if (!goodComponentType) {
-      return tl::unexpected(std::system_error(
-        Error::kFileParseFailed, "accessor has wrong componentType"));
+      return unexpected(std::system_error(Error::kFileParseFailed,
+                                          "accessor has wrong componentType"));
     }
   }
 
@@ -796,8 +795,8 @@ GetAccessorData(int index, std::string const& accessorType,
   // zeros with actual values.
   if (!accessor.bufferView) {
     if (!canBeZero) {
-      return tl::unexpected(std::system_error(Error::kFileParseFailed,
-                                              "accessor has no bufferView"));
+      return unexpected(std::system_error(Error::kFileParseFailed,
+                                          "accessor has no bufferView"));
     }
 
     data.resize(accessor.count);
@@ -806,11 +805,11 @@ GetAccessorData(int index, std::string const& accessorType,
   }
 
   if (!bufferViews || bufferViews->empty()) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "no bufferViews"));
   } else if (bufferViews->size() <
              static_cast<std::size_t>(*accessor.bufferView)) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "too few bufferViews"));
   }
 
@@ -818,7 +817,7 @@ GetAccessorData(int index, std::string const& accessorType,
   IRIS_LOG_TRACE("bufferView: {}", json(bufferView).dump());
 
   if (buffersBytes.size() < static_cast<std::size_t>(bufferView.buffer)) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "too few buffers"));
   }
 
@@ -831,7 +830,7 @@ GetAccessorData(int index, std::string const& accessorType,
 
   auto&& bufferBytes = buffersBytes[bufferView.buffer];
   if (bufferBytes.size() < byteOffset + componentTypeSize * accessor.count) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "buffer too small"));
   }
 
@@ -882,7 +881,7 @@ GetAccessorData(int index, std::string const& accessorType,
   } break;
 
   default:
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed,
                         "Invalid combination of type and componentType"));
   }
@@ -891,7 +890,7 @@ GetAccessorData(int index, std::string const& accessorType,
 } // GetAccessorData
 
 template <class T>
-tl::expected<std::vector<T>, std::system_error>
+expected<std::vector<T>, std::system_error>
 GetAccessorData(int index, std::string const& accessorType,
                 int requiredComponentTypes, bool canBeZero,
                 std::optional<std::vector<Accessor>> accessors,
@@ -901,7 +900,7 @@ GetAccessorData(int index, std::string const& accessorType,
                             canBeZero, accessors, bufferViews, buffersBytes);
 } // GetAccessorData
 
-inline tl::expected<VkPrimitiveTopology, std::system_error>
+inline expected<VkPrimitiveTopology, std::system_error>
 ModeToVkPrimitiveTopology(std::optional<int> mode) {
   if (!mode) return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
@@ -914,7 +913,7 @@ ModeToVkPrimitiveTopology(std::optional<int> mode) {
   case 6: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
   }
 
-  return tl::unexpected(
+  return unexpected(
     std::system_error(Error::kFileParseFailed, "unknown primitive mode"));
 } // glTFModeToVkPrimitiveTopology
 
@@ -1062,7 +1061,7 @@ struct TangentGenerator {
   }
 }; // struct TangentGenerator
 
-tl::expected<std::vector<Renderer::Component::Renderable>, std::system_error>
+expected<std::vector<Renderer::Component::Renderable>, std::system_error>
 GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                 glm::mat4x4 parentMat, std::filesystem::path const& path,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
@@ -1072,7 +1071,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   std::vector<Renderer::Component::Renderable> components;
 
   if (!nodes || nodes->size() < static_cast<std::size_t>(nodeIdx)) {
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kFileParseFailed, "not enough nodes"));
   }
 
@@ -1095,10 +1094,10 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       if (auto r = io::LoadShaderToy(*node.shaderToy->url)) {
         components.push_back(std::move(*r));
       } else {
-        return tl::unexpected(r.error());
+        return unexpected(r.error());
       }
     } else {
-      return tl::unexpected(
+      return unexpected(
         std::system_error(Error::kFileParseFailed,
                           "node has unsupported shaderToy type (not url)"));
     }
@@ -1133,7 +1132,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       components.insert(components.end(), r->begin(), r->end());
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(r.error());
+      return unexpected(r.error());
     }
   }
 
@@ -1144,13 +1143,13 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
   if (!meshes || meshes->empty()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kFileParseFailed, "node defines mesh, but no meshes"));
+    return unexpected(std::system_error(Error::kFileParseFailed,
+                                        "node defines mesh, but no meshes"));
   }
 
   if (meshes->size() < static_cast<std::size_t>(*node.mesh)) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, "node defines mesh, but not enough meshes"));
   }
 
@@ -1219,7 +1218,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           positions = std::move(*p);
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(p.error());
+          return unexpected(p.error());
         }
       }
     }
@@ -1240,7 +1239,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         indices = std::move(*i);
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(i.error());
+        return unexpected(i.error());
       }
     }
 
@@ -1260,7 +1259,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           texcoords = std::move(*t);
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(t.error());
+          return unexpected(t.error());
         }
       } else if (semantic == "NORMAL") {
         IRIS_LOG_TRACE("reading NORMAL");
@@ -1270,7 +1269,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           normals = std::move(*n);
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(n.error());
+          return unexpected(n.error());
         }
       } else if (semantic == "TANGENT") {
         IRIS_LOG_TRACE("reading TANGENT");
@@ -1280,7 +1279,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           tangents = std::move(*t);
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(t.error());
+          return unexpected(t.error());
         }
       }
     }
@@ -1320,7 +1319,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         tangents = std::move(tg.tangents);
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(std::system_error(
+        return unexpected(std::system_error(
           Error::kFileLoadFailed, "unable to generate tangent space"));
       }
     }
@@ -1358,7 +1357,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       component.topology = *t;
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(t.error());
+      return unexpected(t.error());
     }
 
     VkFrontFace const frontFace = (glm::determinant(nodeMat) < 0.f)
@@ -1379,7 +1378,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
           component.material = matID;
         } else {
           IRIS_LOG_LEAVE();
-          return tl::unexpected(m.error());
+          return unexpected(m.error());
         }
       }
     }
@@ -1391,7 +1390,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
                      VMA_MEMORY_USAGE_CPU_TO_GPU);
     if (!staging) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(staging.error());
+      return unexpected(staging.error());
     }
 
     float* pVertexBuffer;
@@ -1400,7 +1399,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     } else {
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(ptr.error());
+      return unexpected(ptr.error());
     }
 
     for (std::size_t i = 0; i < positions.size(); i++) {
@@ -1434,7 +1433,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     } else {
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(buf.error());
+      return unexpected(buf.error());
     }
 
     VkCommandBuffer commandBuffer;
@@ -1444,7 +1443,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(cb.error());
+      return unexpected(cb.error());
     }
 
     VkBufferCopy region = {};
@@ -1462,7 +1461,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(result.error());
+      return unexpected(result.error());
     }
 
     if (!primitive.indices) {
@@ -1481,7 +1480,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
       if (!staging) {
         DestroyBuffer(component.vertexBuffer);
         IRIS_LOG_LEAVE();
-        return tl::unexpected(staging.error());
+        return unexpected(staging.error());
       }
 
       std::byte* pIndexBuffer;
@@ -1489,7 +1488,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         pIndexBuffer = *ptr;
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(ptr.error());
+        return unexpected(ptr.error());
       }
 
       auto indexBufferView = (*bufferViews)[*indexAccessor.bufferView];
@@ -1511,7 +1510,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
-        return tl::unexpected(buf.error());
+        return unexpected(buf.error());
       }
 
       if (auto cb = Renderer::BeginOneTimeSubmit(commandQueue.commandPool)) {
@@ -1521,7 +1520,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
-        return tl::unexpected(cb.error());
+        return unexpected(cb.error());
       }
 
       region = {};
@@ -1540,7 +1539,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
         DestroyBuffer(component.vertexBuffer);
         DestroyBuffer(*staging);
         IRIS_LOG_LEAVE();
-        return tl::unexpected(result.error());
+        return unexpected(result.error());
       }
 
       component.indexType =
@@ -1588,7 +1587,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   return components;
 } // GLTF::ParseNode
 
-tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
+expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
   std::vector<VkExtent2D> const& imagesExtents,
   std::vector<std::vector<std::byte>> imagesBytes, bool srgb) {
@@ -1598,7 +1597,7 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   if (!textures ||
       static_cast<std::size_t>(textureInfo.index) >= textures->size()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, "material references non-existent texture"));
   }
 
@@ -1657,7 +1656,7 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   if (!texture.source ||
       static_cast<std::size_t>(*texture.source) >= imagesBytes.size()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, "texture references non-existent source"));
   }
 
@@ -1668,7 +1667,7 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
     deviceTexture.texture = std::move(*tex);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(tex.error());
+    return unexpected(tex.error());
   }
 
   if (auto view = CreateImageView(
@@ -1677,7 +1676,7 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
     deviceTexture.view = std::move(*view);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(view.error());
+    return unexpected(view.error());
   }
 
   VkSamplerCreateInfo samplerCI = {};
@@ -1765,16 +1764,15 @@ tl::expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
     deviceTexture.sampler = sampler;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create texture sampler"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create texture sampler"));
   }
 
   IRIS_LOG_LEAVE();
   return std::move(deviceTexture);
 } // GLTF::CreateTexture
 
-tl::expected<Renderer::Component::Material, std::system_error>
-GLTF::CreateMaterial(
+expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
   Renderer::CommandQueue commandQueue, std::string const& meshName,
   VkPrimitiveTopology topology, bool hasTexCoords,
   decltype(Renderer::Component::Material::vertexInputBindingDescriptions)
@@ -1813,7 +1811,7 @@ GLTF::CreateMaterial(
   if (!materials ||
       materials->size() < static_cast<std::size_t>(materialIndex)) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, "primitive references non-existent material"));
   }
 
@@ -1842,7 +1840,7 @@ GLTF::CreateMaterial(
         });
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(dt.error());
+        return unexpected(dt.error());
       }
     }
 
@@ -1868,7 +1866,7 @@ GLTF::CreateMaterial(
         });
       } else {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(dt.error());
+        return unexpected(dt.error());
       }
     }
   }
@@ -1897,7 +1895,7 @@ GLTF::CreateMaterial(
       });
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(dt.error());
+      return unexpected(dt.error());
     }
   }
 
@@ -1920,7 +1918,7 @@ GLTF::CreateMaterial(
       });
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(dt.error());
+      return unexpected(dt.error());
     }
   }
 
@@ -1948,7 +1946,7 @@ GLTF::CreateMaterial(
       });
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(dt.error());
+      return unexpected(dt.error());
     }
   }
 
@@ -1964,8 +1962,8 @@ GLTF::CreateMaterial(
                                     nullptr, &component.descriptorSetLayout);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create descriptor set layout"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create descriptor set layout"));
   }
 
   Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
@@ -1982,8 +1980,8 @@ GLTF::CreateMaterial(
         Renderer::sDevice, &descriptorSetAI, &component.descriptorSet);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot allocate descriptor set"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot allocate descriptor set"));
   }
 
   Renderer::NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, component.descriptorSet,
@@ -1996,7 +1994,7 @@ GLTF::CreateMaterial(
     shaders[0] = std::move(*vs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(vs.error());
+    return unexpected(vs.error());
   }
 
   if (auto fs =
@@ -2005,7 +2003,7 @@ GLTF::CreateMaterial(
     shaders[1] = std::move(*fs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(fs.error());
+    return unexpected(fs.error());
   }
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {};
@@ -2065,7 +2063,7 @@ GLTF::CreateMaterial(
     component.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(iris::Error::kFileLoadFailed,
                         fmt::format("unable to create graphics pipeline: {}",
                                     pipe.error().what())));
@@ -2076,7 +2074,7 @@ GLTF::CreateMaterial(
                    VMA_MEMORY_USAGE_CPU_TO_GPU);
   if (!staging) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(staging.error());
+    return unexpected(staging.error());
   }
 
   if (auto ptr = staging->Map<MaterialBuffer*>()) {
@@ -2109,7 +2107,7 @@ GLTF::CreateMaterial(
     staging->Unmap();
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(ptr.error());
+    return unexpected(ptr.error());
   }
 
   if (auto buf = AllocateBuffer(sizeof(MaterialBuffer),
@@ -2120,7 +2118,7 @@ GLTF::CreateMaterial(
   } else {
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(buf.error());
+    return unexpected(buf.error());
   }
 
   VkCommandBuffer commandBuffer;
@@ -2131,7 +2129,7 @@ GLTF::CreateMaterial(
     DestroyBuffer(component.materialBuffer);
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   VkBufferCopy region = {};
@@ -2149,7 +2147,7 @@ GLTF::CreateMaterial(
     DestroyBuffer(component.materialBuffer);
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   VkDescriptorBufferInfo materialBufferInfo = {};
@@ -2231,7 +2229,7 @@ GLTF::CreateMaterial(
 
 namespace iris::io {
 
-tl::expected<void, std::system_error> static ParseGLTF(
+expected<void, std::system_error> static ParseGLTF(
   json const& j, std::filesystem::path const& path = "") noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
@@ -2243,7 +2241,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
     g = j.get<gltf::GLTF>();
   } catch (std::exception const& e) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileParseFailed, fmt::format("Parsing failed: {}", e.what())));
   }
 
@@ -2251,23 +2249,25 @@ tl::expected<void, std::system_error> static ParseGLTF(
     if (g.asset.minVersion) {
       if (g.asset.minVersion != "2.0") {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(
+        return unexpected(
           std::system_error(Error::kFileParseFailed,
                             fmt::format("Unsupported version: {} / {}",
                                         g.asset.version, *g.asset.minVersion)));
       }
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
+      return unexpected(std::system_error(
         Error::kFileParseFailed,
         fmt::format("Unsupported version: {} and no minVersion",
                     g.asset.version)));
     }
   }
 
+  bool raytracing = false;
   if (g.extensionsRequired) {
     for (auto&& extension : *g.extensionsRequired) {
       IRIS_LOG_DEBUG("glTF extension: {}", extension);
+      if (extension == "NIST_techniques_raytracing") raytracing = true;
     }
   }
 
@@ -2290,8 +2290,8 @@ tl::expected<void, std::system_error> static ParseGLTF(
       }
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(Error::kFileParseFailed,
-                                              "unexpected buffer with no uri"));
+      return unexpected(std::system_error(Error::kFileParseFailed,
+                                          "unexpected buffer with no uri"));
     }
   }
 
@@ -2315,7 +2315,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
       if (auto pixels = stbi_load(uriPath.string().c_str(), &x, &y, &n, 4);
           !pixels) {
         IRIS_LOG_LEAVE();
-        return tl::unexpected(
+        return unexpected(
           std::system_error(Error::kFileNotSupported, stbi_failure_reason()));
       } else {
         imagesBytes.emplace_back(reinterpret_cast<std::byte*>(pixels),
@@ -2328,8 +2328,8 @@ tl::expected<void, std::system_error> static ParseGLTF(
       imagesBytes.push_back(buffersBytes[*image.bufferView]);
     } else {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        Error::kFileNotSupported, "image with no uri or bufferView"));
+      return unexpected(std::system_error(Error::kFileNotSupported,
+                                          "image with no uri or bufferView"));
     }
   }
 
@@ -2341,20 +2341,12 @@ tl::expected<void, std::system_error> static ParseGLTF(
     commandQueue = std::move(*q);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(Error::kFileLoadFailed,
-                                            "could not acquire command queue"));
+    return unexpected(std::system_error(Error::kFileLoadFailed,
+                                        "could not acquire command queue"));
   }
 
-  //
-  // Parse the scene graph
-  // TODO: this removes the hierarchy: need to maintain those relationships
-  // TODO: implement Animatable(?) component to support animations
-  //
-
-  std::vector<Renderer::Component::Renderable> renderables;
-
   if (!g.scene) {
-    IRIS_LOG_WARN("no default scene specified; using first scene");
+    IRIS_LOG_DEBUG("no default scene specified; using first scene");
     g.scene = 0;
   }
 
@@ -2367,7 +2359,7 @@ tl::expected<void, std::system_error> static ParseGLTF(
 
   if (static_cast<std::size_t>(*g.scene) >= g.scenes->size()) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kFileLoadFailed, "default scene references non-existent scene"));
   }
 
@@ -2378,18 +2370,43 @@ tl::expected<void, std::system_error> static ParseGLTF(
     scene.nodes = std::vector<int>{0};
   }
 
-  for (auto&& node : *scene.nodes) {
-    if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
-                             buffersBytes, imagesExtents, imagesBytes)) {
-      renderables.insert(renderables.end(), r->begin(), r->end());
-    } else {
-      IRIS_LOG_LEAVE();
-      return tl::unexpected(r.error());
-    }
-  }
+  //
+  // Parse the scene graph
+  // TODO: this removes the hierarchy: need to maintain those relationships
+  // TODO: implement Animatable(?) component to support animations
+  //
 
-  IRIS_LOG_DEBUG("Adding {} renderables", renderables.size());
-  for (auto&& r : renderables) Renderer::AddRenderable(r);
+  if (!raytracing) {
+    std::vector<Renderer::Component::Renderable> renderables;
+
+    for (auto&& node : *scene.nodes) {
+      if (auto r = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
+                               buffersBytes, imagesExtents, imagesBytes)) {
+        renderables.insert(renderables.end(), r->begin(), r->end());
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(r.error());
+      }
+    }
+
+    IRIS_LOG_DEBUG("Adding {} renderables", renderables.size());
+    for (auto&& r : renderables) Renderer::AddRenderable(r);
+  } else {
+    std::vector<Renderer::Component::Traceable> traceables;
+#if 0
+    for (auto&& node : *scene.nodes) {
+      if (auto t = g.ParseNode(commandQueue, node, glm::mat4x4(1.f), path,
+                               buffersBytes, imagesExtents, imagesBytes)) {
+        traceables.insert(traceables.end(), t->begin(), t->end());
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(t.error());
+      }
+    }
+#endif
+    IRIS_LOG_DEBUG("Adding {} traceables", traceables.size());
+    for (auto&& t : traceables) Renderer::AddTraceable(t);
+  }
 
   IRIS_LOG_LEAVE();
   return {};

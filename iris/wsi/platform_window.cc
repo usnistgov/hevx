@@ -10,7 +10,7 @@
 #include "wsi/platform_window_win32.h"
 #endif
 
-tl::expected<iris::wsi::PlatformWindow, std::exception>
+iris::expected<iris::wsi::PlatformWindow, std::exception>
 iris::wsi::PlatformWindow::Create(gsl::czstring<> title, Offset2D offset,
                                   Extent2D extent, Options const& options,
                                   int display) noexcept {
@@ -19,7 +19,7 @@ iris::wsi::PlatformWindow::Create(gsl::czstring<> title, Offset2D offset,
                                 options, display)) {
     window.pImpl_ = std::move(*pImpl);
   } else {
-    return tl::unexpected(pImpl.error());
+    return unexpected(pImpl.error());
   }
 
   return std::move(window);

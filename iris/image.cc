@@ -7,7 +7,7 @@
 #include "renderer.h"
 #include "renderer_private.h"
 
-tl::expected<void, std::system_error>
+iris::expected<void, std::system_error>
 iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                       Image image, VkImageLayout oldLayout,
                       VkImageLayout newLayout, std::uint32_t mipLevels,
@@ -45,7 +45,7 @@ iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
     dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kImageTransitionFailed, "Not implemented"));
   }
 
@@ -54,7 +54,7 @@ iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   SetImageLayout(commandBuffer, image, srcStage, dstStage, oldLayout, newLayout,
@@ -64,14 +64,14 @@ iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
         Renderer::EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
       !result) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   IRIS_LOG_LEAVE();
   return {};
 } // iris::TransitionImage
 
-tl::expected<iris::Image, std::system_error>
+iris::expected<iris::Image, std::system_error>
 iris::AllocateImage(VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
                     std::uint32_t arrayLayers,
                     VkSampleCountFlagBits sampleCount,
@@ -104,7 +104,7 @@ iris::AllocateImage(VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
                        &image.image, &image.allocation, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    tl::unexpected(
+    unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
@@ -115,7 +115,7 @@ iris::AllocateImage(VkFormat format, VkExtent2D extent, std::uint32_t mipLevels,
   return image;
 } // iris::AllocateImage
 
-tl::expected<VkImageView, std::system_error>
+iris::expected<VkImageView, std::system_error>
 iris::CreateImageView(Image image, VkImageViewType type, VkFormat format,
                       VkImageSubresourceRange subresourceRange) noexcept {
   IRIS_LOG_ENTER();
@@ -139,7 +139,7 @@ iris::CreateImageView(Image image, VkImageViewType type, VkFormat format,
         vkCreateImageView(Renderer::sDevice, &imageViewCI, nullptr, &imageView);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    tl::unexpected(
+    unexpected(
       std::system_error(make_error_code(result), "Cannot create image view"));
   }
 
@@ -149,7 +149,7 @@ iris::CreateImageView(Image image, VkImageViewType type, VkFormat format,
   return imageView;
 } // iris::CreateImageView
 
-tl::expected<iris::Image, std::system_error> iris::CreateImage(
+iris::expected<iris::Image, std::system_error> iris::CreateImage(
   VkCommandPool commandPool, VkQueue queue, VkFence fence, VkFormat format,
   VkExtent2D extent, VkImageUsageFlags imageUsage, VmaMemoryUsage memoryUsage,
   gsl::not_null<std::byte*> pixels, std::uint32_t bytesPerPixel) noexcept {
@@ -175,7 +175,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
 
   default:
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(std::make_error_code(std::errc::invalid_argument),
                         "Unsupported texture format"));
   }
@@ -185,9 +185,9 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
   if (!staging) {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(staging.error().code(),
-                                            "Cannot create staging buffer: "s +
-                                              staging.error().what()));
+    return unexpected(std::system_error(staging.error().code(),
+                                        "Cannot create staging buffer: "s +
+                                          staging.error().what()));
   }
 
   if (auto ptr = staging->Map<std::byte*>()) {
@@ -196,7 +196,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
   }
 
@@ -223,7 +223,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
                        &image.image, &image.allocation, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
@@ -231,7 +231,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
                                     VK_IMAGE_LAYOUT_UNDEFINED,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
       !result) {
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   VkCommandBuffer commandBuffer;
@@ -239,7 +239,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   VkBufferImageCopy region = {};
@@ -257,7 +257,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
         Renderer::EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
       !result) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   if (auto result = TransitionImage(
@@ -267,7 +267,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
            : VK_IMAGE_LAYOUT_GENERAL),
         1, 1);
       !result) {
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   DestroyBuffer(*staging);
@@ -279,7 +279,7 @@ tl::expected<iris::Image, std::system_error> iris::CreateImage(
   return image;
 } // iris::CreateImage
 
-tl::expected<iris::Image, std::system_error>
+iris::expected<iris::Image, std::system_error>
 iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                   VkFormat format, gsl::span<VkExtent2D> extents,
                   VkImageUsageFlags imageUsage, VmaMemoryUsage memoryUsage,
@@ -311,7 +311,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
 
   default:
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(std::make_error_code(std::errc::invalid_argument),
                         "Unsupported texture format"));
   }
@@ -321,9 +321,9 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   if (!staging) {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(staging.error().code(),
-                                            "Cannot create staging buffer: "s +
-                                              staging.error().what()));
+    return unexpected(std::system_error(staging.error().code(),
+                                        "Cannot create staging buffer: "s +
+                                          staging.error().what()));
   }
 
   if (auto ptr = staging->Map<std::byte*>()) {
@@ -332,7 +332,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       ptr.error().code(), "Cannot map staging buffer: "s + ptr.error().what()));
   }
 
@@ -359,7 +359,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
                        &image.image, &image.allocation, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create image"));
   }
 
@@ -367,7 +367,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
         commandPool, queue, fence, image, VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageCI.mipLevels, 1);
       !result) {
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   VkCommandBuffer commandBuffer;
@@ -375,7 +375,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   VkBufferImageCopy region = {};
@@ -409,7 +409,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
         Renderer::EndOneTimeSubmit(commandBuffer, commandPool, queue, fence);
       !result) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   if (auto result = TransitionImage(
@@ -419,7 +419,7 @@ iris::CreateImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
            : VK_IMAGE_LAYOUT_GENERAL),
         imageCI.mipLevels, 1);
       !result) {
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   DestroyBuffer(*staging);

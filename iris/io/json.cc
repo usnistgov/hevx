@@ -1,7 +1,6 @@
 #include "io/json.h"
 #include "config.h"
 #include "error.h"
-#include "expected.hpp"
 #include "io/read_file.h"
 #if PLATFORM_COMPILER_MSVC
 #pragma warning(push)
@@ -20,6 +19,7 @@
 #include "logging.h"
 #include "protos.h"
 #include "renderer.h"
+#include "types.h"
 #include <string>
 #include <vector>
 

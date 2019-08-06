@@ -8,6 +8,7 @@
 #include "iris/config.h"
 
 #include "iris/image.h"
+#include "iris/types.h"
 #include "iris/vulkan.h"
 #include "iris/wsi/platform_window.h"
 
@@ -21,7 +22,6 @@
 #endif
 
 #include "absl/container/fixed_array.h"
-#include "expected.hpp"
 #include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
 #include "imgui.h"
@@ -171,13 +171,13 @@ struct Window {
 
 namespace Renderer {
 
-[[nodiscard]] tl::expected<Window, std::exception>
+[[nodiscard]] expected<Window, std::exception>
 CreateWindow(gsl::czstring<> title, wsi::Offset2D offset, wsi::Extent2D extent,
              glm::vec4 const& clearColor, Window::Options const& options,
              int display, std::uint32_t numFrames) noexcept;
 
-tl::expected<void, std::system_error>
-ResizeWindow(Window& window, VkExtent2D newExtent) noexcept;
+expected<void, std::system_error> ResizeWindow(Window& window,
+                                               VkExtent2D newExtent) noexcept;
 
 } // namespace Renderer
 

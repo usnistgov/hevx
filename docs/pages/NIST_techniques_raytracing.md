@@ -22,9 +22,9 @@ TODO
 
 This extension deifnes two new attribute semantic properties for primitives:
 
-| Name   | Accessor Type | Component Type | Description               |
-|--------|---------------|----------------|---------------------------|
-| `AABB` | `"VEC3"`      | `5126` (FLOAT) | Axis Aligned Bounding Box |
+| Name    | Accessor Type | Component Type | Description               |
+|---------|---------------|----------------|---------------------------|
+| `_AABB` | `"VEC3"`      | `5126` (FLOAT) | Axis Aligned Bounding Box |
 
 The Axis Aligned Bounding Box is a sequential set of two `VEC3` values defining
 the minimum and maximum corners of the AABB respectively.
@@ -85,9 +85,9 @@ property with the following additional values.
 
 ### JSON Schema
 
-| Name   | Accessor Type | Component Type | Description               |
-|--------|---------------|----------------|---------------------------|
-| `AABB` | `"VEC3"`      | `5126` (FLOAT) | Axis Aligned Bounding Box |
+| Name    | Accessor Type | Component Type | Description               |
+|---------|---------------|----------------|---------------------------|
+| `_AABB` | `"VEC3"`      | `5126` (FLOAT) | Axis Aligned Bounding Box |
 
 #### shader.type
 

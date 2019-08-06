@@ -6,7 +6,7 @@
 #include "logging.h"
 #include <string>
 
-tl::expected<VkInstance, std::system_error> iris::vk::CreateInstance(
+iris::expected<VkInstance, std::system_error> iris::vk::CreateInstance(
   gsl::czstring<> appName, std::uint32_t appVersion,
   gsl::span<gsl::czstring<>> extensionNames,
   gsl::span<gsl::czstring<>> layerNames,
@@ -47,7 +47,7 @@ tl::expected<VkInstance, std::system_error> iris::vk::CreateInstance(
   if (auto result = vkCreateInstance(&ci, nullptr, &instance);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create instance"));
   }
 
@@ -56,7 +56,7 @@ tl::expected<VkInstance, std::system_error> iris::vk::CreateInstance(
   return instance;
 } // iris::vk::CreateInstance
 
-tl::expected<VkDebugUtilsMessengerEXT, std::system_error>
+iris::expected<VkDebugUtilsMessengerEXT, std::system_error>
 iris::vk::CreateDebugUtilsMessenger(
   VkInstance instance,
   PFN_vkDebugUtilsMessengerCallbackEXT debugUtilsMessengerCallback) noexcept {
@@ -79,8 +79,8 @@ iris::vk::CreateDebugUtilsMessenger(
         vkCreateDebugUtilsMessengerEXT(instance, &dumci, nullptr, &messenger);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot create debug utils messenger"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create debug utils messenger"));
   }
 
   Ensures(messenger != VK_NULL_HANDLE);
@@ -178,7 +178,7 @@ bool iris::vk::ComparePhysicalDeviceFeatures(
   return result;
 } // iris::vk::ComparePhysicalDeviceFeatures
 
-tl::expected<std::uint32_t, std::system_error>
+iris::expected<std::uint32_t, std::system_error>
 iris::vk::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
                               VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
@@ -214,7 +214,7 @@ iris::vk::GetQueueFamilyIndex(VkPhysicalDevice physicalDevice,
   return UINT32_MAX;
 } // iris::vk::GetQueueFamilyIndex
 
-tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
+iris::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
   VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2 features,
   gsl::span<gsl::czstring<>> extensionNames, VkQueueFlags queueFlags) noexcept {
   IRIS_LOG_ENTER();
@@ -258,7 +258,7 @@ tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
         physicalDevice, nullptr, &numExtensionProperties, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result),
       "Cannot enumerate physical device extension properties"));
   }
@@ -271,7 +271,7 @@ tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
         extensionProperties.data());
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result),
       "Cannot enumerate physical device extension properties"));
   }
@@ -280,7 +280,7 @@ tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
   if (auto result = GetQueueFamilyIndex(physicalDevice, queueFlags)) {
     queueFamilyIndex = std::move(*result);
   } else {
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   //
@@ -320,7 +320,7 @@ tl::expected<bool, std::system_error> iris::vk::IsPhysicalDeviceGood(
   return true;
 } // iris::vk::IsPhysicalDeviceGood
 
-tl::expected<void, std::system_error>
+iris::expected<void, std::system_error>
 iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
                              char const* indent) noexcept {
   IRIS_LOG_ENTER();
@@ -369,7 +369,7 @@ iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
         physicalDevice, nullptr, &numExtensionProperties, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result),
       "Cannot enumerate physical device extension properties"));
   }
@@ -382,7 +382,7 @@ iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
         extensionProperties.data());
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result),
       "Cannot enumerate physical device extension properties"));
   }
@@ -396,7 +396,7 @@ iris::vk::DumpPhysicalDevice(VkPhysicalDevice physicalDevice,
   return {};
 } // iris::vk::DumpPhysicalDevice
 
-tl::expected<void, std::system_error>
+iris::expected<void, std::system_error>
 iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
   IRIS_LOG_ENTER();
   Expects(instance != VK_NULL_HANDLE);
@@ -407,8 +407,8 @@ iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
         vkEnumeratePhysicalDevices(instance, &numPhysicalDevices, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot enumerate physical devices"));
   }
 
   // Get the physical devices present on the system
@@ -417,8 +417,8 @@ iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
                                                physicalDevices.data());
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot enumerate physical devices"));
   }
 
   // Iterate through each physical device to find one that we can use.
@@ -431,7 +431,7 @@ iris::vk::DumpPhysicalDevices(VkInstance instance) noexcept {
   return {};
 } // iris::vk::DumpPhysicalDevices
 
-tl::expected<VkPhysicalDevice, std::system_error>
+iris::expected<VkPhysicalDevice, std::system_error>
 iris::vk::ChoosePhysicalDevice(
   VkInstance instance, VkPhysicalDeviceFeatures2 features,
   gsl::span<gsl::czstring<>> requiredExtensionNames,
@@ -446,8 +446,8 @@ iris::vk::ChoosePhysicalDevice(
         vkEnumeratePhysicalDevices(instance, &numPhysicalDevices, nullptr);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot enumerate physical devices"));
   }
 
   // Get the physical devices present on the system
@@ -456,8 +456,8 @@ iris::vk::ChoosePhysicalDevice(
                                                physicalDevices.data());
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      make_error_code(result), "Cannot enumerate physical devices"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot enumerate physical devices"));
   }
 
   /////
@@ -493,12 +493,12 @@ iris::vk::ChoosePhysicalDevice(
     return candidatePhysicalDevices[0];
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kNoPhysicalDevice, "No suitable physical device found"));
+    return unexpected(std::system_error(Error::kNoPhysicalDevice,
+                                        "No suitable physical device found"));
   }
 } // iris::vk::ChoosePhysicalDevice
 
-tl::expected<std::pair<VkDevice, std::uint32_t>, std::system_error>
+iris::expected<std::pair<VkDevice, std::uint32_t>, std::system_error>
 iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
                        VkPhysicalDeviceFeatures2 physicalDeviceFeatures,
                        gsl::span<gsl::czstring<>> extensionNames,
@@ -547,7 +547,7 @@ iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
   if (auto result = vkCreateDevice(physicalDevice, &ci, nullptr, &device);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create device"));
   }
 
@@ -556,7 +556,7 @@ iris::vk::CreateDevice(VkPhysicalDevice physicalDevice,
   return std::make_pair(device, queueCreateInfos[0].queueCount);
 } // iris::vk::CreateDevice
 
-tl::expected<VmaAllocator, std::system_error>
+iris::expected<VmaAllocator, std::system_error>
 iris::vk::CreateAllocator(VkPhysicalDevice physicalDevice,
                           VkDevice device) noexcept {
   IRIS_LOG_ENTER();
@@ -572,7 +572,7 @@ iris::vk::CreateAllocator(VkPhysicalDevice physicalDevice,
   if (auto result = vmaCreateAllocator(&allocatorInfo, &allocator);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create allocator"));
   }
 
@@ -581,14 +581,14 @@ iris::vk::CreateAllocator(VkPhysicalDevice physicalDevice,
   return allocator;
 } // iris::vk::CreateAllocator
 
-tl::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>, std::system_error>
+iris::expected<absl::InlinedVector<VkSurfaceFormatKHR, 128>, std::system_error>
 iris::vk::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                           VkSurfaceKHR surface) {
   std::uint32_t numSurfaceFormats;
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
         physicalDevice, surface, &numSurfaceFormats, nullptr);
       result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result), "Cannot get physical device surface formats"));
   }
 
@@ -597,7 +597,7 @@ iris::vk::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
         physicalDevice, surface, &numSurfaceFormats, surfaceFormats.data());
       result != VK_SUCCESS) {
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       make_error_code(result), "Cannot get physical device surface formats"));
   }
 

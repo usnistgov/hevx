@@ -73,7 +73,7 @@ layout(location = 0) in vec2 fragCoord;
 layout(location = 0) out vec4 fragColor;
 )";
 
-tl::expected<iris::Renderer::Component::Renderable, std::system_error>
+expected<iris::Renderer::Component::Renderable, std::system_error>
 CreateRenderable(std::string_view code) {
   IRIS_LOG_ENTER();
   absl::FixedArray<Shader> shaders(2);
@@ -83,7 +83,7 @@ CreateRenderable(std::string_view code) {
     shaders[0] = std::move(*vs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(vs.error());
+    return unexpected(vs.error());
   }
 
   Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shaders[0].module,
@@ -101,7 +101,7 @@ void main() {
     shaders[1] = std::move(*fs);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(fs.error());
+    return unexpected(fs.error());
   }
 
   Renderer::NameObject(VK_OBJECT_TYPE_SHADER_MODULE, shaders[1].module,
@@ -162,7 +162,7 @@ void main() {
     material.pipeline = std::move(*pipe);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(pipe.error());
+    return unexpected(pipe.error());
   }
 
   auto materialID = Renderer::AddMaterial(material);
@@ -260,7 +260,7 @@ std::string GetCode(web::http::uri const& uri) {
   return code;
 } // GetCode
 
-tl::expected<Renderer::Component::Renderable, std::system_error>
+expected<Renderer::Component::Renderable, std::system_error>
 LoadFile(web::http::uri const& uri) {
 #if PLATFORM_WINDOWS
   std::filesystem::path const path = wstring_to_string(uri.path());
@@ -273,7 +273,7 @@ LoadFile(web::http::uri const& uri) {
     code = std::string(reinterpret_cast<char*>(bytes->data()), bytes->size());
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(bytes.error());
+    return unexpected(bytes.error());
   }
 
   IRIS_LOG_TRACE("creating renderable");
@@ -282,11 +282,11 @@ LoadFile(web::http::uri const& uri) {
     return std::move(*r);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(r.error());
+    return unexpected(r.error());
   }
 } // LoadFile
 
-tl::expected<Renderer::Component::Renderable, std::system_error> static LoadWeb(
+expected<Renderer::Component::Renderable, std::system_error> static LoadWeb(
   web::http::uri const& uri) {
   IRIS_LOG_ENTER();
 
@@ -297,13 +297,12 @@ tl::expected<Renderer::Component::Renderable, std::system_error> static LoadWeb(
 #if PLATFORM_WINDOWS
   if (id == std::wstring::npos) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
-      Error::kURIInvalid, wstring_to_string(uri.to_string())));
+    return unexpected(std::system_error(Error::kURIInvalid,
+                                        wstring_to_string(uri.to_string())));
 #else
   if (id == std::string::npos) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
-      std::system_error(Error::kURIInvalid, uri.to_string()));
+    return unexpected(std::system_error(Error::kURIInvalid, uri.to_string()));
 #endif
   }
 
@@ -327,7 +326,7 @@ tl::expected<Renderer::Component::Renderable, std::system_error> static LoadWeb(
     return std::move(*r);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(r.error());
+    return unexpected(r.error());
   }
 } // LoadWeb
 
@@ -381,7 +380,7 @@ private:
 
 } // namespace iris::io
 
-tl::expected<iris::Renderer::Component::Renderable, std::system_error>
+iris::expected<iris::Renderer::Component::Renderable, std::system_error>
 iris::io::LoadShaderToy(std::string const& url) {
   IRIS_LOG_ENTER();
 #if PLATFORM_WINDOWS
@@ -396,7 +395,6 @@ iris::io::LoadShaderToy(std::string const& url) {
              uri.scheme() == _XPLATSTR("https")) {
     return LoadWeb(uri);
   } else {
-    return tl::unexpected(
-      std::system_error(Error::kURIInvalid, "unknown scheme"));
+    return unexpected(std::system_error(Error::kURIInvalid, "unknown scheme"));
   }
 } // iris::io::LoadShaderToy

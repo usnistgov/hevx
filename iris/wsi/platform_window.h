@@ -4,7 +4,8 @@
  * \brief \ref iris::wsi::PlatformWindow declaration.
  */
 
-#include "expected.hpp"
+#include "iris/types.h"
+
 #include "glm/vec2.hpp"
 #include "gsl/gsl"
 #include <cstdint>
@@ -117,7 +118,7 @@ public:
   \param[in] options the Options describing how to create the window.
   \return a std::expected of either the PlatformWindow or a std::exception.
   */
-  static tl::expected<PlatformWindow, std::exception>
+  static expected<PlatformWindow, std::exception>
   Create(gsl::czstring<> title, Offset2D offset, Extent2D extent,
          Options const& options, int display) noexcept;
 

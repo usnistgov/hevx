@@ -19,7 +19,6 @@
 #pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
-#include "expected.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/vec4.hpp"
 #include "gsl/gsl"
@@ -102,7 +101,7 @@ enum class Features {
 
 \return void or a std::system_error indicating the reason for failure.
 */
-[[nodiscard]] tl::expected<void, std::system_error>
+[[nodiscard]] expected<void, std::system_error>
 Initialize(gsl::czstring<> appName, Options const& options,
            spdlog::sinks_init_list logSinks,
            std::uint32_t appVersion = 0) noexcept;
@@ -159,8 +158,7 @@ using MaterialID = ComponentID<struct MaterialIDTab>;
 
 MaterialID AddMaterial(Component::Material material) noexcept;
 
-tl::expected<void, std::system_error>
-RemoveMaterial(MaterialID const& id) noexcept;
+expected<void, std::system_error> RemoveMaterial(MaterialID const& id) noexcept;
 
 using RenderableID = ComponentID<struct RenderableIDTag>;
 
@@ -170,22 +168,21 @@ using RenderableID = ComponentID<struct RenderableIDTag>;
 \param[in] renderable the Component::Renderable to add.
 \return the \ref RenderableID of the added renderable.
 */
-RenderableID
-AddRenderable(Component::Renderable renderable) noexcept;
+RenderableID AddRenderable(Component::Renderable renderable) noexcept;
 
 /*!
 \brief Remove a \ref Component::Renderable by its \ref RenderableID.
 
 \param[in] id the RenderableID to remove.
 */
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 RemoveRenderable(RenderableID const& id) noexcept;
 
 using TraceableID = ComponentID<struct TracableIDTag>;
 
 TraceableID AddTraceable(Component::Traceable traceable) noexcept;
 
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 RemoveTraceable(TraceableID const& id) noexcept;
 
 struct CommandQueue {
@@ -196,19 +193,19 @@ struct CommandQueue {
   VkFence submitFence{VK_NULL_HANDLE};
 }; // struct CommandQueue
 
-tl::expected<CommandQueue, std::system_error> AcquireCommandQueue(
+expected<CommandQueue, std::system_error> AcquireCommandQueue(
   std::chrono::milliseconds timeout = std::chrono::milliseconds{
     INT64_MAX}) noexcept;
 
-tl::expected<void, std::system_error> ReleaseCommandQueue(
+expected<void, std::system_error> ReleaseCommandQueue(
   CommandQueue& queue,
   std::chrono::milliseconds timeout = std::chrono::milliseconds{
     INT64_MAX}) noexcept;
 
-[[nodiscard]] tl::expected<VkCommandBuffer, std::system_error>
+[[nodiscard]] expected<VkCommandBuffer, std::system_error>
 BeginOneTimeSubmit(VkCommandPool commandPool) noexcept;
 
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 EndOneTimeSubmit(VkCommandBuffer commandBuffer, VkCommandPool commandPool,
                  VkQueue queue, VkFence fence) noexcept;
 
@@ -223,7 +220,7 @@ operation failed to be enqueued.
 \return std::system_error indicating if the async operation failed to be
 enqueued.
 */
-[[nodiscard]] tl::expected<void, std::system_error>
+[[nodiscard]] expected<void, std::system_error>
 LoadFile(std::filesystem::path const& path) noexcept;
 
 /*!
@@ -233,7 +230,7 @@ This is a synchronous execution step and not thread safe.
 \param[in] control the \ref iris::Control::Control message.
 \return std::system_error> indicating if the message failed.
 */
-tl::expected<void, std::system_error>
+expected<void, std::system_error>
 ProcessControlMessage(iris::Control::Control const& control) noexcept;
 
 namespace Nav {

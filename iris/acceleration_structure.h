@@ -5,16 +5,16 @@
 
 #include "iris/buffer.h"
 #include "iris/shader.h"
+#include "iris/types.h"
 #include "iris/vulkan.h"
 
 #if PLATFORM_COMPILER_MSVC
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
-#pragma warning(disable: ALL_CPPCORECHECK_WARNINGS)
+#pragma warning(disable : ALL_CODE_ANALYSIS_WARNINGS)
+#pragma warning(disable : ALL_CPPCORECHECK_WARNINGS)
 #endif
 
-#include "expected.hpp"
 #include "gsl/gsl"
 #include <cstdint>
 #include <system_error>
@@ -54,19 +54,19 @@ struct GeometryInstance {
   }
 }; // GeometryInstance
 
-[[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
+[[nodiscard]] expected<AccelerationStructure, std::system_error>
 CreateAccelerationStructure(std::uint32_t instanceCount,
                             VkDeviceSize compactedSize) noexcept;
 
-[[nodiscard]] tl::expected<AccelerationStructure, std::system_error>
+[[nodiscard]] expected<AccelerationStructure, std::system_error>
 CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
                             VkDeviceSize compactedSize) noexcept;
 
-[[nodiscard]] tl::expected<void, std::system_error> BuildAccelerationStructure(
+[[nodiscard]] expected<void, std::system_error> BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<GeometryInstance> instances) noexcept;
 
-[[nodiscard]] tl::expected<void, std::system_error> BuildAccelerationStructure(
+[[nodiscard]] expected<void, std::system_error> BuildAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept;
 
@@ -75,4 +75,3 @@ void DestroyAccelerationStructure(AccelerationStructure structure) noexcept;
 } // namespace iris
 
 #endif // HEV_IRIS_ACCELERATION_STRUCTURE_H_
-

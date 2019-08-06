@@ -24,7 +24,7 @@ extern absl::InlinedVector<VkQueue, 16> sCommandQueues;
 extern absl::InlinedVector<VkCommandPool, 16> sCommandPools;
 extern absl::InlinedVector<VkFence, 16> sCommandFences;
 
-}
+} // namespace iris::Renderer
 
 iris::Window::Window(Window&& other) noexcept
   : title(std::move(other.title))
@@ -61,7 +61,7 @@ iris::Window::Window(Window&& other) noexcept
     [this](wsi::Extent2D const&) { this->resized = true; });
 } // Window::Window
 
-tl::expected<iris::Window, std::exception>
+iris::expected<iris::Window, std::exception>
 iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                              wsi::Extent2D extent, glm::vec4 const& clearColor,
                              Window::Options const& options, int display,
@@ -90,7 +90,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     window.platformWindow = std::move(*win);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(win.error());
+    return unexpected(win.error());
   }
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
@@ -103,7 +103,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         vkCreateXcbSurfaceKHR(sInstance, &sci, nullptr, &window.surface);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create surface"));
   }
 
@@ -117,7 +117,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         vkCreateWin32SurfaceKHR(sInstance, &sci, nullptr, &window.surface);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create surface"));
   }
 
@@ -131,14 +131,14 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
         sPhysicalDevice, sQueueFamilyIndex, window.surface, &surfaceSupported);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result),
                         "Cannot check for physical device surface support"));
   }
 
   if (surfaceSupported == VK_FALSE) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kSurfaceNotSupported,
                         "Surface is not supported by physical device."));
   }
@@ -160,12 +160,12 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     }
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(surfaceFormats.error());
+    return unexpected(surfaceFormats.error());
   }
 
   if (!formatSupported) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kSurfaceNotSupported,
                         "Surface format is not supported by physical device"));
   }
@@ -188,7 +188,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                                         &frame.imageAvailable);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
+      return unexpected(std::system_error(
         make_error_code(result), "Cannot create image available semaphore"));
     }
 
@@ -199,8 +199,8 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                                           &frame.commandPool);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot create command pool"));
+      return unexpected(std::system_error(make_error_code(result),
+                                          "Cannot create command pool"));
     }
 
     NameObject(VK_OBJECT_TYPE_COMMAND_POOL, frame.commandPool,
@@ -212,8 +212,8 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
                                                &frame.commandBuffer);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot allocate command buffer"));
+      return unexpected(std::system_error(make_error_code(result),
+                                          "Cannot allocate command buffer"));
     }
 
     NameObject(VK_OBJECT_TYPE_COMMAND_BUFFER, frame.commandBuffer,
@@ -223,7 +223,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   if (auto result = ResizeWindow(window, {extent.width, extent.height});
       !result) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   window.uiContext.reset(ImGui::CreateContext());
@@ -256,7 +256,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     window.uiFontTexture = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(img.error());
+    return unexpected(img.error());
   }
 
   if (auto view = CreateImageView(window.uiFontTexture, VK_IMAGE_VIEW_TYPE_2D,
@@ -266,7 +266,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   } else {
     IRIS_LOG_LEAVE();
     DestroyImage(window.uiFontTexture);
-    return tl::unexpected(view.error());
+    return unexpected(view.error());
   }
 
   NameObject(VK_OBJECT_TYPE_IMAGE, window.uiFontTexture.image,
@@ -298,7 +298,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
     IRIS_LOG_LEAVE();
     vkDestroyImageView(sDevice, window.uiFontTextureView, nullptr);
     DestroyImage(window.uiFontTexture);
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create sampler"));
   }
 
@@ -351,7 +351,7 @@ iris::Renderer::CreateWindow(gsl::czstring<> title, wsi::Offset2D offset,
   return std::move(window);
 } // iris::Renderer::CreateWindow
 
-tl::expected<void, std::system_error>
+iris::expected<void, std::system_error>
 iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   IRIS_LOG_ENTER();
   Expects(sPhysicalDevice != VK_NULL_HANDLE);
@@ -371,7 +371,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
         sPhysicalDevice, &surfaceInfo, &surfaceCapabilities);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result),
                         "Cannot get physical device surface capabilities"));
   }
@@ -433,7 +433,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
         vkCreateSwapchainKHR(sDevice, &swapchainCI, nullptr, &newSwapchain);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(make_error_code(result), "Cannot create swapchain"));
   }
 
@@ -443,14 +443,14 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       result != VK_SUCCESS) {
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot get swapchain images"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot get swapchain images"));
   }
 
   if (numSwapchainImages != window.colorImages.size()) {
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kWindowResizeFailed,
       "New number of swapchain images not equal to old number"));
   }
@@ -458,7 +458,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   if (numSwapchainImages != window.frames.size()) {
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(
+    return unexpected(std::system_error(
       Error::kWindowResizeFailed,
       "New number of swapchain images not equal to number of frames"));
   }
@@ -469,8 +469,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
       result != VK_SUCCESS) {
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot get swapchain images"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot get swapchain images"));
   }
 
   VkImageViewCreateInfo imageViewCI = {};
@@ -489,8 +489,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
         result != VK_SUCCESS) {
       vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(
-        make_error_code(result), "Cannot get swapchain image view"));
+      return unexpected(std::system_error(make_error_code(result),
+                                          "Cannot get swapchain image view"));
     }
   }
 
@@ -506,7 +506,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(img.error());
+    return unexpected(img.error());
   }
 
   if (auto view = CreateImageView(newDepthStencilImage, VK_IMAGE_VIEW_TYPE_2D,
@@ -517,7 +517,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(view.error());
+    return unexpected(view.error());
   }
 
   Image newColorTarget;
@@ -534,7 +534,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(img.error());
+    return unexpected(img.error());
   }
 
   if (auto view = CreateImageView(newColorTarget, VK_IMAGE_VIEW_TYPE_2D,
@@ -548,7 +548,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(view.error());
+    return unexpected(view.error());
   }
 
   Image newDepthStencilTarget;
@@ -567,7 +567,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(img.error());
+    return unexpected(img.error());
   }
 
   if (auto view = CreateImageView(newDepthStencilTarget, VK_IMAGE_VIEW_TYPE_2D,
@@ -583,7 +583,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(view.error());
+    return unexpected(view.error());
   }
 
   VkCommandBuffer commandBuffer;
@@ -591,7 +591,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     commandBuffer = *cb;
   } else {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(cb.error());
+    return unexpected(cb.error());
   }
 
   for (auto&& image : newColorImages) {
@@ -626,7 +626,7 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
     for (auto&& v : newColorImageViews) vkDestroyImageView(sDevice, v, nullptr);
     vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(result.error());
+    return unexpected(result.error());
   }
 
   absl::FixedArray<VkImageView> attachments(sNumRenderPassAttachments);
@@ -662,8 +662,8 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
         vkDestroyImageView(sDevice, v, nullptr);
       vkDestroySwapchainKHR(sDevice, newSwapchain, nullptr);
       IRIS_LOG_LEAVE();
-      return tl::unexpected(std::system_error(make_error_code(result),
-                                              "Cannot create framebuffer"));
+      return unexpected(std::system_error(make_error_code(result),
+                                          "Cannot create framebuffer"));
     }
   }
 
@@ -744,4 +744,3 @@ iris::Renderer::ResizeWindow(Window& window, VkExtent2D newExtent) noexcept {
   IRIS_LOG_LEAVE();
   return {};
 } // iris::Renderer::ResizeWindow
-

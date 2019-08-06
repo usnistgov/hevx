@@ -211,7 +211,7 @@ private:
   }
 }; // class DirStackIncluder
 
-[[nodiscard]] static tl::expected<std::vector<std::uint32_t>, std::string>
+[[nodiscard]] static expected<std::vector<std::uint32_t>, std::string>
 CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
               std::filesystem::path const& path,
               gsl::span<std::string> macroDefinitions [[maybe_unused]],
@@ -274,14 +274,14 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
 
   if (!shader.parse(&DefaultTBuiltInResource, 1, false,
                     EShMessages::EShMsgDefault, includer)) {
-    return tl::unexpected(std::string(shader.getInfoLog()));
+    return unexpected(std::string(shader.getInfoLog()));
   }
 
   glslang::TProgram program;
   program.addShader(&shader);
 
   if (!program.link(EShMessages::EShMsgDefault)) {
-    return tl::unexpected(std::string(program.getInfoLog()));
+    return unexpected(std::string(program.getInfoLog()));
   }
 
   if (auto glsl = program.getIntermediate(lang)) {
@@ -300,14 +300,14 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
     IRIS_LOG_LEAVE();
     return code;
   } else {
-    return tl::unexpected(std::string(
+    return unexpected(std::string(
       "cannot get glsl intermediate representation of compiled shader"));
   }
 } // CompileShader
 
 } // namespace iris
 
-tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
+iris::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
   std::string_view source, VkShaderStageFlagBits stage,
   gsl::span<std::string> macroDefinitions) noexcept {
   IRIS_LOG_ENTER();
@@ -321,7 +321,7 @@ tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
     CompileShader(source, shader.stage, "<inline>", macroDefinitions, "main");
   if (!code) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kShaderCompileFailed, code.error()));
   }
 
@@ -335,8 +335,8 @@ tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
                                          nullptr, &shader.module);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create shader module"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create shader module"));
   }
 
   Ensures(shader.module != VK_NULL_HANDLE);
@@ -345,7 +345,7 @@ tl::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
   return shader;
 } // iris::CompileShaderFromSource
 
-tl::expected<iris::Shader, std::system_error>
+iris::expected<iris::Shader, std::system_error>
 iris::LoadShaderFromFile(std::filesystem::path const& path,
                          VkShaderStageFlagBits stage,
                          gsl::span<std::string> macroDefinitions) noexcept {
@@ -357,7 +357,7 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
 
   if (!bytes) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(bytes.error());
+    return unexpected(bytes.error());
   }
 
   Shader shader;
@@ -368,7 +368,7 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
                   shader.stage, path, macroDefinitions, "main");
   if (!code) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(
+    return unexpected(
       std::system_error(Error::kShaderCompileFailed, code.error()));
   }
 
@@ -382,8 +382,8 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
                                          nullptr, &shader.module);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create shader module"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create shader module"));
   }
 
   Ensures(shader.module != VK_NULL_HANDLE);
@@ -391,4 +391,3 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
   IRIS_LOG_LEAVE();
   return shader;
 } // iris::LoadShaderFromFile
-

@@ -6,7 +6,7 @@
 #include "logging.h"
 #include "renderer_private.h"
 
-tl::expected<iris::Pipeline, std::system_error>
+iris::expected<iris::Pipeline, std::system_error>
 iris::CreateRasterizationPipeline(
   gsl::span<const Shader> shaders,
   gsl::span<const VkVertexInputBindingDescription>
@@ -53,8 +53,8 @@ iris::CreateRasterizationPipeline(
                                            nullptr, &pipeline.layout);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create pipeline layout"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create pipeline layout"));
   }
 
   absl::FixedArray<VkPipelineShaderStageCreateInfo> shaderStageCIs(
@@ -119,8 +119,8 @@ iris::CreateRasterizationPipeline(
       result != VK_SUCCESS) {
     vkDestroyPipelineLayout(Renderer::sDevice, pipeline.layout, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create graphics pipeline"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create graphics pipeline"));
   }
 
   Ensures(pipeline.layout != VK_NULL_HANDLE);
@@ -130,7 +130,8 @@ iris::CreateRasterizationPipeline(
   return pipeline;
 } // iris::CreateRasterizationPipeline
 
-tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
+iris::expected<iris::Pipeline, std::system_error>
+iris::CreateRayTracingPipeline(
   gsl::span<const Shader> shaders, gsl::span<const ShaderGroup> groups,
   gsl::span<const VkDescriptorSetLayout> descriptorSetLayouts,
   std::uint32_t maxRecursionDepth) noexcept {
@@ -165,8 +166,8 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
                                            nullptr, &pipeline.layout);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(make_error_code(result),
-                                            "Cannot create pipeline layout"));
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create pipeline layout"));
   }
 
   absl::FixedArray<VkPipelineShaderStageCreateInfo> shaderStageCIs(
@@ -214,8 +215,8 @@ tl::expected<iris::Pipeline, std::system_error> iris::CreateRayTracingPipeline(
       result != VK_SUCCESS) {
     vkDestroyPipelineLayout(Renderer::sDevice, pipeline.layout, nullptr);
     IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(iris::make_error_code(result),
-                                            "Cannot create pipeline"));
+    return unexpected(std::system_error(iris::make_error_code(result),
+                                        "Cannot create pipeline"));
   }
 
   Ensures(pipeline.layout != VK_NULL_HANDLE);
