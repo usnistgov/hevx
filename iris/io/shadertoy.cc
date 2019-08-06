@@ -188,7 +188,13 @@ std::string GetCode(web::http::uri const& uri) {
       IRIS_LOG_TRACE(
         "LoadShaderToy::LoadTask::GetCode: response status_code: {}",
         response.status_code());
-      return response.extract_json();
+      try {
+        return response.extract_json();
+      } catch (std::exception const& e) {
+        IRIS_LOG_ERROR("Error parsing json: {}", e.what());
+        IRIS_LOG_LEAVE();
+        std::terminate();
+      }
     })
     .then([&](web::json::value json) {
       IRIS_LOG_TRACE("parsing code");
