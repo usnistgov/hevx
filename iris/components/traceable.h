@@ -33,6 +33,8 @@ struct Traceable {
 
   VkFence traceCompleteFence{VK_NULL_HANDLE};
 
+  Buffer geometryBuffer{};
+
   VkGeometryNV geometry{};
   bool bottomLevelDirty{true};
   AccelerationStructure bottomLevelAccelerationStructure{};

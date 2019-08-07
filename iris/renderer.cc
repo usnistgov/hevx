@@ -2620,6 +2620,19 @@ iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
     tbb::task* execute() override {
       IRIS_LOG_ENTER();
 
+      if (traceable_.topLevelAccelerationStructure) {
+        DestroyAccelerationStructure(traceable_.topLevelAccelerationStructure);
+      }
+
+      if (traceable_.bottomLevelAccelerationStructure) {
+        DestroyAccelerationStructure(
+          traceable_.bottomLevelAccelerationStructure);
+      }
+
+      if (traceable_.geometryBuffer) {
+        DestroyBuffer(traceable_.geometryBuffer);
+      }
+
       if (traceable_.traceCompleteFence) {
         vkDestroyFence(sDevice, traceable_.traceCompleteFence, nullptr);
       }
@@ -2633,15 +2646,6 @@ iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
       }
 
       if (traceable_.outputImage) DestroyImage(traceable_.outputImage);
-
-      if (traceable_.topLevelAccelerationStructure) {
-        DestroyAccelerationStructure(traceable_.topLevelAccelerationStructure);
-      }
-
-      if (traceable_.bottomLevelAccelerationStructure) {
-        DestroyAccelerationStructure(
-          traceable_.bottomLevelAccelerationStructure);
-      }
 
       if (traceable_.descriptorSet != VK_NULL_HANDLE) {
         vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,

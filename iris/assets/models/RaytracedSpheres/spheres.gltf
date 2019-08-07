@@ -87,7 +87,7 @@
     },
     {
       "bufferView": 0,
-      "byteOffset": 192,
+      "byteOffset": 8,
       "componentType": 5126,
       "count": 2,
       "type": "VEC3"
@@ -96,12 +96,12 @@
   "bufferViews": [
     {
       "buffer": 0,
-      "byteLength": 384
+      "byteLength": 48
     }
   ],
   "buffers": [
     {
-      "byteLength": 384,
+      "byteLength": 48,
       "uri": "spheres.bin"
     }
   ],

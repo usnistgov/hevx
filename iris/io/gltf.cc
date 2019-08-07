@@ -1627,12 +1627,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
 
 template <>
 iris::expected<iris::Renderer::Component::Traceable, std::system_error>
-GLTF::ParseNode(Renderer::CommandQueue commandQueue,
-                std::string const& , glm::mat4x4 const& nodeMat,
+GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
+                glm::mat4x4 const& nodeMat,
                 std::vector<std::vector<std::byte>> const& buffersBytes,
-                std::vector<VkExtent2D> const& ,
-                std::vector<std::vector<std::byte>> ,
-                Node const& , Primitive const& ) {
+                std::vector<VkExtent2D> const&,
+                std::vector<std::vector<std::byte>>, Node const&,
+                Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
   Renderer::Component::Traceable component;
@@ -1689,6 +1689,28 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
     return unexpected(std::system_error(make_error_code(result),
                                         "Cannot allocate descriptor set"));
   }
+
+#if 0
+  // TODO: use the primitive material for the shaders
+  if (primitive.material) {
+    if (auto it = materialsMap.find(*primitive.material);
+        it != materialsMap.end()) {
+      component.material = it->second;
+    } else {
+      if (auto m = CreateMaterial(
+            commandQueue, meshName, component.topology, !texcoords.empty(),
+            vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
+            frontFace, *primitive.material, imagesExtents, imagesBytes)) {
+        auto matID = Renderer::AddMaterial(std::move(*m));
+        materialsMap.insert(std::make_pair(*primitive.material, matID));
+        component.material = matID;
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(m.error());
+      }
+    }
+  }
+#endif
 
   using namespace std::string_literals;
   absl::FixedArray<Shader> shaders(4);
@@ -1747,33 +1769,36 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
     return unexpected(pipe.error());
   }
 
+  // TODO: don't hardcode this
   component.outputImageExtent = VkExtent2D{1000, 1000};
 
   if (auto img =
-        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM, component.outputImageExtent, 1,
-                      1, VK_SAMPLE_COUNT_1_BIT,
+        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM,    // format
+                      component.outputImageExtent, // extent
+                      1,                           // mipLevels
+                      1,                           // arrayLayers
+                      VK_SAMPLE_COUNT_1_BIT,       // sampleCount
                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                      VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // imageUsage
+                      VK_IMAGE_TILING_OPTIMAL,           // imageTiling
+                      VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
+                      )) {
     component.outputImage = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
-    using namespace std::string_literals;
-    return unexpected(
-      std::system_error(img.error().code(),
-                        "cannot create output image: "s + img.error().what()));
+    return unexpected(img.error());
   }
 
-  if (auto view = CreateImageView(component.outputImage, VK_IMAGE_VIEW_TYPE_2D,
-                                  VK_FORMAT_R8G8B8A8_UNORM,
-                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+  if (auto view = CreateImageView(component.outputImage,    // image
+                                  VK_IMAGE_VIEW_TYPE_2D,    // type
+                                  VK_FORMAT_R8G8B8A8_UNORM, // format
+                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+                                  // subResourceRange
+                                  )) {
     component.outputImageView = *view;
   } else {
     IRIS_LOG_LEAVE();
-    using namespace std::string_literals;
-    return unexpected(std::system_error(view.error().code(),
-                                        "cannot create output image view: "s +
-                                          view.error().what()));
+    return unexpected(view.error());
   }
 
   VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
@@ -1807,17 +1832,18 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
                                         "Cannot get shader group handles"));
   }
 
-  if (auto buf = CreateBuffer(
-        commandQueue.commandPool, commandQueue.queue, commandQueue.submitFence,
-        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VMA_MEMORY_USAGE_GPU_ONLY,
-        shaderGroupHandleSize * 3, shaderGroupHandles.data())) {
+  if (auto buf = CreateBuffer(commandQueue.commandPool,           // commandPool
+                              commandQueue.queue,                 // queue
+                              commandQueue.submitFence,           // fence
+                              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
+                              VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
+                              shaderGroupHandleSize * 3,          // size
+                              shaderGroupHandles.data()           // data
+                              )) {
     component.shaderBindingTable = std::move(*buf);
   } else {
-    using namespace std::string_literals;
     IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(
-      buf.error().code(),
-      "Cannot create shader binding table: "s + buf.error().what()));
+    return unexpected(buf.error());
   }
 
   component.missBindingOffset = shaderGroupHandleSize;
@@ -1838,13 +1864,156 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
       std::system_error(make_error_code(result), "Cannot create fence"));
   }
 
-  // TODO: implement:
-  //  CreateSpheres
-  //  CreateGeometry
-  //  CreateBottomLevelAccelerationStructure
-  //  CreateInstance
-  //  CreateTopLevelAccelerationStructure
-  //  WriteDescriptorSets
+  //
+  // TODO: CreateSpheres
+  //
+
+  std::vector<glm::vec3> aabbs;
+
+  for (auto&& [semantic, index] : primitive.attributes) {
+    if (semantic == "_AABB") {
+      IRIS_LOG_TRACE("reading _AABB");
+      if (auto a = gltf::GetAccessorData<glm::vec3>(
+            index, "VEC3", 5126, false, accessors, bufferViews, buffersBytes)) {
+        aabbs = std::move(*a);
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(a.error());
+      }
+    }
+  }
+
+  IRIS_LOG_DEBUG("aabbs.size(): {}", aabbs.size());
+
+  if (auto buf =
+        iris::CreateBuffer(commandQueue.commandPool,           // commandPool
+                           commandQueue.queue,                 // queue
+                           commandQueue.submitFence,           // fence
+                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, // bufferUsage
+                           VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
+                           aabbs.size() * sizeof(glm::vec3),   // size
+                           reinterpret_cast<std::byte*>(aabbs.data()) // data
+                           )) {
+    component.geometryBuffer = std::move(*buf);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(buf.error());
+  }
+
+  //
+  // TODO: CreateGeometry
+  //
+
+  VkGeometryTrianglesNV triangles = {};
+  triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
+
+  VkGeometryAABBNV spheres = {};
+  spheres.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
+  spheres.pNext = nullptr;
+  spheres.aabbData = component.geometryBuffer.buffer;
+  spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(aabbs.size());
+  spheres.stride = sizeof(glm::vec3) * 2;
+  spheres.offset = sizeof(glm::vec3);
+
+  component.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+  component.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  component.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+  component.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  component.geometry.geometry.triangles = triangles;
+  component.geometry.geometry.aabbs = spheres;
+
+  //
+  // TODO: CreateBottomLevelAccelerationStructure
+  //
+
+  if (auto structure = CreateAccelerationStructure(
+    gsl::make_span(&component.geometry, 1), 0)) {
+    component.bottomLevelAccelerationStructure = std::move(*structure);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(structure.error());
+  }
+
+  //
+  // TODO: CreateInstance
+  //
+  component.instance =
+    GeometryInstance(component.bottomLevelAccelerationStructure.handle);
+
+  //
+  // TODO: CreateTopLevelAccelerationStructure
+  //
+
+  if (auto structure = CreateAccelerationStructure(1, 0)) {
+    component.topLevelAccelerationStructure = std::move(*structure);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(structure.error());
+  }
+
+  //
+  // TODO: WriteDescriptorSets
+  //
+
+  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
+  writeDescriptorSetAS.sType =
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
+  writeDescriptorSetAS.accelerationStructureCount = 1;
+  writeDescriptorSetAS.pAccelerationStructures =
+    &component.topLevelAccelerationStructure.structure;
+
+  VkDescriptorImageInfo imageInfo = {};
+  imageInfo.imageView = component.outputImageView;
+  imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+  VkDescriptorBufferInfo bufferInfo = {};
+  bufferInfo.buffer = component.geometryBuffer.buffer;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(glm::vec3) *2;
+
+  absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
+      &writeDescriptorSetAS,                        // pNext
+      component.descriptorSet,                      // dstSet
+      0,                                            // dstBinding
+      0,                                            // dstArrayElement
+      1,                                            // descriptorCount
+      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+      nullptr,                                      // pImageInfo
+      nullptr,                                      // pBufferInfo
+      nullptr                                       // pTexelBufferView
+    },
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+      nullptr,                                // pNext
+      component.descriptorSet,                // dstSet
+      1,                                      // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,       // descriptorType
+      &imageInfo,                             // pImageInfo
+      nullptr,                                // pBufferInfo
+      nullptr                                 // pTexelBufferView
+    },
+    {
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+      nullptr,                                // pNext
+      component.descriptorSet,                // dstSet
+      2,                                      // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
+      nullptr,                                // pImageInfo
+      &bufferInfo,                            // pBufferInfo
+      nullptr                                 // pTexelBufferView
+    },
+  };
+
+  vkUpdateDescriptorSets(
+    iris::Renderer::sDevice,
+    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
+    descriptorWrites.data(), 0, nullptr);
 
   component.modelMatrix = nodeMat;
 
