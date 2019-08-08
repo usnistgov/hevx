@@ -1,5 +1,10 @@
 #version 460 core
 #extension GL_NV_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_int64 : require
+
+#include "prd.glsl"
+#include "rand.glsl"
 
 layout(push_constant) uniform PushConstants {
   vec4 padding0;
@@ -25,38 +30,82 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
 layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
 layout(set = 1, binding = 1, rgba8) uniform image2D outputImage;
 
-layout(location = 0) rayPayloadNV vec4 hitValue;
+struct Ray {
+  vec3 origin;
+  vec3 direction;
+};
+
+vec3 missColor(Ray ray) {
+  const vec3 direction = normalize(ray.direction);
+  // HEV is -Z up, so the Z coordinate of the direction vector runs top-bottom
+  const float t = .5f * (-direction.z + 1.f);
+  return mix(vec3(1.f, 1.f, 1.f), vec3(.5f, .7f, 1.f), t);
+}
+
+layout(location = 0) rayPayloadNV PerRayData prd;
+
+vec3 color(Ray ray) {
+  vec3 attenuation = vec3(1.f, 1.f, 1.f);
+
+  for (int depth = 0; depth < 10; ++depth) {
+    traceNV(scene, // topLevel
+            gl_RayFlagsOpaqueNV, // rayFlags
+            0xF, // cullMask
+            0, // sbtRecordOffset
+            0, // sbtRecordStride
+            0, // missIndex
+            ray.origin.xyz, // origin
+            .001f, // Tmin
+            ray.direction.xyz, // direction
+            1e+38f, // Tmax
+            0 // payload
+    );
+
+    if (prd.scatterEvent == SCATTER_EVENT_RAY_MISSED) {
+      return attenuation * missColor(ray);
+    } else if (prd.scatterEvent == SCATTER_EVENT_RAY_KILLED) {
+      return vec3(0.f, 0.f, 0.f);
+    } else {
+      attenuation *= prd.attenuation;
+      ray.origin = prd.scatterOrigin;
+      ray.direction = prd.scatterDirection;
+    }
+  }
+
+  return vec3(0.f, 0.f, 0.f);
+}
 
 void main() {
+  prd.rngState = gl_LaunchIDNV.x * gl_LaunchIDNV.y;
+
   // gl_LaunchIDNV is the integer coordinates of the pixel in outputImage
   const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(.5f);
-  // gl_LaunchSizeNV is the dimensions of outputImage
-  // uv is the normalized coordinates of the pixel in outputImage
-  const vec2 uv = pixelCenter / vec2(gl_LaunchSizeNV.xy);
-  // ndc ranges from [-1, -1]
-  const vec2 ndc = uv * 2.f - 1.f;
 
-  // EyePosition is the world-space coordinates of the camera.
-  const vec4 origin = EyePosition;
-  // target is the view-space coordinates reverse-projected from ndc
-  const vec4 target = ProjectionMatrixInverse * vec4(ndc.x, ndc.y, 1.f, 1.f);
-  // HEV is -Z up for the ViewMatrix.
-  // direction is the world-space direction of the ray
-  const vec4 direction = ViewMatrixInverse * vec4(normalize(target.xyz), 0.f);
+  vec3 col = vec3(0.f, 0.f, 0.f);
+  for (int s = 0; s < 16; ++s) {
+    // gl_LaunchSizeNV is the dimensions of outputImage
+    // uv is the normalized coordinates of the pixel in outputImage
+    const vec2 uv = (pixelCenter
+                     + vec2(drand48(prd.rngState), drand48(prd.rngState)))
+      / vec2(gl_LaunchSizeNV.xy);
 
-  traceNV(scene,               // topLevel
-          gl_RayFlagsOpaqueNV, // rayFlags
-          0xF,                 // cullMask
-          0,                   // sbtRecordOffset
-          0,                   // sbtRecordStride
-          0,                   // missIndex
-          origin.xyz,          // origin
-          0.f,                 // Tmin
-          direction.xyz,       // direction
-          1e+38f,              // Tmax
-          0                    // payload
-  );
+    // ndc ranges from [-1, -1]
+    const vec2 ndc = uv * 2.f - 1.f;
 
-  imageStore(outputImage, ivec2(gl_LaunchIDNV.xy), hitValue);
+    Ray ray;
+    // EyePosition is the world-space coordinates of the camera.
+    ray.origin = EyePosition.xyz;
+
+    // target is the view-space coordinates reverse-projected from ndc
+    const vec4 target = ProjectionMatrixInverse * vec4(ndc.x, ndc.y, 1.f, 1.f);
+    // HEV is -Z up for the ViewMatrix.
+    // direction is the world-space direction of the ray
+    ray.direction = vec3(ViewMatrixInverse * vec4(normalize(target.xyz), 0.f));
+
+    col += color(ray) * vec3(1.f / 16.f, 1.f / 16.f, 1.f / 16.f);
+  }
+
+  col = sqrt(col);
+  imageStore(outputImage, ivec2(gl_LaunchIDNV.xy), vec4(col, 1.f));
 }
 

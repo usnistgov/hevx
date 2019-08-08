@@ -299,7 +299,7 @@ bool sTraceableAdded{false};
 bool sTopLevelDirty{false};
 AccelerationStructure sTopLevelAccelerationStructure{};
 
-static VkExtent2D sOutputImageExtent{2000, 2000};
+static VkExtent2D sOutputImageExtent{1000, 1000};
 static Image sOutputImage;
 static VkImageView sOutputImageView;
 
@@ -527,14 +527,12 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
 
   VkCommandBufferInheritanceInfo commandBufferII = {};
   commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  //commandBufferII.renderPass = sRenderPass;
   commandBufferII.subpass = 0;
   commandBufferII.framebuffer = VK_NULL_HANDLE;
 
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;// |
-                          //VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
   commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
@@ -1212,8 +1210,8 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
       ImGui::Text("Total Time %.3f s", sTime.count());
-      ImGui::Text("%zu Renderables / %zu Materials", sRenderables.size(),
-                  sMaterials.size());
+      ImGui::Text("%zu Renderables / %zu Materials / %zu Traceables",
+        sRenderables.size(), sMaterials.size(), sTraceables.size());
 
       ImGui::Separator();
       ImGui::BeginGroup();

@@ -132,7 +132,9 @@ static const TBuiltInResource DefaultTBuiltInResource = {
 
 class DirStackIncluder : public glslang::TShader::Includer {
 public:
-  DirStackIncluder() noexcept = default;
+  DirStackIncluder()
+    : dirStack_{kIRISContentDirectory + "/assets/shaders"s}
+    , numExternalLocalDirs_(1) {}
 
   virtual IncludeResult* includeLocal(char const* headerName,
                                       char const* includerName,
@@ -142,11 +144,11 @@ public:
   }
 
   virtual IncludeResult* includeSystem(char const* headerName,
-                                       char const* includerName
-                                       [[maybe_unused]],
-                                       std::size_t inclusionDepth
-                                       [[maybe_unused]]) override {
-    return readSystemPath(headerName);
+                                       char const* includerName,
+                                       std::size_t inclusionDepth) override {
+    IRIS_LOG_WARN("system headers are treated as local headers");
+    return readLocalPath(headerName, includerName,
+                         gsl::narrow_cast<int>(inclusionDepth));
   }
 
   virtual void releaseInclude(IncludeResult* result) override {
@@ -162,8 +164,8 @@ public:
   }
 
 private:
-  std::vector<std::string> dirStack_{};
-  int numExternalLocalDirs_{0};
+  std::vector<std::string> dirStack_;
+  int numExternalLocalDirs_;
 
   virtual IncludeResult* readLocalPath(std::string const& headerName,
                                        std::string const& includerName,
@@ -176,7 +178,7 @@ private:
 
     // Find a directory that works, using a reverse search of the include stack.
     for (auto& dir : dirStack_) {
-      std::string path = dir + "/"s + headerName;
+      std::string path = absl::StrCat(dir, "/", headerName);
       std::replace(path.begin(), path.end(), '\\', '/');
       std::ifstream ifs(path.c_str(),
                         std::ios_base::binary | std::ios_base::ate);
@@ -189,7 +191,7 @@ private:
     return nullptr;
   }
 
-  virtual IncludeResult* readSystemPath(char const*) const {
+  virtual IncludeResult* readSystemPath(char const* ) const {
     IRIS_LOG_ERROR("including system headers not implemented");
     return nullptr;
   }
@@ -352,6 +354,7 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
   IRIS_LOG_ENTER();
   Expects(!path.empty());
   Expects(Renderer::sDevice != VK_NULL_HANDLE);
+  IRIS_LOG_DEBUG("Loading shader {}", path.c_str());
 
   auto bytes = iris::io::ReadFile(path);
 

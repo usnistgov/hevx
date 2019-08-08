@@ -1745,7 +1745,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
   }
 
   if (auto rchit = LoadShaderFromFile(kIRISContentDirectory +
-                                        "/assets/shaders/sphere.rchit"s,
+                                        "/assets/shaders/lambertian.rchit"s,
                                       VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
     shaders[3] = std::move(*rchit);
   } else {
@@ -1759,12 +1759,14 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
   shaderGroups[2] = ShaderGroup::ProceduralHit(2, 3);
 #endif
 
+  // TODO: probably move this out of here, also reduce maxRecursionDepth
+
   if (auto pipe =
         CreateRayTracingPipeline(shaders,      // shaders
                                  shaderGroups, // groups
                                  gsl::make_span(&component.descriptorSetLayout,
                                                 1), // descriptorSetLayouts
-                                 4                  // maxRecursionDepth
+                                 10                  // maxRecursionDepth
                                  )) {
     component.pipeline = std::move(*pipe);
   } else {

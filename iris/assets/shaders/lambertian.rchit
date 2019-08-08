@@ -1,6 +1,11 @@
 #version 460 core
 #extension GL_NV_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
+#extension GL_ARB_gpu_shader_int64 : require
 #extension GL_EXT_nonuniform_qualifier : enable
+
+#include "rand.glsl"
+#include "prd.glsl"
 
 #define MAX_LIGHTS 100
 
@@ -50,24 +55,16 @@ layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
 
-layout(location = 0) rayPayloadInNV vec4 hitValue;
+layout(location = 0) rayPayloadInNV PerRayData prd;
 
+hitAttributeNV vec3 Po; // Hit position in world-space
 hitAttributeNV vec3 No; // Normal in world-space
 
 void main() {
-  const vec4 Po = vec4(hitValue.xyz, 1.f);
-  const vec4 Pe = ModelViewMatrix * Po;
+  const vec3 target = Po + No + rand_vec3_in_unit_sphere(prd.rngState);
 
-  if (bDebugNormals) {
-    // HEV is -Z up, so surfaces with upward normals have high Z component.
-    // Most other engines use +Y up, so flip the components here to visualize it.
-    const vec3 n = normalize(vec3(No.x, -No.z, -No.y));
-    hitValue = vec4(vec3(.5f) * (n + vec3(1.f)), 1.f);
-    return;
-  }
-
-  const vec3 l = normalize(Lights[0].direction.xyz * Pe.w - Lights[0].direction.w * Pe.xyz);
-  const float dP = max(dot(l, normalize(No)), .2f);
-  hitValue = vec4(dP, dP, dP, 1.f);
+  prd.scatterEvent = SCATTER_EVENT_RAY_BOUNCED;
+  prd.scatterOrigin = Po;
+  prd.scatterDirection = (target - Po);
+  prd.attenuation = vec3(.5f, .5f, .5f);
 }
-

@@ -1,5 +1,6 @@
 #version 460 core
 #extension GL_NV_ray_tracing : require
+#extension GL_GOOGLE_include_directive : require
 
 layout(push_constant) uniform PushConstants {
   vec4 padding0;
@@ -28,6 +29,7 @@ layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
 
+hitAttributeNV vec3 Po; // Hit position in world-space
 hitAttributeNV vec3 No; // Normal in world-space
 
 void main() {
@@ -60,11 +62,11 @@ void main() {
     const float t2 = (-b + s_d) / a;
 
     if (gl_RayTminNV < t1 && t1 < gl_RayTmaxNV) {
-      const vec3 Po = origin + direction * t1;
+      Po = origin + direction * t1;
       No = (Po - center) / radius;
       reportIntersectionNV(t1, 0);
     } else if (gl_RayTminNV < t2 && t2 < gl_RayTmaxNV) {
-      const vec3 Po = origin + direction * t2;
+      Po = origin + direction * t2;
       No = (Po - center) / radius;
       reportIntersectionNV(t2, 0);
     }
