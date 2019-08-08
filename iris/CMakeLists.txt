@@ -196,13 +196,9 @@ if(WIN32)
   unset(tbb_dlls)
 endif()
 
-add_executable(iris-raytracer WIN32 iris-raytracer.cc)
-target_link_libraries(iris-raytracer iris
-  absl::failure_signal_handler absl::flags absl::flags_parse)
-
-add_executable(iris-swsynth WIN32 iris-swsynth.cc)
-target_link_libraries(iris-swsynth iris
-  absl::failure_signal_handler absl::flags absl::flags_parse)
+#add_executable(iris-swsynth WIN32 iris-swsynth.cc)
+#target_link_libraries(iris-swsynth iris
+#  absl::failure_signal_handler absl::flags absl::flags_parse)
 
 #add_executable(iris-dxr WIN32 iris-dxr.cc)
 #target_link_libraries(iris-dxr iris

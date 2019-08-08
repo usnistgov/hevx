@@ -23,12 +23,6 @@
             "_AABB": 0
           },
           "material": 0
-        },
-        {
-          "attributes": {
-            "_AABB": 1
-          },
-          "material": 0
         }
       ]
     }
@@ -82,14 +76,7 @@
       "bufferView": 0,
       "byteOffset": 0,
       "componentType": 5126,
-      "count": 2,
-      "type": "VEC3"
-    },
-    {
-      "bufferView": 0,
-      "byteOffset": 8,
-      "componentType": 5126,
-      "count": 2,
+      "count": 4,
       "type": "VEC3"
     }
   ],

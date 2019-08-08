@@ -1783,39 +1783,6 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
 
   vkGetPhysicalDeviceProperties2(Renderer::sPhysicalDevice,
                                  &physicalDeviceProperties);
-#if 0
-  // TODO: don't hardcode this
-  component.outputImageExtent = VkExtent2D{1000, 1000};
-
-  if (auto img =
-        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM,    // format
-                      component.outputImageExtent, // extent
-                      1,                           // mipLevels
-                      1,                           // arrayLayers
-                      VK_SAMPLE_COUNT_1_BIT,       // sampleCount
-                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // imageUsage
-                      VK_IMAGE_TILING_OPTIMAL,           // imageTiling
-                      VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
-                      )) {
-    component.outputImage = std::move(*img);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(img.error());
-  }
-
-  if (auto view = CreateImageView(component.outputImage,    // image
-                                  VK_IMAGE_VIEW_TYPE_2D,    // type
-                                  VK_FORMAT_R8G8B8A8_UNORM, // format
-                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-                                  // subResourceRange
-                                  )) {
-    component.outputImageView = *view;
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(view.error());
-  }
-#endif
   VkDeviceSize const shaderGroupHandleSize =
     rayTracingProperties.shaderGroupHandleSize;
 
