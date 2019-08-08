@@ -33,10 +33,6 @@ struct Traceable {
   bool bottomLevelDirty{true};
   AccelerationStructure bottomLevelAccelerationStructure{};
 
-  GeometryInstance instance{};
-  bool topLevelDirty{true};
-  AccelerationStructure topLevelAccelerationStructure{};
-
   glm::mat4 modelMatrix{1.f};
 }; // struct Traceable
 

@@ -293,10 +293,19 @@ ProcessControlMessage(iris::Control::Nav const& navMessage) noexcept {
 
 } // namespace Nav
 
-static VkExtent2D sTracedImageExtent{2000, 2000};
-static Image sTracedImage;
-static VkImageView sTracedImageView;
+namespace Tracer {
+
+bool sTraceableAdded{false};
+bool sTopLevelDirty{false};
+AccelerationStructure sTopLevelAccelerationStructure{};
+
+static VkExtent2D sOutputImageExtent{2000, 2000};
+static Image sOutputImage;
+static VkImageView sOutputImageView;
+
 static VkFence sTraceFinishedFence{VK_NULL_HANDLE};
+
+} // namespace Tracer
 
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
@@ -370,8 +379,7 @@ static Pipeline sUIPipeline;
 static VkDescriptorSetLayout sUIDescriptorSetLayout{VK_NULL_HANDLE};
 static VkDescriptorSet sUIDescriptorSet{VK_NULL_HANDLE};
 
-static void
-CreateEmplaceWindow(iris::Control::Window const& windowMessage) noexcept {
+static void CreateEmplaceWindow(Control::Window const& windowMessage) noexcept {
   IRIS_LOG_ENTER();
   auto const& bg = windowMessage.background_color();
 
@@ -445,8 +453,7 @@ BuildBlitImageCommandBuffer(VkImageView src, VkViewport* pViewport,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
-                   iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -514,8 +521,7 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
-                   iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -583,8 +589,8 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
     VK_NULL_HANDLE,                      // callableShaderBindingTableBuffer
     0,                                   // callableShaderBindingOffset
     0,                                   // callableShaderBindingStride
-    sTracedImageExtent.width,            // width
-    sTracedImageExtent.height,           // height
+    Tracer::sOutputImageExtent.width,    // width
+    Tracer::sOutputImageExtent.height,   // height
     1                                    // depth
   );
 
@@ -609,8 +615,7 @@ BuildRenderableCommandBuffer(Component::Renderable const& renderable,
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
-                   iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -808,8 +813,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
-                   iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
     return VK_NULL_HANDLE;
   }
 
@@ -953,8 +957,27 @@ static void BeginFrameTraceables() {
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                       "BeginFrameTraceables");
 
-  vkWaitForFences(sDevice, 1, &sTraceFinishedFence, VK_TRUE, UINT64_MAX);
-  vkResetFences(sDevice, 1, &sTraceFinishedFence);
+  if (Tracer::sTraceableAdded) {
+    if (Tracer::sTopLevelAccelerationStructure) {
+      DestroyAccelerationStructure(Tracer::sTopLevelAccelerationStructure);
+    }
+
+    if (auto structure = CreateTopLevelAccelerationStructure(
+          gsl::narrow_cast<std::uint32_t>(sTraceables.size()), 0)) {
+      Tracer::sTopLevelAccelerationStructure = std::move(*structure);
+    } else {
+      IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
+                     structure.error().what());
+      return;
+    }
+
+    Tracer::sTraceableAdded = false;
+    Tracer::sTopLevelDirty = true;
+  }
+
+  vkWaitForFences(sDevice, 1, &Tracer::sTraceFinishedFence, VK_TRUE,
+                  UINT64_MAX);
+  vkResetFences(sDevice, 1, &Tracer::sTraceFinishedFence);
 
   for (auto&& [id, traceable] : sTraceables.components) {
     if (traceable.bottomLevelDirty) {
@@ -971,39 +994,43 @@ static void BeginFrameTraceables() {
         return;
       }
 
-      traceable.topLevelDirty = true;
       traceable.bottomLevelDirty = false;
+      Tracer::sTopLevelDirty = true;
     }
+  }
 
-    if (traceable.topLevelDirty) {
-      IRIS_LOG_DEBUG("topLevelAS dirty: building");
-      iris::GeometryInstance topLevelInstance(
+  if (Tracer::sTopLevelDirty) {
+    IRIS_LOG_DEBUG("topLevelAS dirty: building");
+    absl::InlinedVector<GeometryInstance, 32> geometryInstances{};
+    for (auto&& [id, traceable] : sTraceables.components) {
+      geometryInstances.push_back(
         traceable.bottomLevelAccelerationStructure.handle);
-
-      if (auto result = iris::BuildTopLevelAccelerationStructure(
-            traceable.topLevelAccelerationStructure,
-            sCommandPools[sCommandQueueGraphics],
-            sCommandQueues[sCommandQueueGraphics],
-            sCommandFences[sCommandQueueGraphics],
-            gsl::make_span(&traceable.instance, 1));
-          !result) {
-        IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
-                       result.error().what());
-        return;
-      }
-
-      traceable.topLevelDirty = false;
     }
 
+    if (auto result = BuildTopLevelAccelerationStructure(
+          Tracer::sTopLevelAccelerationStructure,
+          sCommandPools[sCommandQueueGraphics],
+          sCommandQueues[sCommandQueueGraphics],
+          sCommandFences[sCommandQueueGraphics], geometryInstances);
+        !result) {
+      IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
+                     result.error().what());
+      return;
+    }
+
+    Tracer::sTopLevelDirty = false;
+  }
+
+  for (auto&& [id, traceable] : sTraceables.components) {
     VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
     writeDescriptorSetAS.sType =
       VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
     writeDescriptorSetAS.accelerationStructureCount = 1;
     writeDescriptorSetAS.pAccelerationStructures =
-      &traceable.topLevelAccelerationStructure.structure;
+      &Tracer::sTopLevelAccelerationStructure.structure;
 
     VkDescriptorImageInfo imageInfo = {};
-    imageInfo.imageView = sTracedImageView;
+    imageInfo.imageView = Tracer::sOutputImageView;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkDescriptorBufferInfo bufferInfo = {};
@@ -1065,8 +1092,7 @@ static void BeginFrameTraceables() {
   if (auto result =
         vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
       result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
-                   iris::to_string(result));
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
     return;
   }
 
@@ -1084,7 +1110,7 @@ static void BeginFrameTraceables() {
 
   vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout initial");
   SetImageLayout(commandBuffer,                               // commandBuffer
-                 sTracedImage,                                // image
+                 Tracer::sOutputImage,                        // image
                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,           // srcStages
                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
                  VK_IMAGE_LAYOUT_UNDEFINED,                   // oldLayout
@@ -1129,7 +1155,7 @@ static void BeginFrameTraceables() {
 
   vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout final");
   SetImageLayout(commandBuffer,                               // commandBuffer
-                 sTracedImage,                                // image
+                 Tracer::sOutputImage,                        // image
                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
                  VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
@@ -1153,10 +1179,10 @@ static void BeginFrameTraceables() {
   submitI.pCommandBuffers = &commandBuffer;
 
   if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1,
-                                  &submitI, sTraceFinishedFence);
+                                  &submitI, Tracer::sTraceFinishedFence);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting traceable command buffer: {}",
-                   iris::to_string(result));
+                   to_string(result));
   }
 
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
@@ -1360,11 +1386,11 @@ EndFrameWindow(std::string const& title, Window& window,
   pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
                           0.f};
 
-  if (ImGui::IsMouseDown(iris::wsi::Buttons::kButtonLeft)) {
+  if (ImGui::IsMouseDown(wsi::Buttons::kButtonLeft)) {
     window.lastMousePos.x = ImGui::GetIO().MousePos.x;
     window.lastMousePos.y = ImGui::GetIO().MousePos.y;
   }
-  if (ImGui::IsMouseReleased(iris::wsi::Buttons::kButtonLeft)) {
+  if (ImGui::IsMouseReleased(wsi::Buttons::kButtonLeft)) {
     pushConstants.iMouse.z = ImGui::GetIO().MousePos.x;
     pushConstants.iMouse.w = ImGui::GetIO().MousePos.y;
   }
@@ -1396,7 +1422,7 @@ EndFrameWindow(std::string const& title, Window& window,
       vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                           "BuildBlitImageCommandBuffer");
       VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(
-        sTracedImageView, &window.viewport, &window.scissor,
+        Tracer::sOutputImageView, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                                   sizeof(PushConstants)));
       if (blitCommandBuffer != VK_NULL_HANDLE) {
@@ -1542,11 +1568,10 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
                  sTaskSchedulerInit.default_num_threads());
 
 #if PLATFORM_LINUX
-  ::setenv(
-    "VK_LAYER_PATH",
-    (iris::kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
+  ::setenv("VK_LAYER_PATH",
+           (kVulkanSDKDirectory + "/etc/vulkan/explicit_layer.d"s).c_str(), 0);
 #elif PLATFORM_WINDOWS
-  ::_putenv(("VK_LAYER_PATH="s + iris::kVulkanSDKDirectory + "\\Bin"s).c_str());
+  ::_putenv(("VK_LAYER_PATH="s + kVulkanSDKDirectory + "\\Bin"s).c_str());
 #endif
   IRIS_LOG_DEBUG("VK_LAYER_PATH: {}", ::getenv("VK_LAYER_PATH"));
 
@@ -2026,29 +2051,29 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
              "sGlobalDescriptorSet");
 
   if (auto img =
-        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM, // format
-                      sTracedImageExtent,       // extent
-                      1,                        // mipLevels
-                      1,                        // arrayLayers
-                      VK_SAMPLE_COUNT_1_BIT,    // sampleCount
+        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM,   // format
+                      Tracer::sOutputImageExtent, // extent
+                      1,                          // mipLevels
+                      1,                          // arrayLayers
+                      VK_SAMPLE_COUNT_1_BIT,      // sampleCount
                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // imageUsage
                       VK_IMAGE_TILING_OPTIMAL,           // imageTiling
                       VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
                       )) {
-    sTracedImage = std::move(*img);
+    Tracer::sOutputImage = std::move(*img);
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(img.error());
   }
 
-  if (auto view = CreateImageView(sTracedImage,             // image
+  if (auto view = CreateImageView(Tracer::sOutputImage,     // image
                                   VK_IMAGE_VIEW_TYPE_2D,    // type
                                   VK_FORMAT_R8G8B8A8_UNORM, // format
                                   {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
                                   // subResourceRange
                                   )) {
-    sTracedImageView = *view;
+    Tracer::sOutputImageView = *view;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(view.error());
@@ -2058,8 +2083,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   traceFenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   traceFenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  if (auto result =
-        vkCreateFence(sDevice, &traceFenceCI, nullptr, &sTraceFinishedFence);
+  if (auto result = vkCreateFence(sDevice, &traceFenceCI, nullptr,
+                                  &Tracer::sTraceFinishedFence);
       result != VK_SUCCESS) {
     IRIS_LOG_LEAVE();
     return unexpected(
@@ -2555,7 +2580,7 @@ void iris::Renderer::EndFrame(
                                   &submitI, sFrameFinishedFences[sFrameIndex]);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting command buffer: {}",
-                   iris::to_string(result));
+                   to_string(result));
   }
 
   if (!swapchains.empty()) {
@@ -2756,6 +2781,8 @@ iris::Renderer::AddTraceable(Component::Traceable traceable) noexcept {
   IRIS_LOG_ENTER();
 
   auto&& id = sTraceables.Insert(std::move(traceable));
+  Tracer::sTraceableAdded = true;
+  Tracer::sTopLevelDirty = true;
 
   IRIS_LOG_LEAVE();
   return id;
@@ -2772,10 +2799,6 @@ iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
 
     tbb::task* execute() override {
       IRIS_LOG_ENTER();
-
-      if (traceable_.topLevelAccelerationStructure) {
-        DestroyAccelerationStructure(traceable_.topLevelAccelerationStructure);
-      }
 
       if (traceable_.bottomLevelAccelerationStructure) {
         DestroyAccelerationStructure(

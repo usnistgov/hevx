@@ -1926,23 +1926,6 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
     return unexpected(structure.error());
   }
 
-  //
-  // TODO: CreateInstance
-  //
-  component.instance =
-    GeometryInstance(component.bottomLevelAccelerationStructure.handle);
-
-  //
-  // TODO: CreateTopLevelAccelerationStructure
-  //
-
-  if (auto structure = CreateTopLevelAccelerationStructure(1, 0)) {
-    component.topLevelAccelerationStructure = std::move(*structure);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(structure.error());
-  }
-
   component.modelMatrix = nodeMat;
 
   IRIS_LOG_LEAVE();

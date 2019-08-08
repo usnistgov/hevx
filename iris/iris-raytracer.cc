@@ -270,35 +270,6 @@ CreateBottomLevelAccelerationStructure() noexcept {
 } // CreateBottomLevelAccelerationStructure
 
 static tl::expected<void, std::system_error>
-CreateInstance() noexcept {
-  IRIS_LOG_ENTER();
-
-  sTraceable.instance =
-    iris::GeometryInstance(sTraceable.bottomLevelAccelerationStructure.handle);
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateInstance
-
-static tl::expected<void, std::system_error>
-CreateTopLevelAccelerationStructure() noexcept {
-  IRIS_LOG_ENTER();
-  using namespace std::string_literals;
-
-  if (auto structure = iris::CreateTopLevelAccelerationStructure(1, 0)) {
-    sTraceable.topLevelAccelerationStructure = std::move(*structure);
-  } else {
-    IRIS_LOG_LEAVE();
-    return tl::unexpected(std::system_error(structure.error().code(),
-                                            "Cannot create top level AS: "s +
-                                              structure.error().what()));
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateTopLevelAccelerationStructure
-
-static tl::expected<void, std::system_error>
 CreateShaderBindingTable() noexcept {
   IRIS_LOG_ENTER();
 
@@ -414,8 +385,6 @@ int main(int argc, char** argv) {
     .and_then(CreateSpheres)
     .and_then(CreateGeometry)
     .and_then(CreateBottomLevelAccelerationStructure)
-    .and_then(CreateInstance)
-    .and_then(CreateTopLevelAccelerationStructure)
     .or_else([](auto error) {
       sLogger->critical("initialization failed: {}", error.what());
       std::exit(EXIT_FAILURE);
