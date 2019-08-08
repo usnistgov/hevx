@@ -299,7 +299,7 @@ bool sTraceableAdded{false};
 bool sTopLevelDirty{false};
 AccelerationStructure sTopLevelAccelerationStructure{};
 
-static VkExtent2D sOutputImageExtent{1000, 1000};
+static VkExtent2D sOutputImageExtent{1600, 1200};
 static Image sOutputImage;
 static VkImageView sOutputImageView;
 
