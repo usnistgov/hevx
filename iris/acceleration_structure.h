@@ -55,18 +55,20 @@ struct GeometryInstance {
 }; // GeometryInstance
 
 [[nodiscard]] expected<AccelerationStructure, std::system_error>
-CreateAccelerationStructure(std::uint32_t instanceCount,
-                            VkDeviceSize compactedSize) noexcept;
+CreateTopLevelAccelerationStructure(std::uint32_t instanceCount,
+                                    VkDeviceSize compactedSize) noexcept;
 
 [[nodiscard]] expected<AccelerationStructure, std::system_error>
-CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
-                            VkDeviceSize compactedSize) noexcept;
+CreateBottomLevelAccelerationStructure(gsl::span<VkGeometryNV> geometries,
+                                       VkDeviceSize compactedSize) noexcept;
 
-[[nodiscard]] expected<void, std::system_error> BuildAccelerationStructure(
+[[nodiscard]] expected<void, std::system_error>
+BuildTopLevelAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<GeometryInstance> instances) noexcept;
 
-[[nodiscard]] expected<void, std::system_error> BuildAccelerationStructure(
+[[nodiscard]] expected<void, std::system_error>
+BuildBottomLevelAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept;
 

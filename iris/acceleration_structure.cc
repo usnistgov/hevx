@@ -168,8 +168,8 @@ static expected<void, std::system_error> BuildAccelerationStructure(
 } // namespace iris
 
 iris::expected<iris::AccelerationStructure, std::system_error>
-iris::CreateAccelerationStructure(std::uint32_t instanceCount,
-                                  VkDeviceSize compactedSize) noexcept {
+iris::CreateTopLevelAccelerationStructure(std::uint32_t instanceCount,
+                                          VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
 
   VkAccelerationStructureInfoNV asInfo = {};
@@ -185,8 +185,8 @@ iris::CreateAccelerationStructure(std::uint32_t instanceCount,
 } // iris::CreateAccelerationStructure
 
 iris::expected<iris::AccelerationStructure, std::system_error>
-iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
-                                  VkDeviceSize compactedSize) noexcept {
+iris::CreateBottomLevelAccelerationStructure(
+  gsl::span<VkGeometryNV> geometries, VkDeviceSize compactedSize) noexcept {
   IRIS_LOG_ENTER();
 
   VkAccelerationStructureInfoNV asInfo = {};
@@ -202,7 +202,8 @@ iris::CreateAccelerationStructure(gsl::span<VkGeometryNV> geometries,
   return ret;
 } // iris::CreateAccelerationStructure
 
-iris::expected<void, std::system_error> iris::BuildAccelerationStructure(
+iris::expected<void, std::system_error>
+iris::BuildTopLevelAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence,
   gsl::span<GeometryInstance> instances) noexcept {
@@ -241,7 +242,8 @@ iris::expected<void, std::system_error> iris::BuildAccelerationStructure(
   return ret;
 } // iris::BuildAccelerationStructure
 
-iris::expected<void, std::system_error> iris::BuildAccelerationStructure(
+iris::expected<void, std::system_error>
+iris::BuildBottomLevelAccelerationStructure(
   AccelerationStructure const& structure, VkCommandPool commandPool,
   VkQueue queue, VkFence fence, gsl::span<VkGeometryNV> geometries) noexcept {
   IRIS_LOG_ENTER();

@@ -965,12 +965,12 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
 
   if (traceable.bottomLevelDirty) {
     IRIS_LOG_DEBUG("bottomLevelAS dirty: building");
-    if (auto result =
-          BuildAccelerationStructure(traceable.bottomLevelAccelerationStructure,
-                                     sCommandPools[sCommandQueueGraphics],
-                                     sCommandQueues[sCommandQueueGraphics],
-                                     sCommandFences[sCommandQueueGraphics],
-                                     gsl::make_span(&traceable.geometry, 1));
+    if (auto result = BuildBottomLevelAccelerationStructure(
+          traceable.bottomLevelAccelerationStructure,
+          sCommandPools[sCommandQueueGraphics],
+          sCommandQueues[sCommandQueueGraphics],
+          sCommandFences[sCommandQueueGraphics],
+          gsl::make_span(&traceable.geometry, 1));
         !result) {
       IRIS_LOG_ERROR("Cannot build bottomLevelAccelerationStructure: {}",
                      result.error().what());
@@ -987,7 +987,7 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
     iris::GeometryInstance topLevelInstance(
       traceable.bottomLevelAccelerationStructure.handle);
 
-    if (auto result = iris::BuildAccelerationStructure(
+    if (auto result = iris::BuildTopLevelAccelerationStructure(
           traceable.topLevelAccelerationStructure,
           sCommandPools[sCommandQueueGraphics],
           sCommandQueues[sCommandQueueGraphics],

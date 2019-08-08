@@ -572,21 +572,21 @@ struct GLTF {
   absl::flat_hash_map<int, Renderer::MaterialID> materialsMap;
 
   template <typename T>
-  expected<T, std::system_error>
-  ParseNode(Renderer::CommandQueue commandQueue, std::string const& meshName,
-            glm::mat4x4 const& nodeMat,
-            std::vector<std::vector<std::byte>> const& buffersBytes,
-            std::vector<VkExtent2D> const& imagesExtents,
-            std::vector<std::vector<std::byte>> imagesBytes, Node const& node,
-            Primitive const& primitive);
-
-  template <typename T>
   expected<std::vector<T>, std::system_error>
   ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
             glm::mat4x4 parentMat, std::filesystem::path const& path,
             std::vector<std::vector<std::byte>> const& buffersBytes,
             std::vector<VkExtent2D> const& imagesExtents,
             std::vector<std::vector<std::byte>> imagesBytes);
+
+  template <typename T>
+  expected<T, std::system_error>
+  ParsePrimitive(Renderer::CommandQueue commandQueue,
+                 std::string const& meshName, glm::mat4x4 const& nodeMat,
+                 std::vector<std::vector<std::byte>> const& buffersBytes,
+                 std::vector<VkExtent2D> const& imagesExtents,
+                 std::vector<std::vector<std::byte>> imagesBytes,
+                 Node const& node, Primitive const& primitive);
 
   struct DeviceTexture {
     iris::Image texture;
@@ -1134,8 +1134,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
   }
 
   if (node.shaderToy) {
-    if (auto c = ParseNode<T>(commandQueue, "", nodeMat, buffersBytes,
-                              imagesExtents, imagesBytes, node, {})) {
+    if (auto c = ParsePrimitive<T>(commandQueue, "", nodeMat, buffersBytes,
+                                   imagesExtents, imagesBytes, node, {})) {
       components.push_back(std::move(*c));
     } else {
       return unexpected(c.error());
@@ -1211,8 +1211,9 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
     std::string const meshName =
       nodeName + ":" + (mesh.name ? *mesh.name : fmt::format("{}", primIdx));
 
-    if (auto c = ParseNode<T>(commandQueue, meshName, nodeMat, buffersBytes,
-                              imagesExtents, imagesBytes, node, primitive)) {
+    if (auto c =
+          ParsePrimitive<T>(commandQueue, meshName, nodeMat, buffersBytes,
+                            imagesExtents, imagesBytes, node, primitive)) {
       components.push_back(std::move(*c));
     } else {
       return unexpected(c.error());
@@ -1225,12 +1226,12 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, int nodeIdx,
 
 template <>
 iris::expected<iris::Renderer::Component::Renderable, std::system_error>
-GLTF::ParseNode(Renderer::CommandQueue commandQueue,
-                std::string const& meshName, glm::mat4x4 const& nodeMat,
-                std::vector<std::vector<std::byte>> const& buffersBytes,
-                std::vector<VkExtent2D> const& imagesExtents,
-                std::vector<std::vector<std::byte>> imagesBytes,
-                Node const& node, Primitive const& primitive) {
+GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue,
+                     std::string const& meshName, glm::mat4x4 const& nodeMat,
+                     std::vector<std::vector<std::byte>> const& buffersBytes,
+                     std::vector<VkExtent2D> const& imagesExtents,
+                     std::vector<std::vector<std::byte>> imagesBytes,
+                     Node const& node, Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
   if (node.shaderToy) {
@@ -1623,16 +1624,16 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue,
 
   IRIS_LOG_LEAVE();
   return component;
-} // GLTF::ParseNode
+} // GLTF::ParsePrimitive
 
 template <>
 iris::expected<iris::Renderer::Component::Traceable, std::system_error>
-GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
-                glm::mat4x4 const& nodeMat,
-                std::vector<std::vector<std::byte>> const& buffersBytes,
-                std::vector<VkExtent2D> const&,
-                std::vector<std::vector<std::byte>>, Node const&,
-                Primitive const& primitive) {
+GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
+                     glm::mat4x4 const& nodeMat,
+                     std::vector<std::vector<std::byte>> const& buffersBytes,
+                     std::vector<VkExtent2D> const&,
+                     std::vector<std::vector<std::byte>>, Node const&,
+                     Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
   Renderer::Component::Traceable component;
@@ -1710,7 +1711,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
       }
     }
   }
-#endif
+
+#else
 
   using namespace std::string_literals;
   absl::FixedArray<Shader> shaders(4);
@@ -1751,10 +1753,11 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
     return unexpected(rchit.error());
   }
 
-  absl::InlinedVector<iris::ShaderGroup, 4> shaderGroups;
-  shaderGroups.push_back(ShaderGroup::General(0));
-  shaderGroups.push_back(ShaderGroup::General(1));
-  shaderGroups.push_back(ShaderGroup::ProceduralHit(2, 3));
+  absl::FixedArray<iris::ShaderGroup> shaderGroups(3);
+  shaderGroups[0] = ShaderGroup::General(0);
+  shaderGroups[1] = ShaderGroup::General(1);
+  shaderGroups[2] = ShaderGroup::ProceduralHit(2, 3);
+#endif
 
   if (auto pipe =
         CreateRayTracingPipeline(shaders,      // shaders
@@ -1913,7 +1916,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
   spheres.aabbData = component.geometryBuffer.buffer;
   spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(aabbs.size());
   spheres.stride = sizeof(glm::vec3) * 2;
-  spheres.offset = sizeof(glm::vec3);
+  spheres.offset = 0;
 
   component.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
   component.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
@@ -1926,8 +1929,8 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
   // TODO: CreateBottomLevelAccelerationStructure
   //
 
-  if (auto structure = CreateAccelerationStructure(
-    gsl::make_span(&component.geometry, 1), 0)) {
+  if (auto structure = CreateBottomLevelAccelerationStructure(
+        gsl::make_span(&component.geometry, 1), 0)) {
     component.bottomLevelAccelerationStructure = std::move(*structure);
   } else {
     IRIS_LOG_LEAVE();
@@ -1944,7 +1947,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
   // TODO: CreateTopLevelAccelerationStructure
   //
 
-  if (auto structure = CreateAccelerationStructure(1, 0)) {
+  if (auto structure = CreateTopLevelAccelerationStructure(1, 0)) {
     component.topLevelAccelerationStructure = std::move(*structure);
   } else {
     IRIS_LOG_LEAVE();
@@ -1969,7 +1972,7 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
   VkDescriptorBufferInfo bufferInfo = {};
   bufferInfo.buffer = component.geometryBuffer.buffer;
   bufferInfo.offset = 0;
-  bufferInfo.range = sizeof(glm::vec3) *2;
+  bufferInfo.range = sizeof(glm::vec3) * 2;
 
   absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
     {
@@ -2011,15 +2014,14 @@ GLTF::ParseNode(Renderer::CommandQueue commandQueue, std::string const&,
   };
 
   vkUpdateDescriptorSets(
-    iris::Renderer::sDevice,
-    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
+    Renderer::sDevice, gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
     descriptorWrites.data(), 0, nullptr);
 
   component.modelMatrix = nodeMat;
 
   IRIS_LOG_LEAVE();
   return component;
-} // GLTF::ParseNode
+} // GLTF::ParsePrimitive
 
 expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   Renderer::CommandQueue commandQueue, TextureInfo textureInfo,

@@ -293,7 +293,7 @@ CreateBottomLevelAccelerationStructure() noexcept {
 
   using namespace std::string_literals;
 
-  if (auto structure = iris::CreateAccelerationStructure(
+  if (auto structure = iris::CreateBottomLevelAccelerationStructure(
         gsl::make_span(&sTraceable.geometry, 1), 0)) {
     sTraceable.bottomLevelAccelerationStructure = std::move(*structure);
   } else {
@@ -323,7 +323,7 @@ CreateTopLevelAccelerationStructure() noexcept {
   IRIS_LOG_ENTER();
   using namespace std::string_literals;
 
-  if (auto structure = iris::CreateAccelerationStructure(1, 0)) {
+  if (auto structure = iris::CreateTopLevelAccelerationStructure(1, 0)) {
     sTraceable.topLevelAccelerationStructure = std::move(*structure);
   } else {
     IRIS_LOG_LEAVE();
