@@ -54,6 +54,9 @@ layout(set = 1, binding = 1, rgba8) uniform image2D image;
 layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
   Sphere spheres[];
 };
+layout(set = 1, binding = 3) uniform block {
+  vec3 albedo;
+};
 
 layout(location = 0) rayPayloadInNV PerRayData prd;
 
@@ -66,5 +69,5 @@ void main() {
   prd.scatterEvent = SCATTER_EVENT_RAY_BOUNCED;
   prd.scatterOrigin = Po;
   prd.scatterDirection = (target - Po);
-  prd.attenuation = vec3(.5f, .5f, .5f);
+  prd.attenuation = albedo;//vec3(.5f, .5f, .5f);
 }

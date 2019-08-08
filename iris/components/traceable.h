@@ -19,6 +19,13 @@ struct Traceable {
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
+  struct InlineUniforms {
+    glm::vec3 albedo;
+    float pad0;
+  };
+
+  InlineUniforms inlineUniforms;
+
   Buffer shaderBindingTable{};
 
   VkDeviceSize raygenBindingOffset{0};

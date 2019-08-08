@@ -15,5 +15,6 @@ extension KHR_get_memory_requirements2 required
 extension KHR_maintenance2 required
 extension KHR_multiview required
 extension KHR_swapchain required
+extension EXT_inline_uniform_block required
 
 extension NV_ray_tracing optional

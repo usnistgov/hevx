@@ -35,6 +35,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <vulkan/vulkan.h>
 
 namespace nlohmann {
 
@@ -1662,6 +1663,14 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
         VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
       nullptr                               // pImmutableSamplers
     },
+    {
+      3,                                                      // binding
+      VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,            // descriptorType
+      sizeof(Renderer::Component::Traceable::InlineUniforms), // descriptorCount
+      VK_SHADER_STAGE_INTERSECTION_BIT_NV |
+        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
+      nullptr                               // pImmutableSamplers
+    },
   };
 
   VkDescriptorSetLayoutCreateInfo layoutCI = {};
@@ -1690,6 +1699,9 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
     return unexpected(std::system_error(make_error_code(result),
                                         "Cannot allocate descriptor set"));
   }
+
+  // TODO
+  component.inlineUniforms.albedo = glm::vec3(.8f, .2f, .2f);
 
 #if 0
   // TODO: use the primitive material for the shaders

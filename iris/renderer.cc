@@ -1036,7 +1036,13 @@ static void BeginFrameTraceables() {
     bufferInfo.offset = 0;
     bufferInfo.range = traceable.geometryBuffer.size;
 
-    absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
+    // TODO
+    VkWriteDescriptorSetInlineUniformBlockEXT writeDescriptorSetIUB = {};
+    writeDescriptorSetIUB.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT;
+    writeDescriptorSetIUB.dataSize = sizeof(Component::Traceable::InlineUniforms);
+    writeDescriptorSetIUB.pData = &traceable.inlineUniforms;
+
+    absl::FixedArray<VkWriteDescriptorSet, 4> descriptorWrites{
       {
         VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
         &writeDescriptorSetAS,                        // pNext
@@ -1072,6 +1078,18 @@ static void BeginFrameTraceables() {
         nullptr,                                // pImageInfo
         &bufferInfo,                            // pBufferInfo
         nullptr                                 // pTexelBufferView
+      },
+      {
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
+        &writeDescriptorSetIUB,                       // pNext
+        traceable.descriptorSet,                      // dstSet
+        3,                                            // dstBinding
+        0,                                            // dstArrayElement
+        sizeof(Component::Traceable::InlineUniforms), // descriptorCount
+        VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,  // descriptorType
+        nullptr,                                      // pImageInfo
+        nullptr,                                      // pBufferInfo
+        nullptr                                       // pTexelBufferView
       },
     };
 
@@ -1700,7 +1718,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     {VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
      // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
      VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-     VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_maintenance1"}};
+     VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_maintenance1",
+     VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME}};
 
   // These are additional extensions that we would like for the physical device.
   absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{{
