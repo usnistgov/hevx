@@ -293,6 +293,11 @@ ProcessControlMessage(iris::Control::Nav const& navMessage) noexcept {
 
 } // namespace Nav
 
+static VkExtent2D sTracedImageExtent{2000, 2000};
+static Image sTracedImage;
+static VkImageView sTracedImageView;
+static VkFence sTraceFinishedFence{VK_NULL_HANDLE};
+
 static Buffer sMatricesBuffer;
 static Buffer sLightsBuffer;
 
@@ -502,7 +507,7 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
   VkCommandBufferAllocateInfo commandBufferAI = {};
   commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   commandBufferAI.commandPool = sCommandPools[sCommandQueueGraphics];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
   commandBufferAI.commandBufferCount = 1;
 
   VkCommandBuffer commandBuffer;
@@ -514,24 +519,19 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
     return VK_NULL_HANDLE;
   }
 
+  VkCommandBufferInheritanceInfo commandBufferII = {};
+  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+  //commandBufferII.renderPass = sRenderPass;
+  commandBufferII.subpass = 0;
+  commandBufferII.framebuffer = VK_NULL_HANDLE;
+
   VkCommandBufferBeginInfo commandBufferBI = {};
   commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;// |
+                          //VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+  commandBufferBI.pInheritanceInfo = &commandBufferII;
 
   vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-
-  vk::BeginDebugLabel(commandBuffer, "Traceable SetImageLayout initial");
-  SetImageLayout(commandBuffer,                               // commandBuffer
-                 traceable.outputImage,                       // image
-                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,           // srcStages
-                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
-                 VK_IMAGE_LAYOUT_UNDEFINED,                   // oldLayout
-                 VK_IMAGE_LAYOUT_GENERAL,                     // newLayout
-                 VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
-                 1,                                           // mipLevels
-                 1                                            // arrayLayers
-  );
-  vk::EndDebugLabel(commandBuffer);
 
   vk::BeginDebugLabel(commandBuffer, "Traceable Bind and Push");
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
@@ -583,23 +583,10 @@ BuildTraceableCommandBuffer(Component::Traceable const& traceable,
     VK_NULL_HANDLE,                      // callableShaderBindingTableBuffer
     0,                                   // callableShaderBindingOffset
     0,                                   // callableShaderBindingStride
-    traceable.outputImageExtent.width,   // width
-    traceable.outputImageExtent.height,  // height
+    sTracedImageExtent.width,            // width
+    sTracedImageExtent.height,           // height
     1                                    // depth
   );
-
-  vk::BeginDebugLabel(commandBuffer, "Traceable SetImageLayout final");
-  SetImageLayout(commandBuffer,                               // commandBuffer
-                 traceable.outputImage,                       // image
-                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
-                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
-                 VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
-                 VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
-                 1,                                           // mipLevels
-                 1                                            // arrayLayers
-  );
-  vk::EndDebugLabel(commandBuffer);
 
   vkEndCommandBuffer(commandBuffer);
   return commandBuffer;
@@ -959,53 +946,154 @@ static void BeginFrameWindow(std::string const& title,
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 } // BeginFrameWindow
 
-static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
+static void BeginFrameTraceables() {
+  std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
+  if (sTraceables.size() == 0) return;
+
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
-                      "BeginFrameTraceable");
+                      "BeginFrameTraceables");
 
-  if (traceable.bottomLevelDirty) {
-    IRIS_LOG_DEBUG("bottomLevelAS dirty: building");
-    if (auto result = BuildBottomLevelAccelerationStructure(
-          traceable.bottomLevelAccelerationStructure,
-          sCommandPools[sCommandQueueGraphics],
-          sCommandQueues[sCommandQueueGraphics],
-          sCommandFences[sCommandQueueGraphics],
-          gsl::make_span(&traceable.geometry, 1));
-        !result) {
-      IRIS_LOG_ERROR("Cannot build bottomLevelAccelerationStructure: {}",
-                     result.error().what());
-      IRIS_LOG_LEAVE();
-      return;
+  vkWaitForFences(sDevice, 1, &sTraceFinishedFence, VK_TRUE, UINT64_MAX);
+  vkResetFences(sDevice, 1, &sTraceFinishedFence);
+
+  for (auto&& [id, traceable] : sTraceables.components) {
+    if (traceable.bottomLevelDirty) {
+      IRIS_LOG_DEBUG("bottomLevelAS dirty: building");
+      if (auto result = BuildBottomLevelAccelerationStructure(
+            traceable.bottomLevelAccelerationStructure,
+            sCommandPools[sCommandQueueGraphics],
+            sCommandQueues[sCommandQueueGraphics],
+            sCommandFences[sCommandQueueGraphics],
+            gsl::make_span(&traceable.geometry, 1));
+          !result) {
+        IRIS_LOG_ERROR("Cannot build bottomLevelAccelerationStructure: {}",
+                       result.error().what());
+        return;
+      }
+
+      traceable.topLevelDirty = true;
+      traceable.bottomLevelDirty = false;
     }
 
-    traceable.topLevelDirty = true;
-    traceable.bottomLevelDirty = false;
-  }
+    if (traceable.topLevelDirty) {
+      IRIS_LOG_DEBUG("topLevelAS dirty: building");
+      iris::GeometryInstance topLevelInstance(
+        traceable.bottomLevelAccelerationStructure.handle);
 
-  if (traceable.topLevelDirty) {
-    IRIS_LOG_DEBUG("topLevelAS dirty: building");
-    iris::GeometryInstance topLevelInstance(
-      traceable.bottomLevelAccelerationStructure.handle);
+      if (auto result = iris::BuildTopLevelAccelerationStructure(
+            traceable.topLevelAccelerationStructure,
+            sCommandPools[sCommandQueueGraphics],
+            sCommandQueues[sCommandQueueGraphics],
+            sCommandFences[sCommandQueueGraphics],
+            gsl::make_span(&traceable.instance, 1));
+          !result) {
+        IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
+                       result.error().what());
+        return;
+      }
 
-    if (auto result = iris::BuildTopLevelAccelerationStructure(
-          traceable.topLevelAccelerationStructure,
-          sCommandPools[sCommandQueueGraphics],
-          sCommandQueues[sCommandQueueGraphics],
-          sCommandFences[sCommandQueueGraphics],
-          gsl::make_span(&traceable.instance, 1));
-        !result) {
-      IRIS_LOG_ERROR("Cannot build topLevelAccelerationStructure: {}",
-                     result.error().what());
-      IRIS_LOG_LEAVE();
-      return;
+      traceable.topLevelDirty = false;
     }
 
-    traceable.topLevelDirty = false;
+    VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
+    writeDescriptorSetAS.sType =
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
+    writeDescriptorSetAS.accelerationStructureCount = 1;
+    writeDescriptorSetAS.pAccelerationStructures =
+      &traceable.topLevelAccelerationStructure.structure;
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.imageView = sTracedImageView;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = traceable.geometryBuffer.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = traceable.geometryBuffer.size;
+
+    absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
+      {
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
+        &writeDescriptorSetAS,                        // pNext
+        traceable.descriptorSet,                      // dstSet
+        0,                                            // dstBinding
+        0,                                            // dstArrayElement
+        1,                                            // descriptorCount
+        VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+        nullptr,                                      // pImageInfo
+        nullptr,                                      // pBufferInfo
+        nullptr                                       // pTexelBufferView
+      },
+      {
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+        nullptr,                                // pNext
+        traceable.descriptorSet,                // dstSet
+        1,                                      // dstBinding
+        0,                                      // dstArrayElement
+        1,                                      // descriptorCount
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,       // descriptorType
+        &imageInfo,                             // pImageInfo
+        nullptr,                                // pBufferInfo
+        nullptr                                 // pTexelBufferView
+      },
+      {
+        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+        nullptr,                                // pNext
+        traceable.descriptorSet,                // dstSet
+        2,                                      // dstBinding
+        0,                                      // dstArrayElement
+        1,                                      // descriptorCount
+        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
+        nullptr,                                // pImageInfo
+        &bufferInfo,                            // pBufferInfo
+        nullptr                                 // pTexelBufferView
+      },
+    };
+
+    vkUpdateDescriptorSets(
+      sDevice, gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
+      descriptorWrites.data(), 0, nullptr);
   }
 
-  vkWaitForFences(sDevice, 1, &traceable.traceCompleteFence, VK_TRUE,
-                  UINT64_MAX);
-  vkResetFences(sDevice, 1, &traceable.traceCompleteFence);
+  VkCommandBufferAllocateInfo commandBufferAI = {};
+  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  commandBufferAI.commandPool = sCommandPools[sCommandQueueGraphics];
+  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  commandBufferAI.commandBufferCount = 1;
+
+  VkCommandBuffer commandBuffer;
+  if (auto result =
+        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
+      result != VK_SUCCESS) {
+    IRIS_LOG_ERROR("Cannot allocate command buffer: {}",
+                   iris::to_string(result));
+    return;
+  }
+
+  VkCommandBufferBeginInfo commandBufferBI = {};
+  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+  if (auto result = vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
+      result != VK_SUCCESS) {
+    IRIS_LOG_ERROR("Error beginning traced command buffer: {}",
+                   make_error_code(result).message());
+    sTraceCommandBuffers.push_back(commandBuffer);
+    return;
+  }
+
+  vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout initial");
+  SetImageLayout(commandBuffer,                               // commandBuffer
+                 sTracedImage,                                // image
+                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,           // srcStages
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
+                 VK_IMAGE_LAYOUT_UNDEFINED,                   // oldLayout
+                 VK_IMAGE_LAYOUT_GENERAL,                     // newLayout
+                 VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
+                 1,                                           // mipLevels
+                 1                                            // arrayLayers
+  );
+  vk::EndDebugLabel(commandBuffer);
 
   PushConstants pushConstants;
   pushConstants.iMouse = glm::vec4(0.f, 0.f, 0.f, 0.f);
@@ -1017,16 +1105,47 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
   pushConstants.bDebugNormals = sDebugNormals;
   pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
 
-  pushConstants.ModelMatrix =
-    Nav::Matrix() * sWorldMatrix * traceable.modelMatrix;
-  pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
-  pushConstants.NormalMatrix =
-    glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+  for (auto&& [id, traceable] : sTraceables.components) {
+    pushConstants.ModelMatrix =
+      Nav::Matrix() * sWorldMatrix * traceable.modelMatrix;
+    pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
+    pushConstants.NormalMatrix =
+      glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
 
-  VkCommandBuffer commandBuffer = BuildTraceableCommandBuffer(
-    traceable,
-    gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
-                              sizeof(PushConstants)));
+    vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
+                        "BeginFrameTraceable");
+    VkCommandBuffer traceableCommandBuffer = BuildTraceableCommandBuffer(
+      traceable,
+      gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
+                                sizeof(PushConstants)));
+    if (traceableCommandBuffer != VK_NULL_HANDLE) {
+      vk::BeginDebugLabel(commandBuffer, "Traceable");
+      vkCmdExecuteCommands(commandBuffer, 1, &traceableCommandBuffer);
+      vk::EndDebugLabel(commandBuffer);
+    }
+    vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
+    sTraceCommandBuffers.push_back(traceableCommandBuffer);
+  }
+
+  vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout final");
+  SetImageLayout(commandBuffer,                               // commandBuffer
+                 sTracedImage,                                // image
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
+                 VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
+                 VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
+                 1,                                           // mipLevels
+                 1                                            // arrayLayers
+  );
+  vk::EndDebugLabel(commandBuffer);
+
+  if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
+    IRIS_LOG_ERROR("Error ending traced command buffer: {}",
+                   make_error_code(result).message());
+    sTraceCommandBuffers.push_back(commandBuffer);
+    return;
+  }
 
   VkSubmitInfo submitI = {};
   submitI.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1034,15 +1153,15 @@ static void BeginFrameTraceable(Component::Traceable& traceable) noexcept {
   submitI.pCommandBuffers = &commandBuffer;
 
   if (auto result = vkQueueSubmit(sCommandQueues[sCommandQueueGraphics], 1,
-                                  &submitI, traceable.traceCompleteFence);
+                                  &submitI, sTraceFinishedFence);
       result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error submitting traceable command buffer: {}",
                    iris::to_string(result));
   }
 
-  sTraceCommandBuffers.push_back(commandBuffer);
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
-} // BeginFrameTraceable
+  sTraceCommandBuffers.push_back(commandBuffer);
+} // BeginFrameTraceables
 
 static void EndFrameWindowUI(Window& window) {
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
@@ -1063,7 +1182,7 @@ static void EndFrameWindowUI(Window& window) {
   if (window.showUI) {
     if (sShowDemoWindow) ImGui::ShowDemoWindow(&sShowDemoWindow);
     if (ImGui::Begin("Status")) {
-      ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.f);
+      ImGui::Text("Last Frame %.3f ms", sFrameDelta.count() * 1000.0);
       ImGui::Text("Average %.3f ms/frame (%.1f FPS)", 1000.f / io.Framerate,
                   io.Framerate);
       ImGui::Text("Total Time %.3f s", sTime.count());
@@ -1273,16 +1392,15 @@ EndFrameWindow(std::string const& title, Window& window,
 
   { // this block locks sTraceables so that we can iterate over them safely
     std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
-    for (auto&& [id, traceable] : sTraceables.components) {
-      // TODO: this overwrites the framebuffer with the last traceable.
+    if (sTraceables.size() > 0) {
       vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                           "BuildBlitImageCommandBuffer");
       VkCommandBuffer blitCommandBuffer = BuildBlitImageCommandBuffer(
-        traceable.outputImageView, &window.viewport, &window.scissor,
+        sTracedImageView, &window.viewport, &window.scissor,
         gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
                                   sizeof(PushConstants)));
       if (blitCommandBuffer != VK_NULL_HANDLE) {
-        vk::BeginDebugLabel(frame.commandBuffer, "Traceable BlitImage");
+        vk::BeginDebugLabel(frame.commandBuffer, "Traced BlitImage");
         vkCmdExecuteCommands(frame.commandBuffer, 1, &blitCommandBuffer);
         vk::EndDebugLabel(frame.commandBuffer);
       }
@@ -1638,8 +1756,8 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   commandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   commandPoolCI.queueFamilyIndex = sQueueFamilyIndex;
 
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  VkFenceCreateInfo commandFenceCI = {};
+  commandFenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
   sCommandQueues.resize(numQueues);
   for (auto&& [i, commandQueue] : enumerate(sCommandQueues)) {
@@ -1665,7 +1783,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   sCommandFences.resize(numQueues);
   for (auto&& [i, commandFence] : enumerate(sCommandFences)) {
-    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &commandFence);
+    if (auto result = vkCreateFence(sDevice, &commandFenceCI, nullptr, &commandFence);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return unexpected(std::system_error(
@@ -1779,7 +1897,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   NameObject(VK_OBJECT_TYPE_RENDER_PASS, sRenderPass, "sRenderPass");
 
   for (auto&& fence : sFrameFinishedFences) {
-    if (auto result = vkCreateFence(sDevice, &fenceCI, nullptr, &fence);
+    if (auto result = vkCreateFence(sDevice, &commandFenceCI, nullptr, &fence);
         result != VK_SUCCESS) {
       IRIS_LOG_LEAVE();
       return unexpected(std::system_error(
@@ -1906,6 +2024,47 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   NameObject(VK_OBJECT_TYPE_DESCRIPTOR_SET, sGlobalDescriptorSet,
              "sGlobalDescriptorSet");
+
+  if (auto img =
+        AllocateImage(VK_FORMAT_R8G8B8A8_UNORM, // format
+                      sTracedImageExtent,       // extent
+                      1,                        // mipLevels
+                      1,                        // arrayLayers
+                      VK_SAMPLE_COUNT_1_BIT,    // sampleCount
+                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // imageUsage
+                      VK_IMAGE_TILING_OPTIMAL,           // imageTiling
+                      VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
+                      )) {
+    sTracedImage = std::move(*img);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(img.error());
+  }
+
+  if (auto view = CreateImageView(sTracedImage,             // image
+                                  VK_IMAGE_VIEW_TYPE_2D,    // type
+                                  VK_FORMAT_R8G8B8A8_UNORM, // format
+                                  {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+                                  // subResourceRange
+                                  )) {
+    sTracedImageView = *view;
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(view.error());
+  }
+
+  VkFenceCreateInfo traceFenceCI = {};
+  traceFenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  traceFenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  if (auto result =
+        vkCreateFence(sDevice, &traceFenceCI, nullptr, &sTraceFinishedFence);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(make_error_code(result), "Cannot create fence"));
+  }
 
   if (auto buf = AllocateBuffer(sizeof(MatricesBuffer),
                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -2329,13 +2488,7 @@ VkRenderPass iris::Renderer::BeginFrame() noexcept {
   for (auto&& [title, window] : Windows()) BeginFrameWindow(title, window);
   vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 
-  { // this block locks sTraceables so that we can iterate over them safely
-    std::lock_guard<decltype(sTraceables.mutex)> lck(sTraceables.mutex);
-    for (auto&& [id, traceable] : sTraceables.components) {
-      BeginFrameTraceable(traceable);
-    }
-  } // end std::lock_guard block
-
+  BeginFrameTraceables();
   return sRenderPass;
 } // iris::Renderer::BeginFrame()
 
@@ -2633,19 +2786,9 @@ iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
         DestroyBuffer(traceable_.geometryBuffer);
       }
 
-      if (traceable_.traceCompleteFence) {
-        vkDestroyFence(sDevice, traceable_.traceCompleteFence, nullptr);
-      }
-
       if (traceable_.shaderBindingTable) {
         DestroyBuffer(traceable_.shaderBindingTable);
       }
-
-      if (traceable_.outputImageView != VK_NULL_HANDLE) {
-        vkDestroyImageView(sDevice, traceable_.outputImageView, nullptr);
-      }
-
-      if (traceable_.outputImage) DestroyImage(traceable_.outputImage);
 
       if (traceable_.descriptorSet != VK_NULL_HANDLE) {
         vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,

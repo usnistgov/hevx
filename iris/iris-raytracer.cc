@@ -55,8 +55,6 @@ static absl::FixedArray<Sphere> sSpheres = {
   Sphere(glm::vec3(0.f, 0.f, 100.5f), 100.f),
 };
 
-static iris::Buffer sSpheresBuffer;
-
 static iris::Renderer::CommandQueue sCommandQueue;
 absl::InlinedVector<iris::ShaderGroup, 4> sShaderGroups;
 static iris::Renderer::Component::Traceable sTraceable;
@@ -204,42 +202,6 @@ static tl::expected<void, std::system_error> CreatePipeline() noexcept {
   return {};
 } // CreatePipeline
 
-static tl::expected<void, std::system_error> CreateOutputImage() noexcept {
-  IRIS_LOG_ENTER();
-
-  sTraceable.outputImageExtent = VkExtent2D{1000, 1000};
-
-  if (auto img = iris::AllocateImage(
-        VK_FORMAT_R8G8B8A8_UNORM, sTraceable.outputImageExtent, 1, 1,
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-          VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        VK_IMAGE_TILING_OPTIMAL, VMA_MEMORY_USAGE_GPU_ONLY)) {
-    sTraceable.outputImage = std::move(*img);
-  } else {
-    IRIS_LOG_LEAVE();
-    using namespace std::string_literals;
-    return tl::unexpected(
-      std::system_error(img.error().code(),
-                        "cannot create output image: "s + img.error().what()));
-  }
-
-  if (auto view = iris::CreateImageView(
-        sTraceable.outputImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
-    sTraceable.outputImageView = *view;
-  } else {
-    IRIS_LOG_LEAVE();
-    using namespace std::string_literals;
-    return tl::unexpected(std::system_error(
-      view.error().code(),
-      "cannot create output image view: "s + view.error().what()));
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // CreateOutputImage
-
 static tl::expected<void, std::system_error> CreateSpheres() noexcept {
   IRIS_LOG_ENTER();
 
@@ -248,7 +210,7 @@ static tl::expected<void, std::system_error> CreateSpheres() noexcept {
         sCommandQueue.submitFence, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VMA_MEMORY_USAGE_GPU_ONLY, sSpheres.size() * sizeof(Sphere),
         reinterpret_cast<std::byte*>(sSpheres.data()))) {
-    sSpheresBuffer = std::move(*buf);
+    sTraceable.geometryBuffer = std::move(*buf);
   } else {
     IRIS_LOG_LEAVE();
     using namespace std::string_literals;
@@ -271,7 +233,7 @@ CreateGeometry() noexcept {
   VkGeometryAABBNV spheres = {};
   spheres.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
   spheres.pNext = nullptr;
-  spheres.aabbData = sSpheresBuffer.buffer;
+  spheres.aabbData = sTraceable.geometryBuffer.buffer;
   spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(sSpheres.size());
   spheres.stride = sizeof(Sphere);
   spheres.offset = offsetof(Sphere, aabbMin);
@@ -336,73 +298,6 @@ CreateTopLevelAccelerationStructure() noexcept {
   return {};
 } // CreateTopLevelAccelerationStructure
 
-static tl::expected<void, std::system_error> WriteDescriptorSets() noexcept {
-  IRIS_LOG_ENTER();
-
-  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
-  writeDescriptorSetAS.sType =
-    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
-  writeDescriptorSetAS.accelerationStructureCount = 1;
-  writeDescriptorSetAS.pAccelerationStructures =
-    &sTraceable.topLevelAccelerationStructure.structure;
-
-  VkDescriptorImageInfo imageInfo = {};
-  imageInfo.imageView = sTraceable.outputImageView;
-  imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-  VkDescriptorBufferInfo bufferInfo = {};
-  bufferInfo.buffer = sSpheresBuffer.buffer;
-  bufferInfo.offset = 0;
-  bufferInfo.range = sizeof(Sphere) * sSpheres.size();
-
-  absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
-      &writeDescriptorSetAS,                        // pNext
-      sTraceable.descriptorSet,                     // dstSet
-      0,                                            // dstBinding
-      0,                                            // dstArrayElement
-      1,                                            // descriptorCount
-      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
-      nullptr,                                      // pImageInfo
-      nullptr,                                      // pBufferInfo
-      nullptr                                       // pTexelBufferView
-    },
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
-      nullptr,                                // pNext
-      sTraceable.descriptorSet,               // dstSet
-      1,                                      // dstBinding
-      0,                                      // dstArrayElement
-      1,                                      // descriptorCount
-      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,       // descriptorType
-      &imageInfo,                             // pImageInfo
-      nullptr,                                // pBufferInfo
-      nullptr                                 // pTexelBufferView
-    },
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
-      nullptr,                                // pNext
-      sTraceable.descriptorSet,               // dstSet
-      2,                                      // dstBinding
-      0,                                      // dstArrayElement
-      1,                                      // descriptorCount
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
-      nullptr,                                // pImageInfo
-      &bufferInfo,                            // pBufferInfo
-      nullptr                                 // pTexelBufferView
-    },
-  };
-
-  vkUpdateDescriptorSets(
-    iris::Renderer::sDevice,
-    gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
-    descriptorWrites.data(), 0, nullptr);
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // WriteDescriptorSets
-
 static tl::expected<void, std::system_error>
 CreateShaderBindingTable() noexcept {
   IRIS_LOG_ENTER();
@@ -462,24 +357,6 @@ CreateShaderBindingTable() noexcept {
   return {};
 } // CreateShaderBindingTable
 
-static tl::expected<void, std::system_error> CreateTraceFence() noexcept {
-  IRIS_LOG_ENTER();
-
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-  if (auto result = vkCreateFence(iris::Renderer::sDevice, &fenceCI, nullptr,
-                                  &sTraceable.traceCompleteFence);
-      result != VK_SUCCESS) {
-    sLogger->error("Error creating fence: {}", iris::to_string(result));
-    std::exit(EXIT_FAILURE);
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-}
-
 #if PLATFORM_WINDOWS
 extern "C" {
 _declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
@@ -526,27 +403,23 @@ int main(int argc, char** argv) {
 
   sLogger->info("Logging initialized");
 
-  if (auto result = iris::Renderer::Initialize(
-                      "iris-raytracer",
-                      iris::Renderer::Options::kReportDebugMessages |
-                        iris::Renderer::Options::kEnableValidation,
-                      {console_sink, file_sink}, 0)
-                      .and_then(AcquireCommandQueue)
-                      .and_then(CreateDescriptor)
-                      .and_then(CreatePipeline)
-                      .and_then(CreateOutputImage)
-                      .and_then(CreateSpheres)
-                      .and_then(CreateGeometry)
-                      .and_then(CreateBottomLevelAccelerationStructure)
-                      .and_then(CreateInstance)
-                      .and_then(CreateTopLevelAccelerationStructure)
-                      .and_then(WriteDescriptorSets)
-                      .and_then(CreateShaderBindingTable)
-                      .and_then(CreateTraceFence);
-      !result) {
-    sLogger->critical("initialization failed: {}", result.error().what());
-    std::exit(EXIT_FAILURE);
-  }
+  iris::Renderer::Initialize("iris-raytracer",
+                             iris::Renderer::Options::kReportDebugMessages |
+                               iris::Renderer::Options::kEnableValidation,
+                             {console_sink, file_sink}, 0)
+    .and_then(AcquireCommandQueue)
+    .and_then(CreateDescriptor)
+    .and_then(CreatePipeline)
+    .and_then(CreateShaderBindingTable)
+    .and_then(CreateSpheres)
+    .and_then(CreateGeometry)
+    .and_then(CreateBottomLevelAccelerationStructure)
+    .and_then(CreateInstance)
+    .and_then(CreateTopLevelAccelerationStructure)
+    .or_else([](auto error) {
+      sLogger->critical("initialization failed: {}", error.what());
+      std::exit(EXIT_FAILURE);
+    });
 
   for (size_t i = 1; i < positional.size(); ++i) {
     sLogger->info("Loading {}", positional[i]);

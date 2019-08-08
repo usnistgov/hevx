@@ -1772,6 +1772,18 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
     return unexpected(pipe.error());
   }
 
+  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
+  rayTracingProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &rayTracingProperties;
+
+  vkGetPhysicalDeviceProperties2(Renderer::sPhysicalDevice,
+                                 &physicalDeviceProperties);
+#if 0
   // TODO: don't hardcode this
   component.outputImageExtent = VkExtent2D{1000, 1000};
 
@@ -1803,18 +1815,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
     IRIS_LOG_LEAVE();
     return unexpected(view.error());
   }
-
-  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
-  rayTracingProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
-
-  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
-  physicalDeviceProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-  physicalDeviceProperties.pNext = &rayTracingProperties;
-
-  vkGetPhysicalDeviceProperties2(Renderer::sPhysicalDevice,
-                                 &physicalDeviceProperties);
+#endif
   VkDeviceSize const shaderGroupHandleSize =
     rayTracingProperties.shaderGroupHandleSize;
 
@@ -1854,18 +1855,6 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
   component.hitBindingOffset =
     component.missBindingOffset + component.missBindingStride;
   component.hitBindingStride = shaderGroupHandleSize;
-
-  VkFenceCreateInfo fenceCI = {};
-  fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-  if (auto result = vkCreateFence(Renderer::sDevice, &fenceCI, nullptr,
-                                  &component.traceCompleteFence);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return unexpected(
-      std::system_error(make_error_code(result), "Cannot create fence"));
-  }
 
   //
   // TODO: CreateSpheres
@@ -1953,69 +1942,6 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
     IRIS_LOG_LEAVE();
     return unexpected(structure.error());
   }
-
-  //
-  // TODO: WriteDescriptorSets
-  //
-
-  VkWriteDescriptorSetAccelerationStructureNV writeDescriptorSetAS = {};
-  writeDescriptorSetAS.sType =
-    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
-  writeDescriptorSetAS.accelerationStructureCount = 1;
-  writeDescriptorSetAS.pAccelerationStructures =
-    &component.topLevelAccelerationStructure.structure;
-
-  VkDescriptorImageInfo imageInfo = {};
-  imageInfo.imageView = component.outputImageView;
-  imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-  VkDescriptorBufferInfo bufferInfo = {};
-  bufferInfo.buffer = component.geometryBuffer.buffer;
-  bufferInfo.offset = 0;
-  bufferInfo.range = sizeof(glm::vec3) * 2;
-
-  absl::FixedArray<VkWriteDescriptorSet, 3> descriptorWrites{
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,       // sType
-      &writeDescriptorSetAS,                        // pNext
-      component.descriptorSet,                      // dstSet
-      0,                                            // dstBinding
-      0,                                            // dstArrayElement
-      1,                                            // descriptorCount
-      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
-      nullptr,                                      // pImageInfo
-      nullptr,                                      // pBufferInfo
-      nullptr                                       // pTexelBufferView
-    },
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
-      nullptr,                                // pNext
-      component.descriptorSet,                // dstSet
-      1,                                      // dstBinding
-      0,                                      // dstArrayElement
-      1,                                      // descriptorCount
-      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,       // descriptorType
-      &imageInfo,                             // pImageInfo
-      nullptr,                                // pBufferInfo
-      nullptr                                 // pTexelBufferView
-    },
-    {
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
-      nullptr,                                // pNext
-      component.descriptorSet,                // dstSet
-      2,                                      // dstBinding
-      0,                                      // dstArrayElement
-      1,                                      // descriptorCount
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
-      nullptr,                                // pImageInfo
-      &bufferInfo,                            // pBufferInfo
-      nullptr                                 // pTexelBufferView
-    },
-  };
-
-  vkUpdateDescriptorSets(
-    Renderer::sDevice, gsl::narrow_cast<std::uint32_t>(descriptorWrites.size()),
-    descriptorWrites.data(), 0, nullptr);
 
   component.modelMatrix = nodeMat;
 

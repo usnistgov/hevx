@@ -19,10 +19,6 @@ struct Traceable {
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
 
-  Image outputImage{};
-  VkExtent2D outputImageExtent{};
-  VkImageView outputImageView{VK_NULL_HANDLE};
-
   Buffer shaderBindingTable{};
 
   VkDeviceSize raygenBindingOffset{0};
@@ -30,8 +26,6 @@ struct Traceable {
   VkDeviceSize missBindingStride{0};
   VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
-
-  VkFence traceCompleteFence{VK_NULL_HANDLE};
 
   Buffer geometryBuffer{};
 
