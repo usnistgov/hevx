@@ -178,12 +178,15 @@ RenderableID AddRenderable(Component::Renderable renderable) noexcept;
 expected<void, std::system_error>
 RemoveRenderable(RenderableID const& id) noexcept;
 
+void SetTraceable(Component::Traceable traceable) noexcept;
+#if 0
 using TraceableID = ComponentID<struct TracableIDTag>;
 
 TraceableID AddTraceable(Component::Traceable traceable) noexcept;
 
 expected<void, std::system_error>
 RemoveTraceable(TraceableID const& id) noexcept;
+#endif
 
 struct CommandQueue {
   std::uint32_t id{UINT32_MAX};
@@ -340,14 +343,14 @@ struct hash<iris::Renderer::RenderableID> {
     return std::hash<iris::Renderer::RenderableID::id_type>{}(v());
   }
 };
-
+#if 0
 template <>
 struct hash<iris::Renderer::TraceableID> {
   std::size_t operator()(iris::Renderer::TraceableID const& v) const noexcept {
     return std::hash<iris::Renderer::TraceableID::id_type>{}(v());
   }
 };
-
+#endif
 } // namespace std
 
 #endif // HEV_IRIS_RENDERER_H_

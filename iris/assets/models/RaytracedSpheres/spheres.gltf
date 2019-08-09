@@ -23,42 +23,56 @@
             "_AABB": 0
           },
           "material": 0
+        },
+        {
+          "attributes": {
+            "_AABB": 1
+          },
+          "material": 1
         }
       ]
     }
   ],
   "materials": [
     {
+      "name": "lambertian",
       "extensions": {
         "NIST_techniques_raytracing": {
-          "technique": 0
+          "shaderHitGroup": 0,
+          "shaderRecord": {
+            "albedo": 2
+          }
         }
       }
     },
     {
+      "name": "metal",
       "extensions": {
         "NIST_techniques_raytracing": {
-          "technique": 2
+          "shaderHitGroup": 0,
+          "shaderRecord": {
+            "albedo": 3
+          }
         }
       }
     }
   ],
   "extensions": {
     "NIST_techniques_raytracing": {
-      "programs": [
-        {
-          "raygenShader": 0,
-          "missShader": 1,
-          "intersectionShader": 2,
-          "closestHitShader": 3
-        },
-        {
-          "raygenShader": 0,
-          "missShader": 1,
-          "intersectionShader": 2,
-          "closestHitShader": 4
-        }
-      ],
+      "shaderBindingTable": {
+        "raygenShader": 0,
+        "missShader": 1,
+        "hitShaders": [
+          {
+            "intersectionShader": 2,
+            "closestHitShader": 3
+          },
+          {
+            "intersectionShader": 2,
+            "closestHitShader": 4
+          }
+        ]
+      },
       "shaders": [
         {
           "type": 256,
@@ -80,28 +94,6 @@
           "type": 1024,
           "uri": "assets/shaders/metal.rchit"
         }
-      ],
-      "techniques": [
-        {
-          "program": 0,
-          "albedo": [ 0.8, 0.3, 0.3 ],
-          "fuzz":  0.0
-        },
-        {
-          "program": 0,
-          "albedo": [ 0.8, 0.8, 0.0 ],
-          "fuzz":  0.0
-        },
-        {
-          "program": 1,
-          "albedo": [ 0.8, 0.6, 0.2 ],
-          "fuzz":  0.3
-        },
-        {
-          "program": 1,
-          "albedo": [ 0.8, 0.8, 0.8 ],
-          "fuzz":  1.0
-        }
       ]
     }
   },
@@ -110,19 +102,40 @@
       "bufferView": 0,
       "byteOffset": 0,
       "componentType": 5126,
-      "count": 4,
+      "count": 2,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 24,
+      "componentType": 5126,
+      "count": 2,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 48,
+      "componentType": 5126,
+      "count": 1,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 64,
+      "componentType": 5126,
+      "count": 1,
       "type": "VEC3"
     }
   ],
   "bufferViews": [
     {
       "buffer": 0,
-      "byteLength": 48
+      "byteLength": 72
     }
   ],
   "buffers": [
     {
-      "byteLength": 48,
+      "byteLength": 72,
       "uri": "spheres.bin"
     }
   ],

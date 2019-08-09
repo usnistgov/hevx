@@ -604,6 +604,48 @@ iris::vk::GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
   return surfaceFormats;
 } // iris::vk::GetPhysicalDeviceSurfaceFormats
 
+VkPhysicalDeviceRayTracingPropertiesNV
+iris::vk::GetRayTracingProperties(VkPhysicalDevice physicalDevice) noexcept {
+  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
+  rayTracingProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+
+  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
+  physicalDeviceProperties.sType =
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  physicalDeviceProperties.pNext = &rayTracingProperties;
+
+  vkGetPhysicalDeviceProperties2(physicalDevice, &physicalDeviceProperties);
+  return rayTracingProperties;
+} // iris::vk::GetRayTracingProperties
+
+iris::expected<absl::InlinedVector<std::byte, 128>, std::system_error>
+iris::vk::GetRayTracingShaderHandles(VkPhysicalDevice physicalDevice,
+                                     VkDevice device, VkPipeline pipeline,
+                                     std::uint32_t numGroups) noexcept {
+  VkDeviceSize const shaderGroupHandleSize =
+    GetRayTracingProperties(physicalDevice).shaderGroupHandleSize;
+
+  absl::InlinedVector<std::byte, 128> shaderGroupHandles(shaderGroupHandleSize *
+                                                         numGroups);
+
+  if (auto result = vkGetRayTracingShaderGroupHandlesNV(
+        device,    // device
+        pipeline,  // pipeline
+        0,         // firstGroup
+        numGroups, // groupCount
+        gsl::narrow_cast<std::uint32_t>(shaderGroupHandles.size()), // dataSize
+        shaderGroupHandles.data()                                   // pData
+      );
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot get shader group handles"));
+  }
+
+  return shaderGroupHandles;
+} // iris::vk::GetRayTracingShaderHandles
+
 void iris::vk::SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                               VkPipelineStageFlags srcStages,
                               VkPipelineStageFlags dstStages,

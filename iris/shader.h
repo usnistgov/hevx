@@ -37,17 +37,27 @@ struct ShaderGroup {
   std::uint32_t intersectionShaderIndex{VK_SHADER_UNUSED_NV};
 
   static ShaderGroup General(std::uint32_t index) {
-    return {VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV, index,
-            VK_SHADER_UNUSED_NV, VK_SHADER_UNUSED_NV, VK_SHADER_UNUSED_NV};
+    return {VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV, index};
   }
 
   static ShaderGroup
   ProceduralHit(std::uint32_t intersectionIndex, std::uint32_t closestHitIndex,
                 std::uint32_t anyHitIndex = VK_SHADER_UNUSED_NV) {
     return {VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV,
-            VK_SHADER_UNUSED_NV, closestHitIndex, anyHitIndex,
-            intersectionIndex};
+            closestHitIndex, anyHitIndex, intersectionIndex};
   }
+
+private:
+  ShaderGroup(VkRayTracingShaderGroupTypeNV t, std::uint32_t g)
+    : type(t)
+    , generalShaderIndex(g) {}
+
+  ShaderGroup(VkRayTracingShaderGroupTypeNV t, std::uint32_t c, std::uint32_t a,
+              std::uint32_t i) noexcept
+    : type(t)
+    , closestHitShaderIndex(c)
+    , anyHitShaderIndex(a)
+    , intersectionShaderIndex(i) {}
 }; // struct ShaderGroup
 
 [[nodiscard]] expected<Shader, std::system_error>

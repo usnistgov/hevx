@@ -332,15 +332,19 @@ void from_json(json const& j, OcclusionTextureInfo& info) {
 }
 
 struct NISTTechniquesRaytracingMaterialExtension {
-  int technique;
+  int shaderHitGroup;
+  std::optional<json> shaderRecord;
 }; // struct NISTTechniquesRaytracingMaterialExtension
 
 void to_json(json& j, NISTTechniquesRaytracingMaterialExtension const& ext) {
-  j = json{{"technique", ext.technique}};
+  j = json{};
+  j["shaderHitGroup"] = ext.shaderHitGroup;
+  if (ext.shaderRecord) j["shaderRecord"] = *ext.shaderRecord;
 }
 
 void from_json(json const& j, NISTTechniquesRaytracingMaterialExtension& ext) {
-  ext.technique = j.at("technique");
+  ext.shaderHitGroup = j.at("shaderHitGroup");
+  if (j.find("shaderRecord") != j.end()) ext.shaderRecord = j["shaderRecord"];
 }
 
 struct Material {
@@ -572,33 +576,28 @@ void from_json(json const& j, Texture& tex) {
   if (j.find("name") != j.end()) tex.name = j["name"];
 }
 
-struct NISTTechniquesRaytracingExtensionProgram {
-  std::optional<int> raygenShader;
-  std::optional<int> missShader;
-  std::optional<int> intersectionShader;
-  std::optional<int> anyHitShader;
-  std::optional<int> closestHitShader;
-}; // struct NISTTechniquesRaytracingExtensionProgram
+struct NISTTechniquesRaytracingExtensionShaderBindingTable {
+  int raygenShader;
+  int missShader;
+  std::vector<std::map<std::string, int>> hitShaders;
+}; // struct NISTTechniquesRaytracingExtensionShaderBindingTable
 
-void to_json(json& j, NISTTechniquesRaytracingExtensionProgram const& prog) {
+void to_json(json& j,
+             NISTTechniquesRaytracingExtensionShaderBindingTable const& sbt) {
   j = json{};
-  if (prog.raygenShader) j["raygenShader"] = *prog.raygenShader;
-  if (prog.missShader) j["missShader"] = *prog.missShader;
-  if (prog.intersectionShader) j["intersectionShader"] = *prog.intersectionShader;
-  if (prog.anyHitShader) j["anyHitShader"] = *prog.anyHitShader;
-  if (prog.closestHitShader) j["closestHitShader"] = *prog.closestHitShader;
+  j["raygenShader"] = sbt.raygenShader;
+  j["missShader"] = sbt.missShader;
+  j["hitShaders"] = sbt.hitShaders;
 }
 
-void from_json(json const& j, NISTTechniquesRaytracingExtensionProgram& prog) {
-  if (j.find("raygenShader") != j.end()) prog.raygenShader = j["raygenShader"];
-  if (j.find("missShader") != j.end()) prog.missShader = j["missShader"];
-  if (j.find("intersectionShader") != j.end()) {
-    prog.intersectionShader = j["intersectionShader"];
-  }
-  if (j.find("anyHitShader") != j.end()) prog.anyHitShader = j["anyHitShader"];
-  if (j.find("closestHitShader") != j.end()) {
-    prog.closestHitShader = j["closestHitShader"];
-  }
+void from_json(json const& j,
+               NISTTechniquesRaytracingExtensionShaderBindingTable& sbt) {
+  sbt.raygenShader = j.at("raygenShader");
+  sbt.missShader = j.at("missShader");
+  sbt.hitShaders =
+    j.at("hitShaders")
+      .get<decltype(
+        NISTTechniquesRaytracingExtensionShaderBindingTable::hitShaders)>();
 }
 
 struct NISTTechniquesRaytracingExtensionShader {
@@ -613,47 +612,25 @@ void to_json(json& j, NISTTechniquesRaytracingExtensionShader const& shader) {
 }
 
 void from_json(json const& j, NISTTechniquesRaytracingExtensionShader& shader) {
-  shader.type = j["type"];
-  shader.uri = j["uri"];
-}
-
-struct NISTTechniquesRaytracingExtensionTechnique {
-  int program;
-  glm::vec3 albedo;
-}; // struct NISTTechniquesRaytracingExtensionTechnique
-
-void to_json(json& j, NISTTechniquesRaytracingExtensionTechnique const& t) {
-  j = json{};
-  j["program"] = t.program;
-  j["albedo"] = t.albedo;
-}
-
-void from_json(json const& j, NISTTechniquesRaytracingExtensionTechnique& t) {
-  t.program = j["program"];
-  t.albedo = j["albedo"];
+  shader.type = j.at("type");
+  shader.uri = j.at("uri");
 }
 
 struct NISTTechniquesRaytracingExtension {
-  std::vector<NISTTechniquesRaytracingExtensionProgram> programs;
+  NISTTechniquesRaytracingExtensionShaderBindingTable shaderBindingTable;
   std::vector<NISTTechniquesRaytracingExtensionShader> shaders;
-  std::vector<NISTTechniquesRaytracingExtensionTechnique> techniques;
 }; // struct NISTTechniquesRaytracingExtension
 
 void to_json(json& j, NISTTechniquesRaytracingExtension const& ext) {
   j = json{};
-  j["programs"] = ext.programs;
+  j["shaderBindingTable"] = ext.shaderBindingTable;
   j["shaders"] = ext.shaders;
-  j["techniques"] = ext.techniques;
 }
 
 void from_json(json const& j, NISTTechniquesRaytracingExtension& ext) {
-  ext.programs =
-    j["programs"].get<decltype(NISTTechniquesRaytracingExtension::programs)>();
+  ext.shaderBindingTable = j.at("shaderBindingTable");
   ext.shaders =
-    j["shaders"].get<decltype(NISTTechniquesRaytracingExtension::shaders)>();
-  ext.techniques =
-    j["techniques"]
-      .get<decltype(NISTTechniquesRaytracingExtension::techniques)>();
+    j.at("shaders").get<decltype(NISTTechniquesRaytracingExtension::shaders)>();
 }
 
 struct GLTF {
@@ -690,6 +667,15 @@ struct GLTF {
             std::vector<std::vector<std::byte>> const& buffersBytes,
             std::vector<VkExtent2D> const& imagesExtents,
             std::vector<std::vector<std::byte>> imagesBytes);
+
+  expected<
+    std::tuple<VkDescriptorSetLayout, VkDescriptorSet,
+               absl::InlinedVector<iris::ShaderGroup, 8>, iris::Pipeline>,
+    std::system_error>
+  ParseRaytracingPipeline(int numGeometries);
+
+  expected<void, std::system_error>
+  ParseRaytracingMaterials(gsl::span<ShaderGroup> shaderGroups);
 
   template <typename T>
   expected<T, std::system_error>
@@ -1750,296 +1736,17 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue,
 } // GLTF::ParsePrimitive
 
 template <>
-iris::expected<iris::Renderer::Component::Traceable, std::system_error>
+iris::expected<iris::Renderer::Component::Traceable::Geometry,
+               std::system_error>
 GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
-                     glm::mat4x4 const& nodeMat,
+                     glm::mat4x4 const&,
                      std::vector<std::vector<std::byte>> const& buffersBytes,
                      std::vector<VkExtent2D> const&,
                      std::vector<std::vector<std::byte>>, Node const&,
                      Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
-  Renderer::Component::Traceable component;
-
-  absl::FixedArray<VkDescriptorSetLayoutBinding, 4> bindings{
-    {
-      0,                                            // binding
-      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
-      1,                                            // descriptorCount
-      VK_SHADER_STAGE_RAYGEN_BIT_NV |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
-      nullptr                               // pImmutableSamplers
-    },
-    {
-      1,                                // binding
-      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
-      1,                                // descriptorCount
-      VK_SHADER_STAGE_RAYGEN_BIT_NV,    // stageFlags
-      nullptr                           // pImmutableSamplers
-    },
-    {
-      2,                                 // binding
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-      1,                                 // descriptorCount
-      VK_SHADER_STAGE_INTERSECTION_BIT_NV |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
-      nullptr                               // pImmutableSamplers
-    },
-    {
-      3,                                                      // binding
-      VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT,            // descriptorType
-      sizeof(Renderer::Component::Traceable::InlineUniforms), // descriptorCount
-      VK_SHADER_STAGE_INTERSECTION_BIT_NV |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
-      nullptr                               // pImmutableSamplers
-    },
-  };
-
-  VkDescriptorSetLayoutCreateInfo layoutCI = {};
-  layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(bindings.size());
-  layoutCI.pBindings = bindings.data();
-
-  if (auto result = vkCreateDescriptorSetLayout(
-        Renderer::sDevice, &layoutCI, nullptr, &component.descriptorSetLayout);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(make_error_code(result),
-                                        "Cannot create descriptor set layout"));
-  }
-
-  VkDescriptorSetAllocateInfo setAI = {};
-  setAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  setAI.descriptorPool = Renderer::sDescriptorPool;
-  setAI.descriptorSetCount = 1;
-  setAI.pSetLayouts = &component.descriptorSetLayout;
-
-  if (auto result = vkAllocateDescriptorSets(Renderer::sDevice, &setAI,
-                                             &component.descriptorSet);
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(make_error_code(result),
-                                        "Cannot allocate descriptor set"));
-  }
-
-  //
-  // TODO: break this out into another CreateMaterial function to reuse the
-  // pipeline - although I'm not sure multiple traceables will work this way.
-  //
-
-  if (!primitive.material) {
-    IRIS_LOG_LEAVE();
-    return unexpected(
-      std::system_error(Error::kFileParseFailed, "Primitive has not material"));
-  } else if (!materials || *primitive.material > materials->size()) {
-    IRIS_LOG_LEAVE();
-    return unexpected(
-      std::system_error(Error::kFileParseFailed, "No materials defined"));
-  }
-
-  auto&& material = (*materials)[*primitive.material];
-  if (!material.nistTechniquesRaytracingExtension) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(
-      Error::kFileParseFailed,
-      "Material has no NIST_techniques_raytracing extension"));
-  }
-
-  if (!nistTechniquesRaytracingExtension) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(
-      Error::kFileParseFailed,
-      "File has no NIST_techniques_raytracing extension"));
-  }
-
-  if (material.nistTechniquesRaytracingExtension->technique >
-      nistTechniquesRaytracingExtension->techniques.size()) {
-    IRIS_LOG_LEAVE();
-    return unexpected(
-      std::system_error(Error::kFileParseFailed,
-                        "NIST_techniques_raytracing has too few techniques"));
-  }
-
-  auto&& technique =
-    nistTechniquesRaytracingExtension
-      ->techniques[material.nistTechniquesRaytracingExtension->technique];
-
-  component.inlineUniforms.albedo = technique.albedo;
-
-  if (technique.program > nistTechniquesRaytracingExtension->programs.size()) {
-    IRIS_LOG_LEAVE();
-    return unexpected(
-      std::system_error(Error::kFileParseFailed,
-                        "NIST_techniques_raytracing has too few programs"));
-  }
-
-  auto&& program =
-    nistTechniquesRaytracingExtension->programs[technique.program];
-
-  if (!program.raygenShader || !program.missShader ||
-      !program.closestHitShader) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(
-      Error::kFileParseFailed,
-      "NIST_techniques_raytracing program is likely invalid"));
-  }
-
-  absl::InlinedVector<Shader, 6> shaders;
-
-  if (program.raygenShader) {
-    if (*program.raygenShader >
-        nistTechniquesRaytracingExtension->shaders.size()) {
-      IRIS_LOG_LEAVE();
-      return unexpected(
-        std::system_error(Error::kFileParseFailed,
-                          "NIST_techniques_raytracing has too few shaders"));
-    }
-
-    auto&& shader =
-      nistTechniquesRaytracingExtension->shaders[*program.raygenShader];
-
-    if (auto rgen =
-          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
-      shaders.push_back(std::move(*rgen));
-    } else {
-      IRIS_LOG_LEAVE();
-      return unexpected(rgen.error());
-    }
-  }
-
-  if (program.missShader) {
-    if (*program.missShader >
-        nistTechniquesRaytracingExtension->shaders.size()) {
-      IRIS_LOG_LEAVE();
-      return unexpected(
-        std::system_error(Error::kFileParseFailed,
-                          "NIST_techniques_raytracing has too few shaders"));
-    }
-
-    auto&& shader =
-      nistTechniquesRaytracingExtension->shaders[*program.missShader];
-
-    if (auto rmiss =
-          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_MISS_BIT_NV)) {
-      shaders.push_back(std::move(*rmiss));
-    } else {
-      IRIS_LOG_LEAVE();
-      return unexpected(rmiss.error());
-    }
-  }
-
-  if (program.intersectionShader) {
-    if (*program.intersectionShader >
-        nistTechniquesRaytracingExtension->shaders.size()) {
-      IRIS_LOG_LEAVE();
-      return unexpected(
-        std::system_error(Error::kFileParseFailed,
-                          "NIST_techniques_raytracing has too few shaders"));
-    }
-
-    auto&& shader =
-      nistTechniquesRaytracingExtension->shaders[*program.intersectionShader];
-
-    if (auto rint =
-          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
-      shaders.push_back(std::move(*rint));
-    } else {
-      IRIS_LOG_LEAVE();
-      return unexpected(rint.error());
-    }
-  }
-
-  if (program.closestHitShader) {
-    if (*program.closestHitShader >
-        nistTechniquesRaytracingExtension->shaders.size()) {
-      IRIS_LOG_LEAVE();
-      return unexpected(
-        std::system_error(Error::kFileParseFailed,
-                          "NIST_techniques_raytracing has too few shaders"));
-    }
-
-    auto&& shader =
-      nistTechniquesRaytracingExtension->shaders[*program.closestHitShader];
-
-    if (auto rchit =
-          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
-      shaders.push_back(std::move(*rchit));
-    } else {
-      IRIS_LOG_LEAVE();
-      return unexpected(rchit.error());
-    }
-  }
-
-  absl::FixedArray<iris::ShaderGroup> shaderGroups(3);
-  shaderGroups[0] = ShaderGroup::General(0);
-  shaderGroups[1] = ShaderGroup::General(1);
-  shaderGroups[2] = ShaderGroup::ProceduralHit(2, 3);
-
-  // TODO: probably move this out of here, also reduce maxRecursionDepth
-
-  if (auto pipe =
-        CreateRayTracingPipeline(shaders,      // shaders
-                                 shaderGroups, // groups
-                                 gsl::make_span(&component.descriptorSetLayout,
-                                                1), // descriptorSetLayouts
-                                 1                  // maxRecursionDepth
-                                 )) {
-    component.pipeline = std::move(*pipe);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(pipe.error());
-  }
-
-  VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties = {};
-  rayTracingProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
-
-  VkPhysicalDeviceProperties2 physicalDeviceProperties = {};
-  physicalDeviceProperties.sType =
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-  physicalDeviceProperties.pNext = &rayTracingProperties;
-
-  vkGetPhysicalDeviceProperties2(Renderer::sPhysicalDevice,
-                                 &physicalDeviceProperties);
-  VkDeviceSize const shaderGroupHandleSize =
-    rayTracingProperties.shaderGroupHandleSize;
-
-  absl::FixedArray<std::byte> shaderGroupHandles(shaderGroupHandleSize *
-                                                 shaderGroups.size());
-
-  if (auto result = vkGetRayTracingShaderGroupHandlesNV(
-        Renderer::sDevice,                                    // device
-        component.pipeline.pipeline,                          // pipeline
-        0,                                                    // firstGroup
-        gsl::narrow_cast<std::uint32_t>(shaderGroups.size()), // groupCount
-        gsl::narrow_cast<std::uint32_t>(shaderGroupHandles.size()), // dataSize
-        shaderGroupHandles.data()                                   // pData
-      );
-      result != VK_SUCCESS) {
-    IRIS_LOG_LEAVE();
-    return unexpected(std::system_error(make_error_code(result),
-                                        "Cannot get shader group handles"));
-  }
-
-  if (auto buf = CreateBuffer(commandQueue.commandPool,           // commandPool
-                              commandQueue.queue,                 // queue
-                              commandQueue.submitFence,           // fence
-                              VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
-                              VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
-                              shaderGroupHandleSize * 3,          // size
-                              shaderGroupHandles.data()           // data
-                              )) {
-    component.shaderBindingTable = std::move(*buf);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(buf.error());
-  }
-
-  component.missBindingOffset = shaderGroupHandleSize;
-  component.missBindingStride = shaderGroupHandleSize;
-  component.hitBindingOffset =
-    component.missBindingOffset + component.missBindingStride;
-  component.hitBindingStride = shaderGroupHandleSize;
+  Renderer::Component::Traceable::Geometry geometry;
 
   //
   // TODO: CreateSpheres
@@ -2071,7 +1778,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                            aabbs.size() * sizeof(glm::vec3),   // size
                            reinterpret_cast<std::byte*>(aabbs.data()) // data
                            )) {
-    component.geometryBuffer = std::move(*buf);
+    geometry.buffer = std::move(*buf);
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(buf.error());
@@ -2087,35 +1794,221 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
   VkGeometryAABBNV spheres = {};
   spheres.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
   spheres.pNext = nullptr;
-  spheres.aabbData = component.geometryBuffer.buffer;
+  spheres.aabbData = geometry.buffer.buffer;
   spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(aabbs.size());
   spheres.stride = sizeof(glm::vec3) * 2;
   spheres.offset = 0;
 
-  component.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-  component.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  component.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
-  component.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  component.geometry.geometry.triangles = triangles;
-  component.geometry.geometry.aabbs = spheres;
+  geometry.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+  geometry.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  geometry.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+  geometry.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+  geometry.geometry.geometry.triangles = triangles;
+  geometry.geometry.geometry.aabbs = spheres;
 
   //
   // TODO: CreateBottomLevelAccelerationStructure
   //
 
   if (auto structure = CreateBottomLevelAccelerationStructure(
-        gsl::make_span(&component.geometry, 1), 0)) {
-    component.bottomLevelAccelerationStructure = std::move(*structure);
+        gsl::make_span(&geometry.geometry, 1), 0)) {
+    geometry.bottomLevelAccelerationStructure = std::move(*structure);
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(structure.error());
   }
 
-  component.modelMatrix = nodeMat;
+  IRIS_LOG_LEAVE();
+  return geometry;
+} // GLTF::ParsePrimitive
+
+iris::expected<
+  std::tuple<VkDescriptorSetLayout, VkDescriptorSet,
+             absl::InlinedVector<iris::ShaderGroup, 8>, iris::Pipeline>,
+  std::system_error>
+GLTF::ParseRaytracingPipeline(int numGeometries) {
+  IRIS_LOG_ENTER();
+
+  absl::InlinedVector<VkDescriptorSetLayoutBinding, 128> bindings{
+    {
+      0,                                            // binding
+      VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+      1,                                            // descriptorCount
+      VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
+        VK_SHADER_STAGE_ANY_HIT_BIT_NV, // stageFlags
+      nullptr                           // pImmutableSamplers
+    },
+    {
+      1,                                // binding
+      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
+      1,                                // descriptorCount
+      VK_SHADER_STAGE_RAYGEN_BIT_NV,    // stageFlags
+      nullptr                           // pImmutableSamplers
+    },
+  };
+
+  for (int i = 0; i < numGeometries; ++i) {
+    bindings.push_back({
+      static_cast<std::uint32_t>(bindings.size()), // binding
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,           // descriptorType
+      1,                                           // descriptorCount
+      VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
+        VK_SHADER_STAGE_ANY_HIT_BIT_NV, // stageFlags
+      nullptr                           // pImmutableSamplers
+    });
+  }
+
+  VkDescriptorSetLayoutCreateInfo layoutCI = {};
+  layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layoutCI.bindingCount = gsl::narrow_cast<std::uint32_t>(bindings.size());
+  layoutCI.pBindings = bindings.data();
+
+  VkDescriptorSetLayout descriptorSetLayout;
+  if (auto result = vkCreateDescriptorSetLayout(Renderer::sDevice, &layoutCI,
+                                                nullptr, &descriptorSetLayout);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot create descriptor set layout"));
+  }
+
+  VkDescriptorSetAllocateInfo setAI = {};
+  setAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  setAI.descriptorPool = Renderer::sDescriptorPool;
+  setAI.descriptorSetCount = 1;
+  setAI.pSetLayouts = &descriptorSetLayout;
+
+  VkDescriptorSet descriptorSet;
+  if (auto result =
+        vkAllocateDescriptorSets(Renderer::sDevice, &setAI, &descriptorSet);
+      result != VK_SUCCESS) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(make_error_code(result),
+                                        "Cannot allocate descriptor set"));
+  }
+
+  if (!nistTechniquesRaytracingExtension) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed,
+                        "File has no NIST_techniques_raytracing extension"));
+  }
+
+  auto&& shaders = nistTechniquesRaytracingExtension->shaders;
+  auto&& sbt = nistTechniquesRaytracingExtension->shaderBindingTable;
+
+  if (static_cast<std::size_t>(sbt.raygenShader) > shaders.size() ||
+      static_cast<std::size_t>(sbt.missShader) > shaders.size()) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed,
+                        "NIST_techniques_raytracing has too few shaders"));
+  }
+
+  for (auto&& hitShaders : sbt.hitShaders) {
+    for (auto&& shader : hitShaders) {
+      if (static_cast<std::size_t>(shader.second) > shaders.size()) {
+        IRIS_LOG_LEAVE();
+        return unexpected(
+          std::system_error(Error::kFileParseFailed,
+                            "NIST_techniques_raytracing has too few shaders"));
+      }
+    }
+  }
+
+  absl::InlinedVector<Shader, 16> compiledShaders;
+  absl::InlinedVector<ShaderGroup, 8> shaderGroups;
+
+  if (auto s = LoadShaderFromFile(shaders[sbt.raygenShader].uri,
+                                  VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
+    compiledShaders.push_back(std::move(*s));
+    shaderGroups.push_back(ShaderGroup::General(compiledShaders.size() - 1));
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(s.error());
+  }
+
+  if (auto s = LoadShaderFromFile(shaders[sbt.missShader].uri,
+                                  VK_SHADER_STAGE_MISS_BIT_NV)) {
+    compiledShaders.push_back(std::move(*s));
+    shaderGroups.push_back(ShaderGroup::General(compiledShaders.size() - 1));
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(s.error());
+  }
+
+  for (auto&& hitShaders : sbt.hitShaders) {
+    if (hitShaders.find("intersectionShader") != hitShaders.end()) {
+      if (auto s =
+            LoadShaderFromFile(shaders[hitShaders["intersectionShader"]].uri,
+                               VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
+        compiledShaders.push_back(std::move(*s));
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(s.error());
+      }
+
+      int const intersectionIndex = compiledShaders.size() - 1;
+
+      if (auto s = LoadShaderFromFile(shaders[hitShaders["closestHit"]].uri,
+                                      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+        compiledShaders.push_back(std::move(*s));
+      } else {
+        IRIS_LOG_LEAVE();
+        return unexpected(s.error());
+      }
+
+      shaderGroups.push_back(ShaderGroup::ProceduralHit(
+        intersectionIndex, compiledShaders.size() - 1));
+    } else {
+
+    }
+  }
+
+  if (auto p = CreateRayTracingPipeline(compiledShaders, // shaders
+                                        shaderGroups,    // groups
+                                        gsl::make_span(&descriptorSetLayout, 1),
+                                        1 // maxRecursionDepth
+                                        )) {
+    return std::make_tuple(descriptorSetLayout, descriptorSet, shaderGroups,
+                           *p);
+  } else {
+    IRIS_LOG_LEAVE();
+    return unexpected(p.error());
+  }
+} // GLTF::ParseRaytracingPipeline
+
+expected<void, std::system_error>
+GLTF::ParseRaytracingMaterials(gsl::span<ShaderGroup> shaderGroups) {
+  IRIS_LOG_ENTER();
+
+  if (!materials) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed, "no materials"));
+  }
+
+  for (auto&& material : *materials) {
+    if (!material.nistTechniquesRaytracingExtension) continue;
+
+    if (material.nistTechniquesRaytracingExtension->shaderHitGroup + 2 >
+        shaderGroups.size()) {
+      IRIS_LOG_LEAVE();
+      return unexpected(std::system_error(
+        Error::kFileParseFailed,
+        "NIST_techniques_raytracing has too few shaderGroups"));
+    }
+
+    auto&& shaderGroup =
+      shaderGroups[material.nistTechniquesRaytracingExtension->shaderHitGroup +
+                   2];
+
+    //shaderGroup.type;
+  }
 
   IRIS_LOG_LEAVE();
-  return component;
-} // GLTF::ParsePrimitive
+  return {};
+} // GLTF::ParseRaytracingMaterials
 
 expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   Renderer::CommandQueue commandQueue, TextureInfo textureInfo,
@@ -2911,34 +2804,164 @@ expected<void, std::system_error> static ParseGLTF(
     std::vector<Renderer::Component::Renderable> renderables;
 
     for (auto&& node : *scene.nodes) {
-      if (auto r = g.ParseNode<Renderer::Component::Renderable>(
+      if (auto c = g.ParseNode<Renderer::Component::Renderable>(
             commandQueue, node, glm::mat4x4(1.f), path, buffersBytes,
             imagesExtents, imagesBytes)) {
-        renderables.insert(renderables.end(), r->begin(), r->end());
+        renderables.insert(renderables.end(), c->begin(), c->end());
       } else {
         IRIS_LOG_LEAVE();
-        return unexpected(r.error());
       }
     }
 
     IRIS_LOG_DEBUG("Adding {} renderables", renderables.size());
     for (auto&& r : renderables) Renderer::AddRenderable(r);
   } else {
-    std::vector<Renderer::Component::Traceable> traceables;
+    Renderer::Component::Traceable traceable;
+
+    /////
+    //
+    // Create the geometries
+    //
+    /////
 
     for (auto&& node : *scene.nodes) {
-      if (auto t = g.ParseNode<Renderer::Component::Traceable>(
+      if (auto c = g.ParseNode<Renderer::Component::Traceable::Geometry>(
             commandQueue, node, glm::mat4x4(1.f), path, buffersBytes,
             imagesExtents, imagesBytes)) {
-        traceables.insert(traceables.end(), t->begin(), t->end());
+        traceable.geometries.insert(traceable.geometries.end(), c->begin(),
+                                    c->end());
       } else {
         IRIS_LOG_LEAVE();
-        return unexpected(t.error());
+        return unexpected(c.error());
       }
     }
 
-    IRIS_LOG_DEBUG("Adding {} traceables", traceables.size());
-    for (auto&& t : traceables) Renderer::AddTraceable(t);
+    if (auto s =
+          CreateTopLevelAccelerationStructure(traceable.geometries.size(), 0)) {
+      traceable.topLevelAccelerationStructure = std::move(*s);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(s.error());
+    }
+
+    /////
+    //
+    // Create the pipeline
+    //
+    /////
+
+    if (auto p = g.ParseRaytracingPipeline(traceable.geometries.size())) {
+      std::tie(traceable.descriptorSetLayout, traceable.descriptorSet,
+               traceable.shaderGroups, traceable.pipeline) = *p;
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(p.error());
+    }
+
+    /////
+    //
+    // Parse the materials
+    //
+    /////
+
+    if (auto m = g.ParseRaytracingMaterials(traceable.shaderGroups)) {
+
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(m.error());
+    }
+
+    /////
+    //
+    // Create the Shader Binding Tables
+    //
+    /////
+
+    VkDeviceSize const shaderGroupHandleSize =
+      vk::GetRayTracingProperties(Renderer::sPhysicalDevice)
+        .shaderGroupHandleSize;
+
+    auto shaderGroupHandles = vk::GetRayTracingShaderHandles(
+      Renderer::sPhysicalDevice, Renderer::sDevice, traceable.pipeline.pipeline,
+      traceable.shaderGroups.size());
+    if (!shaderGroupHandles) {
+      IRIS_LOG_LEAVE();
+      return unexpected(shaderGroupHandles.error());
+    }
+
+    if (auto buf =
+          CreateBuffer(commandQueue.commandPool,           // commandPool
+                       commandQueue.queue,                 // queue
+                       commandQueue.submitFence,           // fence
+                       VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
+                       VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
+                       shaderGroupHandleSize,              // size
+                       shaderGroupHandles->data()          // data
+                       )) {
+      traceable.raygenShaderBindingTable = std::move(*buf);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(buf.error());
+    }
+
+    if (auto buf = CreateBuffer(
+          commandQueue.commandPool,                          // commandPool
+          commandQueue.queue,                                // queue
+          commandQueue.submitFence,                          // fence
+          VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,                // bufferUsage
+          VMA_MEMORY_USAGE_GPU_ONLY,                         // memoryUsage
+          shaderGroupHandleSize,                             // size
+          shaderGroupHandles->data() + shaderGroupHandleSize // data
+          )) {
+      traceable.missShaderBindingTable = std::move(*buf);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(buf.error());
+    }
+
+    traceable.missBindingStride = shaderGroupHandleSize;
+    traceable.hitBindingStride = shaderGroupHandleSize;
+
+    if (auto img = AllocateImage(
+          VK_FORMAT_R8G8B8A8_UNORM,    // format
+          traceable.outputImageExtent, // extent
+          1,                           // mipLevels
+          1,                           // arrayLayers
+          VK_SAMPLE_COUNT_1_BIT,       // sampleCount
+          VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // imageUsage
+          VK_IMAGE_TILING_OPTIMAL,           // imageTiling
+          VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
+          )) {
+      traceable.outputImage = std::move(*img);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(img.error());
+    }
+
+    if (auto view = CreateImageView(traceable.outputImage,    // image
+                                    VK_IMAGE_VIEW_TYPE_2D,    // type
+                                    VK_FORMAT_R8G8B8A8_UNORM, // format
+                                    {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1})) {
+      traceable.outputImageView = *view;
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(view.error());
+    }
+
+    VkFenceCreateInfo traceFenceCI = {};
+    traceFenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    traceFenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    if (auto result = vkCreateFence(Renderer::sDevice, &traceFenceCI, nullptr,
+                                    &traceable.traceFinishedFence);
+        result != VK_SUCCESS) {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(make_error_code(result), "Cannot create fence"));
+    }
+
+    Renderer::SetTraceable(traceable);
   }
 
   IRIS_LOG_LEAVE();

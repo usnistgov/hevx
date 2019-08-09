@@ -8,39 +8,41 @@
 #include "iris/buffer.h"
 #include "iris/image.h"
 #include "iris/pipeline.h"
+#include "iris/shader.h"
 #include "iris/vulkan.h"
 #include <cstdint>
 
 namespace iris::Renderer::Component {
 
 struct Traceable {
-  Pipeline pipeline{};
-
   VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
   VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
+  absl::InlinedVector<ShaderGroup, 8> shaderGroups;
+  Pipeline pipeline{};
 
-  struct InlineUniforms {
-    glm::vec3 albedo;
-    float fuzz;
-  };
+  Buffer raygenShaderBindingTable{};
+  Buffer missShaderBindingTable{};
+  Buffer hitShaderBindingTable{};
 
-  InlineUniforms inlineUniforms;
-
-  Buffer shaderBindingTable{};
-
-  VkDeviceSize raygenBindingOffset{0};
-  VkDeviceSize missBindingOffset{0};
   VkDeviceSize missBindingStride{0};
-  VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
 
-  Buffer geometryBuffer{};
+  struct Geometry {
+    Buffer buffer{};
+    VkGeometryNV geometry{};
+    bool bottomLevelDirty{true};
+    AccelerationStructure bottomLevelAccelerationStructure{};
+  };
 
-  VkGeometryNV geometry{};
-  bool bottomLevelDirty{true};
-  AccelerationStructure bottomLevelAccelerationStructure{};
+  absl::InlinedVector<Geometry, 128> geometries;
+  bool topLevelDirty{true};
+  AccelerationStructure topLevelAccelerationStructure{};
 
-  glm::mat4 modelMatrix{1.f};
+  VkExtent2D outputImageExtent{1600, 1200};
+  Image outputImage{};
+  VkImageView outputImageView{};
+
+  VkFence traceFinishedFence{VK_NULL_HANDLE};
 }; // struct Traceable
 
 } // namespace iris::Renderer::Component

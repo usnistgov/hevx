@@ -40,11 +40,6 @@ layout(set = 0, binding = 1) uniform LightsBuffer {
   int NumLights;
 };
 
-layout(set = 1, binding = 3) uniform block {
-  vec3 albedo;
-  float fuzz;
-};
-
 layout(location = 0) rayPayloadInNV PerRayData prd;
 
 hitAttributeNV vec3 Po; // Hit position in world-space
@@ -55,5 +50,5 @@ void main() {
 
   prd.event = EVENT_RAY_BOUNCED;
   prd.scattered = Ray(Po, reflected);
-  prd.attenuation = albedo;
+  prd.attenuation = vec3(.8f, .8f, .8f);
 }

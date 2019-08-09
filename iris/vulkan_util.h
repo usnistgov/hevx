@@ -110,6 +110,14 @@ CreateAllocator(VkPhysicalDevice physicalDevice, VkDevice device) noexcept;
 GetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice,
                                 VkSurfaceKHR surface);
 
+[[nodiscard]] VkPhysicalDeviceRayTracingPropertiesNV
+GetRayTracingProperties(VkPhysicalDevice physicalDevice) noexcept;
+
+[[nodiscard]] expected<absl::InlinedVector<std::byte, 128>, std::system_error>
+GetRayTracingShaderHandles(VkPhysicalDevice physicalDevice, VkDevice device,
+                           VkPipeline pipeline,
+                           std::uint32_t numGroups) noexcept;
+
 void SetImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                     VkPipelineStageFlags srcStages,
                     VkPipelineStageFlags dstStages, VkImageLayout oldLayout,
