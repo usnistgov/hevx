@@ -23,12 +23,6 @@
             "_AABB": 0
           },
           "material": 0
-        },
-        {
-          "attributes": {
-            "_AABB": 1
-          },
-          "material": 1
         }
       ]
     }
@@ -44,17 +38,6 @@
           }
         }
       }
-    },
-    {
-      "name": "metal",
-      "extensions": {
-        "NIST_techniques_raytracing": {
-          "shaderHitGroup": 0,
-          "shaderRecord": {
-            "albedo": 3
-          }
-        }
-      }
     }
   ],
   "extensions": {
@@ -66,10 +49,6 @@
           {
             "intersectionShader": 2,
             "closestHitShader": 3
-          },
-          {
-            "intersectionShader": 2,
-            "closestHitShader": 4
           }
         ]
       },
@@ -102,7 +81,7 @@
       "bufferView": 0,
       "byteOffset": 0,
       "componentType": 5126,
-      "count": 2,
+      "count": 4,
       "type": "VEC3"
     },
     {

@@ -495,94 +495,6 @@ BuildBlitImageCommandBuffer(VkImageView src, VkViewport* pViewport,
 } // BuildBlitImageCommandBuffer
 
 static VkCommandBuffer
-BuildTraceableCommandBuffer(Component::Traceable const& traceable,
-                            gsl::span<std::byte> pushConstants) noexcept {
-  VkCommandBufferAllocateInfo commandBufferAI = {};
-  commandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  commandBufferAI.commandPool = sCommandPools[sCommandQueueGraphics];
-  commandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-  commandBufferAI.commandBufferCount = 1;
-
-  VkCommandBuffer commandBuffer;
-  if (auto result =
-        vkAllocateCommandBuffers(sDevice, &commandBufferAI, &commandBuffer);
-      result != VK_SUCCESS) {
-    IRIS_LOG_ERROR("Cannot allocate command buffer: {}", to_string(result));
-    return VK_NULL_HANDLE;
-  }
-
-  VkCommandBufferInheritanceInfo commandBufferII = {};
-  commandBufferII.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-  commandBufferII.subpass = 0;
-  commandBufferII.framebuffer = VK_NULL_HANDLE;
-
-  VkCommandBufferBeginInfo commandBufferBI = {};
-  commandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  commandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-  commandBufferBI.pInheritanceInfo = &commandBufferII;
-
-  vkBeginCommandBuffer(commandBuffer, &commandBufferBI);
-
-  vk::BeginDebugLabel(commandBuffer, "Traceable Bind and Push");
-  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
-                    traceable.pipeline.pipeline);
-
-  vkCmdBindDescriptorSets(
-    commandBuffer,                         // commandBuffer
-    VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
-    traceable.pipeline.layout,             // layout
-    0,                                     // firstSet
-    1,                                     // descriptorSetCount
-    &sGlobalDescriptorSet,                 // pDescriptorSets
-    0,                                     // dynamicOffsetCount
-    nullptr                                // pDynamicOffsets
-  );
-
-  if (traceable.descriptorSet != VK_NULL_HANDLE) {
-    vkCmdBindDescriptorSets(
-      commandBuffer,                         // commandBuffer
-      VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
-      traceable.pipeline.layout,             // layout
-      1,                                     // firstSet
-      1,                                     // descriptorSetCount
-      &traceable.descriptorSet,              // pDescriptorSets
-      0,                                     // dynamicOffsetCount
-      nullptr                                // pDynamicOffsets
-    );
-  }
-
-  vkCmdPushConstants(
-    commandBuffer, traceable.pipeline.layout,
-    VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
-      VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV |
-      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
-    0, gsl::narrow_cast<std::uint32_t>(pushConstants.size()),
-    pushConstants.data());
-  vk::EndDebugLabel(commandBuffer);
-
-  vkCmdTraceRaysNV(
-    commandBuffer,                             // commandBuffer
-    traceable.raygenShaderBindingTable.buffer, // raygenShaderBindingTableBuffer
-    0,                                         // raygenShaderBindingOffset
-    traceable.missShaderBindingTable.buffer,   // missShaderBindingTableBuffer
-    0,                                         // missShaderBindingOffset
-    traceable.missBindingStride,               // missShaderBindingStride
-    traceable.hitShaderBindingTable.buffer,    // hitShaderBindingTableBuffer
-    0,                                         // hitShaderBindingOffset
-    traceable.hitBindingStride,                // hitShaderBindingStride
-    VK_NULL_HANDLE,                     // callableShaderBindingTableBuffer
-    0,                                  // callableShaderBindingOffset
-    0,                                  // callableShaderBindingStride
-    traceable.outputImageExtent.width,  // width
-    traceable.outputImageExtent.height, // height
-    1                                   // depth
-  );
-
-  vkEndCommandBuffer(commandBuffer);
-  return commandBuffer;
-} // BuildTraceableCommandBuffer
-
-static VkCommandBuffer
 BuildRenderableCommandBuffer(Component::Renderable const& renderable,
                              VkViewport* pViewport, VkRect2D* pScissor,
                              gsl::span<std::byte> pushConstants) noexcept {
@@ -942,7 +854,6 @@ static void BeginFrameTraceable() {
                   UINT64_MAX);
   vkResetFences(sDevice, 1, &sTraceable.traceFinishedFence);
 
-  IRIS_LOG_TRACE("traceable geometries: {}", sTraceable.geometries.size());
   for (auto&& geometry : sTraceable.geometries) {
     if (geometry.bottomLevelDirty) {
       IRIS_LOG_DEBUG("bottomLevelAS dirty: building");
@@ -959,6 +870,7 @@ static void BeginFrameTraceable() {
       }
 
       sTraceable.topLevelDirty = true;
+      geometry.bottomLevelDirty = false;
     }
   }
 
@@ -966,7 +878,7 @@ static void BeginFrameTraceable() {
     IRIS_LOG_DEBUG("topLevelAS dirty: building");
     absl::InlinedVector<GeometryInstance, 128> instances{};
     for (auto&& geometry : sTraceable.geometries) {
-      instances.push_back(geometry.bottomLevelAccelerationStructure.handle);
+      instances.emplace_back(geometry.bottomLevelAccelerationStructure.handle);
     }
 
     if (auto result = BuildTopLevelAccelerationStructure(
@@ -1027,17 +939,20 @@ static void BeginFrameTraceable() {
     bufferInfo.offset = 0;
     bufferInfo.range = geometry.buffer.size;
 
+    std::uint32_t const dstBinding =
+      gsl::narrow_cast<std::uint32_t>(descriptorWrites.size());
+
     descriptorWrites.push_back({
-      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,              // sType
-      nullptr,                                             // pNext
-      sTraceable.descriptorSet,                            // dstSet
-      static_cast<std::uint32_t>(descriptorWrites.size()), // dstBinding
-      0,                                                   // dstArrayElement
-      1,                                                   // descriptorCount
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,                   // descriptorType
-      nullptr,                                             // pImageInfo
-      &bufferInfo,                                         // pBufferInfo
-      nullptr                                              // pTexelBufferView
+      VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sType
+      nullptr,                                // pNext
+      sTraceable.descriptorSet,               // dstSet
+      dstBinding,                             // dstBinding
+      0,                                      // dstArrayElement
+      1,                                      // descriptorCount
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,      // descriptorType
+      nullptr,                                // pImageInfo
+      &bufferInfo,                            // pBufferInfo
+      nullptr                                 // pTexelBufferView
     });
   }
 
@@ -1096,18 +1011,59 @@ static void BeginFrameTraceable() {
 
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                       "BeginFrameTraceable");
-  VkCommandBuffer traceableCommandBuffer = BuildTraceableCommandBuffer(
-    sTraceable,
-    gsl::make_span<std::byte>(reinterpret_cast<std::byte*>(&pushConstants),
-                              sizeof(PushConstants)));
-  if (traceableCommandBuffer != VK_NULL_HANDLE) {
-    vk::BeginDebugLabel(commandBuffer, "Traceable");
-    vkCmdExecuteCommands(commandBuffer, 1, &traceableCommandBuffer);
-    vk::EndDebugLabel(commandBuffer);
-  }
-  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
-  sTraceCommandBuffers.push_back(traceableCommandBuffer);
+  vk::BeginDebugLabel(commandBuffer, "Traceable Bind and Push");
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
+                    sTraceable.pipeline.pipeline);
 
+  vkCmdBindDescriptorSets(
+    commandBuffer,                         // commandBuffer
+    VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
+    sTraceable.pipeline.layout,            // layout
+    0,                                     // firstSet
+    1,                                     // descriptorSetCount
+    &sGlobalDescriptorSet,                 // pDescriptorSets
+    0,                                     // dynamicOffsetCount
+    nullptr                                // pDynamicOffsets
+  );
+
+  if (sTraceable.descriptorSet != VK_NULL_HANDLE) {
+    vkCmdBindDescriptorSets(
+      commandBuffer,                         // commandBuffer
+      VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
+      sTraceable.pipeline.layout,            // layout
+      1,                                     // firstSet
+      1,                                     // descriptorSetCount
+      &sTraceable.descriptorSet,             // pDescriptorSets
+      0,                                     // dynamicOffsetCount
+      nullptr                                // pDynamicOffsets
+    );
+  }
+
+  vkCmdPushConstants(
+    commandBuffer, sTraceable.pipeline.layout,
+    VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV |
+      VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV |
+      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
+    0, gsl::narrow_cast<std::uint32_t>(sizeof(pushConstants)), &pushConstants);
+  vk::EndDebugLabel(commandBuffer);
+#if 0
+  vkCmdTraceRaysNV(commandBuffer, // commandBuffer
+                   sTraceable.raygenShaderBindingTable.buffer,
+                   0, // raygenShaderBindingOffset
+                   sTraceable.missShaderBindingTable.buffer,
+                   0,                            // missShaderBindingOffset
+                   sTraceable.missBindingStride, // missShaderBindingStride
+                   sTraceable.hitShadersBindingTable.buffer,
+                   0,                           // hitShaderBindingOffset
+                   sTraceable.hitBindingStride, // hitShaderBindingStride
+                   VK_NULL_HANDLE,
+                   0, // callableShaderBindingOffset
+                   0, // callableShaderBindingStride
+                   sTraceable.outputImageExtent.width,  // width
+                   sTraceable.outputImageExtent.height, // height
+                   1                                    // depth
+  );
+#endif
   vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout final");
   SetImageLayout(commandBuffer,                               // commandBuffer
                  sTraceable.outputImage,                      // image
@@ -1120,6 +1076,7 @@ static void BeginFrameTraceable() {
                  1                                            // arrayLayers
   );
   vk::EndDebugLabel(commandBuffer);
+  vk::EndDebugLabel(sCommandQueues[sCommandQueueGraphics]);
 
   if (auto result = vkEndCommandBuffer(commandBuffer); result != VK_SUCCESS) {
     IRIS_LOG_ERROR("Error ending traced command buffer: {}",

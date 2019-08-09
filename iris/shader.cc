@@ -203,7 +203,6 @@ private:
     char* content = new char[length];
     ifs.seekg(0, ifs.beg);
     ifs.read(content, length);
-    content[length] = '\0';
     return new IncludeResult(path.c_str(), content, length, content);
   }
 

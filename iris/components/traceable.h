@@ -22,7 +22,7 @@ struct Traceable {
 
   Buffer raygenShaderBindingTable{};
   Buffer missShaderBindingTable{};
-  Buffer hitShaderBindingTable{};
+  Buffer hitShadersBindingTable{};
 
   VkDeviceSize missBindingStride{0};
   VkDeviceSize hitBindingStride{0};

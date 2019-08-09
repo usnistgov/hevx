@@ -1848,10 +1848,12 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
   };
 
   for (int i = 0; i < numGeometries; ++i) {
+    std::uint32_t const binding =
+      gsl::narrow_cast<std::uint32_t>(bindings.size());
     bindings.push_back({
-      static_cast<std::uint32_t>(bindings.size()), // binding
-      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,           // descriptorType
-      1,                                           // descriptorCount
+      binding,
+      VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+      1,                                 // descriptorCount
       VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
         VK_SHADER_STAGE_ANY_HIT_BIT_NV, // stageFlags
       nullptr                           // pImmutableSamplers
@@ -1922,7 +1924,8 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
   if (auto s = LoadShaderFromFile(shaders[sbt.raygenShader].uri,
                                   VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
     compiledShaders.push_back(std::move(*s));
-    shaderGroups.push_back(ShaderGroup::General(compiledShaders.size() - 1));
+    shaderGroups.push_back(ShaderGroup::General(
+      gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1)));
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(s.error());
@@ -1931,7 +1934,8 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
   if (auto s = LoadShaderFromFile(shaders[sbt.missShader].uri,
                                   VK_SHADER_STAGE_MISS_BIT_NV)) {
     compiledShaders.push_back(std::move(*s));
-    shaderGroups.push_back(ShaderGroup::General(compiledShaders.size() - 1));
+    shaderGroups.push_back(ShaderGroup::General(
+      gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1)));
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(s.error());
@@ -1948,7 +1952,8 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
         return unexpected(s.error());
       }
 
-      int const intersectionIndex = compiledShaders.size() - 1;
+      std::uint32_t const intersectionIndex =
+        gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1);
 
       if (auto s = LoadShaderFromFile(shaders[hitShaders["closestHit"]].uri,
                                       VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
@@ -1959,10 +1964,18 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
       }
 
       shaderGroups.push_back(ShaderGroup::ProceduralHit(
-        intersectionIndex, compiledShaders.size() - 1));
+        intersectionIndex,
+        static_cast<std::uint32_t>(compiledShaders.size() - 1)));
     } else {
 
     }
+  }
+
+  for (std::size_t i = 0; i < shaderGroups.size(); ++i) {
+    IRIS_LOG_DEBUG("shaderGroups[{}]: {} {} {}", i,
+                   shaderGroups[i].generalShaderIndex,
+                   shaderGroups[i].intersectionShaderIndex,
+                   shaderGroups[i].closestHitShaderIndex);
   }
 
   if (auto p = CreateRayTracingPipeline(compiledShaders, // shaders
@@ -1999,9 +2012,9 @@ GLTF::ParseRaytracingMaterials(gsl::span<ShaderGroup> shaderGroups) {
         "NIST_techniques_raytracing has too few shaderGroups"));
     }
 
-    auto&& shaderGroup =
-      shaderGroups[material.nistTechniquesRaytracingExtension->shaderHitGroup +
-                   2];
+    //auto&& shaderGroup =
+      //shaderGroups[material.nistTechniquesRaytracingExtension->shaderHitGroup +
+                   //2];
 
     //shaderGroup.type;
   }
@@ -2836,8 +2849,8 @@ expected<void, std::system_error> static ParseGLTF(
       }
     }
 
-    if (auto s =
-          CreateTopLevelAccelerationStructure(traceable.geometries.size(), 0)) {
+    if (auto s = CreateTopLevelAccelerationStructure(
+          gsl::narrow_cast<std::uint32_t>(traceable.geometries.size()), 0)) {
       traceable.topLevelAccelerationStructure = std::move(*s);
     } else {
       IRIS_LOG_LEAVE();
@@ -2850,7 +2863,8 @@ expected<void, std::system_error> static ParseGLTF(
     //
     /////
 
-    if (auto p = g.ParseRaytracingPipeline(traceable.geometries.size())) {
+    if (auto p = g.ParseRaytracingPipeline(
+          gsl::narrow_cast<int>(traceable.geometries.size()))) {
       std::tie(traceable.descriptorSetLayout, traceable.descriptorSet,
                traceable.shaderGroups, traceable.pipeline) = *p;
     } else {
@@ -2883,7 +2897,7 @@ expected<void, std::system_error> static ParseGLTF(
 
     auto shaderGroupHandles = vk::GetRayTracingShaderHandles(
       Renderer::sPhysicalDevice, Renderer::sDevice, traceable.pipeline.pipeline,
-      traceable.shaderGroups.size());
+      gsl::narrow_cast<std::uint32_t>(traceable.shaderGroups.size()));
     if (!shaderGroupHandles) {
       IRIS_LOG_LEAVE();
       return unexpected(shaderGroupHandles.error());
@@ -2914,6 +2928,21 @@ expected<void, std::system_error> static ParseGLTF(
           shaderGroupHandles->data() + shaderGroupHandleSize // data
           )) {
       traceable.missShaderBindingTable = std::move(*buf);
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(buf.error());
+    }
+
+    if (auto buf = CreateBuffer(
+          commandQueue.commandPool,           // commandPool
+          commandQueue.queue,                 // queue
+          commandQueue.submitFence,           // fence
+          VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
+          VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
+          shaderGroupHandleSize,              // size
+          shaderGroupHandles->data() + (shaderGroupHandleSize * 2) // data
+          )) {
+      traceable.hitShadersBindingTable = std::move(*buf);
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
