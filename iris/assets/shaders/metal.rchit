@@ -51,9 +51,9 @@ hitAttributeNV vec3 Po; // Hit position in world-space
 hitAttributeNV vec3 No; // Normal in world-space
 
 void main() {
-  const vec3 target = Po + No + rand_vec3_in_unit_sphere(prd.rngState);
+  const vec3 reflected = reflect(normalize(gl_WorldRayDirectionNV), No);
 
   prd.event = EVENT_RAY_BOUNCED;
-  prd.scattered = Ray(Po, (target - Po));
+  prd.scattered = Ray(Po, reflected);
   prd.attenuation = albedo;
 }

@@ -22,6 +22,6 @@ layout(push_constant) uniform PushConstants {
 layout(location = 0) rayPayloadInNV PerRayData prd;
 
 void main() {
-  prd.scatterEvent = SCATTER_EVENT_RAY_MISSED;
+  prd.event = EVENT_RAY_MISSED;
 }
 

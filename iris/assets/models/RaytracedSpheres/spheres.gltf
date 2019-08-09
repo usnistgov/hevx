@@ -34,6 +34,13 @@
           "technique": 0
         }
       }
+    },
+    {
+      "extensions": {
+        "NIST_techniques_raytracing": {
+          "technique": 2
+        }
+      }
     }
   ],
   "extensions": {
@@ -41,15 +48,25 @@
       "programs": [
         {
           "raygenShader": 0,
-          "intersectionShader": 1,
-          "closestHitShader": 2,
-          "missShader": 3
+          "missShader": 1,
+          "intersectionShader": 2,
+          "closestHitShader": 3
+        },
+        {
+          "raygenShader": 0,
+          "missShader": 1,
+          "intersectionShader": 2,
+          "closestHitShader": 4
         }
       ],
       "shaders": [
         {
           "type": 256,
           "uri": "assets/shaders/raygen.rgen"
+        },
+        {
+          "type": 2048,
+          "uri": "assets/shaders/miss.rmiss"
         },
         {
           "type": 4096,
@@ -60,14 +77,30 @@
           "uri": "assets/shaders/lambertian.rchit"
         },
         {
-          "type": 2048,
-          "uri": "assets/shaders/miss.rmiss"
+          "type": 1024,
+          "uri": "assets/shaders/metal.rchit"
         }
       ],
       "techniques": [
         {
           "program": 0,
-          "albedo": [0.5, 0.5, 0.5]
+          "albedo": [ 0.8, 0.3, 0.3 ],
+          "fuzz":  0.0
+        },
+        {
+          "program": 0,
+          "albedo": [ 0.8, 0.8, 0.0 ],
+          "fuzz":  0.0
+        },
+        {
+          "program": 1,
+          "albedo": [ 0.8, 0.6, 0.2 ],
+          "fuzz":  0.3
+        },
+        {
+          "program": 1,
+          "albedo": [ 0.8, 0.8, 0.8 ],
+          "fuzz":  1.0
         }
       ]
     }

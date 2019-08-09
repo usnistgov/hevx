@@ -21,7 +21,7 @@ struct Traceable {
 
   struct InlineUniforms {
     glm::vec3 albedo;
-    float pad0;
+    float fuzz;
   };
 
   InlineUniforms inlineUniforms;

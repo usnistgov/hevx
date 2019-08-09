@@ -2149,7 +2149,8 @@ expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   for (uint32_t i = 1; i < nLevels; ++i) {
     mipLevelExtents[i].width = mipLevelExtents[i - 1].width / 2;
     mipLevelExtents[i].height = mipLevelExtents[i - 1].height / 2;
-    mipLevelSizes[i] = mipLevelExtents[i].width * mipLevelExtents[i].height *
+    mipLevelSizes[i] = static_cast<std::size_t>(mipLevelExtents[i].width) *
+                       static_cast<std::size_t>(mipLevelExtents[i].height) *
                        sizeof(std::byte) * 4;
     totalBytesSize += mipLevelSizes[i];
   }

@@ -33,11 +33,6 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
 layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
 layout(set = 1, binding = 1, rgba8) uniform image2D outputImage;
 
-struct Ray {
-  vec3 origin;
-  vec3 direction;
-};
-
 vec3 missColor(Ray ray) {
   const vec3 direction = normalize(ray.direction);
   // HEV is -Z up, so the Z coordinate of the direction vector runs top-bottom
@@ -64,14 +59,13 @@ vec3 color(Ray ray) {
             0 // payload
     );
 
-    if (prd.scatterEvent == SCATTER_EVENT_RAY_MISSED) {
+    if (prd.event == EVENT_RAY_MISSED) {
       return attenuation * missColor(ray);
-    } else if (prd.scatterEvent == SCATTER_EVENT_RAY_KILLED) {
+    } else if (prd.event == EVENT_RAY_KILLED) {
       return vec3(0.f, 0.f, 0.f);
     } else {
       attenuation *= prd.attenuation;
-      ray.origin = prd.scatterOrigin;
-      ray.direction = prd.scatterDirection;
+      ray = prd.scattered;
     }
   }
 
