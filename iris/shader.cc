@@ -132,9 +132,7 @@ static const TBuiltInResource DefaultTBuiltInResource = {
 
 class DirStackIncluder : public glslang::TShader::Includer {
 public:
-  DirStackIncluder()
-    : dirStack_{kIRISContentDirectory + "/assets/shaders"s}
-    , numExternalLocalDirs_(1) {}
+  DirStackIncluder() = default;
 
   virtual IncludeResult* includeLocal(char const* headerName,
                                       char const* includerName,
@@ -164,8 +162,8 @@ public:
   }
 
 private:
-  std::vector<std::string> dirStack_;
-  int numExternalLocalDirs_;
+  std::vector<std::string> dirStack_{};
+  int numExternalLocalDirs_{0};
 
   virtual IncludeResult* readLocalPath(std::string const& headerName,
                                        std::string const& includerName,
@@ -180,11 +178,14 @@ private:
     for (auto& dir : dirStack_) {
       std::string path = absl::StrCat(dir, "/", headerName);
       std::replace(path.begin(), path.end(), '\\', '/');
-      std::ifstream ifs(path.c_str(),
-                        std::ios_base::binary | std::ios_base::ate);
+      std::ifstream ifs(path.c_str());
       if (ifs) {
+        ifs.ignore(std::numeric_limits<std::streamsize>::max());
+        std::streamsize length = ifs.gcount();
+        ifs.clear();
+
         dirStack_.push_back(getDirectory(path));
-        return newIncludeResult(path, ifs, gsl::narrow_cast<int>(ifs.tellg()));
+        return newIncludeResult(path, ifs, gsl::narrow_cast<int>(length));
       }
     }
 
@@ -202,6 +203,7 @@ private:
     char* content = new char[length];
     ifs.seekg(0, ifs.beg);
     ifs.read(content, length);
+    IRIS_LOG_TRACE("include result content:\n {}", content);
     return new IncludeResult(path.c_str(), content, length, content);
   }
 
@@ -273,17 +275,21 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
 
   DirStackIncluder includer;
   includer.pushExternalLocalDirectory(kIRISContentDirectory);
+  includer.pushExternalLocalDirectory(kIRISContentDirectory +
+                                      "/assets/shaders"s);
 
   if (!shader.parse(&DefaultTBuiltInResource, 1, false,
                     EShMessages::EShMsgDefault, includer)) {
-    return unexpected(std::string(shader.getInfoLog()));
+    return unexpected(shader.getInfoLog() + "\nsource:\n"s +
+                      std::string(source));
   }
 
   glslang::TProgram program;
   program.addShader(&shader);
 
   if (!program.link(EShMessages::EShMsgDefault)) {
-    return unexpected(std::string(program.getInfoLog()));
+    return unexpected(program.getInfoLog() + "\nsource:\n"s +
+                      std::string(source));
   }
 
   if (auto glsl = program.getIntermediate(lang)) {
@@ -302,8 +308,8 @@ CompileShader(std::string_view source, VkShaderStageFlagBits shaderStage,
     IRIS_LOG_LEAVE();
     return code;
   } else {
-    return unexpected(std::string(
-      "cannot get glsl intermediate representation of compiled shader"));
+    return unexpected(
+      "cannot get glsl intermediate representation of compiled shader"s);
   }
 } // CompileShader
 
@@ -330,7 +336,7 @@ iris::expected<iris::Shader, std::system_error> iris::CompileShaderFromSource(
   VkShaderModuleCreateInfo shaderModuleCI = {};
   shaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   // codeSize is count of bytes, not count of words (which is what size() is)
-  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size()) * 4u;
+  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4);
   shaderModuleCI.pCode = code->data();
 
   if (auto result = vkCreateShaderModule(Renderer::sDevice, &shaderModuleCI,
@@ -378,7 +384,7 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
   VkShaderModuleCreateInfo shaderModuleCI = {};
   shaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   // codeSize is count of bytes, not count of words (which is what size() is)
-  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size()) * 4u;
+  shaderModuleCI.codeSize = gsl::narrow_cast<std::uint32_t>(code->size() * 4u);
   shaderModuleCI.pCode = code->data();
 
   if (auto result = vkCreateShaderModule(Renderer::sDevice, &shaderModuleCI,

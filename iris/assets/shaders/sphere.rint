@@ -2,6 +2,8 @@
 #extension GL_NV_ray_tracing : require
 #extension GL_GOOGLE_include_directive : require
 
+#include "sphere.glsl"
+
 layout(push_constant) uniform PushConstants {
   vec4 padding0;
   float iTime;
@@ -14,15 +16,6 @@ layout(push_constant) uniform PushConstants {
   mat4 ModelMatrix;
   mat4 ModelViewMatrix;
   mat3 NormalMatrix;
-};
-
-struct Sphere {
-  float aabbMinX;
-  float aabbMinY;
-  float aabbMinZ;
-  float aabbMaxX;
-  float aabbMaxY;
-  float aabbMaxZ;
 };
 
 layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
