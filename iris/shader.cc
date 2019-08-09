@@ -354,7 +354,7 @@ iris::LoadShaderFromFile(std::filesystem::path const& path,
   IRIS_LOG_ENTER();
   Expects(!path.empty());
   Expects(Renderer::sDevice != VK_NULL_HANDLE);
-  IRIS_LOG_DEBUG("Loading shader {}", path.c_str());
+  IRIS_LOG_DEBUG("Loading shader {}", path.string());
 
   auto bytes = iris::io::ReadFile(path);
 

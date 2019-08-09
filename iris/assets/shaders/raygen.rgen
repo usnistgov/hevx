@@ -6,7 +6,7 @@
 #include "prd.glsl"
 #include "rand.glsl"
 
-#define MAX_DEPTH 10
+#define MAX_DEPTH 16
 #define NUM_SAMPLES 4
 
 layout(push_constant) uniform PushConstants {

@@ -49,24 +49,25 @@
       "shaders": [
         {
           "type": 256,
-          "uri": "raygen.rgen"
+          "uri": "assets/shaders/raygen.rgen"
         },
         {
           "type": 4096,
-          "uri": "sphere.rint"
+          "uri": "assets/shaders/sphere.rint"
         },
         {
           "type": 1024,
-          "uri": "sphere.rchit"
+          "uri": "assets/shaders/lambertian.rchit"
         },
         {
           "type": 2048,
-          "uri": "miss.miss"
+          "uri": "assets/shaders/miss.rmiss"
         }
       ],
       "techniques": [
         {
-          "program": 0
+          "program": 0,
+          "albedo": [0.5, 0.5, 0.5]
         }
       ]
     }

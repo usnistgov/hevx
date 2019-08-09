@@ -331,6 +331,18 @@ void from_json(json const& j, OcclusionTextureInfo& info) {
   if (j.find("strength") != j.end()) info.strength = j["strength"];
 }
 
+struct NISTTechniquesRaytracingMaterialExtension {
+  int technique;
+}; // struct NISTTechniquesRaytracingMaterialExtension
+
+void to_json(json& j, NISTTechniquesRaytracingMaterialExtension const& ext) {
+  j = json{{"technique", ext.technique}};
+}
+
+void from_json(json const& j, NISTTechniquesRaytracingMaterialExtension& ext) {
+  ext.technique = j.at("technique");
+}
+
 struct Material {
   std::optional<std::string> name;
   std::optional<PBRMetallicRoughness> pbrMetallicRoughness;
@@ -341,6 +353,8 @@ struct Material {
   std::optional<std::string> alphaMode;
   std::optional<double> alphaCutoff;
   std::optional<bool> doubleSided;
+  std::optional<NISTTechniquesRaytracingMaterialExtension>
+    nistTechniquesRaytracingExtension;
 }; // struct Material
 
 void to_json(json& j, Material const& m) {
@@ -356,6 +370,11 @@ void to_json(json& j, Material const& m) {
   if (m.alphaMode) j["alphaMode"] = *m.alphaMode;
   if (m.alphaCutoff) j["alphaCutoff"] = *m.alphaCutoff;
   if (m.doubleSided) j["doubleSided"] = *m.doubleSided;
+  if (m.nistTechniquesRaytracingExtension) {
+    json e{};
+    e["NIST_techniques_raytracing"] = *m.nistTechniquesRaytracingExtension;
+    j["extensions"] = e;
+  }
 }
 
 void from_json(json const& j, Material& m) {
@@ -376,6 +395,12 @@ void from_json(json const& j, Material& m) {
   if (j.find("alphaMode") != j.end()) m.alphaMode = j["alphaMode"];
   if (j.find("alphaCutoff") != j.end()) m.alphaCutoff = j["alphaCutoff"];
   if (j.find("doubleSided") != j.end()) m.doubleSided = j["doubleSided"];
+  if (j.find("extensions") != j.end()) {
+    auto&& e = j["extensions"];
+    if (e.find("NIST_techniques_raytracing") != e.end()) {
+      m.nistTechniquesRaytracingExtension = e["NIST_techniques_raytracing"];
+    }
+  }
 }
 
 struct Primitive {
@@ -547,6 +572,90 @@ void from_json(json const& j, Texture& tex) {
   if (j.find("name") != j.end()) tex.name = j["name"];
 }
 
+struct NISTTechniquesRaytracingExtensionProgram {
+  std::optional<int> raygenShader;
+  std::optional<int> missShader;
+  std::optional<int> intersectionShader;
+  std::optional<int> anyHitShader;
+  std::optional<int> closestHitShader;
+}; // struct NISTTechniquesRaytracingExtensionProgram
+
+void to_json(json& j, NISTTechniquesRaytracingExtensionProgram const& prog) {
+  j = json{};
+  if (prog.raygenShader) j["raygenShader"] = *prog.raygenShader;
+  if (prog.missShader) j["missShader"] = *prog.missShader;
+  if (prog.intersectionShader) j["intersectionShader"] = *prog.intersectionShader;
+  if (prog.anyHitShader) j["anyHitShader"] = *prog.anyHitShader;
+  if (prog.closestHitShader) j["closestHitShader"] = *prog.closestHitShader;
+}
+
+void from_json(json const& j, NISTTechniquesRaytracingExtensionProgram& prog) {
+  if (j.find("raygenShader") != j.end()) prog.raygenShader = j["raygenShader"];
+  if (j.find("missShader") != j.end()) prog.missShader = j["missShader"];
+  if (j.find("intersectionShader") != j.end()) {
+    prog.intersectionShader = j["intersectionShader"];
+  }
+  if (j.find("anyHitShader") != j.end()) prog.anyHitShader = j["anyHitShader"];
+  if (j.find("closestHitShader") != j.end()) {
+    prog.closestHitShader = j["closestHitShader"];
+  }
+}
+
+struct NISTTechniquesRaytracingExtensionShader {
+  int type;
+  std::string uri;
+}; // struct NISTTechniquesRaytracingExtensionShader
+
+void to_json(json& j, NISTTechniquesRaytracingExtensionShader const& shader) {
+  j = json{};
+  j["type"] = shader.type;
+  j["uri"] = shader.uri;
+}
+
+void from_json(json const& j, NISTTechniquesRaytracingExtensionShader& shader) {
+  shader.type = j["type"];
+  shader.uri = j["uri"];
+}
+
+struct NISTTechniquesRaytracingExtensionTechnique {
+  int program;
+  glm::vec3 albedo;
+}; // struct NISTTechniquesRaytracingExtensionTechnique
+
+void to_json(json& j, NISTTechniquesRaytracingExtensionTechnique const& t) {
+  j = json{};
+  j["program"] = t.program;
+  j["albedo"] = t.albedo;
+}
+
+void from_json(json const& j, NISTTechniquesRaytracingExtensionTechnique& t) {
+  t.program = j["program"];
+  t.albedo = j["albedo"];
+}
+
+struct NISTTechniquesRaytracingExtension {
+  std::vector<NISTTechniquesRaytracingExtensionProgram> programs;
+  std::vector<NISTTechniquesRaytracingExtensionShader> shaders;
+  std::vector<NISTTechniquesRaytracingExtensionTechnique> techniques;
+}; // struct NISTTechniquesRaytracingExtension
+
+void to_json(json& j, NISTTechniquesRaytracingExtension const& ext) {
+  j = json{};
+  j["programs"] = ext.programs;
+  j["shaders"] = ext.shaders;
+  j["techniques"] = ext.techniques;
+}
+
+void from_json(json const& j, NISTTechniquesRaytracingExtension& ext) {
+  ext.programs =
+    j["programs"].get<decltype(NISTTechniquesRaytracingExtension::programs)>();
+  ext.shaders =
+    j["shaders"].get<decltype(NISTTechniquesRaytracingExtension::shaders)>();
+  ext.techniques =
+    j["techniques"]
+      .get<decltype(NISTTechniquesRaytracingExtension::techniques)>();
+}
+
 struct GLTF {
   // TODO: These need to match gltf.frag
   static constexpr std::size_t const kBaseColorBinding = 1;
@@ -569,6 +678,8 @@ struct GLTF {
   std::optional<std::vector<Texture>> textures;
   std::optional<std::vector<std::string>> extensionsUsed;
   std::optional<std::vector<std::string>> extensionsRequired;
+  std::optional<NISTTechniquesRaytracingExtension>
+    nistTechniquesRaytracingExtension;
 
   absl::flat_hash_map<int, Renderer::MaterialID> materialsMap;
 
@@ -626,6 +737,11 @@ void to_json(json& j, GLTF const& g) {
   if (g.textures) j["textures"] = *g.textures;
   if (g.extensionsUsed) j["extensionsUsed"] = *g.extensionsUsed;
   if (g.extensionsRequired) j["extensionsRequired"] = *g.extensionsRequired;
+  if (g.nistTechniquesRaytracingExtension) {
+    json e{};
+    e["NIST_techniques_raytracing"] = *g.nistTechniquesRaytracingExtension;
+    j["extensions"] = e;
+  }
 }
 
 void from_json(json const& j, GLTF& g) {
@@ -670,6 +786,12 @@ void from_json(json const& j, GLTF& g) {
     g.extensionsRequired =
       j["extensionsRequired"]
         .get<decltype(GLTF::extensionsRequired)::value_type>();
+  }
+  if (j.find("extensions") != j.end()) {
+    auto&& e = j["extensions"];
+    if (e.find("NIST_techniques_raytracing") != e.end()) {
+      g.nistTechniquesRaytracingExtension = e["NIST_techniques_raytracing"];
+    }
   }
 }
 
@@ -1700,76 +1822,158 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                                         "Cannot allocate descriptor set"));
   }
 
-  // TODO
-  component.inlineUniforms.albedo = glm::vec3(.8f, .2f, .2f);
+  //
+  // TODO: break this out into another CreateMaterial function to reuse the
+  // pipeline - although I'm not sure multiple traceables will work this way.
+  //
 
-#if 0
-  // TODO: use the primitive material for the shaders
-  if (primitive.material) {
-    if (auto it = materialsMap.find(*primitive.material);
-        it != materialsMap.end()) {
-      component.material = it->second;
+  if (!primitive.material) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed, "Primitive has not material"));
+  } else if (!materials || *primitive.material > materials->size()) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed, "No materials defined"));
+  }
+
+  auto&& material = (*materials)[*primitive.material];
+  if (!material.nistTechniquesRaytracingExtension) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(
+      Error::kFileParseFailed,
+      "Material has no NIST_techniques_raytracing extension"));
+  }
+
+  if (!nistTechniquesRaytracingExtension) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(
+      Error::kFileParseFailed,
+      "File has no NIST_techniques_raytracing extension"));
+  }
+
+  if (material.nistTechniquesRaytracingExtension->technique >
+      nistTechniquesRaytracingExtension->techniques.size()) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed,
+                        "NIST_techniques_raytracing has too few techniques"));
+  }
+
+  auto&& technique =
+    nistTechniquesRaytracingExtension
+      ->techniques[material.nistTechniquesRaytracingExtension->technique];
+
+  component.inlineUniforms.albedo = technique.albedo;
+
+  if (technique.program > nistTechniquesRaytracingExtension->programs.size()) {
+    IRIS_LOG_LEAVE();
+    return unexpected(
+      std::system_error(Error::kFileParseFailed,
+                        "NIST_techniques_raytracing has too few programs"));
+  }
+
+  auto&& program =
+    nistTechniquesRaytracingExtension->programs[technique.program];
+
+  if (!program.raygenShader || !program.missShader ||
+      !program.closestHitShader) {
+    IRIS_LOG_LEAVE();
+    return unexpected(std::system_error(
+      Error::kFileParseFailed,
+      "NIST_techniques_raytracing program is likely invalid"));
+  }
+
+  absl::InlinedVector<Shader, 6> shaders;
+
+  if (program.raygenShader) {
+    if (*program.raygenShader >
+        nistTechniquesRaytracingExtension->shaders.size()) {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "NIST_techniques_raytracing has too few shaders"));
+    }
+
+    auto&& shader =
+      nistTechniquesRaytracingExtension->shaders[*program.raygenShader];
+
+    if (auto rgen =
+          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
+      shaders.push_back(std::move(*rgen));
     } else {
-      if (auto m = CreateMaterial(
-            commandQueue, meshName, component.topology, !texcoords.empty(),
-            vertexInputBindingDescriptions, vertexInputAttributeDescriptions,
-            frontFace, *primitive.material, imagesExtents, imagesBytes)) {
-        auto matID = Renderer::AddMaterial(std::move(*m));
-        materialsMap.insert(std::make_pair(*primitive.material, matID));
-        component.material = matID;
-      } else {
-        IRIS_LOG_LEAVE();
-        return unexpected(m.error());
-      }
+      IRIS_LOG_LEAVE();
+      return unexpected(rgen.error());
     }
   }
 
-#else
+  if (program.missShader) {
+    if (*program.missShader >
+        nistTechniquesRaytracingExtension->shaders.size()) {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "NIST_techniques_raytracing has too few shaders"));
+    }
 
-  using namespace std::string_literals;
-  absl::FixedArray<Shader> shaders(4);
+    auto&& shader =
+      nistTechniquesRaytracingExtension->shaders[*program.missShader];
 
-  if (auto rgen = LoadShaderFromFile(kIRISContentDirectory +
-                                       "/assets/shaders/raygen.rgen"s,
-                                     VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
-    shaders[0] = std::move(*rgen);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(rgen.error());
+    if (auto rmiss =
+          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_MISS_BIT_NV)) {
+      shaders.push_back(std::move(*rmiss));
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(rmiss.error());
+    }
   }
 
-  if (auto rmiss = LoadShaderFromFile(kIRISContentDirectory +
-                                        "/assets/shaders/miss.rmiss"s,
-                                      VK_SHADER_STAGE_MISS_BIT_NV)) {
-    shaders[1] = std::move(*rmiss);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(rmiss.error());
+  if (program.intersectionShader) {
+    if (*program.intersectionShader >
+        nistTechniquesRaytracingExtension->shaders.size()) {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "NIST_techniques_raytracing has too few shaders"));
+    }
+
+    auto&& shader =
+      nistTechniquesRaytracingExtension->shaders[*program.intersectionShader];
+
+    if (auto rint =
+          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
+      shaders.push_back(std::move(*rint));
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(rint.error());
+    }
   }
 
-  if (auto rint = LoadShaderFromFile(kIRISContentDirectory +
-                                       "/assets/shaders/sphere.rint"s,
-                                     VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
-    shaders[2] = std::move(*rint);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(rint.error());
-  }
+  if (program.closestHitShader) {
+    if (*program.closestHitShader >
+        nistTechniquesRaytracingExtension->shaders.size()) {
+      IRIS_LOG_LEAVE();
+      return unexpected(
+        std::system_error(Error::kFileParseFailed,
+                          "NIST_techniques_raytracing has too few shaders"));
+    }
 
-  if (auto rchit = LoadShaderFromFile(kIRISContentDirectory +
-                                        "/assets/shaders/lambertian.rchit"s,
-                                      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
-    shaders[3] = std::move(*rchit);
-  } else {
-    IRIS_LOG_LEAVE();
-    return unexpected(rchit.error());
+    auto&& shader =
+      nistTechniquesRaytracingExtension->shaders[*program.closestHitShader];
+
+    if (auto rchit =
+          LoadShaderFromFile(shader.uri, VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+      shaders.push_back(std::move(*rchit));
+    } else {
+      IRIS_LOG_LEAVE();
+      return unexpected(rchit.error());
+    }
   }
 
   absl::FixedArray<iris::ShaderGroup> shaderGroups(3);
   shaderGroups[0] = ShaderGroup::General(0);
   shaderGroups[1] = ShaderGroup::General(1);
   shaderGroups[2] = ShaderGroup::ProceduralHit(2, 3);
-#endif
 
   // TODO: probably move this out of here, also reduce maxRecursionDepth
 
@@ -1778,7 +1982,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                                  shaderGroups, // groups
                                  gsl::make_span(&component.descriptorSetLayout,
                                                 1), // descriptorSetLayouts
-                                 10                  // maxRecursionDepth
+                                 1                  // maxRecursionDepth
                                  )) {
     component.pipeline = std::move(*pipe);
   } else {
