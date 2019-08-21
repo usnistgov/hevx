@@ -10,10 +10,8 @@
 #include "error.h"
 #include "fmt/format.h"
 #include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/gtc/type_ptr.hpp"
-#include "glm/gtx/matrix_decompose.hpp"
 #include "gsl/gsl"
 #include "io/read_file.h"
 #include "io/shadertoy.h"
@@ -35,7 +33,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan.h>
 
 namespace nlohmann {
 
@@ -73,16 +70,16 @@ struct adl_serializer<glm::vec4> {
 template <>
 struct adl_serializer<glm::quat> {
   static void to_json(json& j, glm::quat const& q) {
-    j = std::vector<float>{q.x, q.y, q.z, q.w};
+    j = std::vector<float>{q.w, q.x, q.y, q.z};
   }
 
   static void from_json(json const& j, glm::quat& q) {
     auto arr = j.get<std::vector<float>>();
     if (arr.size() != 4) throw std::runtime_error("wrong number of elements");
-    q.x = arr[0];
-    q.y = arr[1];
-    q.z = arr[2];
-    q.w = arr[3];
+    q.w = arr[0];
+    q.x = arr[1];
+    q.y = arr[2];
+    q.z = arr[3];
   }
 }; // struct adl_serializer<glm::vec4>
 
@@ -683,13 +680,13 @@ struct GLTF {
                  std::string const& meshName, glm::mat4x4 const& nodeMat,
                  std::vector<std::vector<std::byte>> const& buffersBytes,
                  std::vector<VkExtent2D> const& imagesExtents,
-                 std::vector<std::vector<std::byte>> imagesBytes,
+                 std::vector<std::vector<std::byte>> const& imagesBytes,
                  Node const& node, Primitive const& primitive);
 
   struct DeviceTexture {
-    iris::Image texture;
-    VkImageView view;
-    VkSampler sampler;
+    iris::Image texture{};
+    VkImageView view{VK_NULL_HANDLE};
+    VkSampler sampler{VK_NULL_HANDLE};
   };
 
   expected<DeviceTexture, std::system_error>
@@ -706,7 +703,7 @@ struct GLTF {
       vertexInputAttributeDescriptions,
     VkFrontFace frontFace, int materialIndex,
     std::vector<VkExtent2D> const& imagesExtents,
-    std::vector<std::vector<std::byte>> imagesBytes);
+    std::vector<std::vector<std::byte>> const& imagesBytes);
 }; // struct GLTF
 
 void to_json(json& j, GLTF const& g) {
@@ -1339,7 +1336,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue,
                      std::string const& meshName, glm::mat4x4 const& nodeMat,
                      std::vector<std::vector<std::byte>> const& buffersBytes,
                      std::vector<VkExtent2D> const& imagesExtents,
-                     std::vector<std::vector<std::byte>> imagesBytes,
+                     std::vector<std::vector<std::byte>> const& imagesBytes,
                      Node const& node, Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
@@ -1580,7 +1577,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue,
                                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 VMA_MEMORY_USAGE_GPU_ONLY)) {
-    component.vertexBuffer = std::move(*buf);
+    component.vertexBuffer = *buf;
   } else {
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
@@ -1656,7 +1653,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue,
                                   VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                   VMA_MEMORY_USAGE_GPU_ONLY)) {
-      component.indexBuffer = std::move(*buf);
+      component.indexBuffer = *buf;
     } else {
       DestroyBuffer(component.vertexBuffer);
       DestroyBuffer(*staging);
@@ -1742,7 +1739,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                      glm::mat4x4 const&,
                      std::vector<std::vector<std::byte>> const& buffersBytes,
                      std::vector<VkExtent2D> const&,
-                     std::vector<std::vector<std::byte>>, Node const&,
+                     std::vector<std::vector<std::byte>> const&, Node const&,
                      Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
@@ -1778,7 +1775,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                            aabbs.size() * sizeof(glm::vec3),   // size
                            reinterpret_cast<std::byte*>(aabbs.data()) // data
                            )) {
-    geometry.buffer = std::move(*buf);
+    geometry.buffer = *buf;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(buf.error());
@@ -1812,7 +1809,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
 
   if (auto structure = CreateBottomLevelAccelerationStructure(
         gsl::make_span(&geometry.geometry, 1), 0)) {
-    geometry.bottomLevelAccelerationStructure = std::move(*structure);
+    geometry.bottomLevelAccelerationStructure = *structure;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(structure.error());
@@ -1851,8 +1848,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
   };
 
   for (int i = 0; i < numGeometries; ++i) {
-    std::uint32_t const binding =
-      gsl::narrow_cast<std::uint32_t>(bindings.size());
+    auto const binding = gsl::narrow_cast<std::uint32_t>(bindings.size());
     bindings.push_back({
       binding,
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
@@ -1927,7 +1923,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
 
   if (auto s = LoadShaderFromFile(shaders[sbt.raygenShader].uri,
                                   VK_SHADER_STAGE_RAYGEN_BIT_NV)) {
-    compiledShaders.push_back(std::move(*s));
+    compiledShaders.push_back(*s);
     shaderGroups.push_back(ShaderGroup::General(
       gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1)));
   } else {
@@ -1937,7 +1933,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
 
   if (auto s = LoadShaderFromFile(shaders[sbt.missShader].uri,
                                   VK_SHADER_STAGE_MISS_BIT_NV)) {
-    compiledShaders.push_back(std::move(*s));
+    compiledShaders.push_back(*s);
     shaderGroups.push_back(ShaderGroup::General(
       gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1)));
   } else {
@@ -1950,7 +1946,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
       if (auto s =
             LoadShaderFromFile(shaders[hitShaders["intersectionShader"]].uri,
                                VK_SHADER_STAGE_INTERSECTION_BIT_NV)) {
-        compiledShaders.push_back(std::move(*s));
+        compiledShaders.push_back(*s);
       } else {
         IRIS_LOG_LEAVE();
         return unexpected(s.error());
@@ -1961,7 +1957,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
 
       if (auto s = LoadShaderFromFile(shaders[hitShaders["closestHit"]].uri,
                                       VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
-        compiledShaders.push_back(std::move(*s));
+        compiledShaders.push_back(*s);
       } else {
         IRIS_LOG_LEAVE();
         return unexpected(s.error());
@@ -1982,11 +1978,9 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
                    shaderGroups[i].closestHitShaderIndex);
   }
 
-  if (auto p = CreateRayTracingPipeline(compiledShaders, // shaders
-                                        shaderGroups,    // groups
-                                        gsl::make_span(&descriptorSetLayout, 1),
-                                        1 // maxRecursionDepth
-                                        )) {
+  if (auto p =
+        CreateRayTracingPipeline(compiledShaders, shaderGroups,
+                                 gsl::make_span(&descriptorSetLayout, 1), 1)) {
     return std::make_tuple(descriptorSetLayout, descriptorSet, shaderGroups,
                            *p);
   } else {
@@ -2105,7 +2099,7 @@ expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
         commandQueue.commandPool, commandQueue.queue, commandQueue.submitFence,
         VK_FORMAT_R8G8B8A8_UNORM, mipLevelExtents, VK_IMAGE_USAGE_SAMPLED_BIT,
         VMA_MEMORY_USAGE_GPU_ONLY, gsl::not_null(mipLevelBytes.data()), 4)) {
-    deviceTexture.texture = std::move(*tex);
+    deviceTexture.texture = *tex;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(tex.error());
@@ -2114,7 +2108,7 @@ expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   if (auto view = CreateImageView(
         deviceTexture.texture, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, nLevels, 0, 1})) {
-    deviceTexture.view = std::move(*view);
+    deviceTexture.view = *view;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(view.error());
@@ -2210,7 +2204,7 @@ expected<GLTF::DeviceTexture, std::system_error> GLTF::CreateTexture(
   }
 
   IRIS_LOG_LEAVE();
-  return std::move(deviceTexture);
+  return deviceTexture;
 } // GLTF::CreateTexture
 
 expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
@@ -2222,7 +2216,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
     vertexInputAttributeDescriptions,
   VkFrontFace frontFace, int materialIndex,
   std::vector<VkExtent2D> const& imagesExtents,
-  std::vector<std::vector<std::byte>> imagesBytes) {
+  std::vector<std::vector<std::byte>> const& imagesBytes) {
   IRIS_LOG_ENTER();
 
   int baseColorIndex = -1;
@@ -2268,7 +2262,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
         shaderMacros.push_back("#define HAS_BASECOLOR_MAP");
         baseColorIndex = gsl::narrow_cast<int>(component.textures.size());
 
-        component.textures.push_back(std::move(dt->texture));
+        component.textures.push_back(dt->texture);
         component.textureViews.push_back(dt->view);
         component.textureSamplers.push_back(dt->sampler);
 
@@ -2294,7 +2288,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
         metallicRoughnessIndex =
           gsl::narrow_cast<int>(component.textures.size());
 
-        component.textures.push_back(std::move(dt->texture));
+        component.textures.push_back(dt->texture);
         component.textureViews.push_back(dt->view);
         component.textureSamplers.push_back(dt->sampler);
 
@@ -2323,7 +2317,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
       shaderMacros.push_back("#define HAS_NORMAL_MAP");
       normalIndex = gsl::narrow_cast<int>(component.textures.size());
 
-      component.textures.push_back(std::move(dt->texture));
+      component.textures.push_back(dt->texture);
       component.textureViews.push_back(dt->view);
       component.textureSamplers.push_back(dt->sampler);
 
@@ -2346,7 +2340,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
       shaderMacros.push_back("#define HAS_EMISSIVE_MAP");
       emissiveIndex = gsl::narrow_cast<int>(component.textures.size());
 
-      component.textures.push_back(std::move(dt->texture));
+      component.textures.push_back(dt->texture);
       component.textureViews.push_back(dt->view);
       component.textureSamplers.push_back(dt->sampler);
 
@@ -2374,7 +2368,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
       shaderMacros.push_back("#define HAS_OCCLUSION_MAP");
       occlusionIndex = gsl::narrow_cast<int>(component.textures.size());
 
-      component.textures.push_back(std::move(dt->texture));
+      component.textures.push_back(dt->texture);
       component.textureViews.push_back(dt->view);
       component.textureSamplers.push_back(dt->sampler);
 
@@ -2432,7 +2426,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
 
   if (auto vs = LoadShaderFromFile("assets/shaders/gltf.vert",
                                    VK_SHADER_STAGE_VERTEX_BIT, shaderMacros)) {
-    shaders[0] = std::move(*vs);
+    shaders[0] = *vs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(vs.error());
@@ -2441,7 +2435,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
   if (auto fs =
         LoadShaderFromFile("assets/shaders/gltf_pbr.frag",
                            VK_SHADER_STAGE_FRAGMENT_BIT, shaderMacros)) {
-    shaders[1] = std::move(*fs);
+    shaders[1] = *fs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(fs.error());
@@ -2501,7 +2495,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
         gsl::make_span(&component.descriptorSetLayout, 1))) {
-    component.pipeline = std::move(*pipe);
+    component.pipeline = *pipe;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(
@@ -2555,7 +2549,7 @@ expected<Renderer::Component::Material, std::system_error> GLTF::CreateMaterial(
                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                                   VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 VMA_MEMORY_USAGE_GPU_ONLY)) {
-    component.materialBuffer = std::move(*buf);
+    component.materialBuffer = *buf;
   } else {
     DestroyBuffer(*staging);
     IRIS_LOG_LEAVE();
@@ -2779,7 +2773,7 @@ expected<void, std::system_error> static ParseGLTF(
   //
   Renderer::CommandQueue commandQueue;
   if (auto q = Renderer::AcquireCommandQueue()) {
-    commandQueue = std::move(*q);
+    commandQueue = *q;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(std::system_error(Error::kFileLoadFailed,
@@ -2812,7 +2806,7 @@ expected<void, std::system_error> static ParseGLTF(
   }
 
   //
-  // Parse the scene graph
+  // TODO: Parse the scene graph
   // TODO: this removes the hierarchy: need to maintain those relationships
   // TODO: implement Animatable(?) component to support animations
   //
@@ -2853,12 +2847,12 @@ expected<void, std::system_error> static ParseGLTF(
       }
     }
 
-    if (auto s = CreateTopLevelAccelerationStructure(
+    if (auto structure = CreateTopLevelAccelerationStructure(
           gsl::narrow_cast<std::uint32_t>(traceable.geometries.size()), 0)) {
-      traceable.topLevelAccelerationStructure = std::move(*s);
+      traceable.topLevelAccelerationStructure = *structure;
     } else {
       IRIS_LOG_LEAVE();
-      return unexpected(s.error());
+      return unexpected(structure.error());
     }
 
     /////
@@ -2916,7 +2910,7 @@ expected<void, std::system_error> static ParseGLTF(
                        shaderGroupHandleSize,              // size
                        shaderGroupHandles->data()          // data
                        )) {
-      traceable.raygenShaderBindingTable = std::move(*buf);
+      traceable.raygenShaderBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
@@ -2931,7 +2925,7 @@ expected<void, std::system_error> static ParseGLTF(
           shaderGroupHandleSize,                             // size
           shaderGroupHandles->data() + shaderGroupHandleSize // data
           )) {
-      traceable.missShaderBindingTable = std::move(*buf);
+      traceable.missShaderBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
@@ -2946,7 +2940,7 @@ expected<void, std::system_error> static ParseGLTF(
           shaderGroupHandleSize,              // size
           shaderGroupHandles->data() + (shaderGroupHandleSize * 2) // data
           )) {
-      traceable.hitShadersBindingTable = std::move(*buf);
+      traceable.hitShadersBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
@@ -2966,7 +2960,7 @@ expected<void, std::system_error> static ParseGLTF(
           VK_IMAGE_TILING_OPTIMAL,           // imageTiling
           VMA_MEMORY_USAGE_GPU_ONLY          // memoryUsage
           )) {
-      traceable.outputImage = std::move(*img);
+      traceable.outputImage = *img;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(img.error());

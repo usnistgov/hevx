@@ -11,9 +11,7 @@
 #include "components/traceable.h"
 #include "enumerate.h"
 #include "error.h"
-#include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
-#include "glm/gtx/matrix_decompose.hpp"
 #include "renderer.h"
 #if PLATFORM_COMPILER_GCC
 #pragma GCC diagnostic push
@@ -26,7 +24,6 @@
 #include "gsl/gsl"
 #include "io/gltf.h"
 #include "io/json.h"
-#include "io/shadertoy.h"
 #include "pipeline.h"
 #include "protos.h"
 #include "renderer_private.h"
@@ -41,7 +38,6 @@
 #include "vulkan_util.h"
 #include "window.h"
 #include "wsi/input.h"
-#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
@@ -50,7 +46,6 @@
 #include <mutex>
 #include <string>
 #include <utility>
-#include <vector>
 
 using namespace std::string_literals;
 
@@ -210,7 +205,7 @@ void Move(glm::vec3 const& delta) noexcept {
 } // Move
 
 void Reposition(glm::vec3 position) noexcept {
-  sPosition = std::move(position);
+  sPosition = position;
 } // Reposition
 
 glm::quat Orientation() noexcept {
@@ -222,7 +217,7 @@ void Rotate(glm::quat const& delta) noexcept {
 } // Rotate
 
 void Reorient(glm::quat orientation) noexcept {
-  sOrientation = std::move(orientation);
+  sOrientation = orientation;
 } // Reorient
 
 glm::mat4 Matrix() noexcept {
@@ -273,7 +268,7 @@ ProcessControlMessage(iris::Control::Nav const& navMessage) noexcept {
   } break;
   case iris::Control::Nav::NavCase::kAttitude: {
     auto const& a = navMessage.attitude();
-    Reorient(glm::quat(a.x(), a.y(), a.z(), a.w()));
+    Reorient(glm::quat(a.w(), a.x(), a.y(), a.z()));
   } break;
   case iris::Control::Nav::NavCase::kScale: Rescale(navMessage.scale()); break;
   case iris::Control::Nav::NavCase::kMatrix:
@@ -599,7 +594,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   if (auto vb = ReallocateBuffer(
         window.uiVertexBuffer, drawData->TotalVtxCount * sizeof(ImDrawVert),
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    window.uiVertexBuffer = std::move(*vb);
+    window.uiVertexBuffer = *vb;
     NameObject(VK_OBJECT_TYPE_BUFFER, window.uiVertexBuffer.buffer,
                (window.title + "::uiVertexBuffer").c_str());
   } else {
@@ -611,7 +606,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   if (auto ib = ReallocateBuffer(
         window.uiIndexBuffer, drawData->TotalIdxCount * sizeof(ImDrawIdx),
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    window.uiIndexBuffer = std::move(*ib);
+    window.uiIndexBuffer = *ib;
     NameObject(VK_OBJECT_TYPE_BUFFER, window.uiIndexBuffer.buffer,
                (window.title + "::uiIndexBuffer").c_str());
   } else {
@@ -624,7 +619,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   ImDrawIdx* pIndices;
 
   if (auto ptr = window.uiVertexBuffer.Map<ImDrawVert*>()) {
-    pVertices = std::move(*ptr);
+    pVertices = *ptr;
   } else {
     IRIS_LOG_WARN("Unable to map ui vertex buffer for window {}: {}",
                   window.title, ptr.error().what());
@@ -632,7 +627,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
   }
 
   if (auto ptr = window.uiIndexBuffer.Map<ImDrawIdx*>()) {
-    pIndices = std::move(*ptr);
+    pIndices = *ptr;
   } else {
     IRIS_LOG_WARN("Unable to map ui index buffer for window {}: {}",
                   window.title, ptr.error().what());
@@ -792,7 +787,7 @@ static VkCommandBuffer BuildUICommandBuffer(Window& window) {
       vkCmdDrawIndexed(commandBuffer, drawCmd->ElemCount, 1, idOff, vtOff, 0);
       vk::EndDebugLabel(commandBuffer);
 
-      idOff += drawCmd->ElemCount;
+      idOff += gsl::narrow_cast<int>(drawCmd->ElemCount);
     }
 
     vtOff += cmdList->VtxBuffer.Size;
@@ -939,7 +934,7 @@ static void BeginFrameTraceable() {
     bufferInfo.offset = 0;
     bufferInfo.range = geometry.buffer.size;
 
-    std::uint32_t const dstBinding =
+    auto&& dstBinding =
       gsl::narrow_cast<std::uint32_t>(descriptorWrites.size());
 
     descriptorWrites.push_back({
@@ -999,7 +994,7 @@ static void BeginFrameTraceable() {
   );
   vk::EndDebugLabel(commandBuffer);
 
-  PushConstants pushConstants;
+  PushConstants pushConstants{};
   pushConstants.iMouse = glm::vec4(0.f, 0.f, 0.f, 0.f);
   pushConstants.iTimeDelta = sFrameDelta.count();
   pushConstants.iTime = sTime.count();
@@ -1026,18 +1021,16 @@ static void BeginFrameTraceable() {
     nullptr                                // pDynamicOffsets
   );
 
-  if (sTraceable.descriptorSet != VK_NULL_HANDLE) {
-    vkCmdBindDescriptorSets(
-      commandBuffer,                         // commandBuffer
-      VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
-      sTraceable.pipeline.layout,            // layout
-      1,                                     // firstSet
-      1,                                     // descriptorSetCount
-      &sTraceable.descriptorSet,             // pDescriptorSets
-      0,                                     // dynamicOffsetCount
-      nullptr                                // pDynamicOffsets
-    );
-  }
+  vkCmdBindDescriptorSets(
+    commandBuffer,                         // commandBuffer
+    VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, // pipelineBindPoint
+    sTraceable.pipeline.layout,            // layout
+    1,                                     // firstSet
+    1,                                     // descriptorSetCount
+    &sTraceable.descriptorSet,             // pDescriptorSets
+    0,                                     // dynamicOffsetCount
+    nullptr                                // pDynamicOffsets
+  );
 
   vkCmdPushConstants(
     commandBuffer, sTraceable.pipeline.layout,
@@ -1046,7 +1039,7 @@ static void BeginFrameTraceable() {
       VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV,
     0, gsl::narrow_cast<std::uint32_t>(sizeof(pushConstants)), &pushConstants);
   vk::EndDebugLabel(commandBuffer);
-#if 0
+
   vkCmdTraceRaysNV(commandBuffer, // commandBuffer
                    sTraceable.raygenShaderBindingTable.buffer,
                    0, // raygenShaderBindingOffset
@@ -1063,7 +1056,7 @@ static void BeginFrameTraceable() {
                    sTraceable.outputImageExtent.height, // height
                    1                                    // depth
   );
-#endif
+
   vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout final");
   SetImageLayout(commandBuffer,                               // commandBuffer
                  sTraceable.outputImage,                      // image
@@ -1140,7 +1133,7 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::BeginGroup();
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "Projection");
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Matrix", "%+.3f", window.projectionMatrix);
       ImGui::Columns(1);
 
@@ -1150,19 +1143,19 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::BeginGroup();
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "View");
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Position", "%+.3f", position);
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Center", "%+.3f", center);
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Up", "%+.3f", up);
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Matrix", "%+.3f", sViewMatrix);
       ImGui::Columns(1);
 
@@ -1184,15 +1177,15 @@ static void EndFrameWindowUI(Window& window) {
         Nav::Rescale(scale);
       }
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Position", "%+.3f", Nav::Position());
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Orientation", "%+.3f", Nav::Orientation());
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Matrix", "%+.3f", Nav::Matrix());
       ImGui::Columns(1);
 
@@ -1202,11 +1195,11 @@ static void EndFrameWindowUI(Window& window) {
       ImGui::BeginGroup();
       ImGui::TextColored(ImVec4(.4f, .2f, 1.f, 1.f), "World");
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "BSphere", "%+.3f", sWorldBoundingSphere);
       ImGui::Columns(1);
 
-      ImGui::Columns(5, NULL, false);
+      ImGui::Columns(5, nullptr, false);
       Text(5, "Matrix", "%+.3f", sWorldMatrix);
       ImGui::Columns(1);
 
@@ -1294,7 +1287,7 @@ EndFrameWindow(std::string const& title, Window& window,
   vkCmdSetViewport(frame.commandBuffer, 0, 1, &window.viewport);
   vkCmdSetScissor(frame.commandBuffer, 0, 1, &window.scissor);
 
-  PushConstants pushConstants;
+  PushConstants pushConstants{};
   pushConstants.iMouse = {window.lastMousePos.x, window.lastMousePos.y, 0.f,
                           0.f};
 
@@ -1559,7 +1552,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
             Options::kReportDebugMessages
           ? &DebugUtilsMessengerCallback
           : nullptr)) {
-    sInstance = std::move(*instance);
+    sInstance = *instance;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(instance.error());
@@ -1572,7 +1565,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       Options::kReportDebugMessages) {
     if (auto messenger = vk::CreateDebugUtilsMessenger(
           sInstance, &DebugUtilsMessengerCallback)) {
-      sDebugUtilsMessenger = std::move(*messenger);
+      sDebugUtilsMessenger = *messenger;
     } else {
       IRIS_LOG_WARN("Cannot create DebugUtilsMessenger: {}",
                     messenger.error().what());
@@ -1616,15 +1609,15 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
      VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME}};
 
   // These are additional extensions that we would like for the physical device.
-  absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{{
+  absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{
     VK_NV_RAY_TRACING_EXTENSION_NAME,
-  }};
+  };
 
   if (auto physicalDevice = vk::ChoosePhysicalDevice(
         sInstance, physicalDeviceFeatures, requiredPhysicalDeviceExtensionNames,
         optionalPhysicalDeviceExtensionNames,
         VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
-    sPhysicalDevice = std::move(*physicalDevice);
+    sPhysicalDevice = *physicalDevice;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(physicalDevice.error());
@@ -1731,7 +1724,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   }
 
   if (auto allocator = vk::CreateAllocator(sPhysicalDevice, sDevice)) {
-    sAllocator = std::move(*allocator);
+    sAllocator = *allocator;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(allocator.error());
@@ -1911,9 +1904,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
       1,                                 // descriptorCount
       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-        VK_SHADER_STAGE_RAYGEN_BIT_NV |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
-      nullptr                               // pImmutableSamplers
+        VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stageFlags
+      nullptr                                // pImmutableSamplers
     },
     // This is the LightsBuffer
     {
@@ -1921,9 +1914,9 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
       1,                                 // descriptorCount
       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-        VK_SHADER_STAGE_RAYGEN_BIT_NV |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stageFlags
-      nullptr                               // pImmutableSamplers
+        VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stageFlags
+      nullptr                                // pImmutableSamplers
     }};
 
   VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {};
@@ -1964,7 +1957,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   if (auto buf = AllocateBuffer(sizeof(MatricesBuffer),
                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                 VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    sMatricesBuffer = std::move(*buf);
+    sMatricesBuffer = *buf;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(buf.error());
@@ -1975,7 +1968,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   if (auto buf =
         AllocateBuffer(sizeof(LightsBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                        VMA_MEMORY_USAGE_CPU_TO_GPU)) {
-    sLightsBuffer = std::move(*buf);
+    sLightsBuffer = *buf;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(buf.error());
@@ -2115,7 +2108,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto vs = CompileShaderFromSource(sImageBlitVertexShaderSource,
                                         VK_SHADER_STAGE_VERTEX_BIT)) {
-    imageBlitShaders[0] = std::move(*vs);
+    imageBlitShaders[0] = *vs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(vs.error());
@@ -2123,7 +2116,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto fs = CompileShaderFromSource(sImageBlitFragmentShaderSource,
                                         VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    imageBlitShaders[1] = std::move(*fs);
+    imageBlitShaders[1] = *fs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(fs.error());
@@ -2179,7 +2172,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
         gsl::make_span(&sImageBlitDescriptorSetLayout, 1))) {
-    sImageBlitPipeline = std::move(*pipe);
+    sImageBlitPipeline = *pipe;
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
@@ -2254,7 +2247,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto vs = CompileShaderFromSource(sUIVertexShaderSource,
                                         VK_SHADER_STAGE_VERTEX_BIT)) {
-    uiShaders[0] = std::move(*vs);
+    uiShaders[0] = *vs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(vs.error());
@@ -2262,7 +2255,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
 
   if (auto fs = CompileShaderFromSource(sUIFragmentShaderSource,
                                         VK_SHADER_STAGE_FRAGMENT_BIT)) {
-    uiShaders[1] = std::move(*fs);
+    uiShaders[1] = *fs;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(fs.error());
@@ -2293,7 +2286,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
         rasterizationStateCI, multisampleStateCI, depthStencilStateCI,
         colorBlendAttachmentStates, dynamicStates, 0,
         gsl::make_span(&sUIDescriptorSetLayout, 1))) {
-    sUIPipeline = std::move(*pipe);
+    sUIPipeline = *pipe;
   } else {
     using namespace std::string_literals;
     IRIS_LOG_LEAVE();
@@ -2503,7 +2496,7 @@ iris::Renderer::RemoveMaterial(MaterialID const& id) noexcept {
 
   class ReleaseTask : public tbb::task {
   public:
-    ReleaseTask(Component::Material m) noexcept
+    explicit ReleaseTask(Component::Material m) noexcept
       : material_(std::move(m)) {}
 
     tbb::task* execute() override {
@@ -2549,7 +2542,7 @@ iris::Renderer::RemoveMaterial(MaterialID const& id) noexcept {
 
   if (auto old = sMaterials.Remove(id)) {
     try {
-      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
+      auto task = new (tbb::task::allocate_root()) ReleaseTask(*old);
       tbb::task::enqueue(*task);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();
@@ -2609,7 +2602,7 @@ iris::Renderer::RemoveRenderable(RenderableID const& id) noexcept {
 
   class ReleaseTask : public tbb::task {
   public:
-    ReleaseTask(Component::Renderable r) noexcept
+    explicit ReleaseTask(Component::Renderable r) noexcept
       : renderable_(std::move(r)) {}
 
     tbb::task* execute() override {
@@ -2632,7 +2625,7 @@ iris::Renderer::RemoveRenderable(RenderableID const& id) noexcept {
 
   if (auto old = sRenderables.Remove(id)) {
     try {
-      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
+      auto task = new (tbb::task::allocate_root()) ReleaseTask(*old);
       tbb::task::enqueue(*task);
     } catch (std::exception const& e) {
       IRIS_LOG_LEAVE();

@@ -103,6 +103,8 @@ void main() {
   }
 
   col = sqrt(col / vec3(float(NUM_SAMPLES)));
+  col = vec3((pixelCenter) / vec2(gl_LaunchSizeNV.zy), 0.f);
+  col = vec3(1.f, 0.f, 0.f);
   imageStore(outputImage, ivec2(gl_LaunchIDNV.xy), vec4(col, 1.f));
 }
 

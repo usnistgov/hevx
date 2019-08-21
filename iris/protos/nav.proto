@@ -15,10 +15,10 @@ message Nav {
   };
 
   message Attitude {
-    float x = 1;
-    float y = 2;
-    float z = 3;
-    float w = 4;
+    float w = 1;
+    float x = 2;
+    float y = 3;
+    float z = 4;
   };
 
   message Matrix {
