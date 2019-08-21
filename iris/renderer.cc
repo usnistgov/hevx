@@ -1611,6 +1611,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
   // These are additional extensions that we would like for the physical device.
   absl::InlinedVector<char const*, 32> optionalPhysicalDeviceExtensionNames{
     VK_NV_RAY_TRACING_EXTENSION_NAME,
+    VK_NV_MESH_SHADER_EXTENSION_NAME,
   };
 
   if (auto physicalDevice = vk::ChoosePhysicalDevice(
