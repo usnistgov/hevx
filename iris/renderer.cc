@@ -1061,7 +1061,7 @@ static void BeginFrameTraceable() {
   SetImageLayout(commandBuffer,                               // commandBuffer
                  sTraceable.outputImage,                      // image
                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
-                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,       // dstStages
+                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
                  VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
                  VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask

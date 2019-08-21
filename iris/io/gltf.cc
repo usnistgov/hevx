@@ -778,17 +778,6 @@ void from_json(json const& j, GLTF& g) {
   }
 }
 
-inline int AccessorTypeCount(std::string const& type) {
-  if (type == "SCALAR") return 1;
-  if (type == "VEC2") return 2;
-  if (type == "VEC3") return 3;
-  if (type == "VEC4") return 4;
-  if (type == "MAT2") return 4;
-  if (type == "MAT3") return 9;
-  if (type == "MAT4") return 16;
-  return 0;
-}
-
 inline int AccessorTypeByteSize(std::string const& type) {
   if (type == "SCALAR") return 4;
   if (type == "VEC2") return 8;
@@ -1743,7 +1732,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                      Primitive const& primitive) {
   IRIS_LOG_ENTER();
 
-  Renderer::Component::Traceable::Geometry geometry;
+  Renderer::Component::Traceable::Geometry geom;
 
   //
   // TODO: CreateSpheres
@@ -1775,7 +1764,7 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
                            aabbs.size() * sizeof(glm::vec3),   // size
                            reinterpret_cast<std::byte*>(aabbs.data()) // data
                            )) {
-    geometry.buffer = *buf;
+    geom.buffer = *buf;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(buf.error());
@@ -1791,32 +1780,31 @@ GLTF::ParsePrimitive(Renderer::CommandQueue commandQueue, std::string const&,
   VkGeometryAABBNV spheres = {};
   spheres.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
   spheres.pNext = nullptr;
-  spheres.aabbData = geometry.buffer.buffer;
-  spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(aabbs.size());
+  spheres.aabbData = geom.buffer.buffer;
+  spheres.numAABBs = gsl::narrow_cast<std::uint32_t>(aabbs.size() / 2);
   spheres.stride = sizeof(glm::vec3) * 2;
   spheres.offset = 0;
 
-  geometry.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-  geometry.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  geometry.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
-  geometry.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-  geometry.geometry.geometry.triangles = triangles;
-  geometry.geometry.geometry.aabbs = spheres;
+  geom.geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+  geom.geometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+  geom.geometry.geometry.triangles = triangles;
+  geom.geometry.geometry.aabbs = spheres;
+  geom.geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
 
   //
   // TODO: CreateBottomLevelAccelerationStructure
   //
 
   if (auto structure = CreateBottomLevelAccelerationStructure(
-        gsl::make_span(&geometry.geometry, 1), 0)) {
-    geometry.bottomLevelAccelerationStructure = *structure;
+        gsl::make_span(&geom.geometry, 1), 0)) {
+    geom.bottomLevelAccelerationStructure = *structure;
   } else {
     IRIS_LOG_LEAVE();
     return unexpected(structure.error());
   }
 
   IRIS_LOG_LEAVE();
-  return geometry;
+  return geom;
 } // GLTF::ParsePrimitive
 
 iris::expected<
@@ -1952,7 +1940,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
         return unexpected(s.error());
       }
 
-      std::uint32_t const intersectionIndex =
+      auto&& intersectionIndex =
         gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1);
 
       if (auto s = LoadShaderFromFile(shaders[hitShaders["closestHit"]].uri,
