@@ -175,6 +175,7 @@ iris::CreateTopLevelAccelerationStructure(std::uint32_t instanceCount,
   VkAccelerationStructureInfoNV asInfo = {};
   asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
   asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+  asInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_NV;
   asInfo.instanceCount = instanceCount;
   asInfo.geometryCount = 0;
   asInfo.pGeometries = nullptr;
@@ -192,7 +193,7 @@ iris::CreateBottomLevelAccelerationStructure(
   VkAccelerationStructureInfoNV asInfo = {};
   asInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
   asInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-  asInfo.flags = 0;
+  asInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_NV;
   asInfo.instanceCount = 0;
   asInfo.geometryCount = gsl::narrow_cast<std::uint32_t>(geometries.size());
   asInfo.pGeometries = geometries.data();

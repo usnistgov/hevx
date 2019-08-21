@@ -1835,15 +1835,18 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
       VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
       1,                                            // descriptorCount
       VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
-        VK_SHADER_STAGE_ANY_HIT_BIT_NV, // stageFlags
-      nullptr                           // pImmutableSamplers
+        VK_SHADER_STAGE_ANY_HIT_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stageFlags
+      nullptr                                // pImmutableSamplers
     },
     {
       1,                                // binding
       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
       1,                                // descriptorCount
-      VK_SHADER_STAGE_RAYGEN_BIT_NV,    // stageFlags
-      nullptr                           // pImmutableSamplers
+      VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
+        VK_SHADER_STAGE_ANY_HIT_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stageFlags
+      nullptr                                // pImmutableSamplers
     },
   };
 
@@ -1855,8 +1858,9 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
       1,                                 // descriptorCount
       VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV |
-        VK_SHADER_STAGE_ANY_HIT_BIT_NV, // stageFlags
-      nullptr                           // pImmutableSamplers
+        VK_SHADER_STAGE_ANY_HIT_BIT_NV |
+        VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stageFlags
+      nullptr                                // pImmutableSamplers
     });
   }
 

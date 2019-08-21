@@ -1,4 +1,4 @@
-set(Vulkan_VERSION 1.1.108.0)
+set(Vulkan_VERSION 1.1.114.0)
 
 find_package(Vulkan ${Vulkan_VERSION} REQUIRED)
 set_target_properties(Vulkan::Vulkan PROPERTIES IMPORTED_GLOBAL TRUE)
