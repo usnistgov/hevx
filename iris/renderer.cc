@@ -1061,7 +1061,7 @@ static void BeginFrameTraceable() {
   SetImageLayout(commandBuffer,                               // commandBuffer
                  sTraceable.outputImage,                      // image
                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // srcStages
-                 VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV, // dstStages
+                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,       // dstStages
                  VK_IMAGE_LAYOUT_GENERAL,                     // oldLayout
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,    // newLayout
                  VK_IMAGE_ASPECT_COLOR_BIT,                   // aspectMask
@@ -1542,12 +1542,12 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     instanceExtensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
+  if (appVersion == 0) {
+    appVersion = VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch);
+  }
+
   if (auto instance = vk::CreateInstance(
-        appName,
-        (appVersion == 0
-           ? VK_MAKE_VERSION(kVersionMajor, kVersionMinor, kVersionPatch)
-           : appVersion),
-        instanceExtensionNames, layerNames,
+        appName, appVersion, instanceExtensionNames, layerNames,
         (options & Options::kReportDebugMessages) ==
             Options::kReportDebugMessages
           ? &DebugUtilsMessengerCallback
@@ -1605,7 +1605,7 @@ iris::Renderer::Initialize(gsl::czstring<> appName, Options const& options,
     {VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
      // MEMORY_REQs_2 is core in 1.1, but necessary for DEDICATED_ALLOCATION
      VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
-     VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_maintenance1",
+     VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME,
      VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME}};
 
   // These are additional extensions that we would like for the physical device.
@@ -2645,97 +2645,6 @@ void iris::Renderer::SetTraceable(Component::Traceable traceable) noexcept {
   sTraceable = std::move(traceable);
   IRIS_LOG_LEAVE();
 } // iris::Renderer::SetTraceable
-
-#if 0
-iris::Renderer::TraceableID
-iris::Renderer::AddTraceable(Component::Traceable traceable) noexcept {
-  IRIS_LOG_ENTER();
-
-  auto&& id = sTraceables.Insert(std::move(traceable));
-
-  IRIS_LOG_LEAVE();
-  return id;
-} // AddTraceable
-
-iris::expected<void, std::system_error>
-iris::Renderer::RemoveTraceable(TraceableID const& id) noexcept {
-  IRIS_LOG_ENTER();
-
-  class ReleaseTask : public tbb::task {
-  public:
-    ReleaseTask(Component::Traceable t) noexcept
-      : traceable_(std::move(t)) {}
-
-    tbb::task* execute() override {
-      IRIS_LOG_ENTER();
-
-      if (traceable_.outputImageView) {
-        vkDestroyImageView(sDevice, traceable_.outputImageView, nullptr);
-      }
-
-      if (traceable_.outputImage) DestroyImage(traceable_.outputImage);
-
-      if (traceable_.topLevelAccelerationStructure) {
-        DestroyAccelerationStructure(traceable_.topLevelAccelerationStructure);
-      }
-
-      for (auto& geometry : traceable_.geometries) {
-        if (geometry.bottomLevelAccelerationStructure) {
-          DestroyAccelerationStructure(
-            geometry.bottomLevelAccelerationStructure);
-        }
-
-        if (geometry.buffer) DestroyBuffer(geometry.buffer);
-      }
-
-      if (traceable_.raygenShaderBindingTable) {
-        DestroyBuffer(traceable_.raygenShaderBindingTable);
-      }
-
-      if (traceable_.missShaderBindingTable) {
-        DestroyBuffer(traceable_.missShaderBindingTable);
-      }
-
-      if (traceable_.hitShaderBindingTable) {
-        DestroyBuffer(traceable_.hitShaderBindingTable);
-      }
-
-      if (traceable_.descriptorSet != VK_NULL_HANDLE) {
-        vkFreeDescriptorSets(sDevice, sDescriptorPool, 1,
-                             &traceable_.descriptorSet);
-      }
-
-      if (traceable_.descriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(sDevice, traceable_.descriptorSetLayout,
-                                     nullptr);
-      }
-
-      if (traceable_.pipeline) DestroyPipeline(traceable_.pipeline);
-
-      IRIS_LOG_LEAVE();
-      return nullptr;
-    }
-
-  private:
-    Component::Traceable traceable_;
-  }; // struct IOTask
-
-  if (auto old = sTraceables.Remove(id)) {
-    try {
-      ReleaseTask* task = new (tbb::task::allocate_root()) ReleaseTask(*old);
-      tbb::task::enqueue(*task);
-    } catch (std::exception const& e) {
-      IRIS_LOG_LEAVE();
-      return unexpected(
-        std::system_error(make_error_code(Error::kEnqueueError),
-                          fmt::format("Enqueing release task: {}", e.what())));
-    }
-  }
-
-  IRIS_LOG_LEAVE();
-  return {};
-} // iris::Renderer::RemoveTraceable
-#endif
 
 iris::expected<iris::Renderer::CommandQueue, std::system_error>
 iris::Renderer::AcquireCommandQueue(

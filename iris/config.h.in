@@ -6,9 +6,9 @@
 
 namespace iris {
 
-inline constexpr int kVersionMajor = @PROJECT_VERSION_MAJOR@; //!< Major version
-inline constexpr int kVersionMinor = @PROJECT_VERSION_MINOR@; //!< Minor version
-inline constexpr int kVersionPatch = @PROJECT_VERSION_PATCH@; //!< Patch version
+inline constexpr unsigned int kVersionMajor = @PROJECT_VERSION_MAJOR@; //!< Major version
+inline constexpr unsigned int kVersionMinor = @PROJECT_VERSION_MINOR@; //!< Minor version
+inline constexpr unsigned int kVersionPatch = @PROJECT_VERSION_PATCH@; //!< Patch version
 inline constexpr char const* kVersionStr = "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"; //!< Version string
 
 inline constexpr char const* kVulkanSDKDirectory = "@Vulkan_SDK_DIR@"; //!< Location of Vulkan SDK

@@ -12,6 +12,7 @@ extension EXT_debug_utils optional
 # Device Extensions
 extension KHR_dedicated_allocation required
 extension KHR_get_memory_requirements2 required
+extension KHR_maintenance1 required
 extension KHR_maintenance2 required
 extension KHR_multiview required
 extension KHR_swapchain required

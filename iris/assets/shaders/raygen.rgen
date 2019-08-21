@@ -5,6 +5,7 @@
 
 #include "prd.glsl"
 #include "rand.glsl"
+#include "sphere.glsl"
 
 #define MAX_DEPTH 16
 #define NUM_SAMPLES 4
@@ -32,6 +33,9 @@ layout(set = 0, binding = 0) uniform MatricesBuffer {
 
 layout(set = 1, binding = 0) uniform accelerationStructureNV scene;
 layout(set = 1, binding = 1, rgba8) uniform image2D outputImage;
+layout(std430, set = 1, binding = 2) readonly buffer SphereBuffer {
+  Sphere spheres[];
+};
 
 vec3 missColor(Ray ray) {
   const vec3 direction = normalize(ray.direction);
@@ -50,7 +54,7 @@ vec3 color(Ray ray) {
             gl_RayFlagsOpaqueNV, // rayFlags
             0xF, // cullMask
             0, // sbtRecordOffset
-            0, // sbtRecordStride
+            16, // sbtRecordStride
             0, // missIndex
             ray.origin.xyz, // origin
             .001f, // Tmin
@@ -103,8 +107,6 @@ void main() {
   }
 
   col = sqrt(col / vec3(float(NUM_SAMPLES)));
-  col = vec3((pixelCenter) / vec2(gl_LaunchSizeNV.zy), 0.f);
-  col = vec3(1.f, 0.f, 0.f);
   imageStore(outputImage, ivec2(gl_LaunchIDNV.xy), vec4(col, 1.f));
 }
 
