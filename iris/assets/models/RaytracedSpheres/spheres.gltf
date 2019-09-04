@@ -34,7 +34,7 @@
         "NIST_techniques_raytracing": {
           "shaderHitGroup": 0,
           "shaderRecord": {
-            "albedo": 2
+            "albedo": 3
           }
         }
       }

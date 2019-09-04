@@ -1004,6 +1004,11 @@ static void BeginFrameTraceable() {
   pushConstants.bDebugNormals = sDebugNormals;
   pushConstants.EyePosition = glm::vec4(0.f, 0.f, 0.f, 1.f);
 
+  pushConstants.ModelMatrix = Nav::Matrix() * sWorldMatrix;
+  pushConstants.ModelViewMatrix = sViewMatrix * pushConstants.ModelMatrix;
+  pushConstants.NormalMatrix =
+    glm::mat3(glm::transpose(glm::inverse(pushConstants.ModelViewMatrix)));
+
   vk::BeginDebugLabel(sCommandQueues[sCommandQueueGraphics],
                       "BeginFrameTraceable");
   vk::BeginDebugLabel(commandBuffer, "Traceable Bind and Push");
@@ -1044,12 +1049,10 @@ static void BeginFrameTraceable() {
                    sTraceable.raygenShaderBindingTable.buffer,
                    0, // raygenShaderBindingOffset
                    sTraceable.missShadersBindingTable.buffer,
-                   //0,                            // missShaderBindingOffset
-                   sTraceable.missBindingOffset,
+                   sTraceable.missBindingOffset, // misShaderBindingOffset
                    sTraceable.missBindingStride, // missShaderBindingStride
                    sTraceable.hitShadersBindingTable.buffer,
-                   //0,                           // hitShaderBindingOffset
-                   sTraceable.hitBindingOffset,
+                   sTraceable.hitBindingOffset, // hitShaderBindingOffset
                    sTraceable.hitBindingStride, // hitShaderBindingStride
                    VK_NULL_HANDLE,
                    0, // callableShaderBindingOffset
