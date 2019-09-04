@@ -1043,11 +1043,13 @@ static void BeginFrameTraceable() {
   vkCmdTraceRaysNV(commandBuffer, // commandBuffer
                    sTraceable.raygenShaderBindingTable.buffer,
                    0, // raygenShaderBindingOffset
-                   sTraceable.missShaderBindingTable.buffer,
-                   0,                            // missShaderBindingOffset
+                   sTraceable.missShadersBindingTable.buffer,
+                   //0,                            // missShaderBindingOffset
+                   sTraceable.missBindingOffset,
                    sTraceable.missBindingStride, // missShaderBindingStride
                    sTraceable.hitShadersBindingTable.buffer,
-                   0,                           // hitShaderBindingOffset
+                   //0,                           // hitShaderBindingOffset
+                   sTraceable.hitBindingOffset,
                    sTraceable.hitBindingStride, // hitShaderBindingStride
                    VK_NULL_HANDLE,
                    0, // callableShaderBindingOffset

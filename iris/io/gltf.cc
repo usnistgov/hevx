@@ -2865,7 +2865,7 @@ expected<void, std::system_error> static ParseGLTF(
     /////
 
     if (auto m = g.ParseRaytracingMaterials(traceable.shaderGroups)) {
-
+      // TODO
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(m.error());
@@ -2877,7 +2877,7 @@ expected<void, std::system_error> static ParseGLTF(
     //
     /////
 
-    VkDeviceSize const shaderGroupHandleSize =
+    auto&& shaderGroupHandleSize =
       vk::GetRayTracingProperties(Renderer::sPhysicalDevice)
         .shaderGroupHandleSize;
 
@@ -2895,15 +2895,17 @@ expected<void, std::system_error> static ParseGLTF(
                        commandQueue.submitFence,           // fence
                        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
                        VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
-                       shaderGroupHandleSize,              // size
+                       shaderGroupHandleSize * 3,          // size
                        shaderGroupHandles->data()          // data
                        )) {
       traceable.raygenShaderBindingTable = *buf;
+      traceable.missShadersBindingTable = *buf;
+      traceable.hitShadersBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
-
+#if 0
     if (auto buf = CreateBuffer(
           commandQueue.commandPool,                          // commandPool
           commandQueue.queue,                                // queue
@@ -2933,8 +2935,10 @@ expected<void, std::system_error> static ParseGLTF(
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
-
+#endif
+    traceable.missBindingOffset = shaderGroupHandleSize;
     traceable.missBindingStride = shaderGroupHandleSize;
+    traceable.hitBindingOffset = shaderGroupHandleSize * 2;
     traceable.hitBindingStride = shaderGroupHandleSize;
 
     if (auto img = AllocateImage(
@@ -2974,6 +2978,16 @@ expected<void, std::system_error> static ParseGLTF(
       IRIS_LOG_LEAVE();
       return unexpected(
         std::system_error(make_error_code(result), "Cannot create fence"));
+    }
+
+    if (auto result =
+          TransitionImage(commandQueue.commandPool, commandQueue.queue,
+                          commandQueue.submitFence, traceable.outputImage,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, 1);
+        !result) {
+      IRIS_LOG_LEAVE();
+      return unexpected(result.error());
     }
 
     Renderer::SetTraceable(traceable);

@@ -31,6 +31,10 @@ iris::TransitionImage(VkCommandPool commandPool, VkQueue queue, VkFence fence,
       newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
     srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
              newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
     srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;

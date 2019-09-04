@@ -21,10 +21,12 @@ struct Traceable {
   Pipeline pipeline{};
 
   Buffer raygenShaderBindingTable{};
-  Buffer missShaderBindingTable{};
+  Buffer missShadersBindingTable{};
   Buffer hitShadersBindingTable{};
 
+  VkDeviceSize missBindingOffset{0};
   VkDeviceSize missBindingStride{0};
+  VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
 
   struct Geometry {
