@@ -1943,8 +1943,9 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
       auto&& intersectionIndex =
         gsl::narrow_cast<std::uint32_t>(compiledShaders.size() - 1);
 
-      if (auto s = LoadShaderFromFile(shaders[hitShaders["closestHit"]].uri,
-                                      VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
+      if (auto s =
+            LoadShaderFromFile(shaders[hitShaders["closestHitShader"]].uri,
+                               VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV)) {
         compiledShaders.push_back(*s);
       } else {
         IRIS_LOG_LEAVE();
