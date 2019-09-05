@@ -32,7 +32,7 @@
       "name": "lambertian",
       "extensions": {
         "NIST_techniques_raytracing": {
-          "shaderHitGroup": 0,
+          "hitShaders": 0,
           "shaderRecord": {
             "albedo": 3
           }
@@ -49,6 +49,10 @@
           {
             "intersectionShader": 2,
             "closestHitShader": 3
+          },
+          {
+            "intersectionShader": 2,
+            "closestHitShader": 4
           }
         ]
       },

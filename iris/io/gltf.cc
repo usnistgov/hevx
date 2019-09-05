@@ -329,18 +329,17 @@ void from_json(json const& j, OcclusionTextureInfo& info) {
 }
 
 struct NISTTechniquesRaytracingMaterialExtension {
-  int shaderHitGroup;
+  int hitShaders;
   std::optional<json> shaderRecord;
 }; // struct NISTTechniquesRaytracingMaterialExtension
 
 void to_json(json& j, NISTTechniquesRaytracingMaterialExtension const& ext) {
-  j = json{};
-  j["shaderHitGroup"] = ext.shaderHitGroup;
+  j = json{{"hitShaders",  ext.hitShaders}};
   if (ext.shaderRecord) j["shaderRecord"] = *ext.shaderRecord;
 }
 
 void from_json(json const& j, NISTTechniquesRaytracingMaterialExtension& ext) {
-  ext.shaderHitGroup = j.at("shaderHitGroup");
+  ext.hitShaders = j.at("hitShaders");
   if (j.find("shaderRecord") != j.end()) ext.shaderRecord = j["shaderRecord"];
 }
 
@@ -581,10 +580,9 @@ struct NISTTechniquesRaytracingExtensionShaderBindingTable {
 
 void to_json(json& j,
              NISTTechniquesRaytracingExtensionShaderBindingTable const& sbt) {
-  j = json{};
-  j["raygenShader"] = sbt.raygenShader;
-  j["missShader"] = sbt.missShader;
-  j["hitShaders"] = sbt.hitShaders;
+  j = json{{"raygenShader", sbt.raygenShader},
+           {"missShader", sbt.missShader},
+           {"hitShaders", sbt.hitShaders}};
 }
 
 void from_json(json const& j,
@@ -1991,7 +1989,7 @@ GLTF::ParseRaytracingMaterials(gsl::span<ShaderGroup> shaderGroups) {
   for (auto&& material : *materials) {
     if (!material.nistTechniquesRaytracingExtension) continue;
 
-    if (material.nistTechniquesRaytracingExtension->shaderHitGroup + 2 >
+    if (material.nistTechniquesRaytracingExtension->hitShaders + 2 >
         shaderGroups.size()) {
       IRIS_LOG_LEAVE();
       return unexpected(std::system_error(
@@ -2000,7 +1998,7 @@ GLTF::ParseRaytracingMaterials(gsl::span<ShaderGroup> shaderGroups) {
     }
 
     //auto&& shaderGroup =
-      //shaderGroups[material.nistTechniquesRaytracingExtension->shaderHitGroup +
+      //shaderGroups[material.nistTechniquesRaytracingExtension->hitShaders +
                    //2];
 
     //shaderGroup.type;
