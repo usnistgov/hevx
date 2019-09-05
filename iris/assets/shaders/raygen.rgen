@@ -54,7 +54,7 @@ vec3 color(Ray ray) {
             gl_RayFlagsOpaqueNV, // rayFlags
             0xF, // cullMask
             0, // sbtRecordOffset
-            16, // sbtRecordStride
+            0, // sbtRecordStride
             0, // missIndex
             ray.origin.xyz, // origin
             .001f, // Tmin

@@ -1956,7 +1956,7 @@ GLTF::ParseRaytracingPipeline(int numGeometries) {
         intersectionIndex,
         static_cast<std::uint32_t>(compiledShaders.size() - 1)));
     } else {
-
+      IRIS_LOG_WARN("non-intersection hit shader group not implemented.");
     }
   }
 
