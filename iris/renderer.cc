@@ -1045,21 +1045,21 @@ static void BeginFrameTraceable() {
     0, gsl::narrow_cast<std::uint32_t>(sizeof(pushConstants)), &pushConstants);
   vk::EndDebugLabel(commandBuffer);
 
-  vkCmdTraceRaysNV(commandBuffer, // commandBuffer
-                   sTraceable.raygenShaderBindingTable.buffer,
-                   0, // raygenShaderBindingOffset
-                   sTraceable.missShadersBindingTable.buffer,
-                   sTraceable.missBindingOffset, // misShaderBindingOffset
-                   sTraceable.missBindingStride, // missShaderBindingStride
-                   sTraceable.hitShadersBindingTable.buffer,
-                   sTraceable.hitBindingOffset, // hitShaderBindingOffset
-                   sTraceable.hitBindingStride, // hitShaderBindingStride
-                   VK_NULL_HANDLE,
-                   0, // callableShaderBindingOffset
-                   0, // callableShaderBindingStride
-                   sTraceable.outputImageExtent.width,  // width
-                   sTraceable.outputImageExtent.height, // height
-                   1                                    // depth
+  vkCmdTraceRaysNV(commandBuffer,                              //
+                   sTraceable.raygenShaderBindingTable.buffer, //
+                   sTraceable.raygenBindingOffset,             //
+                   sTraceable.missShadersBindingTable.buffer,  //
+                   sTraceable.missBindingOffset,               //
+                   sTraceable.missBindingStride,               //
+                   sTraceable.hitShadersBindingTable.buffer,   //
+                   sTraceable.hitBindingOffset,                //
+                   sTraceable.hitBindingStride,                //
+                   VK_NULL_HANDLE,                             //
+                   0,                                          //
+                   0,                                          //
+                   sTraceable.outputImageExtent.width,         //
+                   sTraceable.outputImageExtent.height,        //
+                   1                                           //
   );
 
   vk::BeginDebugLabel(commandBuffer, "sTracedImage SetImageLayout final");

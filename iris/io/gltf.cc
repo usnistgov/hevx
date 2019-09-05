@@ -2894,17 +2894,17 @@ expected<void, std::system_error> static ParseGLTF(
                        commandQueue.submitFence,           // fence
                        VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, // bufferUsage
                        VMA_MEMORY_USAGE_GPU_ONLY,          // memoryUsage
-                       shaderGroupHandleSize * 3,          // size
+                       shaderGroupHandleSize,              // size
                        shaderGroupHandles->data()          // data
                        )) {
       traceable.raygenShaderBindingTable = *buf;
-      traceable.missShadersBindingTable = *buf;
-      traceable.hitShadersBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
-#if 0
+
+    traceable.missBindingStride = shaderGroupHandleSize;
+
     if (auto buf = CreateBuffer(
           commandQueue.commandPool,                          // commandPool
           commandQueue.queue,                                // queue
@@ -2914,11 +2914,13 @@ expected<void, std::system_error> static ParseGLTF(
           shaderGroupHandleSize,                             // size
           shaderGroupHandles->data() + shaderGroupHandleSize // data
           )) {
-      traceable.missShaderBindingTable = *buf;
+      traceable.missShadersBindingTable = *buf;
     } else {
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
+
+    traceable.hitBindingStride = shaderGroupHandleSize;
 
     if (auto buf = CreateBuffer(
           commandQueue.commandPool,           // commandPool
@@ -2934,11 +2936,6 @@ expected<void, std::system_error> static ParseGLTF(
       IRIS_LOG_LEAVE();
       return unexpected(buf.error());
     }
-#endif
-    traceable.missBindingOffset = shaderGroupHandleSize;
-    traceable.missBindingStride = shaderGroupHandleSize;
-    traceable.hitBindingOffset = shaderGroupHandleSize * 2;
-    traceable.hitBindingStride = shaderGroupHandleSize;
 
     if (auto img = AllocateImage(
           VK_FORMAT_R8G8B8A8_UNORM,    // format

@@ -20,14 +20,16 @@ struct Traceable {
   absl::InlinedVector<ShaderGroup, 8> shaderGroups;
   Pipeline pipeline{};
 
+  VkDeviceSize raygenBindingOffset{0};
   Buffer raygenShaderBindingTable{};
-  Buffer missShadersBindingTable{};
-  Buffer hitShadersBindingTable{};
 
   VkDeviceSize missBindingOffset{0};
   VkDeviceSize missBindingStride{0};
+  Buffer missShadersBindingTable{};
+
   VkDeviceSize hitBindingOffset{0};
   VkDeviceSize hitBindingStride{0};
+  Buffer hitShadersBindingTable{};
 
   struct Geometry {
     Buffer buffer{};
