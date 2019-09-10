@@ -1,4 +1,4 @@
-set(_glm_git_tag HEAD)
+set(_glm_git_tag 0.9.9.6)
 
 set(GLM_TEST_ENABLE ${BUILD_DEPENDENCY_TESTING} CACHE BOOL "" FORCE)
 
@@ -11,4 +11,6 @@ FetchContent_Populate(glm
   QUIET
 )
 
-add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
+#add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
