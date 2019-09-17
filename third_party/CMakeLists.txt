@@ -7,7 +7,8 @@ include(Vulkan.cmake)
 
 # These packages can be included in any order
 include(Abseil.cmake)
-include(Expected.cmake)
+#include(Expected.cmake)
+add_subdirectory(expected)
 include(FlextGL.cmake)
 include(Fmtlib.cmake)
 include(Glslang.cmake)
