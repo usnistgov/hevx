@@ -11,6 +11,6 @@ FetchContent_Populate(glm
   QUIET
 )
 
-#add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
+add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR}) # for tests
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})

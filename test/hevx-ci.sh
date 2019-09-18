@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # VulkanSDK Location
-export VULKAN_SDK=$HOME/local/VulkanSDK/1.1.106.0
+export VULKAN_SDK=$HOME/local/VulkanSDK/1.1.114.0/x86_64
 
 # Build configuration to test
 BUILD_CONFIG="RelWithDebInfo"
